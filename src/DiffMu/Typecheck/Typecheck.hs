@@ -6,9 +6,9 @@ import DiffMu.Core
 
 checkSens :: DMTerm -> STC DMType
 -- checkSens (Var x τ) = throwError GeneralException
-checkSens (Sng n τ) =
-  let s = injectCoeff n
-  in return (ConstNum τ (Sens s))
+-- checkSens (Sng n τ) = undefined
+  -- let s = injectCoeff n
+  -- in return (ConstNum τ (Sens s))
 checkSens t = throwError (UnsupportedTermE t)
 
 
