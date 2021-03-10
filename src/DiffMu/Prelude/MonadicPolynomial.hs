@@ -14,29 +14,28 @@ import DiffMu.Prelude.MonadicAlgebra
 class Monad t => NormalizableM t n where
   normalize :: n -> t n
 
-newtype MonDict t m v = MonDict ([(m,v)])
-  deriving (Generic)
+newtype MonDict m v = MonDict ([(m,v)])
+  deriving (Generic, Show)
 
-class (MonoidM t m, Eq m, Ord v)    => HasMonDict t m v
-instance (MonoidM t m, Eq m, Ord v) => HasMonDict t m v
-
-
+class (MonoidM t m, CheckNeutral t m, Eq m, Ord v)    => HasMonDict t m v
+instance (MonoidM t m, CheckNeutral t m, Eq m, Ord v) => HasMonDict t m v
 
 
-instance (HasMonDict t m v) => NormalizableM t (MonDict t m v) where
+instance (HasMonDict t m v) => NormalizableM t (MonDict m v) where
   normalize (MonDict xs) = MonDict <$> (sor xs [])
 
-    where singl :: (m,v) -> [(m,v)]
-          singl (m,v) | m == pt = []
-          singl (m,v) | otherwise = [(m,v)]
+    where singl :: (m,v) -> t [(m,v)]
+          singl (m,v) = checkNeutral m >>= f
+             where f True  = pure []
+                   f False = pure [(m,v)]
 
           ins :: (m,v) -> [(m,v)] -> t [(m,v)]
-          ins (m,v) [] = return $ singl (m,v)
+          ins (m,v) [] = singl (m,v)
           ins (m,v) ((m2, v2) : xs) = f (compare v v2)
              where f :: Ordering -> t [(m,v)]
-                   f LT = return $ singl (m,v) <> ((m2,v2) : xs)
+                   f LT = singl (m,v) ?<> pure ((m2,v2) : xs)
                    f EQ = do m' <- m ⋆ m2
-                             return $ singl (m', v) <> xs
+                             singl (m', v) ?<> pure xs
                    f GT = pure (m2,v2) ?: (ins (m,v) xs)
 
           sor :: [(m,v)] -> [(m,v)] -> t [(m,v)]
@@ -46,14 +45,14 @@ instance (HasMonDict t m v) => NormalizableM t (MonDict t m v) where
                (sor xs ys)
 
 
-
-instance (HasMonDict t m v) => SemigroupM t (MonDict t m v) where
+instance (HasMonDict t m v) => SemigroupM t (MonDict m v) where
   (⋆) (MonDict xs) (MonDict ys) = normalize (MonDict (xs <> ys))
 
-instance (HasMonDict t m v) => Pointed (MonDict t m v) where
-  pt = MonDict []
+instance (HasMonDict t m v) => MonoidM t (MonDict m v) where
+  neutral = pure $ MonDict []
 
-instance (HasMonDict t m v) => ModuleM t m (MonDict t m v) where
+
+instance (HasMonDict t m v) => ModuleM t m (MonDict m v) where
   (⋅) m (MonDict xs) =
     let g m₁ (m₂,v₂) = do m' <- m₁ ⋆ m₂
                           return (m', v₂)
@@ -62,7 +61,7 @@ instance (HasMonDict t m v) => ModuleM t m (MonDict t m v) where
     in (MonDict <$> (f m xs)) >>= normalize
 
 
-instance (HasMonDict t m v, MonoidM t v) => ModuleM t v (MonDict t m v) where
+instance (HasMonDict t m v, MonoidM t v) => ModuleM t v (MonDict m v) where
   (⋅) v (MonDict xs) =
     let g v₁ (m₂,v₂) = do v' <- v₁ ⋆ v₂
                           return (m₂, v')
@@ -75,12 +74,12 @@ instance (HasMonDict t m v, MonoidM t v) => ModuleM t v (MonDict t m v) where
 
 
 -- NOTE: Danger: this assumes that the input values are normal!
-instance (HasMonDict t m v) => Eq (MonDict t m v) where
+instance (Eq m, Eq v) => Eq (MonDict m v) where
   (==) (xs) (ys) = f xs ys
     where
       f (MonDict xs) (MonDict ys) = xs == ys
 
-instance (HasMonDict t m v) => Ord (MonDict t m v) where
+instance (Eq m, Ord v) => Ord (MonDict m v) where
   compare (xs) (ys) = f (xs) (ys)
     where
       f (MonDict xs) (MonDict ys) = compare (fmap snd xs) (fmap snd ys)
@@ -105,31 +104,37 @@ instance (HasInverse m, HasMonDict m v) => HasInverse (MonDict m v) where
 
 -- instance (Ring r) => Monoid (WrapMonoid r) where
 
-newtype Poly t r v = Poly (MonDict t r v)
-  deriving (Generic)
+newtype Combination r v = Combination (MonDict r v)
+  deriving (Generic, Show)
 
-instance (HasMonDict t r v) => SemigroupM t (Poly t r v) where
-  (⋆) (Poly p) (Poly q) = fmap Poly (p ⋆ q)
+instance (HasMonDict t r v) => SemigroupM t (Combination r v) where
+  (⋆) (Combination p) (Combination q) = fmap Combination (p ⋆ q)
 
-instance (HasMonDict t r v) => Pointed (Poly t r v) where
-  pt = Poly pt
+instance (HasMonDict t r v) => MonoidM t (Combination r v) where
+  neutral = Combination <$> neutral
 
-instance (HasMonDict t r v) => ModuleM t r (Poly t r v) where
-  (⋅) r (Poly p) = fmap Poly (r ⋅ p)
-
-
-instance (CMonoidM t r, HasMonDict t r v) => CMonoidM t (Poly t r v)
+instance (HasMonDict t r v) => ModuleM t r (Combination r v) where
+  (⋅) r (Combination p) = fmap Combination (r ⋅ p)
 
 
-instance (HasOne r, HasMonDict t r v, Pointed v) => HasOne (Poly t r v) where
-  one = Poly (MonDict [(one, pt)])
 
-instance (SemiringM t r, HasMonDict t r v, MonoidM t v) => SemiringM t (Poly t r v) where
-  (*) (Poly (MonDict p)) (Poly q) = fmap Poly (f p q)
-    where f :: [(r,v)] -> MonDict t r v -> t (MonDict t r v)
-          f [] q = pure pt
-          f ((xr,xv) : xs) q = (pure xr) ?⋅ (xv ⋅ q) ?⋆ (f xs q)
+instance (CMonoidM t r, HasMonDict t r v) => CMonoidM t (Combination r v)
 
 
-type CPoly t r e v = Poly t r (MonDict t e v)
+-- instance (HasOne r, HasMonDict t r v, Pointed v) => HasOne (Combination r v) where
+--   one = Combination (MonDict [(one, pt)])
 
+instance (SemiringM t r, HasMonDict t r v, MonoidM t v) => SemiringM t (Combination r v) where
+  one = f <$> one <*> neutral
+    where f a b = Combination (MonDict [(a, b)])
+
+  (*) (Combination (MonDict p)) (Combination q) = fmap Combination (f p q)
+    where f :: [(r,v)] -> MonDict r v -> t (MonDict r v)
+          f [] q = neutral
+          f ((xr,xv) : xs) q = (pure xr) ?⋅ (pure xv ?⋅ pure q) ?⋆ (f xs q)
+
+
+type CPolyM r e v = Combination r (MonDict e v)
+
+{-
+-}

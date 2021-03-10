@@ -94,7 +94,7 @@ data DMException where
   UnsupportedTermE :: DMTerm -> DMException
   deriving (Generic, Show)
 
-type TC extra a = StateT (Full extra) (Except DMException) a
+type TC extra = StateT (Full extra) (Except DMException)
 
 type STC a = TC Sensitivity a
 type PTC a = TC Privacy a

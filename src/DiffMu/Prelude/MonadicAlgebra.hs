@@ -9,7 +9,7 @@ module DiffMu.Prelude.MonadicAlgebra
 --   )
 where
 
-import DiffMu.Imports hiding (mempty, (<>))
+import DiffMu.Imports
 
 -- import Data.Semigroup as All hiding (diff, Min, Max, Any)
 -- import Data.Monoid as All hiding (Last, First, getLast, getFirst)
@@ -29,29 +29,38 @@ chainM2 f a b = do
 
 -- class Has a where
 --   mempty :: a
-class Pointed a where
-  pt :: a
+-- class Pointed a where
+--   pt :: a
 
-class (SemigroupM t a, Pointed a) => MonoidM t a
-instance (SemigroupM t a, Pointed a) => MonoidM t a
+class (SemigroupM t a) => MonoidM t a where
+  neutral :: t a
+
+class MonoidM t a => CheckNeutral t a where
+  checkNeutral :: a -> t Bool
+
+-- instance (SemigroupM t a) => MonoidM t a
 
 class (MonoidM t a) => CMonoidM t a where
   (+) :: a -> a -> t a
   (+) x y = x ⋆ y
+  zero :: t a
+  zero = neutral
 
 (?+) = chainM2 (+)
 
 type Semigroup = SemigroupM Identity
 
-class HasOne r where
-  one :: r
+-- class HasOne r where
+--   one :: r
 
-class (HasOne r, CMonoidM t r) => SemiringM t r where
+class (CMonoidM t r) => SemiringM t r where
+  one :: t r
   (*) :: r -> r -> t r
 
 (?*) a b = chainM2 (*)
 
 (?:) = liftM2 (:)
+(?<>) = liftM2 (<>)
 
 class (MonoidM t m) => ModuleM t m x where
   (⋅) :: m -> x -> t x

@@ -60,6 +60,8 @@ library:
     - PolyKinds
     - GeneralizedNewtypeDeriving
     - DeriveGeneric
+    - FlexibleInstances
+    - FunctionalDependencies
 
 
 

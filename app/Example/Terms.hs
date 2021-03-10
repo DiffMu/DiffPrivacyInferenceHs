@@ -5,6 +5,6 @@ import DiffMu.Prelude
 import DiffMu.Core
 
 t₁ :: DMTerm
-t₁ = Var "x" Any
+t₁ = Var "x" JTAny
 
 

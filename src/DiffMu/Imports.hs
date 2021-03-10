@@ -25,4 +25,5 @@ import Prelude as All (Show, IO, putStrLn, undefined, otherwise, fst, snd, ($))
 import Prelude as All ((<$>), (<*>), pure)
 
 import Prelude as All (Float(..), Rational, Int, Ordering(..), Ord(..), Eq(..))
+import Prelude as All (Bool(..))
 
