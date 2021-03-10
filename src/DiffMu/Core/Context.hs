@@ -12,7 +12,8 @@ instance Default (Full a) where
 
 
 
--- instance Semigroup 
+instance Semigroup (Ctx a) where
+  (<>) a b = undefined
 
 -- instance Semigroup (Full a) where
 

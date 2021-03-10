@@ -3,6 +3,8 @@ module DiffMu.Core.Definitions where
 
 import DiffMu.Prelude
 
+import DiffMu.Core.Symbolic
+
 -- import GHC.TypeLits
 
 import           Data.Singletons.Prelude hiding (Symbol)
@@ -17,18 +19,20 @@ import           Data.Singletons.Prelude.List hiding (Group)
 -- g = x + x
 -- test = show g
 
-type Symbol = String
+-- type Symbol = String
 
 
-data Sensitivity = forall n. KnownNat n => Sens (Polynomial (Ratio Integer) n)
+-- data Sensitivity = forall n. KnownNat n => Sens (Polynomial (Ratio Integer) n)
 
-instance Show Sensitivity where
-  show (Sens s) = show s
+type Sensitivity = SymTerm
+
+-- instance Show Sensitivity where
+--   show (Sens s) = show s
 
 newtype Privacy = Privacy ()
 
 data JuliaType =
-  Any
+  JTAny
   deriving (Generic, Show)
 
 
