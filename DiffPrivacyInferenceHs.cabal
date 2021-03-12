@@ -28,8 +28,12 @@ library
       DiffMu.Core
       DiffMu.Core.Context
       DiffMu.Core.Definitions
+      DiffMu.Core.FormalTerm
+      DiffMu.Core.MonadTC
       DiffMu.Core.Symbolic
-      DiffMu.Core.TCMonad
+      DiffMu.Core.TC
+      DiffMu.Core.Term
+      DiffMu.Core.Unification
       DiffMu.Imports
       DiffMu.Prelude
       DiffMu.Prelude.Algebra
@@ -42,7 +46,7 @@ library
       Paths_DiffPrivacyInferenceHs
   hs-source-dirs:
       src
-  default-extensions: QuasiQuotes ConstraintKinds DataKinds GADTs KindSignatures MultiParamTypeClasses NoImplicitPrelude NoMonomorphismRestriction TypeOperators UnicodeSyntax ExistentialQuantification ScopedTypeVariables QuantifiedConstraints KindSignatures PolyKinds GeneralizedNewtypeDeriving DeriveGeneric FlexibleInstances FunctionalDependencies
+  default-extensions: QuasiQuotes ConstraintKinds DataKinds GADTs KindSignatures MultiParamTypeClasses NoImplicitPrelude NoMonomorphismRestriction TypeOperators UnicodeSyntax ExistentialQuantification ScopedTypeVariables QuantifiedConstraints KindSignatures PolyKinds GeneralizedNewtypeDeriving DeriveGeneric FlexibleInstances FlexibleContexts FunctionalDependencies OverloadedStrings TypeApplications TypeFamilies
   build-depends:
       algebra
     , algebraic-prelude
@@ -58,10 +62,12 @@ library
     , halg-matrices
     , halg-polyn-parser
     , halg-polynomials
+    , hashable
     , mtl
     , singletons
     , text
     , type-natural
+    , unordered-containers
   default-language: Haskell2010
 
 executable diffmu

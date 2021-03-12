@@ -4,6 +4,7 @@ module DiffMu.Core.Definitions where
 import DiffMu.Prelude
 
 import DiffMu.Core.Symbolic
+import DiffMu.Core.Term
 
 -- import GHC.TypeLits
 
@@ -36,19 +37,20 @@ data JuliaType =
   deriving (Generic, Show)
 
 
-data DMNum where
-  DMInt :: DMNum
-  DMReal :: DMNum
-  deriving (Generic, Show)
+data DMNumType where
+  DMInt :: DMNumType
+  DMReal :: DMNumType
+  deriving (Generic, Show, Eq)
 
 -- type (:&) :: (k -> j -> *) -> (j -> *) -> k -> j -> *
 -- data (:&) (f :: k -> j -> *) (x :: k -> *) a b = (:@) (f a b) (x a)
+infix 3 :@
 data (:&) f x = (:@) f x
   deriving (Generic, Show)
 
 data DMType where
-  VarNum :: DMNum -> DMType
-  ConstNum :: DMNum -> Sensitivity -> DMType
+  VarNum :: DMNumType -> DMType
+  ConstNum :: DMNumType -> Sensitivity -> DMType
   -- TVar :: forall t ηc τc. (KnownSymbol t, Elem t τc ~ 'True) => DMType
   TVar :: Symbol -> DMType
   (:->:) :: [DMType :& Sensitivity] -> DMType -> DMType
@@ -58,27 +60,30 @@ data DMType where
 data Asgmt a = (:-) Symbol a
   deriving (Generic, Show)
 
-newtype Ctx extra = Ctx ([Asgmt (DMType :& extra)] )
+-- newtype Ctx extra = Ctx ([Asgmt (DMType :& extra)] )
+newtype Ctx extra = Ctx (LinCom (DMType :& extra) Symbol)
+-- ([Asgmt (DMType :& extra)] )
   deriving (Generic, Show)
 
 data DMTypeOp where
   Op1 :: DMTypeOp
   deriving (Generic, Show)
 
-data Constraint =
-  IsNumeric (DMType)
-  | IsEqualSens Sensitivity Sensitivity
-  | IsLessOrEqual Sensitivity Sensitivity
-  | IsTypeOpResult [Sensitivity] (DMType) DMTypeOp
-  -- a | IsEqualPriv (Privacy ηc) (Privacy ηc)
-  | IsSubtypeOf (DMType) (DMType)
-  | IsSupremumOf (DMType) (DMType) (DMType)
-  | IsChoice (DMType) ([([JuliaType], Sensitivity , DMType)])
+data ConstraintOld = ConstraintOld
+  -- IsNumeric (DMType)
+  -- | IsEqualSens Sensitivity Sensitivity
+  -- | IsEqual DMType DMType
+  -- | Substitute Symbol DMType
+  -- | IsLessOrEqual Sensitivity Sensitivity
+  -- | IsTypeOpResult [Sensitivity] (DMType) DMTypeOp
+  -- -- a | IsEqualPriv (Privacy ηc) (Privacy ηc)
+  -- | IsSubtypeOf (DMType) (DMType)
+  -- | IsSupremumOf (DMType) (DMType) (DMType)
+  -- | IsChoice (DMType) ([([JuliaType], Sensitivity , DMType)])
   deriving (Generic, Show)
 
 
-
-type Constraints = [Constraint]
+type ConstraintOlds = [Watch ConstraintOld]
 
 data NameCtx = NameCtx
   { names :: [Symbol]
@@ -87,12 +92,18 @@ data NameCtx = NameCtx
   deriving (Generic, Show)
 
 data Full extra where
-  Full ::  NameCtx -> NameCtx -> Constraints -> Ctx extra -> Full extra
+  Full ::  NameCtx -> NameCtx -> ConstraintOlds -> Ctx extra -> Full extra
   deriving (Generic, Show)
 
 data DMException where
-  UnsupportedTermE :: DMTerm -> DMException
-  deriving (Generic, Show)
+  UnsupportedTermError :: DMTerm -> DMException
+  UnificationError :: Show a => a -> a -> DMException
+  WrongNumberOfArgs :: Show a => a -> a -> DMException
+  ImpossibleError :: String -> DMException
+  -- deriving (Generic, Show)
+
+instance Show DMException where
+
 
 type TC extra = StateT (Full extra) (Except DMException)
 
@@ -105,7 +116,7 @@ data Lam_ = Lam_ [Asgmt JuliaType] DMTerm
 
 data DMTerm =
   Ret DMTerm
-  | Sng Rational DMNum
+  | Sng Rational DMNumType
   | Var Symbol JuliaType
   | Arg Symbol JuliaType
   | Op Symbol [DMTerm]

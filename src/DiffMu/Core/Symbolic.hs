@@ -31,10 +31,10 @@ instance Monad t => CMonoidM t (SymVal)
 -- TODO: Check correctness: is zero handled differently?
 instance Monad t => SemiringM t (SymVal) where
   one = pure $ Fin 1
-  (*) Infty Infty        = pure $ Infty
-  (*) Infty (Fin _)      = pure $ Infty
-  (*) (Fin _) Infty      = pure $ Infty
-  (*) (Fin a) (Fin b)    = pure $ Fin (a P.* b)
+  (⋅) Infty Infty        = pure $ Infty
+  (⋅) Infty (Fin _)      = pure $ Infty
+  (⋅) (Fin _) Infty      = pure $ Infty
+  (⋅) (Fin a) (Fin b)    = pure $ Fin (a P.* b)
 
 data SymVar =
   Var Symbol | Ln SymTerm

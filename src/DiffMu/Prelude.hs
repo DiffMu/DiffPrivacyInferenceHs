@@ -9,10 +9,13 @@ module DiffMu.Prelude
 
 import DiffMu.Imports as All
 
-import DiffMu.Prelude.Algebra as All
-import DiffMu.Prelude.Polynomial as All
+-- import DiffMu.Prelude.Algebra as All
+-- import DiffMu.Prelude.Polynomial as All
 
-import Prelude
+import DiffMu.Prelude.MonadicAlgebra as All
+import DiffMu.Prelude.MonadicPolynomial as All
+
+import qualified Prelude (String)
 
 type Symbol = Prelude.String
 

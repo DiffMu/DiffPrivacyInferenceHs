@@ -9,7 +9,7 @@ checkSens :: DMTerm -> STC DMType
 -- checkSens (Sng n τ) = undefined
   -- let s = injectCoeff n
   -- in return (ConstNum τ (Sens s))
-checkSens t = throwError (UnsupportedTermE t)
+checkSens t = throwError (UnsupportedTermError t)
 
 
 
