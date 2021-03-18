@@ -1,8 +1,10 @@
 
-module DiffMu.Prelude.MonadicPolynomial where
+module DiffMu.Core.MonadicPolynomial where
 
-import DiffMu.Imports
-import DiffMu.Prelude.MonadicAlgebra
+-- import DiffMu.Imports
+-- import DiffMu.Prelude.MonadicAlgebra
+import DiffMu.Prelude
+import DiffMu.Core.Term
 
 -- import GHC.Generics as All (Generic)
 -- import Prelude as All (Show, IO, putStrLn, undefined, otherwise, fst, snd)
@@ -12,7 +14,8 @@ import DiffMu.Prelude.MonadicAlgebra
 
 
 newtype MonCom m v = MonCom ([(m,v)])
-  deriving (Generic, Show)
+  deriving (Generic, Show, Hashable)
+
 
 class (MonoidM t m, CheckNeutral t m, Eq m, Ord v)    => HasMonCom t m v
 instance (MonoidM t m, CheckNeutral t m, Eq m, Ord v) => HasMonCom t m v
@@ -101,8 +104,8 @@ instance (HasInverse m, HasMonCom m v) => HasInverse (MonCom m v) where
 
 -- instance (Ring r) => Monoid (WrapMonoid r) where
 
-newtype LinCom r v = LinCom (MonCom r v)
-  deriving (Generic, Show)
+newtype LinCom r v = LinCom { getLinCom :: (MonCom r v) }
+  deriving (Generic, Show, Hashable, Eq, Ord)
 
 instance (HasMonCom t r v) => SemigroupM t (LinCom r v) where
   (⋆) (LinCom p) (LinCom q) = LinCom <$> (p ⋆ q)
@@ -134,5 +137,27 @@ instance (SemiringM t r, HasMonCom t r v, MonoidM t v) => SemiringM t (LinCom r 
           f ((xr,xv) : xs) q = xr ↷> (xv ↷ q) <+> (f xs q)
 
 type CPolyM r e v = LinCom r (MonCom e v)
+
+
+
+
+----------------------------------------------------
+-- Term instances
+
+instance (Hashable v, Show v, Show m, Eq v, Eq m, Ord v, MonoidM Identity m, CheckNeutral Identity m) => Term (MonCom m v) where
+  type Var (MonCom m v) = v
+  var v = MonCom [(neutralId, v)]
+  substituteAll σ (MonCom t) =
+    let f (m,v) = do vs <- σ v
+                     return (m ↷! vs)
+    in do x <- mapM f t
+          return $ foldl (⋆!) neutralId x
+
+
+instance (Hashable v, Show v, Show m, Eq v, Eq m, Ord v, MonoidM Identity m, CheckNeutral Identity m) => Term (LinCom m v) where
+  type Var (LinCom m v) = v
+  substituteAll σ (LinCom t) = LinCom <$> substituteAll (f) t
+    where f v = getLinCom <$> (σ v)
+
 
 

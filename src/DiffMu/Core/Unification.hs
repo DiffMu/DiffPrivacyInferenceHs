@@ -46,7 +46,7 @@ instance SemigroupM (TC e) DMType where
   (⋆) = unify
 
 
-
-
+testabc :: DMType -> DMType -> TC e ()
+testabc a b = solve (IsEqual (a,b))
 
 

@@ -2,13 +2,19 @@
 module DiffMu.Core.Symbolic where
 
 import DiffMu.Prelude
-import DiffMu.Prelude.MonadicAlgebra
-import DiffMu.Prelude.MonadicPolynomial
+-- import DiffMu.Prelude.MonadicAlgebra
+import DiffMu.Core.MonadicPolynomial
 import qualified Prelude as P
 
 data SymVal =
   Infty | Fin Float -- a| Ln (SymTerm t)
-  deriving (Generic, Show)
+  deriving (Generic, Show, Eq)
+
+instance Hashable SymVal
+
+instance Monad t => CheckNeutral t SymVal where
+  checkNeutral ma = do a <- ma
+                       return (a == Fin 0)
 
 -- data SymTerm = SymTerm SymVal
 --   deriving (Generic, Show)
@@ -38,7 +44,9 @@ instance Monad t => SemiringM t (SymVal) where
 
 data SymVar =
   Var Symbol | Ln SymTerm
-  deriving (Show, Generic)
+  deriving (Show, Generic, Eq, Ord)
+
+instance Hashable SymVar
 
 type SymTerm = CPolyM SymVal Rational SymVar
 

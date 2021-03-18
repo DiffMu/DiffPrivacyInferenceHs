@@ -5,7 +5,7 @@ import DiffMu.Prelude
 
 import DiffMu.Core.Symbolic
 import DiffMu.Core.Term
-
+import DiffMu.Core.MonadicPolynomial
 -- import GHC.TypeLits
 
 import           Data.Singletons.Prelude hiding (Symbol)
@@ -91,10 +91,6 @@ data NameCtx = NameCtx
   }
   deriving (Generic, Show)
 
-data Full extra where
-  Full ::  NameCtx -> NameCtx -> ConstraintOlds -> Ctx extra -> Full extra
-  deriving (Generic, Show)
-
 data DMException where
   UnsupportedTermError :: DMTerm -> DMException
   UnificationError :: Show a => a -> a -> DMException
@@ -105,10 +101,6 @@ data DMException where
 instance Show DMException where
 
 
-type TC extra = StateT (Full extra) (Except DMException)
-
-type STC a = TC Sensitivity a
-type PTC a = TC Privacy a
 
 
 data Lam_ = Lam_ [Asgmt JuliaType] DMTerm

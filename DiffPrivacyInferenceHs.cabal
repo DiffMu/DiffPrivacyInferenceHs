@@ -29,6 +29,7 @@ library
       DiffMu.Core.Context
       DiffMu.Core.Definitions
       DiffMu.Core.FormalTerm
+      DiffMu.Core.MonadicPolynomial
       DiffMu.Core.MonadTC
       DiffMu.Core.Symbolic
       DiffMu.Core.TC
@@ -38,7 +39,6 @@ library
       DiffMu.Prelude
       DiffMu.Prelude.Algebra
       DiffMu.Prelude.MonadicAlgebra
-      DiffMu.Prelude.MonadicPolynomial
       DiffMu.Prelude.Polynomial
       DiffMu.Typecheck.Typecheck
       Lib
@@ -46,7 +46,7 @@ library
       Paths_DiffPrivacyInferenceHs
   hs-source-dirs:
       src
-  default-extensions: QuasiQuotes ConstraintKinds DataKinds GADTs KindSignatures MultiParamTypeClasses NoImplicitPrelude NoMonomorphismRestriction TypeOperators UnicodeSyntax ExistentialQuantification ScopedTypeVariables QuantifiedConstraints KindSignatures PolyKinds GeneralizedNewtypeDeriving DeriveGeneric FlexibleInstances FlexibleContexts FunctionalDependencies OverloadedStrings TypeApplications TypeFamilies
+  default-extensions: QuasiQuotes ConstraintKinds DataKinds GADTs KindSignatures MultiParamTypeClasses NoImplicitPrelude NoMonomorphismRestriction TypeOperators UnicodeSyntax ExistentialQuantification ScopedTypeVariables QuantifiedConstraints KindSignatures PolyKinds GeneralizedNewtypeDeriving DeriveGeneric FlexibleInstances FlexibleContexts FunctionalDependencies OverloadedStrings TypeApplications TypeFamilies RankNTypes
   build-depends:
       algebra
     , algebraic-prelude

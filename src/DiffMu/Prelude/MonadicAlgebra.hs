@@ -58,6 +58,8 @@ class Monad t => SemigroupM t a where
 
 class (SemigroupM t a) => MonoidM t a where
   neutral :: t a
+neutralId :: MonoidM Identity a => a
+neutralId = runIdentity neutral
 -- type Monoid = MonoidM Identity
 
 class MonoidM t a => CheckNeutral t a where
@@ -114,6 +116,8 @@ class (MonoidM t m) => ModuleM t m x where
   b' <- b
   a ↷ b'
 
+(↷!) :: ModuleM Identity m x => m -> x -> x
+(↷!) a b = runIdentity (a ↷ b)
 
 
   {-

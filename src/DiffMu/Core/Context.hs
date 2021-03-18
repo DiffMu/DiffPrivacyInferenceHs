@@ -9,7 +9,7 @@ instance Default (NameCtx) where
 instance Default (Ctx a) where
   def = Ctx (LinCom (MonCom []))
 
-instance Default (Full a) where
+-- instance Default (Full a) where
 
 
 instance (SemigroupM t a, SemigroupM t b) => SemigroupM t (a :& b) where

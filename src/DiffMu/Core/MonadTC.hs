@@ -45,9 +45,19 @@ solve c = constrInside normalize c >>= solve_
 data Solvable t where
   Solvable :: Solve t c a => c a -> Solvable t
 
+data Solvable' (t :: * -> * -> *) where
+  Solvable' :: (forall e. Solve (t e) c a) => c a -> Solvable' t
+
+class (forall e. Monad (t e)) => MonadConstraint' t where
+  type ConstrVar t :: *
+  addConstraint' :: Solvable' t -> t e ()
+  dischargeConstraint' :: ConstrVar t -> t e ()
+  getUnsolvedConstraint' :: t e (Maybe (ConstrVar t, Solvable' t))
+
 class Monad t => MonadConstraint t where
   addConstraint :: Solvable t -> t ()
   getUnsolvedConstraint :: t (Solvable t)
+
 
 newtype IsEqual a = IsEqual a
 instance Constraint IsEqual where
