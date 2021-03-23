@@ -9,9 +9,9 @@ import DiffMu.Core.Term
 
 -- class (TermSubstitute x a) => MonadSubstitute x a t where
 
-class (Monad t, Term a) => MonadTC a t where
-  addSub :: Sub (Var a) a -> t ()
-  getSubs :: t (Subs a)
+class (Monad t, Term v a) => MonadTC v a t where
+  addSub :: Sub v a -> t ()
+  getSubs :: t (Subs v a)
 
 class Constraint c where
   constr :: a -> c a
@@ -46,7 +46,10 @@ data Solvable t where
   Solvable :: Solve t c a => c a -> Solvable t
 
 data Solvable' (t :: * -> * -> *) where
-  Solvable' :: (forall e. Solve (t e) c a) => c a -> Solvable' t
+  Solvable' :: (forall e. Solve (t e) c a, Show (c a)) => c a -> Solvable' t
+
+instance Show (Solvable' t) where
+  show (Solvable' c) = show c
 
 class (forall e. Monad (t e)) => MonadConstraint' t where
   type ConstrVar t :: *

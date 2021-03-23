@@ -33,7 +33,7 @@ import Prelude as All (Show(..), IO, putStrLn, undefined, otherwise, fst, snd, (
 import Prelude as All ((<$>), (<*>), pure, curry, uncurry, (.))
 
 import Prelude as All (Float(..), Rational, Int, Ordering(..), Ord(..), Eq(..))
-import Prelude as All (Bool(..), String(..), Maybe(..))
+import Prelude as All (Bool(..), String(..), Maybe(..), Integer(..), Integral(..))
 import Prelude as All (Functor(..), Applicative(..))
 
 import qualified Data.Semigroup as PP

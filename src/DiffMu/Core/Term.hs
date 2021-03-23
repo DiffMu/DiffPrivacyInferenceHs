@@ -46,30 +46,37 @@ class Monad t => MonadImpossible t where
 class Eq v => Substitute v a x where
   substitute :: Monad t => (v -> t a) -> x -> t x
 
-class (Hashable (Var a), Show (Var a), Show a, Substitute (Var a) a a) => Term a where
-  type Var a :: *
-  -- substituteAll :: Monad t => (Var a -> t a) -> a -> t a
-  var :: Var a -> a
+-- class (Hashable (Var a), Show (Var a), Show a, Substitute (Var a) a a) => Term a where
+--   type Var a :: *
+--   -- substituteAll :: Monad t => (Var a -> t a) -> a -> t a
+--   var :: Var a -> a
 
-data Subs a where
-  Subs :: Term a => (HashMap (Var a) a) -> Subs a
+class (Hashable v, Show v, Show a, Substitute v a a) => Term v a where
+  var :: v -> a
 
+data Subs v a where
+  Subs :: Term v a => (HashMap v a) -> Subs v a
+
+instance Term v a => Default (Subs v a) where
+  def = Subs empty
+instance Show (Subs v a) where
+  show (Subs s) = "some subs"
 -- class Substitute (Var a) a x => VSubstitute a x where
 -- instance Substitute (Var a) a x => VSubstitute a x where
 
 
-trySubstitute :: (MonadWatch t, Term a) => Subs a -> (Var a) -> t a
+trySubstitute :: (MonadWatch t, Term v a) => Subs v a -> v -> t a
 trySubstitute (Subs m) x = case H.lookup x m of
   Just a  -> notifyChanged >> pure a
   Nothing -> pure (var x)
 
-substituteSingle :: Term a => Sub (Var a) a -> a -> a
+substituteSingle :: Term v a => Sub v a -> a -> a
 substituteSingle (x := a) b = runIdentity (substitute f b)
   where f v | v == x    = pure a
         f v | otherwise = pure (var v)
   -- undefined -- runIdentity . substitute (trySubstitute (Subs (H.singleton x a)))
 
-instance (MonadImpossible t, Term a) => SemigroupM t (Subs a) where
+instance (MonadImpossible t, Term v a) => SemigroupM t (Subs v a) where
   (⋆) (Subs m) (Subs n) = Subs <$> H.foldlWithKey f (pure m) n
     where f mm x a = do
             mm' <- mm
@@ -78,11 +85,11 @@ instance (MonadImpossible t, Term a) => SemigroupM t (Subs a) where
               Nothing -> let mm1 = H.map (substituteSingle (x := a)) mm'
                          in return (H.insert x a mm1)
 
-instance (MonadImpossible t, Term a) => MonoidM t (Subs a) where
+instance (MonadImpossible t, Term v a) => MonoidM t (Subs v a) where
   neutral = pure (Subs H.empty)
 
-instance (MonadImpossible t, Term a, VSubstitute a x) => ModuleM t (Subs a) x where
-  (↷) σs a = undefined
+instance (MonadImpossible t, MonadWatch t, Term v a, Substitute v a x) => ModuleM t (Subs v a) x where
+  (↷) σs a = substitute (trySubstitute σs) a
 
 
 

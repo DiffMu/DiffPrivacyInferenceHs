@@ -64,6 +64,7 @@ data Asgmt a = (:-) Symbol a
 newtype Ctx extra = Ctx (LinCom (DMType :& extra) Symbol)
 -- ([Asgmt (DMType :& extra)] )
   deriving (Generic, Show)
+instance Default (Ctx e)
 
 data DMTypeOp where
   Op1 :: DMTypeOp
@@ -90,6 +91,7 @@ data NameCtx = NameCtx
   , currentCtr :: Int
   }
   deriving (Generic, Show)
+instance Default NameCtx
 
 data DMException where
   UnsupportedTermError :: DMTerm -> DMException
@@ -99,6 +101,10 @@ data DMException where
   -- deriving (Generic, Show)
 
 instance Show DMException where
+  show (UnsupportedTermError t) = "The term '" <> show t <> "' is currently not supported."
+  show (UnificationError a b) = "Could not unify '" <> show a <> "' with '" <> show b <> "'."
+  show (WrongNumberOfArgs a b) = "While unifying: the terms '" <> show a <> "' and '" <> show b <> "' have different numbers of arguments"
+  show (ImpossibleError e) = "Something impossible happened: " <> show e
 
 
 
@@ -108,7 +114,7 @@ data Lam_ = Lam_ [Asgmt JuliaType] DMTerm
 
 data DMTerm =
   Ret DMTerm
-  | Sng Rational DMNumType
+  | Sng Float DMNumType
   | Var Symbol JuliaType
   | Arg Symbol JuliaType
   | Op Symbol [DMTerm]

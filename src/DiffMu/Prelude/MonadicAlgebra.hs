@@ -73,6 +73,9 @@ class (MonoidM t a) => CMonoidM t a where
   zero :: t a
   zero = neutral
 
+zeroId :: CMonoidM Identity r => r
+zeroId = runIdentity zero
+
 (<+>) = chainM2 (+)
 (<+)  = chainM2_L (+)
 (+>)  = chainM2_R (+)
@@ -87,6 +90,9 @@ class (CMonoidM t r) => SemiringM t r where
   one :: t r
   (⋅) :: r -> r -> t r
 
+oneId :: SemiringM Identity r => r
+oneId = runIdentity one
+
 (<⋅>) = chainM2 (⋅)
 (<⋅)  = chainM2_L (⋅)
 (⋅>)  = chainM2_R (⋅)
@@ -95,7 +101,10 @@ class (CMonoidM t r) => SemiringM t r where
 (?:) = liftM2 (:)
 (?<>) = liftM2 (<>)
 
-class (MonoidM t m) => ModuleM t m x where
+
+-- NOTE: We do not require the constraint ```(MonoidM t m)```, even though this should be mathematically reasonable.
+-- This is because we have cases where the monoidal structure needs a different monad t than the action.
+class Monad t => ModuleM t m x where
   (↷) :: m -> x -> t x
 
 -- NOTE: Appearently, these functions cannot be defined using

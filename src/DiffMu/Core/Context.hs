@@ -3,11 +3,12 @@ module DiffMu.Core.Context where
 
 import DiffMu.Prelude
 import DiffMu.Core.Definitions
+import DiffMu.Core.MonadicPolynomial
 
-instance Default (NameCtx) where
+-- instance Default (NameCtx) where
 
-instance Default (Ctx a) where
-  def = Ctx (LinCom (MonCom []))
+-- instance Default (Ctx a) where
+--   def = Ctx (LinCom (MonCom []))
 
 -- instance Default (Full a) where
 

@@ -6,6 +6,7 @@ module DiffMu.Core.MonadicPolynomial where
 import DiffMu.Prelude
 import DiffMu.Core.Term
 
+import qualified Prelude as P
 -- import GHC.Generics as All (Generic)
 -- import Prelude as All (Show, IO, putStrLn, undefined, otherwise, fst, snd)
 
@@ -15,7 +16,7 @@ import DiffMu.Core.Term
 
 newtype MonCom m v = MonCom ([(m,v)])
   deriving (Generic, Show, Hashable)
-
+instance Default (MonCom m v)
 
 class (MonoidM t m, CheckNeutral t m, Eq m, Ord v)    => HasMonCom t m v
 instance (MonoidM t m, CheckNeutral t m, Eq m, Ord v) => HasMonCom t m v
@@ -52,17 +53,19 @@ instance (HasMonCom t m v) => MonoidM t (MonCom m v) where
   neutral = pure $ MonCom []
 
 
-instance (HasMonCom t m v) => ModuleM t m (MonCom m v) where
-  (↷) m (MonCom xs) =
+
+newtype ActM a = ActM a
+instance (HasMonCom t m v) => ModuleM t (ActM m) (MonCom m v) where
+  (↷) (ActM m) (MonCom xs) =
     let g m₁ (m₂,v₂) = do m' <- m₁ ⋆ m₂
                           return (m', v₂)
         f m₁ xs = mapM (g m₁) xs
 
     in (MonCom <$> (f m xs)) >>= normalize
 
-
-instance (HasMonCom t m v, MonoidM t v) => ModuleM t v (MonCom m v) where
-  (↷) v (MonCom xs) =
+newtype ActV a = ActV a
+instance (HasMonCom t m v, MonoidM t v) => ModuleM t (ActV v) (MonCom m v) where
+  (↷) (ActV v) (MonCom xs) =
     let g v₁ (m₂,v₂) = do v' <- v₁ ⋆ v₂
                           return (m₂, v')
         f v₁ xs = mapM (g v₁) xs
@@ -105,7 +108,13 @@ instance (HasInverse m, HasMonCom m v) => HasInverse (MonCom m v) where
 -- instance (Ring r) => Monoid (WrapMonoid r) where
 
 newtype LinCom r v = LinCom { getLinCom :: (MonCom r v) }
-  deriving (Generic, Show, Hashable, Eq, Ord)
+  deriving (Generic, Show, Hashable, Eq, Ord, Default)
+
+injectCoeff :: (HasMonCom t r v, MonoidM t v) => r -> t (LinCom r v)
+injectCoeff r = do
+  o <- neutral
+  return (LinCom (MonCom [(r , o)]))
+  -- LinCom <$> ((ActM r) ↷> neutral) -- LinCom (MonCom [(r , o)])
 
 instance (HasMonCom t r v) => SemigroupM t (LinCom r v) where
   (⋆) (LinCom p) (LinCom q) = LinCom <$> (p ⋆ q)
@@ -114,11 +123,10 @@ instance (HasMonCom t r v) => MonoidM t (LinCom r v) where
   neutral = LinCom <$> neutral
 
 instance (HasMonCom t r v) => ModuleM t r (LinCom r v) where
-  (↷) r (LinCom p) = LinCom <$> (r ↷ p)
+  (↷) r (LinCom p) = LinCom <$> (ActM r ↷ p)
 
 instance (HasMonCom t r v, MonoidM t v) => ModuleM t v (LinCom r v) where
-  (↷) v (LinCom p) = LinCom <$> (v ↷ p)
-
+  (↷) v (LinCom p) = LinCom <$> (ActV v ↷ p)
 
 
 instance (CMonoidM t r, HasMonCom t r v) => CMonoidM t (LinCom r v)
@@ -140,24 +148,55 @@ type CPolyM r e v = LinCom r (MonCom e v)
 
 
 
+instance Monad t => SemigroupM t Int where
+  (⋆) a b = pure $ a P.+ b
+instance Monad t => MonoidM t Int where
+  neutral = pure 0
+instance Monad t =>CheckNeutral t Int where
+  checkNeutral a = pure (a == 0)
+
 
 ----------------------------------------------------
 -- Term instances
 
-instance (Hashable v, Show v, Show m, Eq v, Eq m, Ord v, MonoidM Identity m, CheckNeutral Identity m) => Term (MonCom m v) where
-  type Var (MonCom m v) = v
-  var v = MonCom [(neutralId, v)]
-  substituteAll σ (MonCom t) =
+instance (Hashable v, Show v, Show m, Eq v, Eq m, Ord v, MonoidM Identity m, CheckNeutral Identity m) => Substitute v (MonCom m v) (MonCom m v) where
+  substitute σ (MonCom t) =
     let f (m,v) = do vs <- σ v
-                     return (m ↷! vs)
+                     return (ActM m ↷! vs)
     in do x <- mapM f t
           return $ foldl (⋆!) neutralId x
 
+instance (Hashable v, Show v, Show m, Eq v, Eq m, Ord v, MonoidM Identity m, CheckNeutral Identity m) => Term v (MonCom m v) where
+  -- type Var (MonCom m v) = v
+  var v = MonCom [(neutralId, v)]
 
-instance (Hashable v, Show v, Show m, Eq v, Eq m, Ord v, MonoidM Identity m, CheckNeutral Identity m) => Term (LinCom m v) where
-  type Var (LinCom m v) = v
-  substituteAll σ (LinCom t) = LinCom <$> substituteAll (f) t
-    where f v = getLinCom <$> (σ v)
+instance (Eq v, Eq r, Ord v, CheckNeutral Identity r, SemiringM Identity r) => Substitute v (CPolyM r Int v) (CPolyM r Int v) where
+  substitute σ ls =
+    let f (e :: Int,v) = do vs <- σ v
+                            let vslist = take e (repeat vs)
+                            return (foldl (⋅!) oneId vslist)
+        g (r :: r, MonCom mvs) = do mvs' <- mapM f mvs
+                                    return $ r ↷! foldl (⋅!) oneId mvs'
+        -- g' (r, mvs) = r ↷! g mvs
+        h (LinCom (MonCom ls)) = do ls' <- mapM g ls
+                                    return $ foldl (+!) zeroId ls'
+    in h ls
+    -- let f (m,v) = do vs <- σ v
+    --                  return (m ↷! vs)
+    -- in undefined
 
+instance (Hashable v, Show v, Show r, Eq v, Eq r, Ord v, CheckNeutral Identity r, SemiringM Identity r) => Term v (CPolyM r Int v) where
+  var v = LinCom (MonCom [(oneId, var v)])
+
+
+  -- substitute σ (LinCom ls) = undefined
+
+
+-- instance (Hashable v, Show v, Show m, Eq v, Eq m, Ord v, MonoidM Identity m, CheckNeutral Identity m) => Substitute v (LinCom m v) (LinCom m v) where
+--   substitute σ (LinCom t) = LinCom <$> substitute f t
+--     where f v = getLinCom <$> (σ v)
+
+-- instance (Hashable v, Show v, Show m, Eq v, Eq m, Ord v, MonoidM Identity m, CheckNeutral Identity m) => Term v (LinCom m v) where
+--   var v = LinCom $ MonCom [(neutralId, v)]
 
 

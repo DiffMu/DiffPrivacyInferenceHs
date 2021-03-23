@@ -13,8 +13,7 @@ data SymVal =
 instance Hashable SymVal
 
 instance Monad t => CheckNeutral t SymVal where
-  checkNeutral ma = do a <- ma
-                       return (a == Fin 0)
+  checkNeutral a = return (a == Fin 0)
 
 -- data SymTerm = SymTerm SymVal
 --   deriving (Generic, Show)
@@ -43,12 +42,12 @@ instance Monad t => SemiringM t (SymVal) where
   (⋅) (Fin a) (Fin b)    = pure $ Fin (a P.* b)
 
 data SymVar =
-  Var Symbol | Ln SymTerm
+  HonestVar Symbol | Ln SymTerm
   deriving (Show, Generic, Eq, Ord)
 
 instance Hashable SymVar
 
-type SymTerm = CPolyM SymVal Rational SymVar
+type SymTerm = CPolyM SymVal Int SymVar
 
 
 -- type SymTerm t = Combination t SymVal Rational Symbol
