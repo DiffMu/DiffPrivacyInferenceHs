@@ -8,6 +8,6 @@ t₁ :: DMTerm
 t₁ = Var "x" JTAny
 
 t₂ :: DMTerm
-t₂ = Sng 2 DMInt
+t₂ = Sng 2 JTAny
 
 

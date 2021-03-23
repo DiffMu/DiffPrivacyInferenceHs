@@ -4,7 +4,6 @@ module DiffMu.Core.Term where
 import DiffMu.Prelude
 
 import Data.HashMap.Strict as H
-import Data.Hashable
 
 data Sub x a = (:=) x a
   deriving (Show)

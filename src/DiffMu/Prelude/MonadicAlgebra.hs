@@ -129,6 +129,16 @@ class Monad t => ModuleM t m x where
 (↷!) a b = runIdentity (a ↷ b)
 
 
+
+
+
+instance Monad t => SemigroupM t Int where
+  (⋆) a b = pure $ a P.+ b
+instance Monad t => MonoidM t Int where
+  neutral = pure 0
+instance Monad t => CMonoidM t Int where
+instance Monad t =>CheckNeutral t Int where
+  checkNeutral a = pure (a == 0)
   {-
 (?:) :: Monad m => m a -> m [a] -> m [a]
 (?:) x xs = (:) <$> x <⋅> xs

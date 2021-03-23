@@ -17,9 +17,9 @@ import DiffMu.Core.Term
 
 -- unify_ a b = solve (a,b)
 
-instance Unify (TC e) DMNumType where
-  unify_ a b | a == b    = pure a
-  unify_ a b | otherwise = throwError (UnificationError a b)
+-- instance Unify (TC e) DMNumType where
+--   unify_ a b | a == b    = pure a
+--   unify_ a b | otherwise = throwError (UnificationError a b)
 
 instance Unify (TC e) Sensitivity where
   unify_ = undefined
@@ -32,8 +32,9 @@ instance (Show a, Unify (TC e) a) => Unify (TC e) [a] where
   unify_ xs ys = throwError (WrongNumberOfArgs xs ys)
 
 instance Unify (TC e) DMType where
-  unify_ (VarNum t) (VarNum s)         = VarNum <$> unify_ t s
-  unify_ (ConstNum t v) (ConstNum s w) = ConstNum <$> unify_ t s <*> unify_ v w
+  unify_ DMReal DMReal                 = pure DMReal
+  unify_ DMInt DMInt                   = pure DMInt
+  unify_ (Const η₁ τ₁) (Const η₂ τ₂)   = Const <$> unify_ η₁ η₂ <*> unify_ τ₁ τ₂
   unify_ (as :->: a) (bs :->: b)       = (:->:) <$> unify_ as bs <*> unify_ a b
   unify_ (TVar x) (TVar y) | x == y    = pure $ TVar x
   unify_ (TVar x) t                    = addSub (x := t) >> pure t

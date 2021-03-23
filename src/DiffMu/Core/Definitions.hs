@@ -33,14 +33,14 @@ type Sensitivity = SymTerm
 newtype Privacy = Privacy ()
 
 data JuliaType =
-  JTAny
+  JTAny | JTInt | JTReal
   deriving (Generic, Show)
 
 
-data DMNumType where
-  DMInt :: DMNumType
-  DMReal :: DMNumType
-  deriving (Generic, Show, Eq)
+-- data DMNumType where
+--   DMInt :: DMNumType
+--   DMReal :: DMNumType
+--   deriving (Generic, Show, Eq)
 
 -- type (:&) :: (k -> j -> *) -> (j -> *) -> k -> j -> *
 -- data (:&) (f :: k -> j -> *) (x :: k -> *) a b = (:@) (f a b) (x a)
@@ -49,8 +49,10 @@ data (:&) f x = (:@) f x
   deriving (Generic, Show)
 
 data DMType where
-  VarNum :: DMNumType -> DMType
-  ConstNum :: DMNumType -> Sensitivity -> DMType
+  -- Num :: DMNumType -> DMType
+  DMInt :: DMType
+  DMReal :: DMType
+  Const :: Sensitivity -> DMType -> DMType
   -- TVar :: forall t ηc τc. (KnownSymbol t, Elem t τc ~ 'True) => DMType
   TVar :: Symbol -> DMType
   (:->:) :: [DMType :& Sensitivity] -> DMType -> DMType
@@ -93,6 +95,11 @@ data NameCtx = NameCtx
   deriving (Generic, Show)
 instance Default NameCtx
 
+newName :: Symbol -> NameCtx -> (Symbol, NameCtx)
+newName hint (NameCtx names ctr) =
+  let name = hint <> "_" <> show ctr
+  in (name , NameCtx (name : names) (ctr +! 1))
+
 data DMException where
   UnsupportedTermError :: DMTerm -> DMException
   UnificationError :: Show a => a -> a -> DMException
@@ -114,7 +121,7 @@ data Lam_ = Lam_ [Asgmt JuliaType] DMTerm
 
 data DMTerm =
   Ret DMTerm
-  | Sng Float DMNumType
+  | Sng Float JuliaType
   | Var Symbol JuliaType
   | Arg Symbol JuliaType
   | Op Symbol [DMTerm]

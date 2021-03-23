@@ -148,12 +148,6 @@ type CPolyM r e v = LinCom r (MonCom e v)
 
 
 
-instance Monad t => SemigroupM t Int where
-  (⋆) a b = pure $ a P.+ b
-instance Monad t => MonoidM t Int where
-  neutral = pure 0
-instance Monad t =>CheckNeutral t Int where
-  checkNeutral a = pure (a == 0)
 
 
 ----------------------------------------------------
