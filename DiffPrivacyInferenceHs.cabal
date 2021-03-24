@@ -46,7 +46,7 @@ library
       Paths_DiffPrivacyInferenceHs
   hs-source-dirs:
       src
-  default-extensions: QuasiQuotes ConstraintKinds DataKinds GADTs KindSignatures MultiParamTypeClasses NoImplicitPrelude NoMonomorphismRestriction TypeOperators UnicodeSyntax ExistentialQuantification ScopedTypeVariables QuantifiedConstraints KindSignatures PolyKinds GeneralizedNewtypeDeriving DeriveGeneric FlexibleInstances FlexibleContexts FunctionalDependencies OverloadedStrings TypeApplications TypeFamilies RankNTypes
+  default-extensions: QuasiQuotes ConstraintKinds DataKinds GADTs KindSignatures MultiParamTypeClasses NoImplicitPrelude NoMonomorphismRestriction TypeOperators UnicodeSyntax ExistentialQuantification ScopedTypeVariables QuantifiedConstraints KindSignatures PolyKinds GeneralizedNewtypeDeriving DeriveGeneric FlexibleInstances FlexibleContexts FunctionalDependencies OverloadedStrings TypeApplications TypeFamilies RankNTypes OverloadedStrings
   build-depends:
       algebra
     , algebraic-prelude
@@ -79,6 +79,7 @@ executable diffmu
       Paths_DiffPrivacyInferenceHs
   hs-source-dirs:
       app
+  default-extensions: OverloadedStrings
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       DiffPrivacyInferenceHs

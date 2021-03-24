@@ -12,6 +12,8 @@ import           Data.Singletons.Prelude hiding (Symbol)
 import           Data.Singletons.Prelude.Enum (SEnum (..))
 import           Data.Singletons.Prelude.List hiding (Group)
 
+import qualified Data.Text as T
+
 -- import Algebra.Ring.Polynomial.Class
 
 -- x :: Polynomial (Ratio Integer) 2
@@ -46,7 +48,10 @@ data JuliaType =
 -- data (:&) (f :: k -> j -> *) (x :: k -> *) a b = (:@) (f a b) (x a)
 infix 3 :@
 data (:&) f x = (:@) f x
-  deriving (Generic, Show)
+  deriving (Generic)
+
+instance (Show a, Show b) => Show (a :& b) where
+  show (a :@ b) = show a <> " @ " <> show b
 
 data DMType where
   -- Num :: DMNumType -> DMType
@@ -58,15 +63,29 @@ data DMType where
   (:->:) :: [DMType :& Sensitivity] -> DMType -> DMType
   deriving (Generic, Show)
 
+-- instance Show DMType where
+--   show (TVar x) = x
+--   show (DMInt)
+
 
 data Asgmt a = (:-) Symbol a
   deriving (Generic, Show)
 
--- newtype Ctx extra = Ctx ([Asgmt (DMType :& extra)] )
-newtype Ctx extra = Ctx (MonCom (DMType :& extra) Symbol)
+
+newtype Ctx v x = Ctx (MonCom x v)
+  deriving (Generic, DictLike v x)
+
+instance (Show v, Show x, DictKey v) => Show (Ctx v x) where
+  show (Ctx γ) = showWith ", " (\x τ -> x <> " : " <> τ) γ
+
+instance Default (Ctx v x)
+type TypeCtx extra = Ctx Symbol (DMType :& extra)
+
+-- newtype TypeCtx extra = TypeCtx ([Asgmt (DMType :& extra)] )
+-- newtype TypeCtx extra = TypeCtx (MonCom (DMType :& extra) Symbol)
 -- ([Asgmt (DMType :& extra)] )
-  deriving (Generic, Show, DictLike Symbol (DMType :& extra))
-instance Default (Ctx e)
+  -- deriving (Generic, Show, DictLike Symbol (DMType :& extra))
+-- instance Default (TypeCtx e)
 
 data DMTypeOp where
   Op1 :: DMTypeOp
@@ -92,12 +111,14 @@ data NameCtx = NameCtx
   { names :: [Symbol]
   , currentCtr :: Int
   }
-  deriving (Generic, Show)
+  deriving (Generic)
 instance Default NameCtx
+instance Show NameCtx where
+  show (NameCtx names _) = "[" <> intercalate ", " (show <$> names) <> "]"
 
-newName :: Symbol -> NameCtx -> (Symbol, NameCtx)
-newName hint (NameCtx names ctr) =
-  let name = hint <> "_" <> show ctr
+newName :: Text -> NameCtx -> (Symbol, NameCtx)
+newName (hint) (NameCtx names ctr) =
+  let name = Symbol (hint <> "_" <> T.pack (show ctr))
   in (name , NameCtx (name : names) (ctr +! 1))
 
 data DMException where

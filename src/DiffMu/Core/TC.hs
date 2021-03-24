@@ -43,23 +43,23 @@ data Meta1Ctx = Meta1Ctx
     _typeVars :: NameCtx,
     _constraintVars :: NameCtx
   }
-  deriving (Generic, Show)
+  deriving (Generic)
 
 data Meta0Ctx extra = Meta0Ctx
   {
     _sensSubs :: Subs SVar Sensitivity,
     _typeSubs :: Subs TVar DMType,
     _constraints :: MonCom (Solvable' TC) Symbol,
-    _context :: Ctx extra
+    _types :: TypeCtx extra
   }
-  deriving (Generic, Show)
+  deriving (Generic)
 
 data Full extra = Full
   {
     _meta1 :: Meta1Ctx,
     _meta0 :: Meta0Ctx extra
   }
-  deriving (Generic, Show)
+  deriving (Generic)
 
 newtype TCT m extra a = TCT {runTCT :: (StateT (Full extra) (ExceptT DMException m) a)}
   deriving (Functor, Applicative, Monad, MonadState (Full extra), MonadError DMException)
@@ -75,6 +75,20 @@ type PTC a = TC Privacy a
 $(makeLenses ''Meta1Ctx)
 $(makeLenses ''Meta0Ctx)
 $(makeLenses ''Full)
+
+
+instance Show Meta1Ctx where
+  show (Meta1Ctx s t c) =  "- sens vars: " <> show s <> "\n"
+                        <> "- type vars: " <> show t <> "\n"
+                        <> "- cnst vars: " <> show c <> "\n"
+
+instance Show e => Show (Meta0Ctx e) where
+  show (Meta0Ctx sσ tσ cs γ) = "- sens subs:   " <> show sσ <> "\n"
+                            <> "- type subs:   " <> show tσ <> "\n"
+                            <> "- constraints: " <> show cs <> "\n"
+                            <> "- types:       " <> show γ <> "\n"
+instance Show e => Show (Full e) where
+  show (Full m1 m0) = "\nMeta1:\n" <> show m1 <> "\nMeta0:\n" <> show m0 <> "\n"
 
 -- modify02 :: MonadDMTC e t => (Meta0Ctx e -> Meta0Ctx e) -> t e
 -- modify02 f = modify (\s -> s {meta0 = f (meta0 s)})
@@ -159,7 +173,7 @@ instance MonadDMTC e t => Normalize (t e) Sensitivity where
        σ ↷ n
 
 
-newType :: MonadDMTC e t => Symbol -> t e DMType
+newType :: MonadDMTC e t => Text -> t e DMType
 newType hint = meta1.typeVars %%= (first TVar . newName hint)
   -- where f names = let (τ , names') = newName hint names
   --                 in (TVar τ, names')
@@ -172,7 +186,7 @@ newType hint = meta1.typeVars %%= (first TVar . newName hint)
 
 
 setVar :: MonadDMTC e t => Symbol -> DMType :& e -> t e ()
-setVar k v = meta0.context %= setValue k v
+setVar k v = meta0.types %= setValue k v
 
 
 

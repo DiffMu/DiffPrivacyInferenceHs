@@ -71,6 +71,7 @@ library:
     - TypeApplications
     - TypeFamilies
     - RankNTypes
+    - OverloadedStrings
 
 
 
@@ -84,6 +85,8 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - DiffPrivacyInferenceHs
+    default-extensions:
+    - OverloadedStrings
 
 tests:
   DiffPrivacyInferenceHs-test:

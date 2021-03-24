@@ -3,7 +3,7 @@ module DiffMu.Prelude
   (
     -- module Prelude
     module All
-  , Symbol
+  , Symbol (..)
   , DictKey (..)
   )
   where
@@ -17,12 +17,15 @@ import DiffMu.Prelude.MonadicAlgebra as All
 -- import DiffMu.Prelude.MonadicPolynomial as All
 
 import qualified Prelude (String)
+import Data.Text as T
+newtype Symbol = Symbol Text
+  deriving (Eq,Ord,Hashable)
 
-type Symbol = Prelude.String
+instance Show Symbol where
+  show (Symbol t) = T.unpack t
 
 class (Eq v, Hashable v) => DictKey v
 instance DictKey Symbol
-
 
 
 -- import           Prelude                                 hiding

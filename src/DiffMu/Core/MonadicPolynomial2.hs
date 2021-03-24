@@ -32,7 +32,16 @@ instance (HasMonCom t m v) => MonoidM t (MonCom m v) where
 class DictKey k => DictLike k v d where
   setValue :: k -> v -> d -> d
 
-instance DictKey k => DictLike k v (MonCom v k) where
+class ShowDict d where
+  showWith :: String -> (String -> String -> String) -> d -> String
+
+instance (DictKey k) => DictLike k v (MonCom v k) where
   setValue v m (MonCom h) = MonCom (H.insert v m h)
+
+instance (Show k, Show v) => ShowDict (MonCom v k) where
+  showWith comma merge (MonCom d) =
+    let d' = H.toList d
+    in intercalate comma ((\(k,v) -> merge (show k) (show v)) <$> d')
+
 
 
