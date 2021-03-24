@@ -116,6 +116,11 @@ injectCoeff r = do
   return (LinCom (MonCom [(r , o)]))
   -- LinCom <$> ((ActM r) ↷> neutral) -- LinCom (MonCom [(r , o)])
 
+injectCoeffId :: (HasMonCom Identity r v, MonoidM Identity v) => r -> (LinCom r v)
+injectCoeffId r = LinCom (MonCom [(r, neutralId)])
+  -- o <- neutral
+  -- return (LinCom (MonCom [(r , o)]))
+
 instance (HasMonCom t r v) => SemigroupM t (LinCom r v) where
   (⋆) (LinCom p) (LinCom q) = LinCom <$> (p ⋆ q)
 

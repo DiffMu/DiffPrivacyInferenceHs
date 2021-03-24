@@ -5,6 +5,20 @@ import DiffMu.Prelude
 import DiffMu.Core.Definitions
 import DiffMu.Core.MonadicPolynomial
 
+import Data.HashMap.Strict as H
+
+type Context v a = HashMap v a
+
+
+
+
+
+-- testa :: Hashable a => a -> a
+-- testa x = x
+
+-- testb :: (Hashable v, Hashable a) => Context v a -> Context v a
+-- testb x = testa x
+
 -- instance Default (NameCtx) where
 
 -- instance Default (Ctx a) where

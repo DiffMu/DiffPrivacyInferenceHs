@@ -30,6 +30,8 @@ library:
     - algebra
     - text
     - mtl
+    - lens
+    - bifunctors
     - data-default
     - hashable
     - unordered-containers

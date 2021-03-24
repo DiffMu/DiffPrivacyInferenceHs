@@ -1,11 +1,13 @@
 
+{-# LANGUAGE TemplateHaskell #-}
+
 module DiffMu.Core.TC where
 
 import DiffMu.Prelude
 import DiffMu.Core.Definitions
 import DiffMu.Core.MonadTC
 import DiffMu.Core.Term
-import DiffMu.Core.MonadicPolynomial
+import DiffMu.Core.MonadicPolynomial2
 import DiffMu.Core.Symbolic
 
 type TVar = Symbol
@@ -37,55 +39,27 @@ type SSubs = Subs Sensitivity
 
 data Meta1Ctx = Meta1Ctx
   {
-    sensVars :: NameCtx,
-    typeVars :: NameCtx,
-    constraintVars :: NameCtx
+    _sensVars :: NameCtx,
+    _typeVars :: NameCtx,
+    _constraintVars :: NameCtx
   }
   deriving (Generic, Show)
 
 data Meta0Ctx extra = Meta0Ctx
   {
-    sensSubs :: Subs SVar Sensitivity,
-    typeSubs :: Subs TVar DMType,
-    constraints :: MonCom (Solvable' TC) Symbol,
-    context :: Ctx extra
+    _sensSubs :: Subs SVar Sensitivity,
+    _typeSubs :: Subs TVar DMType,
+    _constraints :: MonCom (Solvable' TC) Symbol,
+    _context :: Ctx extra
   }
   deriving (Generic, Show)
 
 data Full extra = Full
   {
-    meta1 :: Meta1Ctx,
-    meta0 :: Meta0Ctx extra
+    _meta1 :: Meta1Ctx,
+    _meta0 :: Meta0Ctx extra
   }
   deriving (Generic, Show)
-
--- modify02 :: MonadDMTC e t => (Meta0Ctx e -> Meta0Ctx e) -> t e
--- modify02 f = modify (\s -> s {meta0 = f (meta0 s)})
-
-modify0 :: MonadDMTC e t => (Meta0Ctx e -> Meta0Ctx e) -> t e ()
-modify0 f = modify (\s -> s {meta0 = f (meta0 s)})
-
-modify1 :: MonadDMTC e t => (Meta1Ctx -> Meta1Ctx) -> t e ()
-modify1 f = modify (\s -> s {meta1 = f (meta1 s)})
-
-state0 :: MonadDMTC e t => (Meta0Ctx e -> (a, Meta0Ctx e)) -> t e a
-state0 f = state (\s -> let (a,b) = f (meta0 s)
-                        in (a, s {meta0 = b}))
-
-state1 :: MonadDMTC e t => (Meta1Ctx -> (a, Meta1Ctx)) -> t e a
-state1 f = state (\s -> let (a,b) = f (meta1 s)
-                        in (a, s {meta1 = b}))
-
-instance Default (Meta1Ctx) where
-instance Default (Meta0Ctx e) where
-instance Default (Full e) where
-
-  -- Full ::  NameCtx -> NameCtx -> NameCtx -> Subs DMType -> ConstraintOlds -> Ctx extra -> Full extra
-  -- deriving (Generic, Show)
-
--- type TC extra = StateT (Full extra) (Except DMException)
--- newtype TC extra a = TC {runTC :: (StateT (Full extra) (Except DMException) a)}
---   deriving (Functor, Applicative, Monad, MonadState (Full extra), MonadError DMException)
 
 newtype TCT m extra a = TCT {runTCT :: (StateT (Full extra) (ExceptT DMException m) a)}
   deriving (Functor, Applicative, Monad, MonadState (Full extra), MonadError DMException)
@@ -98,19 +72,53 @@ type TC = TCT Identity
 type STC a = TC Sensitivity a
 type PTC a = TC Privacy a
 
+$(makeLenses ''Meta1Ctx)
+$(makeLenses ''Meta0Ctx)
+$(makeLenses ''Full)
+
+-- modify02 :: MonadDMTC e t => (Meta0Ctx e -> Meta0Ctx e) -> t e
+-- modify02 f = modify (\s -> s {meta0 = f (meta0 s)})
+
+-- modify0 :: MonadDMTC e t => (Meta0Ctx e -> Meta0Ctx e) -> t e ()
+-- modify0 f = modify (\s -> s {meta0 = f (meta0 s)})
+
+-- modify1 :: MonadDMTC e t => (Meta1Ctx -> Meta1Ctx) -> t e ()
+-- modify1 f = modify (\s -> s {meta1 = f (meta1 s)})
+
+-- state0 :: MonadDMTC e t => (Meta0Ctx e -> (a, Meta0Ctx e)) -> t e a
+-- state0 f = state (\s -> let (a,b) = f (meta0 s)
+--                         in (a, s {meta0 = b}))
+
+-- state1 :: MonadDMTC e t => (Meta1Ctx -> (a, Meta1Ctx)) -> t e a
+-- state1 f = state (\s -> let (a,b) = f (meta1 s)
+--                         in (a, s {meta1 = b}))
+
+instance Default (Meta1Ctx) where
+instance Default (Meta0Ctx e) where
+instance Default (Full e) where
+
+  -- Full ::  NameCtx -> NameCtx -> NameCtx -> Subs DMType -> ConstraintOlds -> Ctx extra -> Full extra
+  -- deriving (Generic, Show)
+
+-- type TC extra = StateT (Full extra) (Except DMException)
+-- newtype TC extra a = TC {runTC :: (StateT (Full extra) (Except DMException) a)}
+--   deriving (Functor, Applicative, Monad, MonadState (Full extra), MonadError DMException)
+
+
+
 instance Monad m => MonadTC TVar DMType (TCT m e) where
-  getSubs = typeSubs . meta0 <$> get
+  getSubs = view (meta0.typeSubs) <$> get
 
 instance Monad m => MonadTC SVar Sensitivity (TCT m e) where
-  getSubs = sensSubs . meta0 <$> get
+  getSubs = view (meta0.sensSubs) <$> get
 
 getUnsolved :: MonCom (Solvable' TC) Symbol -> Maybe (Symbol, Solvable' TC)
 getUnsolved = undefined
 
 instance Monad m => MonadConstraint' TC (TCT m) where
   type ConstrVar TC = Symbol
-  addConstraint' c = modify0 (\f -> f {constraints = MonCom [(c,"hello")]}) -- --modify0 (\s -> s {constraints = _}) -- 
-  getUnsolvedConstraint' = getUnsolved . constraints . meta0 <$> get
+  addConstraint' c = undefined -- modify0 (\f -> f {constraints = MonCom [(c,"hello")]}) -- --modify0 (\s -> s {constraints = _}) -- 
+  getUnsolvedConstraint' = getUnsolved <$> view (meta0.constraints) <$> get
   addConstraint'2 c = return ()
 
 instance Monad m => MonadWatch (TCT m e) where
@@ -152,23 +160,22 @@ instance MonadDMTC e t => Normalize (t e) Sensitivity where
 
 
 newType :: MonadDMTC e t => Symbol -> t e DMType
-newType hint = state1 f
-  where f (Meta1Ctx s t c) =
-          let (τ , s') = newName hint s
-          in (TVar τ , Meta1Ctx s t c)
+newType hint = meta1.typeVars %%= (first TVar . newName hint)
+  -- where f names = let (τ , names') = newName hint names
+  --                 in (TVar τ, names')
+
+
+  -- state (over meta0 f)
+  -- where f (Meta1Ctx s t c) =
+  --         let (τ , s') = newName hint s
+  --         in (TVar τ , Meta1Ctx s t c)
+
+
+setVar :: MonadDMTC e t => Symbol -> DMType :& e -> t e ()
+setVar k v = meta0.context %= setValue k v
 
 
 
-
-
-
-
-
-
-
-
-       -- σ <- getSubstitutions @_ @Sensitivity
-       -- σ ↷ n
 
 
 

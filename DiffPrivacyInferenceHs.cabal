@@ -29,6 +29,7 @@ library
       DiffMu.Core.Context
       DiffMu.Core.Definitions
       DiffMu.Core.MonadicPolynomial
+      DiffMu.Core.MonadicPolynomial2
       DiffMu.Core.MonadTC
       DiffMu.Core.Symbolic
       DiffMu.Core.TC
@@ -50,6 +51,7 @@ library
       algebra
     , algebraic-prelude
     , base >=4.7 && <5
+    , bifunctors
     , computational-algebra
     , data-default
     , halg-algebraic
@@ -62,6 +64,7 @@ library
     , halg-polyn-parser
     , halg-polynomials
     , hashable
+    , lens
     , mtl
     , singletons
     , text

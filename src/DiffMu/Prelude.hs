@@ -4,6 +4,7 @@ module DiffMu.Prelude
     -- module Prelude
     module All
   , Symbol
+  , DictKey (..)
   )
   where
 
@@ -18,6 +19,11 @@ import DiffMu.Prelude.MonadicAlgebra as All
 import qualified Prelude (String)
 
 type Symbol = Prelude.String
+
+class (Eq v, Hashable v) => DictKey v
+instance DictKey Symbol
+
+
 
 -- import           Prelude                                 hiding
 --                                                           (Fractional (..),

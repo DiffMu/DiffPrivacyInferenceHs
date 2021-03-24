@@ -15,8 +15,6 @@ createDMType JTInt = pure DMInt
 createDMType JTReal = pure DMReal
 createDMType JTAny = newType "any"
 
-class (Eq v, Hashable v) => HashKey v
-instance HashKey Symbol
 -- instance (Eq v, Hashable v) => HashKey v where
 
 type Scope v a = HashMap v [a]
@@ -26,7 +24,7 @@ instance Default (Scope v a) where
 type Scoped v a = State (Scope v a)
 runScoped = runState
 
-popDefinition :: (MonadDMTC e t, HashKey v, Show v) => Scope v a -> v -> t e (a, Scope v a)
+popDefinition :: (MonadDMTC e t, DictKey v, Show v) => Scope v a -> v -> t e (a, Scope v a)
 popDefinition scope v =
   do (d,ds) <- case H.lookup v scope of
                  Just (x:xs) -> return (x,xs)
@@ -37,23 +35,32 @@ popDefinition scope v =
 type DMScope = Scope Symbol DMTerm
 
 checkSens :: DMTerm -> DMScope -> STC DMType
-checkSens (Var x dτ) scope = do
-  -- get the term that corresponds to this variable from the scope dict
-  (vt, scope') <- popDefinition scope x
 
-  -- check the term in the new, smaller scope'
-  τ <- checkSens vt scope'
+-- TODO: Here we assume that η really has type τ, and do not check it.
+--       Should probably do that.
+checkSens (Sng η τ) scope  = Const (injectCoeffId (Fin η)) <$> createDMType τ
 
-  case dτ of
-    JTAny -> return τ
-    dτ -> do
-      -- if the user has given an annotation
-      -- inferred type must be a subtype of the user annotation
-      dτd <- createDMType dτ
-      addConstraint'2 (IsLessEqual (τ, dτd) )
-      return τ
+-- a special term for function argument variables.
+-- those get sensitivity 1, all other variables are var terms
+checkSens (Arg x dτ) scope = do τ <- createDMType dτ
+                                setVar x (τ :@ injectCoeffId (Fin 1)) --(Fin 1))
+                                return τ
 
-checkSens (Sng η τ) scope = Const <$> (injectCoeff (Fin η)) <*> createDMType τ
+checkSens (Var x dτ) scope = do -- get the term that corresponds to this variable from the scope dict
+                                (vt, scope') <- popDefinition scope x
+
+                                -- check the term in the new, smaller scope'
+                                τ <- checkSens vt scope'
+
+                                case dτ of
+                                  JTAny -> return τ
+                                  dτ -> do
+                                    -- if the user has given an annotation
+                                    -- inferred type must be a subtype of the user annotation
+                                    dτd <- createDMType dτ
+                                    addConstraint'2 (IsLessEqual (τ, dτd) )
+                                    return τ
+
 checkSens t scope = throwError (UnsupportedTermError t)
 
 

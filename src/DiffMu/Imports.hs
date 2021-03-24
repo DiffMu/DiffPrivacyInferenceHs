@@ -13,7 +13,11 @@ import Control.Monad.Writer as All hiding (getLast, getFirst, Last, First)
 import Control.Monad.Identity as All
 import Control.Monad as All
 
-import Data.Semigroup as All hiding (diff, Min, Max, Any, WrapMonoid)
+import Control.Lens as All hiding (Const)
+import Control.Lens.TH as All
+
+import Data.Bifunctor as All
+import Data.Semigroup as All hiding (diff, Min, Max, Any, WrapMonoid, Arg)
 import Data.Monoid as All hiding (Last, First, getLast, getFirst, WrapMonoid, Monoid)
 
 
@@ -22,7 +26,7 @@ import Data.Default as All
 
 import GHC.Generics as All (Generic)
 
-import Data.List as All
+import Data.List as All hiding (uncons)
 import Data.Text as All (Text)
 
 import Data.Hashable as All

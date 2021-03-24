@@ -5,7 +5,7 @@ import DiffMu.Prelude
 
 import DiffMu.Core.Symbolic
 import DiffMu.Core.Term
-import DiffMu.Core.MonadicPolynomial
+import DiffMu.Core.MonadicPolynomial2
 -- import GHC.TypeLits
 
 import           Data.Singletons.Prelude hiding (Symbol)
@@ -63,9 +63,9 @@ data Asgmt a = (:-) Symbol a
   deriving (Generic, Show)
 
 -- newtype Ctx extra = Ctx ([Asgmt (DMType :& extra)] )
-newtype Ctx extra = Ctx (LinCom (DMType :& extra) Symbol)
+newtype Ctx extra = Ctx (MonCom (DMType :& extra) Symbol)
 -- ([Asgmt (DMType :& extra)] )
-  deriving (Generic, Show)
+  deriving (Generic, Show, DictLike Symbol (DMType :& extra))
 instance Default (Ctx e)
 
 data DMTypeOp where

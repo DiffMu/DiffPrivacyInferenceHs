@@ -10,7 +10,7 @@ import Example.Terms
 main :: IO ()
 main = do
   putStrLn "Starting DiffMu!"
-  let r = checkSens t₁ def
+  let r = checkSens t₃ def
   let x = runExcept (runStateT (runTCT r) def)
   case x of
     Left err -> putStrLn $ "Encountered error: " <> show err
