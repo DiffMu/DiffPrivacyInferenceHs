@@ -51,11 +51,12 @@ data Solvable' (t :: * -> * -> *) where
 instance Show (Solvable' t) where
   show (Solvable' c) = show c
 
-class (forall e. Monad (t e)) => MonadConstraint' t where
+class (forall e. Monad (t e)) => MonadConstraint' t s | s -> t where
   type ConstrVar t :: *
-  addConstraint' :: Solvable' t -> t e ()
-  dischargeConstraint' :: ConstrVar t -> t e ()
-  getUnsolvedConstraint' :: t e (Maybe (ConstrVar t, Solvable' t))
+  addConstraint' :: Solvable' t -> s e ()
+  addConstraint'2 :: (forall e. Solve (t e) c a, Show (c a)) => c a -> s e ()
+  dischargeConstraint' :: ConstrVar t -> s e ()
+  getUnsolvedConstraint' :: s e (Maybe (ConstrVar t, Solvable' t))
 
 class Monad t => MonadConstraint t where
   addConstraint :: Solvable t -> t ()
@@ -66,6 +67,12 @@ newtype IsEqual a = IsEqual a
 instance Constraint IsEqual where
   constr = IsEqual
   runConstr (IsEqual c) = c
+
+newtype IsLessEqual a = IsLessEqual a
+  deriving (Show)
+instance Constraint IsLessEqual where
+  constr = IsLessEqual
+  runConstr (IsLessEqual c) = c
 
 -- class Solve t IsEqual (a,a) => Unifiable t a
 

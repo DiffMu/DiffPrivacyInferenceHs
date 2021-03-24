@@ -10,9 +10,9 @@ import Example.Terms
 main :: IO ()
 main = do
   putStrLn "Starting DiffMu!"
-  let r = checkSens t₂
-  let x = runStateT (runTC r) def
-  case runExcept x of
+  let r = checkSens t₁ def
+  let x = runExcept (runStateT (runTCT r) def)
+  case x of
     Left err -> putStrLn $ "Encountered error: " <> show err
     Right x -> putStrLn $ "Result: " <> show x
   putStrLn "Done!"

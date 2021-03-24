@@ -28,7 +28,6 @@ library
       DiffMu.Core
       DiffMu.Core.Context
       DiffMu.Core.Definitions
-      DiffMu.Core.FormalTerm
       DiffMu.Core.MonadicPolynomial
       DiffMu.Core.MonadTC
       DiffMu.Core.Symbolic

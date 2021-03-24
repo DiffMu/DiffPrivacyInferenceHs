@@ -59,17 +59,20 @@ data Full extra = Full
   }
   deriving (Generic, Show)
 
-modify0 :: (Meta0Ctx e -> Meta0Ctx e) -> TC e ()
+-- modify02 :: MonadDMTC e t => (Meta0Ctx e -> Meta0Ctx e) -> t e
+-- modify02 f = modify (\s -> s {meta0 = f (meta0 s)})
+
+modify0 :: MonadDMTC e t => (Meta0Ctx e -> Meta0Ctx e) -> t e ()
 modify0 f = modify (\s -> s {meta0 = f (meta0 s)})
 
-modify1 :: (Meta1Ctx -> Meta1Ctx) -> TC e ()
+modify1 :: MonadDMTC e t => (Meta1Ctx -> Meta1Ctx) -> t e ()
 modify1 f = modify (\s -> s {meta1 = f (meta1 s)})
 
-state0 :: (Meta0Ctx e -> (a, Meta0Ctx e)) -> TC e a
+state0 :: MonadDMTC e t => (Meta0Ctx e -> (a, Meta0Ctx e)) -> t e a
 state0 f = state (\s -> let (a,b) = f (meta0 s)
                         in (a, s {meta0 = b}))
 
-state1 :: (Meta1Ctx -> (a, Meta1Ctx)) -> TC e a
+state1 :: MonadDMTC e t => (Meta1Ctx -> (a, Meta1Ctx)) -> t e a
 state1 f = state (\s -> let (a,b) = f (meta1 s)
                         in (a, s {meta1 = b}))
 
@@ -81,38 +84,51 @@ instance Default (Full e) where
   -- deriving (Generic, Show)
 
 -- type TC extra = StateT (Full extra) (Except DMException)
-newtype TC extra a = TC {runTC :: (StateT (Full extra) (Except DMException) a)}
+-- newtype TC extra a = TC {runTC :: (StateT (Full extra) (Except DMException) a)}
+--   deriving (Functor, Applicative, Monad, MonadState (Full extra), MonadError DMException)
+
+newtype TCT m extra a = TCT {runTCT :: (StateT (Full extra) (ExceptT DMException m) a)}
   deriving (Functor, Applicative, Monad, MonadState (Full extra), MonadError DMException)
 
+-- liftTC :: TC e a -> TCT m e a
+-- liftTC = _
+
+type TC = TCT Identity
 
 type STC a = TC Sensitivity a
 type PTC a = TC Privacy a
 
-
-instance MonadTC TVar DMType (TC e) where
+instance Monad m => MonadTC TVar DMType (TCT m e) where
   getSubs = typeSubs . meta0 <$> get
 
-instance MonadTC SVar Sensitivity (TC e) where
+instance Monad m => MonadTC SVar Sensitivity (TCT m e) where
   getSubs = sensSubs . meta0 <$> get
 
 getUnsolved :: MonCom (Solvable' TC) Symbol -> Maybe (Symbol, Solvable' TC)
 getUnsolved = undefined
 
-instance MonadConstraint' TC where
+instance Monad m => MonadConstraint' TC (TCT m) where
   type ConstrVar TC = Symbol
-  addConstraint' c = modify0 (\f -> f {constraints = MonCom [(c,"hello")]})
+  addConstraint' c = modify0 (\f -> f {constraints = MonCom [(c,"hello")]}) -- --modify0 (\s -> s {constraints = _}) -- 
   getUnsolvedConstraint' = getUnsolved . constraints . meta0 <$> get
+  addConstraint'2 c = return ()
 
-instance MonadWatch (TC e) where
+instance Monad m => MonadWatch (TCT m e) where
 
+instance Monad m => Solve (TCT m e) IsLessEqual (DMType,DMType) where
+  solve_ (IsLessEqual (a,b)) = undefined
 
-class (MonadImpossible t, MonadWatch t, MonadTC TVar DMType t, MonadTC SVar Sensitivity t) => MonadDMTC t where
-instance MonadDMTC (TC e) where
+class (MonadImpossible (t e), MonadWatch (t e),
+       MonadTC TVar DMType (t e), MonadTC SVar Sensitivity (t e),
+       MonadState (Full e) (t e),
+       MonadError DMException (t e)) => MonadDMTC e t where
+-- instance MonadDMTC e (TC) where
+instance Monad m => MonadDMTC e (TCT m) where
 
-instance MonadImpossible (TC e) where
+instance Monad m => MonadImpossible (TCT m e) where
   impossible err = throwError (ImpossibleError err)
 
-instance MonadDMTC t => Normalize t DMType where
+instance MonadDMTC e t => Normalize (t e) DMType where
   normalize n =
     do σ <- getSubs @TVar @DMType
        n₂ <- σ ↷ n
@@ -129,13 +145,13 @@ instance (Normalize t a) => Normalize t [a] where
 -- instance Monad t => Normalize t DMNumType where
 --   normalize = pure
 
-instance MonadDMTC t => Normalize t Sensitivity where
+instance MonadDMTC e t => Normalize (t e) Sensitivity where
   normalize n =
     do σ <- getSubs @SVar @Sensitivity
        σ ↷ n
 
 
-newType :: Symbol -> TC e DMType
+newType :: MonadDMTC e t => Symbol -> t e DMType
 newType hint = state1 f
   where f (Meta1Ctx s t c) =
           let (τ , s') = newName hint s

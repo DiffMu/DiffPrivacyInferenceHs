@@ -105,6 +105,7 @@ data DMException where
   UnificationError :: Show a => a -> a -> DMException
   WrongNumberOfArgs :: Show a => a -> a -> DMException
   ImpossibleError :: String -> DMException
+  VariableNotInScope :: Show a => a -> DMException
   -- deriving (Generic, Show)
 
 instance Show DMException where
@@ -112,6 +113,7 @@ instance Show DMException where
   show (UnificationError a b) = "Could not unify '" <> show a <> "' with '" <> show b <> "'."
   show (WrongNumberOfArgs a b) = "While unifying: the terms '" <> show a <> "' and '" <> show b <> "' have different numbers of arguments"
   show (ImpossibleError e) = "Something impossible happened: " <> show e
+  show (VariableNotInScope v) = "Variable not in scope: " <> show v
 
 
 
