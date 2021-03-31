@@ -31,6 +31,7 @@ library
       DiffMu.Core.MonadicPolynomial
       DiffMu.Core.MonadicPolynomial2
       DiffMu.Core.MonadTC
+      DiffMu.Core.Operations
       DiffMu.Core.Symbolic
       DiffMu.Core.TC
       DiffMu.Core.Term
@@ -66,6 +67,7 @@ library
     , hashable
     , lens
     , mtl
+    , newtype
     , singletons
     , text
     , type-natural

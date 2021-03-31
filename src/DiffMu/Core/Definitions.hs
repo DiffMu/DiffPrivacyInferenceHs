@@ -5,6 +5,7 @@ import DiffMu.Prelude
 
 import DiffMu.Core.Symbolic
 import DiffMu.Core.Term
+import DiffMu.Core.MonadTC
 import DiffMu.Core.MonadicPolynomial2
 -- import GHC.TypeLits
 
@@ -13,6 +14,7 @@ import           Data.Singletons.Prelude.Enum (SEnum (..))
 import           Data.Singletons.Prelude.List hiding (Group)
 
 import qualified Data.Text as T
+import Data.HashMap.Strict as H
 
 -- import Algebra.Ring.Polynomial.Class
 
@@ -24,19 +26,19 @@ import qualified Data.Text as T
 
 -- type Symbol = String
 
+type SVar = Symbol
+type Sensitivity = SymTerm
+newtype Privacy = Privacy ()
+
 
 -- data Sensitivity = forall n. KnownNat n => Sens (Polynomial (Ratio Integer) n)
 
-type Sensitivity = SymTerm
-
--- instance Show Sensitivity where
---   show (Sens s) = show s
-
-newtype Privacy = Privacy ()
 
 data JuliaType =
   JTAny | JTInt | JTReal
   deriving (Generic, Show)
+
+type TVar = Symbol
 
 
 -- data DMNumType where
@@ -63,10 +65,62 @@ data DMType where
   (:->:) :: [DMType :& Sensitivity] -> DMType -> DMType
   deriving (Generic, Show)
 
--- instance Show DMType where
---   show (TVar x) = x
---   show (DMInt)
 
+--------------------------------------------------------------------------
+-- Type Operations
+-- It is often the case that we cannot say what type a simple operation
+-- such as `a + b` will have, since this depends on the types of `a` and `b`,
+-- which apriori seldom are going to be known.
+-- Thus we introduce 'type operations' encoding these unknown types,
+-- If `a : A` and `b : B`, then `a + b : Binary(DMOpAdd(), A, B)`.
+-- Further along while typechecking, we will compute the actual value of that type.
+
+-- The type of all possible unary type operations.
+data DMTypeOps_Unary =
+   DMOpCeil
+   | DMOpGauss
+
+-- The type of all possible binary type operations.
+data DMTypeOps_Binary =
+   DMOpAdd
+   | DMOpSub
+   | DMOpMul
+   | DMOpDiv
+   | DMOpMod
+   | DMOpEq
+
+-- The type of all possible ternary type operations.
+data DMTypeOps_Ternary =
+   DMOpLoop
+
+data DMTypeOp_Some = IsUnary DMTypeOps_Unary | IsBinary DMTypeOps_Binary | IsTernary DMTypeOps_Ternary
+  deriving (Show, Generic)
+
+instance Show DMTypeOps_Unary where
+  show DMOpCeil = "ceil"
+  show DMOpGauss = "gauss"
+
+instance Show DMTypeOps_Binary where
+  show DMOpAdd = "+"
+  show DMOpSub = "-"
+  show DMOpMul = "*"
+  show DMOpDiv = "/"
+  show DMOpMod = "%"
+  show DMOpEq = "=="
+
+instance Show DMTypeOps_Ternary where
+  show DMOpLoop = "loop"
+
+-- An application of a type operation to an appropriate number of type arguments
+data DMTypeOp =
+   Unary DMTypeOps_Unary (DMType :& SVar) DMType
+   | Binary DMTypeOps_Binary (DMType :& SVar , DMType :& SVar) DMType
+   | Ternary DMTypeOps_Ternary (DMType :& SVar , DMType :& SVar , DMType :& SVar) DMType
+  deriving (Show)
+
+
+--------------------------------------------------------------------------
+-- Other ...
 
 data Asgmt a = (:-) Symbol a
   deriving (Generic, Show)
@@ -74,9 +128,17 @@ data Asgmt a = (:-) Symbol a
 
 newtype Ctx v x = Ctx (MonCom x v)
   deriving (Generic, DictLike v x)
+instance (Normalize t x) => Normalize t (Ctx v x) where
+  normalize (Ctx m) = Ctx <$> normalize m
+
+instance Functor (Ctx v) where
+  fmap f (Ctx (MonCom m)) = Ctx (MonCom (H.map f m))
+
+instance (SemigroupM m x, HasMonCom m x v) => SemigroupM m (Ctx v x) where
+  (⋆) (Ctx c) (Ctx d) = Ctx <$> (c ⋆ d)
 
 instance (Show v, Show x, DictKey v) => Show (Ctx v x) where
-  show (Ctx γ) = showWith ", " (\x τ -> x <> " : " <> τ) γ
+  show (Ctx γ) = showWith ", " (\x τ -> show x <> " : " <> show τ) γ
 
 instance Default (Ctx v x)
 type TypeCtx extra = Ctx Symbol (DMType :& extra)
@@ -87,9 +149,9 @@ type TypeCtx extra = Ctx Symbol (DMType :& extra)
   -- deriving (Generic, Show, DictLike Symbol (DMType :& extra))
 -- instance Default (TypeCtx e)
 
-data DMTypeOp where
-  Op1 :: DMTypeOp
-  deriving (Generic, Show)
+-- data DMTypeOp where
+--   Op1 :: DMTypeOp
+--   deriving (Generic, Show)
 
 data ConstraintOld = ConstraintOld
   -- IsNumeric (DMType)
@@ -125,6 +187,7 @@ data DMException where
   UnsupportedTermError :: DMTerm -> DMException
   UnificationError :: Show a => a -> a -> DMException
   WrongNumberOfArgs :: Show a => a -> a -> DMException
+  WrongNumberOfArgsOp :: Show a => a -> Int -> DMException
   ImpossibleError :: String -> DMException
   VariableNotInScope :: Show a => a -> DMException
   -- deriving (Generic, Show)
@@ -133,6 +196,7 @@ instance Show DMException where
   show (UnsupportedTermError t) = "The term '" <> show t <> "' is currently not supported."
   show (UnificationError a b) = "Could not unify '" <> show a <> "' with '" <> show b <> "'."
   show (WrongNumberOfArgs a b) = "While unifying: the terms '" <> show a <> "' and '" <> show b <> "' have different numbers of arguments"
+  show (WrongNumberOfArgsOp op n) = "The operation " <> show op <> " was given a wrong number (" <> show n <> ") of args."
   show (ImpossibleError e) = "Something impossible happened: " <> show e
   show (VariableNotInScope v) = "Variable not in scope: " <> show v
 
@@ -147,7 +211,7 @@ data DMTerm =
   | Sng Float JuliaType
   | Var Symbol JuliaType
   | Arg Symbol JuliaType
-  | Op Symbol [DMTerm]
+  | Op DMTypeOp_Some [DMTerm]
   | Phi DMTerm DMTerm DMTerm
   | Lam Lam_
   | LamStar Lam_

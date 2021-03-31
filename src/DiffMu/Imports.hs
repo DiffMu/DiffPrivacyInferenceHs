@@ -16,6 +16,8 @@ import Control.Monad as All
 import Control.Lens as All hiding (Const)
 import Control.Lens.TH as All
 
+import Control.Newtype as All hiding (ala, under, over, op)
+
 import Data.Bifunctor as All
 import Data.Semigroup as All hiding (diff, Min, Max, Any, WrapMonoid, Arg)
 import Data.Monoid as All hiding (Last, First, getLast, getFirst, WrapMonoid, Monoid)

@@ -3,7 +3,7 @@ module DiffMu.Core.Unification where
 
 import DiffMu.Prelude
 import DiffMu.Core.Definitions
-import DiffMu.Core.Context
+-- import DiffMu.Core.Context
 import DiffMu.Core.MonadTC
 import DiffMu.Core.TC
 import DiffMu.Core.Term
@@ -17,21 +17,22 @@ import DiffMu.Core.Term
 
 -- unify_ a b = solve (a,b)
 
--- instance Unify (TC e) DMNumType where
+-- instance (MonadDMTC e t) => Unify (TC e) DMNumType where
 --   unify_ a b | a == b    = pure a
 --   unify_ a b | otherwise = throwError (UnificationError a b)
 
-instance Unify (TC e) Sensitivity where
+instance (MonadDMTC e t) => Unify (t e) Sensitivity where
   unify_ = undefined
 
-instance (Unify (TC e) a, Unify (TC e) b) => Unify (TC e) (a :& b) where
+-- instance (MonadDMTC e t, Unify (TC e) a, Unify (TC e) b) => Unify (TC e) (a :& b) where
+instance (MonadDMTC e t, Unify (t e) a, Unify (t e) b) => Unify (t e) (a :& b) where
   unify_ (a₁ :@ e₁) (a₂ :@ e₂) = (:@) <$> unify_ a₁ a₂ <*> unify_ e₁ e₂
 
-instance (Show a, Unify (TC e) a) => Unify (TC e) [a] where
+instance (MonadDMTC e t, Show a, Unify (t e) a) => Unify (t e) [a] where
   unify_ xs ys | length xs == length ys = mapM (uncurry unify_) (zip xs ys)
   unify_ xs ys = throwError (WrongNumberOfArgs xs ys)
 
-instance Unify (TC e) DMType where
+instance (MonadDMTC e t) => Unify (t e) DMType where
   unify_ DMReal DMReal                 = pure DMReal
   unify_ DMInt DMInt                   = pure DMInt
   unify_ (Const η₁ τ₁) (Const η₂ τ₂)   = Const <$> unify_ η₁ η₂ <*> unify_ τ₁ τ₂
@@ -41,13 +42,19 @@ instance Unify (TC e) DMType where
   unify_ t (TVar x)                    = addSub (x := t) >> pure t
   unify_ t s                           = throwError (UnificationError t s)
 
--- instance Unify (TC e) DMType where
+-- instance (MonadDMTC e t) => Unify (TC e) DMType where
 
-instance SemigroupM (TC e) DMType where
+instance (MonadDMTC e t) => SemigroupM (t e) DMType where
   (⋆) = unify
 
+instance (MonadDMTC e t) => MonoidM (t e) DMType where
+  neutral = TVar <$> newTVar ""
 
-testabc :: DMType -> DMType -> TC e ()
-testabc a b = solve (IsEqual (a,b))
+instance (MonadDMTC e t) => (CheckNeutral (t e) DMType) where
+  checkNeutral (TVar x) = return True
+  checkNeutral (_) = return False
+
+-- testabc :: DMType -> DMType -> TC e ()
+-- testabc a b = solve (IsEqual (a,b))
 
 

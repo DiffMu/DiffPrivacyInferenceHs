@@ -6,7 +6,9 @@ import DiffMu.Prelude
 import Data.HashMap.Strict as H
 
 data Sub x a = (:=) x a
-  deriving (Show)
+
+instance (Show x, Show a) => Show (Sub x a) where
+  show (x := a) = show x <> " := " <> show a
 
 
 data Changed = IsChanged | NotChanged
@@ -56,10 +58,16 @@ class (Hashable v, Show v, Show a, Substitute v a a) => Term v a where
 data Subs v a where
   Subs :: Term v a => (HashMap v a) -> Subs v a
 
+
 instance Term v a => Default (Subs v a) where
   def = Subs empty
+
+singletonSub :: Term x a => Sub x a -> Subs x a
+singletonSub (x := a) = Subs (singleton x a)
+
 instance Show (Subs v a) where
-  show (Subs s) = "some subs"
+  show (Subs s) = intercalate ", " (show <$> (\(x,a) -> (x := a)) <$> toList s)
+
 -- class Substitute (Var a) a x => VSubstitute a x where
 -- instance Substitute (Var a) a x => VSubstitute a x where
 

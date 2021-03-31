@@ -3,12 +3,15 @@ module DiffMu.Core.Symbolic where
 
 import DiffMu.Prelude
 -- import DiffMu.Prelude.MonadicAlgebra
-import DiffMu.Core.MonadicPolynomial
+import DiffMu.Core.MonadicPolynomial2
 import qualified Prelude as P
 
 data SymVal =
   Infty | Fin Float -- a| Ln (SymTerm t)
-  deriving (Generic, Show, Eq)
+  deriving (Generic, Eq)
+instance Show SymVal where
+  show Infty = "∞"
+  show (Fin f) = show f
 
 instance Hashable SymVal
 
@@ -43,12 +46,35 @@ instance Monad t => SemiringM t (SymVal) where
 
 data SymVar =
   HonestVar Symbol | Ln SymTerm
-  deriving (Show, Generic, Eq, Ord)
+  deriving (Generic, Eq)
+
+instance Show SymVar where
+  show (HonestVar v) = show v
+  show (Ln te) = "ln(" <> show te <> ")"
 
 instance Hashable SymVar
 
+-- newtype MultInt = MultInt Int
+--   deriving (Hashable, Eq)
+-- instance Show MultInt where
+--   show (MultInt a) = show a
+
+-- instance Monad m => SemigroupM m MultInt where
+--   (⋆) (MultInt a) (MultInt b) = pure $ MultInt $ (P.*) a b
+
+-- instance Monad m => MonoidM m MultInt where
+--   neutral = pure (MultInt 1)
+
 type SymTerm = CPolyM SymVal Int SymVar
 
+-- WARNING: This is not implemented, we should actually check for zero here!
+instance Monad m => CheckNeutral m SymTerm where
+  checkNeutral a = pure False
+
+
+svar :: Symbol -> SymTerm
+svar a = injectVarId (HonestVar a)
+  -- LinCom (MonCom [(Fin 1, MonCom [(1,HonestVar a)])])
 
 -- type SymTerm t = Combination t SymVal Rational Symbol
 

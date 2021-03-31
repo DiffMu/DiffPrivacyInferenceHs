@@ -36,6 +36,7 @@ library:
     - hashable
     - unordered-containers
     - singletons
+    - newtype
     - algebraic-prelude
     - halg-core
     - halg-core-test

@@ -139,6 +139,10 @@ instance Monad t => MonoidM t Int where
 instance Monad t => CMonoidM t Int where
 instance Monad t =>CheckNeutral t Int where
   checkNeutral a = pure (a == 0)
+
+instance Monad t => SemiringM t Int where
+  one = pure 1
+  (⋅) a b = pure $ a P.* b
   {-
 (?:) :: Monad m => m a -> m [a] -> m [a]
 (?:) x xs = (:) <$> x <⋅> xs

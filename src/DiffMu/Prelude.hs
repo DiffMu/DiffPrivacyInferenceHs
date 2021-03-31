@@ -8,7 +8,7 @@ module DiffMu.Prelude
   )
   where
 
-import DiffMu.Imports as All
+import DiffMu.Imports as All hiding (msum)
 
 -- import DiffMu.Prelude.Algebra as All
 -- import DiffMu.Prelude.Polynomial as All

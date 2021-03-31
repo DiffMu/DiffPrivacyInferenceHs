@@ -10,4 +10,7 @@ t₁ = Var (Symbol "x") JTAny
 t₂ :: DMTerm
 t₂ = Sng 2 JTAny
 
-t₃ = Arg (Symbol "x") JTAny
+t₃ a = Arg (Symbol a) JTAny
+
+t₄ = Op (IsBinary DMOpAdd) [t₃ "x", t₃ "x"]
+
