@@ -31,6 +31,7 @@ library
       DiffMu.Core.MonadicPolynomial
       DiffMu.Core.MonadicPolynomial2
       DiffMu.Core.MonadTC
+      DiffMu.Core.MonadTCOld
       DiffMu.Core.Operations
       DiffMu.Core.Symbolic
       DiffMu.Core.TC
@@ -49,28 +50,16 @@ library
       src
   default-extensions: QuasiQuotes ConstraintKinds DataKinds GADTs KindSignatures MultiParamTypeClasses NoImplicitPrelude NoMonomorphismRestriction TypeOperators UnicodeSyntax ExistentialQuantification ScopedTypeVariables QuantifiedConstraints KindSignatures PolyKinds GeneralizedNewtypeDeriving DeriveGeneric FlexibleInstances FlexibleContexts FunctionalDependencies OverloadedStrings TypeApplications TypeFamilies RankNTypes OverloadedStrings
   build-depends:
-      algebra
-    , algebraic-prelude
-    , base >=4.7 && <5
+      base >=4.7 && <5
     , bifunctors
-    , computational-algebra
+    , constraints
     , data-default
-    , halg-algebraic
-    , halg-algorithms
-    , halg-core
-    , halg-core-test
-    , halg-factor
-    , halg-galois-fields
-    , halg-matrices
-    , halg-polyn-parser
-    , halg-polynomials
     , hashable
     , lens
     , mtl
     , newtype
     , singletons
     , text
-    , type-natural
     , unordered-containers
   default-language: Haskell2010
 

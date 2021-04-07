@@ -4,6 +4,7 @@ module Main where
 import DiffMu.Prelude
 import DiffMu.Core
 import DiffMu.Core.TC
+import DiffMu.Core.Term
 import DiffMu.Core.Operations
 import DiffMu.Core.Symbolic
 import DiffMu.Core.Context
@@ -21,7 +22,8 @@ main = do
         -- let x = (traceShowId a) +! (traceShowId b)
         -- traceShow x (checkSens t₄ def)
         checkSens t₄ def
-        normalizeTypes
+        normalizeContext
+
   let x = runExcept (runStateT (runTCT r) def)
   case x of
     Left err -> putStrLn $ "Encountered error: " <> show err

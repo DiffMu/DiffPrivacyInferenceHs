@@ -6,6 +6,7 @@ import DiffMu.Core.Definitions
 import DiffMu.Core.MonadicPolynomial
 import DiffMu.Core.MonadTC
 import DiffMu.Core.TC
+import DiffMu.Core.Term
 import DiffMu.Core.Unification
 
 import Data.HashMap.Strict as H
@@ -47,13 +48,13 @@ mscale :: MonadDMTC Sensitivity t => Sensitivity -> t Sensitivity ()
 mscale η = types %= scale η
 
 -- msum :: [TCT m e a] -> TCT m e [a]
-msum :: (Show e, MonadDMTC e t, MonoidM (t e) e, CheckNeutral (t e) e) => [t e a] -> t e [a]
+msum :: (Show e, IsT MonadDMTC t, MonoidM (t e) e, CheckNeutral (t e) e) => [t e a] -> t e [a]
 msum ms = do
   initΣ <- use types
   f initΣ ms def
 
     where
-      f :: (Show e, MonadDMTC e t, MonoidM (t e) e, CheckNeutral (t e) e) => TypeCtx e -> [t e a] -> TypeCtx e -> t e [a]
+      f :: (Show e, IsT MonadDMTC t, MonoidM (t e) e, CheckNeutral (t e) e) => TypeCtx e -> [t e a] -> TypeCtx e -> t e [a]
       f initΣ [] accΣ = types .= accΣ >> return []
       f initΣ (m:ms) accΣ = do
         types .= initΣ
@@ -63,11 +64,55 @@ msum ms = do
         as <- f initΣ ms (m_acc_Σ)
         return []
 
-normalizeTypes :: (Normalize (t e) e, MonadDMTC e t) => t e ()
-normalizeTypes = do
-  curΣ <- use types
-  normΣ <- normalize curΣ
-  types .= normΣ
+
+monadicChange :: MonadState s m => (m a) -> (a -> m s) -> (a -> m a) -> m ()
+monadicChange getF putF change = do
+  curVal <- getF
+  newVal <- change curVal
+  putF newVal
+  return ()
+
+-- NOTE: Warning, this function destroys information if the function `f` which does the update
+-- has monadic effects in m which affect the part of the state which is accessed by the lens.
+(%=~) :: MonadState s m => (forall f. Functor f => LensLike f s s a a) -> (a -> m a) -> m ()
+(%=~) lens f = do
+  curVal <- use lens
+  newVal <- f curVal
+  lens .= newVal
+  return ()
+
+infixr 4 %=~
+
+
+-- (%=~) :: MonadState s m => (LensLike m s s a a) -> (a -> m a) -> m ()
+-- (%=~) lens f = do
+--   curState <- get
+--   newState <- lens f curState
+--   put newState
+--   return ()
+
+  -- curV <- use lens
+  -- normV <- f curV
+  -- lens .= normV
+  -- return ()
+
+-- mytest lens = do
+--   curΣ <- use lens
+--   normΣ <- normalize curΣ
+--   lens .= normΣ
+
+normalizeContext :: (Normalize (t e) e, MonadDMTC e t) => t e ()
+normalizeContext = do
+  types %=~ normalize
+  meta.constraints %=~ normalize
+
+
+
+
+  -- do
+  -- curΣ <- use types
+  -- normΣ <- normalize curΣ
+  -- types .= normΣ
 
 
 -- addConstraint :: Constraint -> TC e ()

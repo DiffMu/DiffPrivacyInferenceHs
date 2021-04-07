@@ -5,6 +5,8 @@ import DiffMu.Prelude
 
 import Data.HashMap.Strict as H
 
+import Debug.Trace
+
 data Sub x a = (:=) x a
 
 instance (Show x, Show a) => Show (Sub x a) where
@@ -13,6 +15,9 @@ instance (Show x, Show a) => Show (Sub x a) where
 
 data Changed = IsChanged | NotChanged
   deriving (Generic, Show)
+
+instance Default Changed where
+  def = NotChanged
 
 type Watch = Writer Changed
 
@@ -25,13 +30,18 @@ instance Monoid Changed where
   mempty = NotChanged
 
 class Monad t => MonadWatch t where
+  -- startWatch :: t ()
+  -- stopWatch :: t ()
+  resetChanged :: t ()
   notifyChanged :: t ()
+  getChanged :: t Changed
 
-instance MonadWatch Watch where
-  notifyChanged = tell IsChanged
+-- instance MonadWatch Watch where
+--   notifyChanged = tell IsChanged
 
-instance MonadWatch Identity where
-  notifyChanged = pure ()
+-- instance MonadWatch Identity where
+--   startWatch = pure ()
+--   notifyChanged = pure ()
 
 -- class Subs x a s where
 --   getTerm :: s -> x -> Maybe a
@@ -75,6 +85,10 @@ instance Show (Subs v a) where
 trySubstitute :: (MonadWatch t, Term v a) => Subs v a -> v -> t a
 trySubstitute (Subs m) x = case H.lookup x m of
   Just a  -> notifyChanged >> pure a
+    -- traceStack ("## Found " <> show (x := a) <> "\n")
+    -- do res <- notifyChanged
+    --    traceShowM $ "CHANGED: " <> show res <> "\n"
+       -- pure a
   Nothing -> pure (var x)
 
 substituteSingle :: Term v a => Sub v a -> a -> a

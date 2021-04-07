@@ -25,9 +25,6 @@ dependencies:
 library:
   source-dirs: src
   dependencies:
-    - computational-algebra
-    - type-natural
-    - algebra
     - text
     - mtl
     - lens
@@ -37,16 +34,20 @@ library:
     - unordered-containers
     - singletons
     - newtype
-    - algebraic-prelude
-    - halg-core
-    - halg-core-test
-    - halg-polyn-parser
-    - halg-polynomials
-    - halg-galois-fields
-    - halg-matrices
-    - halg-algorithms
-    - halg-factor
-    - halg-algebraic
+    - constraints
+    # - computational-algebra
+    # - type-natural
+    # - algebra
+    # - algebraic-prelude
+    # - halg-core
+    # - halg-core-test
+    # - halg-polyn-parser
+    # - halg-polynomials
+    # - halg-galois-fields
+    # - halg-matrices
+    # - halg-algorithms
+    # - halg-factor
+    # - halg-algebraic
   default-extensions:
     - QuasiQuotes
     - ConstraintKinds

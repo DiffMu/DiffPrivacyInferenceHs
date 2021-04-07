@@ -10,6 +10,8 @@ import DiffMu.Core.Term
 import DiffMu.Core.MonadicPolynomial2
 import DiffMu.Core.Symbolic
 
+import Debug.Trace
+
 instance (Substitute v x a, Substitute v x b) => Substitute v x (a :& b) where
   substitute σs (a :@ b) = (:@) <$> substitute σs a <*> substitute σs b
 
@@ -65,11 +67,49 @@ type SSubs = Subs Sensitivity
 --   }
 --   deriving (Generic)
 
+class (MonadImpossible (t e), MonadWatch (t e),
+       MonadTC TVar DMType (t e), MonadTC SVar Sensitivity (t e),
+       MonadState (Full e) (t e),
+       MonadError DMException (t e),
+       -- MonadConstraint' Symbol (TC) (t e),
+       MonadConstraint Symbol (MonadDMTC) (t e),
+       LiftTC t) => MonadDMTC e t where
+
 data Tag = DM
 
 data KindedNameCtx ks = KindedNameCtx NameCtx ks
   deriving (Generic)
-type ConstraintCtx = KindedNameCtx (Ctx Symbol (Solvable' TC))
+-- data DMSolvable where
+--   DMSolvable :: (forall e t. MonadDMTC e t => Solve (t e) c a) => c a -> DMSolvable
+
+-- instance Show DMSolvable where
+--   show a = "some constraint"
+
+-- instance MonadDMTC e t => Normalize (t e) DMSolvable where
+--   -- normalize (DMSolvable c) = DMSolvable <$> normalize c
+
+data Watched a = Watched Changed a
+
+instance Show a => Show (Watched a) where
+  show (Watched IsChanged a) = "*" <> show a
+  show (Watched NotChanged a) = show a
+
+instance (MonadWatch t, Normalize t a) => Normalize t (Watched a) where
+  normalize (Watched c a) =
+    do resetChanged
+       a' <- normalize a
+       newc <- getChanged
+       return (Watched newc a')
+
+type ConstraintCtx = KindedNameCtx (Ctx Symbol (Watched (Solvable MonadDMTC)))
+-- type ConstraintCtx = KindedNameCtx (Ctx Symbol (Solvable' TC))
+
+instance (MonadWatch t, Normalize t ks) => Normalize t (KindedNameCtx ks) where
+  normalize (KindedNameCtx names ks) =
+    do res <- KindedNameCtx names <$> normalize ks
+       isC <- getChanged
+       traceShowM $ "CHANGED: " <> show isC <> "\n"
+       return res
 
 instance Show ks => Show (KindedNameCtx ks) where
   show (KindedNameCtx _ kinds) = show kinds
@@ -89,6 +129,15 @@ newKindedName hint k (KindedNameCtx names kinds) =
 --   }
 --   deriving (Generic)
 
+-- data Watching = IsWatching | NotWatching
+--   deriving (Show)
+
+-- instance Default Watching where
+--   def = NotWatching
+
+data Watcher = Watcher Changed
+  deriving (Generic)
+
 data MetaCtx extra = MetaCtx
   {
     _sensVars :: NameCtx,
@@ -100,10 +149,17 @@ data MetaCtx extra = MetaCtx
   }
   deriving (Generic)
 
+data TCState = TCState
+  {
+    _watcher :: Watcher
+  }
+  deriving (Generic)
+
 data Full extra = Full
   {
     -- _meta1 :: Meta1Ctx,
     -- _meta0 :: Meta0Ctx extra
+    _tcstate :: TCState,
     _meta :: MetaCtx extra,
     _types :: TypeCtx extra
   }
@@ -112,8 +168,8 @@ data Full extra = Full
 newtype TCT m extra a = TCT {runTCT :: (StateT (Full extra) (ExceptT DMException m) a)}
   deriving (Functor, Applicative, Monad, MonadState (Full extra), MonadError DMException)
 
--- liftTC :: TC e a -> TCT m e a
--- liftTC = _
+class LiftTC t where
+  liftTC :: TC e a -> t e a
 
 type TC = TCT Identity
 
@@ -124,6 +180,7 @@ type PTC a = TC Privacy a
 -- $(makeLenses ''Meta0Ctx)
 $(makeLenses ''MetaCtx)
 $(makeLenses ''Full)
+$(makeLenses ''TCState)
 
 
 -- instance Show Meta1Ctx where
@@ -147,8 +204,14 @@ instance Show (MetaCtx e) where
     <> "- constraints: " <> show cs <> "\n"
     -- <> "- types:       " <> show γ <> "\n"
 
+instance Show Watcher where
+  show (Watcher changed) = show changed
+
+instance Show (TCState) where
+  show (TCState w) = "- watcher: " <> show w <> "\n"
+
 instance Show e => Show (Full e) where
-  show (Full m γ) = "\nMeta:\n" <> show m <> "\nTypes:\n" <> show γ <> "\n"
+  show (Full tcs m γ) = "\nState:\n" <> show tcs <> "\nMeta:\n" <> show m <> "\nTypes:\n" <> show γ <> "\n"
 
 -- modify02 :: MonadDMTC e t => (Meta0Ctx e -> Meta0Ctx e) -> t e
 -- modify02 f = modify (\s -> s {meta0 = f (meta0 s)})
@@ -169,6 +232,8 @@ instance Show e => Show (Full e) where
 
 -- instance Default (Meta1Ctx) where
 -- instance Default (Meta0Ctx e) where
+instance Default (Watcher) where
+instance Default (TCState) where
 instance Default (MetaCtx e) where
 instance Default (Full e) where
 
@@ -195,16 +260,21 @@ instance Monad m => MonadTC SVar Sensitivity (TCT m e) where
     σs' <- σs ⋆ singletonSub σ
     meta.sensSubs .= σs'
 
-getUnsolved :: MonCom (Solvable' TC) Symbol -> Maybe (Symbol, Solvable' TC)
-getUnsolved = undefined
+-- getUnsolved :: MonCom (Solvable' TC) Symbol -> Maybe (Symbol, Solvable' TC)
+-- getUnsolved = undefined
 
+instance Monad m => MonadConstraint Symbol (MonadDMTC) (TCT m e) where
+  addConstraint c = meta.constraints %%= (newKindedName "constr" (Watched IsChanged c))
+
+
+  {-
 instance Monad m => MonadConstraint' Symbol TC (TCT m e) where
   -- type ConstrVar TC = Symbol
-  addConstraint' c = meta.constraints %%= newKindedName "constr" c
+  addConstraint' c = meta.constraints %%= newKindedName "constr" (DMSolvable c)
   -- modify0 (\f -> f {constraints = MonCom [(c,"hello")]}) -- --modify0 (\s -> s {constraints = _}) -- 
   getUnsolvedConstraint' = undefined -- getUnsolved <$> view (meta0.constraints) <$> get
   -- addConstraint'2 c = return ()
-
+-}
 -- instance MonadConstraint'' Symbol TCT where
 --   addConstraint'' c = meta0.constraints %%= newKindedName "" (Solvable'' c)
 
@@ -217,23 +287,38 @@ instance Monad m => MonadConstraint' Symbol TC (TCT m e) where
 
 
 
-
-
 instance Monad m => MonadWatch (TCT m e) where
+  -- startWatch = tcstate.watcher %= (\(Watcher _ _) -> Watcher IsWatching NotChanged)
+  -- stopWatch = tcstate.watcher %= (\(Watcher _ s) -> Watcher NotWatching s)
+  resetChanged = tcstate.watcher %= (\(Watcher _) -> Watcher NotChanged)
+  notifyChanged = tcstate.watcher %= (\(Watcher _) -> Watcher IsChanged)
+  getChanged = do (Watcher c) <- use (tcstate.watcher)
+                  return c
 
-instance Solve (TC e) IsLessEqual (DMType,DMType) where
-  solve_ (IsLessEqual (a,b)) = undefined
 
-class (MonadImpossible (t e), MonadWatch (t e),
-       MonadTC TVar DMType (t e), MonadTC SVar Sensitivity (t e),
-       MonadState (Full e) (t e),
-       MonadError DMException (t e),
-       MonadConstraint' Symbol (TC) (t e)) => MonadDMTC e t where
+
+
+
+-- instance MonadWatch m => MonadWatch (TCT m e) where
+--   notifyChanged = TCT (lift (lift notifyChanged))
+
+instance Solve MonadDMTC IsLessEqual (DMType,DMType) where
+  solve_ Dict (IsLessEqual (a,b)) = undefined
+
 -- instance MonadDMTC e (TC) where
 instance Monad m => MonadDMTC e (TCT m) where
 
 
+-- instance MonadDMTC e t => Normalize (t e) (Solvable' TC) where
+--   normalize solv = liftTC (normalize solv)
 
+instance Monad m => LiftTC (TCT m) where
+  liftTC (TCT v) = -- TCT (v >>= (lift . lift . return))
+    let x = StateT (\s -> ExceptT (return $ runExcept (runStateT v s)))
+    in TCT (x) -- TCT (return v)
+
+  {-
+-}
 instance Monad m => MonadImpossible (TCT m e) where
   impossible err = throwError (ImpossibleError err)
 
@@ -268,13 +353,26 @@ instance MonadDMTC e t => Normalize (t e) DMTypeOp where
   normalize (Unary op τ res) = Unary op <$> normalize τ <*> normalize res
   normalize (Binary op τ res) = Binary op <$> normalize τ <*> normalize res
   normalize (Ternary op τ res) = Ternary op <$> normalize τ <*> normalize res
+
+-- instance MonadDMTC e t :=> Normalize (t e) DMTypeOp where
+--   ins = Sub Dict
+
+instance (MonadDMTC e t => Normalize (t e) a) => MonadDMTC e t :=> Normalize (t e) a where
+  ins = Sub Dict
+
+instance Monad m => IsT MonadDMTC (TCT m) where
+
   -- normalize (Binary op σ τ) = Binary op <$> normalize σ <*> normalize τ
   -- normalize (Ternary op ρ σ τ) = Ternary op <$> normalize ρ <*> normalize σ <*> normalize τ
 
-instance MonadDMTC e t => Solve (t e) (IsTypeOpResult) DMTypeOp where
-  solve_ (IsTypeOpResult (Unary op τ res)) = undefined
-  solve_ (IsTypeOpResult (Binary op τ res)) = undefined
-  solve_ (IsTypeOpResult (Ternary op τ res)) = undefined
+instance Solve MonadDMTC (IsTypeOpResult) DMTypeOp where
+  solve_ Dict (IsTypeOpResult (Unary op τ res)) = undefined
+  solve_ Dict (IsTypeOpResult (Binary op τ res)) = undefined
+  solve_ Dict (IsTypeOpResult (Ternary op τ res)) = undefined
+
+-- instance (forall e t. (MonadDMTC e t => Normalize (t e) a)) => HasNormalize MonadDMTC a where
+
+
   -- solve_ (Constr (Binary op σ τ)) = undefined
   -- solve_ (Constr (Ternary op ρ σ τ)) = undefined
 

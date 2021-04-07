@@ -63,8 +63,9 @@ checkSens (Var x dτ) scope = do -- get the term that corresponds to this variab
                                     -- if the user has given an annotation
                                     -- inferred type must be a subtype of the user annotation
                                     dτd <- createDMType dτ
-                                    addConstraint' (Solvable' (IsLessEqual (τ, dτd) ))
+                                    addConstraint (Solvable (IsLessEqual (τ, dτd) ))
                                     return τ
+
 
 checkSens (Op op args) scope =
   let checkOpArg (arg,(τ,s)) = do
