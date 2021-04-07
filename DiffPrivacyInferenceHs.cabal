@@ -28,10 +28,8 @@ library
       DiffMu.Core
       DiffMu.Core.Context
       DiffMu.Core.Definitions
-      DiffMu.Core.MonadicPolynomial
       DiffMu.Core.MonadicPolynomial2
       DiffMu.Core.MonadTC
-      DiffMu.Core.MonadTCOld
       DiffMu.Core.Operations
       DiffMu.Core.Symbolic
       DiffMu.Core.TC
@@ -48,7 +46,7 @@ library
       Paths_DiffPrivacyInferenceHs
   hs-source-dirs:
       src
-  default-extensions: QuasiQuotes ConstraintKinds DataKinds GADTs KindSignatures MultiParamTypeClasses NoImplicitPrelude NoMonomorphismRestriction TypeOperators UnicodeSyntax ExistentialQuantification ScopedTypeVariables QuantifiedConstraints KindSignatures PolyKinds GeneralizedNewtypeDeriving DeriveGeneric FlexibleInstances FlexibleContexts FunctionalDependencies OverloadedStrings TypeApplications TypeFamilies RankNTypes OverloadedStrings
+  default-extensions: QuasiQuotes ConstraintKinds DataKinds GADTs KindSignatures MultiParamTypeClasses NoImplicitPrelude NoMonomorphismRestriction TypeOperators UnicodeSyntax ExistentialQuantification ScopedTypeVariables QuantifiedConstraints KindSignatures PolyKinds GeneralizedNewtypeDeriving DeriveGeneric StandaloneDeriving DerivingVia FlexibleInstances FlexibleContexts FunctionalDependencies OverloadedStrings TypeApplications TypeFamilies RankNTypes OverloadedStrings StandaloneKindSignatures
   build-depends:
       base >=4.7 && <5
     , bifunctors

@@ -10,7 +10,7 @@ import DiffMu.Core.Term
 -- class (TermSubstitute x a) => MonadSubstitute x a t where
 
 class (Monad t, Term v a) => MonadTC v a t where
-  addSub :: Sub v a -> t ()
+  addSub :: (Typeable k) => Sub v a k -> t ()
   getSubs :: t (Subs v a)
 
 class TCConstraint c where

@@ -1,3 +1,4 @@
+{-# LANGUAGE TemplateHaskell #-}
 
 module DiffMu.Core.Symbolic where
 
@@ -5,6 +6,8 @@ import DiffMu.Prelude
 -- import DiffMu.Prelude.MonadicAlgebra
 import DiffMu.Core.MonadicPolynomial2
 import qualified Prelude as P
+
+import Data.Singletons.TH
 
 data SymVal =
   Infty | Fin Float -- a| Ln (SymTerm t)
@@ -44,15 +47,26 @@ instance Monad t => SemiringM t (SymVal) where
   (⋅) (Fin _) Infty      = pure $ Infty
   (⋅) (Fin a) (Fin b)    = pure $ Fin (a P.* b)
 
-data SymVar =
-  HonestVar Symbol | Ln SymTerm
+data SensKind = MainSensKind
+  deriving (Eq)
+
+genSingletons [''SensKind]
+
+
+data SymVar (k :: SensKind) =
+  HonestVar (SymbolOf k) | Ln (SymTerm MainSensKind)
   deriving (Generic, Eq)
 
-instance Show SymVar where
+instance Show (SymVar k) where
   show (HonestVar v) = show v
   show (Ln te) = "ln(" <> show te <> ")"
 
-instance Hashable SymVar
+instance Hashable (SymVar k)
+
+
+instance Show SensKind where
+  show MainSensKind = "S"
+
 
 -- newtype MultInt = MultInt Int
 --   deriving (Hashable, Eq)
@@ -64,16 +78,18 @@ instance Hashable SymVar
 
 -- instance Monad m => MonoidM m MultInt where
 --   neutral = pure (MultInt 1)
-
-type SymTerm = CPolyM SymVal Int SymVar
+type SymTerm :: SensKind -> *
+type SymTerm = CPolyM SymVal Int (SymVar MainSensKind)
+-- SingleKinded (LinCom SymVal (MonCom Int (SymVar MainSensKind)))
 
 -- WARNING: This is not implemented, we should actually check for zero here!
-instance Monad m => CheckNeutral m SymTerm where
+instance Monad m => CheckNeutral m (SymTerm k) where
   checkNeutral a = pure False
 
+-- SingleKinded (LinCom SymVal (MonCom Int (SymVar MainSensKind)))
 
-svar :: Symbol -> SymTerm
-svar a = injectVarId (HonestVar a)
+svar :: Symbol -> (SymTerm MainSensKind)
+svar a = injectVarId (HonestVar (SymbolOf a))
   -- LinCom (MonCom [(Fin 1, MonCom [(1,HonestVar a)])])
 
 -- type SymTerm t = Combination t SymVal Rational Symbol

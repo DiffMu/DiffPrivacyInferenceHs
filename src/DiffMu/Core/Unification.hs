@@ -20,9 +20,10 @@ instance (Show a, Unify MonadDMTC a) => Unify MonadDMTC [a] where
   unify_ xs ys | length xs == length ys = mapM (uncurry unify_) (zip xs ys)
   unify_ xs ys = throwError (WrongNumberOfArgs xs ys)
 
-instance Unify MonadDMTC DMType where
+instance Unify MonadDMTC (DMTypeOf k) where
   unify_ DMReal DMReal                 = pure DMReal
   unify_ DMInt DMInt                   = pure DMInt
+  unify_ (NonConst τ₁) (NonConst τ₂)   = NonConst <$> unify_ τ₁ τ₂
   unify_ (Const η₁ τ₁) (Const η₂ τ₂)   = Const <$> unify_ η₁ η₂ <*> unify_ τ₁ τ₂
   unify_ (as :->: a) (bs :->: b)       = (:->:) <$> unify_ as bs <*> unify_ a b
   unify_ (TVar x) (TVar y) | x == y    = pure $ TVar x

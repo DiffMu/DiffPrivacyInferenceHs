@@ -66,6 +66,8 @@ library:
     - PolyKinds
     - GeneralizedNewtypeDeriving
     - DeriveGeneric
+    - StandaloneDeriving 
+    - DerivingVia
     - FlexibleInstances
     - FlexibleContexts
     - FunctionalDependencies
@@ -74,6 +76,7 @@ library:
     - TypeFamilies
     - RankNTypes
     - OverloadedStrings
+    - StandaloneKindSignatures
 
 
 

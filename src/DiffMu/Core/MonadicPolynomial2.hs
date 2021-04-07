@@ -1,4 +1,5 @@
 
+{-# LANGUAGE UndecidableInstances #-}
 module DiffMu.Core.MonadicPolynomial2 where
 
 import DiffMu.Prelude
@@ -133,18 +134,59 @@ instance (SemiringM t r, HasMonCom t r v, MonoidM t v) => SemiringM t (LinCom r 
           -- f [] q = 
           -- f ((xr,xv) : xs) q = xr ↷> (xv ↷ q) <+> (f xs q)
 
-type CPolyM r e v = LinCom r (MonCom e v)
+newtype SingleKinded a (k :: j) = SingleKinded a
+  deriving (Eq, Show, Generic, Hashable)
+
+type CPolyM r e v = SingleKinded (LinCom r (MonCom e v))
+
+constCoeff :: (HasMonCom Identity e v, Hashable e, SemiringM Identity e, SemiringM Identity r) => r -> CPolyM r e v k
+constCoeff r = SingleKinded $ LinCom (MonCom (H.singleton neutralId r))
 
 
-injectVarId :: (HasMonCom Identity e v, Hashable e, SemiringM Identity e, SemiringM Identity r) => v -> (CPolyM r e v)
-injectVarId v = LinCom (MonCom (H.singleton (MonCom (H.singleton v oneId)) oneId))
+-- deriving via (LinCom r (MonCom e v)) instance (Coercible a b => Coercible (t a) (t v), SemiringM t r) => SemiringM t (CPolyM r e v k)
+
+instance SemigroupM t a => SemigroupM t (SingleKinded a k) where
+  (⋆) (SingleKinded a) (SingleKinded b) = SingleKinded <$> (a ⋆ b)
+
+instance MonoidM t a => MonoidM t (SingleKinded a k) where
+  neutral = SingleKinded <$> neutral
+
+instance CMonoidM t a => CMonoidM t (SingleKinded a k) where
+
+instance SemiringM t a => SemiringM t (SingleKinded a k) where
+  (⋅) (SingleKinded a) (SingleKinded b) = SingleKinded <$> (a ⋅ b)
+  one = SingleKinded <$> one
+
+instance ModuleM t (ActV v) a => ModuleM t (ActV v) (SingleKinded a k) where
+  (↷) a (SingleKinded b) = SingleKinded <$> (a ↷ b)
+
+instance ModuleM t (ActM v) a => ModuleM t (ActM v) (SingleKinded a k) where
+  (↷) a (SingleKinded b) = SingleKinded <$> (a ↷ b)
+
+-- instance SemigroupM t a => SemigroupM t (CPolyM r e v k) -- DIFF
+-- instance SemiringM t r => MonoidM t (CPolyM r e v k)
+-- instance SemiringM t r => CMonoidM t (CPolyM r e v k)
+-- instance SemiringM t r => SemiringM t (CPolyM r e v k)
+-- instance (HasMonCom t r v, MonoidM t v) => ModuleM t (ActV v) (CPolyM r e v k) where
+-- instance (HasMonCom t r v, SemiringM t r) => ModuleM t (ActM r) (CPolyM r e v k) where
+
+
+
+
+
+injectVarId :: (HasMonCom Identity e v, Hashable e, SemiringM Identity e, SemiringM Identity r) => v -> (CPolyM r e v k)
+injectVarId v = SingleKinded $ LinCom (MonCom (H.singleton (MonCom (H.singleton v oneId)) oneId))
                            -- H.singleton (MonCom (H.singleton (v,neutralId)), oneId)))
   -- LinCom (MonCom (H.singleton neutralId r))
+
+
+
 
 -------------------------------------------
 -- Term instances
 
 
+{-
 instance (Hashable v, Show v, Show m, Eq v, Eq m, MonoidM Identity m, CheckNeutral Identity m) => Substitute v (MonCom m v) (MonCom m v) where
   substitute σ (MonCom t) =
     let f (v,m) = do vs <- σ v
@@ -155,9 +197,12 @@ instance (Hashable v, Show v, Show m, Eq v, Eq m, MonoidM Identity m, CheckNeutr
 instance (Hashable v, Show v, Show m, Eq v, Eq m, MonoidM Identity m, CheckNeutral Identity m) => Term v (MonCom m v) where
   -- type Var (MonCom m v) = v
   var v = MonCom (H.singleton v neutralId) -- [(neutralId, v)]
+-}
 
-instance (Eq v, Eq r, Hashable v, CheckNeutral Identity r, SemiringM Identity r) => Substitute v (CPolyM r Int v) (CPolyM r Int v) where
-  substitute σ ls =
+
+
+instance (Typeable j, Typeable r, Typeable v, Typeable (k :: j), KEq v, Eq r, KHashable v, CheckNeutral Identity r, SemiringM Identity r) => Substitute v (CPolyM r Int (v k)) (CPolyM r Int (v k) k1) where
+  substitute σ (SingleKinded ls) =
     let
         f (v, e :: Int) = do vs <- σ v
                              let vslist = take e (repeat vs)
@@ -168,20 +213,33 @@ instance (Eq v, Eq r, Hashable v, CheckNeutral Identity r, SemiringM Identity r)
         -- g' (r, mvs) = r ↷! g mvs
         h (LinCom (MonCom ls)) = do ls' <- mapM g (H.toList ls)
                                     return $ P.foldl (+!) zeroId ls'
-    in h ls
+    in coerce <$> (h ls)
+
+
+
 
     -- let f (m,v) = do vs <- σ v
     --                  return (m ↷! vs)
     -- in undefined
 
-instance (Show r , Show v) => Show (CPolyM r Int v) where
-  show poly = showWith " + " (\vars r -> show r <> "*" <> showWith "*" f vars) poly
+-- type CPolyM r e v = SingleKinded (LinCom r (MonCom e v))
+
+instance (Show r , Show v) => Show (LinCom r (MonCom Int v)) where
+  show (poly) = showWith " + " (\vars r -> show r <> "*" <> showWith "*" f vars) poly
     where f v 1 = show v
           f v e = show v <> "^" <> show e
 
+-- instance (Show r , KShow v) => Show (CPolyM r Int (v k) j) where
 
-instance (Hashable v, Show v, Show r, Eq v, Eq r, CheckNeutral Identity r, SemiringM Identity r) => Term v (CPolyM r Int v) where
-  var v = injectVarId v
+
+instance (Typeable r, Typeable j, Typeable (k :: j), Typeable v, KHashable v, KShow v, Show r, KEq v, Eq r, CheckNeutral Identity r, SemiringM Identity r) => Term v (CPolyM r Int (v k)) where
+  var v = undefined -- (injectVarId v)
+
+
+
+
+
+
 
     -- LinCom (MonCom [(oneId, var v)])
 
@@ -195,3 +253,5 @@ instance Normalize t x => Normalize t (MonCom x v) where
 -- instance (Normalize t x, Normalize t v, Eq v, Hashable v) => Normalize t (MonCom x v) where
 --   normalize (MonCom map) = MonCom <$> H.fromList <$> mapM f (H.toList map)
 --     where f (k,v) = (,) <$> normalize k <*> normalize v
+{-
+-}

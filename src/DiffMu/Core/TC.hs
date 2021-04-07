@@ -18,26 +18,30 @@ instance (Substitute v x a, Substitute v x b) => Substitute v x (a :& b) where
 instance Substitute v x a => Substitute v x [a] where
   substitute σs xs = mapM (substitute σs) xs
 
-instance Substitute TVar DMType Sensitivity where
+instance Substitute TVarOf DMTypeOf Sensitivity where
   substitute σs η = pure η
 
-instance Substitute TVar DMType DMType where
+instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs DMInt = pure DMInt
   substitute σs DMReal = pure DMReal
+  substitute σs (NonConst τ) = NonConst <$> substitute σs τ
   substitute σs (Const η τ) = Const <$> substitute σs η <*> substitute σs τ
   substitute σs (TVar x) = σs x
   substitute σs (τ1 :->: τ2) = (:->:) <$> substitute σs τ1 <*> substitute σs τ2
 
-instance Substitute SVar Sensitivity DMType where
+instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
   substitute σs DMInt = pure DMInt
   substitute σs DMReal = pure DMReal
+  substitute σs (NonConst τ) = NonConst <$> substitute σs τ
   substitute σs (Const η τ) = Const <$> substitute σs η <*> substitute σs τ
   substitute σs (TVar x) = pure (TVar x)
   substitute σs (τ1 :->: τ2) = (:->:) <$> substitute σs τ1 <*> substitute σs τ2
 
 
-instance Term TVar DMType where
+instance Term TVarOf DMTypeOf where
   var x = TVar x
+
+
 
 
   -- substituteAll σ (VarNum t) = pure $ VarNum t
@@ -47,17 +51,18 @@ instance Term TVar DMType where
 
 -- instance (ModuleM t m a, ModuleM t m b) => ModuleM t m (a :& b) where
 
-instance Substitute SVar Sensitivity Sensitivity where
-  substitute σs s = substitute f s
-    where f (HonestVar a) = σs (a)
+instance Substitute SVarOf SensitivityOf (SensitivityOf k) where
+  substitute (σs :: forall k. (Typeable k) => SVarOf k -> t (SensitivityOf k)) s = substitute f s
+    where f :: (Typeable l) => SymVar l -> t (SensitivityOf l)
+          f (HonestVar a) = σs (a)
           f b = pure $ var (b)
 
 
-instance Term SVar Sensitivity where
-  var v = var (HonestVar v)
+instance Term SVarOf SensitivityOf where
+  var (v) = var (HonestVar v)
 
-type TSubs = Subs DMType
-type SSubs = Subs Sensitivity
+type TSubs = Subs DMTypeOf
+type SSubs = Subs SensitivityOf
 
 -- data Meta1Ctx = Meta1Ctx
 --   {
@@ -68,7 +73,7 @@ type SSubs = Subs Sensitivity
 --   deriving (Generic)
 
 class (MonadImpossible (t e), MonadWatch (t e),
-       MonadTC TVar DMType (t e), MonadTC SVar Sensitivity (t e),
+       MonadTC TVarOf DMTypeOf (t e), MonadTC SVarOf SensitivityOf (t e),
        MonadState (Full e) (t e),
        MonadError DMException (t e),
        -- MonadConstraint' Symbol (TC) (t e),
@@ -143,8 +148,8 @@ data MetaCtx extra = MetaCtx
     _sensVars :: NameCtx,
     _typeVars :: NameCtx,
     _constraintVars :: NameCtx,
-    _sensSubs :: Subs SVar Sensitivity,
-    _typeSubs :: Subs TVar DMType,
+    _sensSubs :: Subs SVarOf SensitivityOf,
+    _typeSubs :: Subs TVarOf DMTypeOf,
     _constraints :: ConstraintCtx -- MonCom (Solvable'' TCT) Symbol,
   }
   deriving (Generic)
@@ -246,14 +251,14 @@ instance Default (Full e) where
 
 
 
-instance Monad m => MonadTC TVar DMType (TCT m e) where
+instance Monad m => MonadTC TVarOf DMTypeOf (TCT m e) where
   getSubs = view (meta.typeSubs) <$> get
   addSub σ = do
     σs <- use (meta.typeSubs)
     σs' <- σs ⋆ singletonSub σ
     meta.typeSubs .= σs'
 
-instance Monad m => MonadTC SVar Sensitivity (TCT m e) where
+instance Monad m => MonadTC SVarOf SensitivityOf (TCT m e) where
   getSubs = view (meta.sensSubs) <$> get
   addSub σ = do
     σs <- use (meta.sensSubs)
@@ -324,9 +329,9 @@ instance Monad m => MonadImpossible (TCT m e) where
 
 instance MonadDMTC e t => Normalize (t e) DMType where
   normalize n =
-    do σ <- getSubs @TVar @DMType
+    do σ <- getSubs @TVarOf @DMTypeOf
        n₂ <- σ ↷ n
-       σ <- getSubs @SVar @Sensitivity
+       σ <- getSubs @SVarOf @SensitivityOf
        n₃ <- σ ↷ n₂
        return n₃
 
@@ -343,7 +348,7 @@ instance (Normalize t a, Normalize t b, Normalize t c) => Normalize t (a, b, c) 
 
 instance MonadDMTC e t => Normalize (t e) Sensitivity where
   normalize n =
-    do σ <- getSubs @SVar @Sensitivity
+    do σ <- getSubs @SVarOf @SensitivityOf
        σ ↷ n
 
 instance Monad t => Normalize t Symbol where
@@ -378,8 +383,8 @@ instance Solve MonadDMTC (IsTypeOpResult) DMTypeOp where
 
 
 
-newTVar :: MonadDMTC e t => Text -> t e TVar
-newTVar hint = meta.typeVars %%= (newName hint)
+newTVar :: (MonadDMTC e t, SingI k) => Text -> t e (TVarOf k)
+newTVar hint = meta.typeVars %%= (first SymbolOf . (newName hint))
 
 newSVar :: MonadDMTC e t => Text -> t e SVar
 newSVar hint = meta.sensVars %%= (newName hint)

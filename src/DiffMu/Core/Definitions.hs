@@ -1,4 +1,6 @@
 
+{-# LANGUAGE TemplateHaskell #-}
+
 module DiffMu.Core.Definitions where
 
 import DiffMu.Prelude
@@ -8,6 +10,8 @@ import DiffMu.Core.Term
 import DiffMu.Core.MonadTC
 import DiffMu.Core.MonadicPolynomial2
 -- import GHC.TypeLits
+
+import Data.Singletons.TH
 
 import           Data.Singletons.Prelude hiding (Symbol)
 import           Data.Singletons.Prelude.Enum (SEnum (..))
@@ -27,7 +31,8 @@ import Data.HashMap.Strict as H
 -- type Symbol = String
 
 type SVar = Symbol
-type Sensitivity = SymTerm
+type SensitivityOf = SymTerm
+type Sensitivity = SymTerm MainSensKind
 newtype Privacy = Privacy ()
 
 
@@ -39,6 +44,9 @@ data JuliaType =
   deriving (Generic, Show)
 
 type TVar = Symbol
+type TVarOf = SymbolOf @DMKind
+type SVarOf = SymbolOf @SensKind
+
 
 
 -- data DMNumType where
@@ -55,15 +63,30 @@ data (:&) f x = (:@) f x
 instance (Show a, Show b) => Show (a :& b) where
   show (a :@ b) = show a <> " @ " <> show b
 
-data DMType where
+data DMKind = MainKind | NumericKind
+  deriving (Typeable)
+
+instance Show DMKind where
+  show MainKind = "*"
+  show NumericKind = "Num"
+
+genSingletons [''DMKind]
+
+type DMType = DMTypeOf MainKind
+data DMTypeOf (k :: DMKind) where
   -- Num :: DMNumType -> DMType
-  DMInt :: DMType
-  DMReal :: DMType
-  Const :: Sensitivity -> DMType -> DMType
+  DMInt :: DMTypeOf NumericKind
+  DMReal :: DMTypeOf NumericKind
+
+  Const    :: Sensitivity -> DMTypeOf NumericKind -> DMType
+  NonConst :: DMTypeOf NumericKind -> DMType
   -- TVar :: forall t ηc τc. (KnownSymbol t, Elem t τc ~ 'True) => DMType
-  TVar :: Symbol -> DMType
+  TVar :: Typeable k => SymbolOf k -> DMTypeOf k
   (:->:) :: [DMType :& Sensitivity] -> DMType -> DMType
-  deriving (Generic, Show)
+  -- deriving (Show)
+
+instance Show (DMTypeOf k) where
+  show _ = "some type"
 
 
 --------------------------------------------------------------------------

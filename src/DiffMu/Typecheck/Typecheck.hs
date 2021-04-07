@@ -13,9 +13,14 @@ import Data.HashMap.Strict as H
 
 import Debug.Trace
 
-createDMType :: MonadDMTC e t => JuliaType -> t e DMType
-createDMType JTInt = pure DMInt
-createDMType JTReal = pure DMReal
+createDMTypeNum :: MonadDMTC e t => JuliaType -> t e (DMTypeOf NumericKind)
+createDMTypeNum JTInt = pure DMInt
+createDMTypeNum JTReal = pure DMReal
+createDMTypeNum JTAny = TVar <$> newTVar "any"
+
+createDMType :: MonadDMTC e t => JuliaType -> t e (DMTypeOf MainKind)
+createDMType JTInt = pure (NonConst DMInt)
+createDMType JTReal = pure (NonConst DMReal)
 createDMType JTAny = TVar <$> newTVar "any"
 
 -- instance (Eq v, Hashable v) => HashKey v where
@@ -41,14 +46,15 @@ checkSens :: DMTerm -> DMScope -> STC DMType
 
 -- TODO: Here we assume that η really has type τ, and do not check it.
 --       Should probably do that.
-checkSens (Sng η τ) scope  = Const (injectCoeffId (Fin η)) <$> createDMType τ
+checkSens (Sng η τ) scope  = Const (constCoeff (Fin η)) <$> createDMTypeNum τ
 
 -- a special term for function argument variables.
 -- those get sensitivity 1, all other variables are var terms
 checkSens (Arg x dτ) scope = do τ <- createDMType dτ
-                                setVar x (τ :@ injectCoeffId (Fin 1)) --(Fin 1))
+                                setVar x (τ :@ constCoeff (Fin 1)) --(Fin 1))
                                 tt <- use types
                                 return (traceShow tt τ)
+
                                 -- return τ
 
 checkSens (Var x dτ) scope = do -- get the term that corresponds to this variable from the scope dict
@@ -78,6 +84,7 @@ checkSens (Op op args) scope =
     return res
 
 checkSens t scope = throwError (UnsupportedTermError t)
+
 
 
 
