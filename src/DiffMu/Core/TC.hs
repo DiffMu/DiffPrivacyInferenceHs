@@ -82,7 +82,7 @@ class (MonadImpossible (t e), MonadWatch (t e),
 
 data Tag = DM
 
-data KindedNameCtx ks = KindedNameCtx NameCtx ks
+data AnnNameCtx ks = AnnNameCtx NameCtx ks
   deriving (Generic)
 -- data DMSolvable where
 --   DMSolvable :: (forall e t. MonadDMTC e t => Solve (t e) c a) => c a -> DMSolvable
@@ -106,25 +106,25 @@ instance (MonadWatch t, Normalize t a) => Normalize t (Watched a) where
        newc <- getChanged
        return (Watched newc a')
 
-type ConstraintCtx = KindedNameCtx (Ctx Symbol (Watched (Solvable MonadDMTC)))
--- type ConstraintCtx = KindedNameCtx (Ctx Symbol (Solvable' TC))
+type ConstraintCtx = AnnNameCtx (Ctx Symbol (Watched (Solvable MonadDMTC)))
+-- type ConstraintCtx = AnnNameCtx (Ctx Symbol (Solvable' TC))
 
-instance (MonadWatch t, Normalize t ks) => Normalize t (KindedNameCtx ks) where
-  normalize (KindedNameCtx names ks) =
-    do res <- KindedNameCtx names <$> normalize ks
+instance (MonadWatch t, Normalize t ks) => Normalize t (AnnNameCtx ks) where
+  normalize (AnnNameCtx names ks) =
+    do res <- AnnNameCtx names <$> normalize ks
        isC <- getChanged
        traceShowM $ "CHANGED: " <> show isC <> "\n"
        return res
 
-instance Show ks => Show (KindedNameCtx ks) where
-  show (KindedNameCtx _ kinds) = show kinds
-instance Default ks => Default (KindedNameCtx ks)
+instance Show ks => Show (AnnNameCtx ks) where
+  show (AnnNameCtx _ kinds) = show kinds
+instance Default ks => Default (AnnNameCtx ks)
 
-newKindedName :: DictLike Symbol k ks => Text -> k -> KindedNameCtx ks -> (Symbol, KindedNameCtx ks)
-newKindedName hint k (KindedNameCtx names kinds) =
+newAnnName :: DictLike Symbol k ks => Text -> k -> AnnNameCtx ks -> (Symbol, AnnNameCtx ks)
+newAnnName hint k (AnnNameCtx names kinds) =
   let (name, names') = newName hint names
       kinds' = setValue name k kinds
-  in (name, KindedNameCtx names' kinds')
+  in (name, AnnNameCtx names' kinds')
 
 -- data Meta0Ctx extra = Meta0Ctx
 --   {
@@ -145,9 +145,9 @@ data Watcher = Watcher Changed
 
 data MetaCtx extra = MetaCtx
   {
-    _sensVars :: NameCtx,
-    _typeVars :: NameCtx,
-    _constraintVars :: NameCtx,
+    _sensVars :: KindedNameCtx SVarOf,
+    _typeVars :: KindedNameCtx TVarOf,
+    -- _constraintVars :: NameCtx,
     _sensSubs :: Subs SVarOf SensitivityOf,
     _typeSubs :: Subs TVarOf DMTypeOf,
     _constraints :: ConstraintCtx -- MonCom (Solvable'' TCT) Symbol,
@@ -200,10 +200,10 @@ $(makeLenses ''TCState)
 --                             <> "- types:       " <> show γ <> "\n"
 
 instance Show (MetaCtx e) where
-  show (MetaCtx s t c sσ tσ cs) =
+  show (MetaCtx s t sσ tσ cs) =
        "- sens vars: " <> show s <> "\n"
     <> "- type vars: " <> show t <> "\n"
-    <> "- cnst vars: " <> show c <> "\n"
+    -- <> "- cnst vars: " <> show c <> "\n"
     <> "- sens subs:   " <> show sσ <> "\n"
     <> "- type subs:   " <> show tσ <> "\n"
     <> "- constraints: " <> show cs <> "\n"
@@ -217,6 +217,7 @@ instance Show (TCState) where
 
 instance Show e => Show (Full e) where
   show (Full tcs m γ) = "\nState:\n" <> show tcs <> "\nMeta:\n" <> show m <> "\nTypes:\n" <> show γ <> "\n"
+
 
 -- modify02 :: MonadDMTC e t => (Meta0Ctx e -> Meta0Ctx e) -> t e
 -- modify02 f = modify (\s -> s {meta0 = f (meta0 s)})
@@ -269,25 +270,26 @@ instance Monad m => MonadTC SVarOf SensitivityOf (TCT m e) where
 -- getUnsolved = undefined
 
 instance Monad m => MonadConstraint Symbol (MonadDMTC) (TCT m e) where
-  addConstraint c = meta.constraints %%= (newKindedName "constr" (Watched IsChanged c))
+  addConstraint c = meta.constraints %%= (newAnnName "constr" (Watched IsChanged c))
+
 
 
   {-
 instance Monad m => MonadConstraint' Symbol TC (TCT m e) where
   -- type ConstrVar TC = Symbol
-  addConstraint' c = meta.constraints %%= newKindedName "constr" (DMSolvable c)
+  addConstraint' c = meta.constraints %%= newAnnName "constr" (DMSolvable c)
   -- modify0 (\f -> f {constraints = MonCom [(c,"hello")]}) -- --modify0 (\s -> s {constraints = _}) -- 
   getUnsolvedConstraint' = undefined -- getUnsolved <$> view (meta0.constraints) <$> get
   -- addConstraint'2 c = return ()
 -}
 -- instance MonadConstraint'' Symbol TCT where
---   addConstraint'' c = meta0.constraints %%= newKindedName "" (Solvable'' c)
+--   addConstraint'' c = meta0.constraints %%= newAnnName "" (Solvable'' c)
 
 -- instance Monad t => MonadConstraintTag DM Symbol (TCT t e) where
---   addConstraintTag c = meta0.constraints %%= newKindedName "" (SolvableTag c)
+--   addConstraintTag c = meta0.constraints %%= newAnnName "" (SolvableTag c)
 
 -- instance Monad t => MonadConstraintDiff Symbol (TC e) (TCT t e) where
---   addConstraintDiff c = _ -- meta0.constraints %%= newKindedName "" (SolvableTag c)
+--   addConstraintDiff c = _ -- meta0.constraints %%= newAnnName "" (SolvableTag c)
 
 
 
@@ -351,7 +353,7 @@ instance MonadDMTC e t => Normalize (t e) Sensitivity where
     do σ <- getSubs @SVarOf @SensitivityOf
        σ ↷ n
 
-instance Monad t => Normalize t Symbol where
+instance Monad t => Normalize t (SymbolOf k) where
   normalize = pure
 
 instance MonadDMTC e t => Normalize (t e) DMTypeOp where
@@ -384,10 +386,10 @@ instance Solve MonadDMTC (IsTypeOpResult) DMTypeOp where
 
 
 newTVar :: (MonadDMTC e t, SingI k) => Text -> t e (TVarOf k)
-newTVar hint = meta.typeVars %%= (first SymbolOf . (newName hint))
+newTVar hint = meta.typeVars %%= ((newKindedName hint))
 
-newSVar :: MonadDMTC e t => Text -> t e SVar
-newSVar hint = meta.sensVars %%= (newName hint)
+newSVar :: (SingI k, MonadDMTC e t) => Text -> t e (SVarOf k)
+newSVar hint = meta.sensVars %%= (newKindedName hint)
 
   -- where f names = let (τ , names') = newName hint names
   --                 in (TVar τ, names')

@@ -135,7 +135,10 @@ instance (SemiringM t r, HasMonCom t r v, MonoidM t v) => SemiringM t (LinCom r 
           -- f ((xr,xv) : xs) q = xr ↷> (xv ↷ q) <+> (f xs q)
 
 newtype SingleKinded a (k :: j) = SingleKinded a
-  deriving (Eq, Show, Generic, Hashable)
+  deriving (Eq, Generic, Hashable)
+
+instance Show a => Show (SingleKinded a k) where
+  show (SingleKinded a) = show a
 
 type CPolyM r e v = SingleKinded (LinCom r (MonCom e v))
 
@@ -233,7 +236,18 @@ instance (Show r , Show v) => Show (LinCom r (MonCom Int v)) where
 
 
 instance (Typeable r, Typeable j, Typeable (k :: j), Typeable v, KHashable v, KShow v, Show r, KEq v, Eq r, CheckNeutral Identity r, SemiringM Identity r) => Term v (CPolyM r Int (v k)) where
-  var v = undefined -- (injectVarId v)
+  var (v :: v k2) = case testEquality (typeRep @k) (typeRep @k2) of
+    Nothing -> zeroId -- NOTE: WARNING: This should actually be an error. But we currently do not have access to any failure monad here.
+    Just Refl -> injectVarId v
+
+
+    -- coerce x
+    -- where x :: CPolyM r Int (v k) k
+    --       x = injectVarId v
+
+  -- var v = coerce $ SingleKinded $ LinCom (MonCom (H.singleton (MonCom (H.singleton v oneId)) oneId))-- (injectVarId v)
+
+
 
 
 

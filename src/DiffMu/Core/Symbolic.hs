@@ -88,8 +88,9 @@ instance Monad m => CheckNeutral m (SymTerm k) where
 
 -- SingleKinded (LinCom SymVal (MonCom Int (SymVar MainSensKind)))
 
-svar :: Symbol -> (SymTerm MainSensKind)
-svar a = injectVarId (HonestVar (SymbolOf a))
+svar :: SymbolOf MainSensKind -> (SymTerm MainSensKind)
+svar a = injectVarId (HonestVar a)
+
   -- LinCom (MonCom [(Fin 1, MonCom [(1,HonestVar a)])])
 
 -- type SymTerm t = Combination t SymVal Rational Symbol

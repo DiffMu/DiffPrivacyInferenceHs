@@ -10,6 +10,7 @@ module DiffMu.Prelude
   , KHashable (..)
   , KShow (..)
   , KEq (..)
+  , FromSymbol (..)
   )
   where
 
@@ -26,23 +27,31 @@ import Data.Text as T
 newtype Symbol = Symbol Text
   deriving (Eq,Ord,Hashable)
 
+class FromSymbol (v :: j -> *) where
+  fromSymbol :: Symbol -> v k
+
 -- data SymbolOf (k :: j) where
   -- SymbolOf :: Symbol -> SymbolOf k
 
-data SymbolOf (k :: j) where
-  SymbolOf :: SingI k => Symbol -> SymbolOf k
-  -- deriving Eq via Symbol -- (Eq,Ord,Hashable)
+newtype SymbolOf (k :: j) = SymbolOf Symbol
+  deriving (Eq, Hashable)
 
-instance Eq (SymbolOf (k :: j)) where
-  (SymbolOf x) == (SymbolOf y) = x == y
+-- data SymbolOf (k :: j) where
+--   SymbolOf :: Symbol -> SymbolOf k
+--   -- deriving Eq via Symbol -- (Eq,Ord,Hashable)
 
-instance Hashable (SymbolOf (k :: j)) where
-  hashWithSalt salt (SymbolOf a) = hashWithSalt salt a
+instance FromSymbol SymbolOf where
+  fromSymbol v = SymbolOf v
+
 -- instance Eq (SymbolOf (k :: j)) where
+--   (SymbolOf x) == (SymbolOf y) = x == y
 
+-- instance Hashable (SymbolOf (k :: j)) where
+--   hashWithSalt salt (SymbolOf a) = hashWithSalt salt a
+-- -- instance Eq (SymbolOf (k :: j)) where
 
-instance (Show (Demote (KindOf k)), SingKind (KindOf k)) => Show (SymbolOf k) where
-  show (SymbolOf s :: SymbolOf k) = show s <> " : " <> show (demote @k)
+instance Show (SymbolOf k) where
+  show (SymbolOf s :: SymbolOf k) = show s --  <> " : " <> show (demote @k)
 
 instance Show Symbol where
   show (Symbol t) = T.unpack t

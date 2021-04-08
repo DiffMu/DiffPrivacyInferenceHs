@@ -30,7 +30,7 @@ import Data.HashMap.Strict as H
 
 -- type Symbol = String
 
-type SVar = Symbol
+type SVar = SymbolOf MainSensKind
 type SensitivityOf = SymTerm
 type Sensitivity = SymTerm MainSensKind
 newtype Privacy = Privacy ()
@@ -86,8 +86,12 @@ data DMTypeOf (k :: DMKind) where
   -- deriving (Show)
 
 instance Show (DMTypeOf k) where
-  show _ = "some type"
-
+  show DMInt = "Int"
+  show DMReal = "Real"
+  show (Const s t) = show t <> "[" <> show t <> "]"
+  show (NonConst t) = show t
+  show (TVar t) = show t
+  show (a :->: b) = show a <> " -> " <> show b
 
 --------------------------------------------------------------------------
 -- Type Operations
@@ -205,6 +209,28 @@ newName :: Text -> NameCtx -> (Symbol, NameCtx)
 newName (hint) (NameCtx names ctr) =
   let name = Symbol (hint <> "_" <> T.pack (show ctr))
   in (name , NameCtx (name : names) (ctr +! 1))
+
+data SingSomeK (v :: j -> *) where
+  SingSomeK :: (Show (Demote (KindOf k)), SingKind (KindOf k), SingI k) => v k -> SingSomeK v
+
+instance KShow v => Show (SingSomeK v) where
+  show (SingSomeK (s :: v k)) = show s <> " : " <> show (demote @k)
+
+data KindedNameCtx (v :: j -> *) = KindedNameCtx
+  {
+    namesK :: [SingSomeK v]
+  , currentCtrK :: Int
+  }
+instance Default (KindedNameCtx v) where
+  def = KindedNameCtx [] 0
+
+instance KShow v => Show (KindedNameCtx v) where
+  show (KindedNameCtx names _) = "[" <> intercalate ", " (show <$> names) <> "]"
+
+newKindedName :: (Show (Demote (KindOf k)), SingKind (KindOf k), SingI k, FromSymbol v) => Text -> KindedNameCtx v -> (v k, KindedNameCtx v)
+newKindedName (hint) (KindedNameCtx names ctr) =
+  let name = (fromSymbol (Symbol (hint <> "_" <> T.pack (show ctr))))
+  in (name , KindedNameCtx (SingSomeK (name) : names) (ctr +! 1))
 
 data DMException where
   UnsupportedTermError :: DMTerm -> DMException
