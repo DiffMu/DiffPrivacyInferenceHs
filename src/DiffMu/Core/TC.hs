@@ -111,7 +111,7 @@ instance (MonadWatch t, Normalize t a) => Normalize t (Watched a) where
     do resetChanged
        a' <- normalize a
        newc <- getChanged
-       return (Watched newc a')
+       return (Watched (c <> newc) a')
 
 type ConstraintCtx = AnnNameCtx (Ctx Symbol (Watched (Solvable MonadDMTC)))
 -- type ConstraintCtx = AnnNameCtx (Ctx Symbol (Solvable' TC))
@@ -119,8 +119,8 @@ type ConstraintCtx = AnnNameCtx (Ctx Symbol (Watched (Solvable MonadDMTC)))
 instance (MonadWatch t, Normalize t ks) => Normalize t (AnnNameCtx ks) where
   normalize (AnnNameCtx names ks) =
     do res <- AnnNameCtx names <$> normalize ks
-       isC <- getChanged
-       traceShowM $ "CHANGED: " <> show isC <> "\n"
+       -- isC <- getChanged
+       -- traceShowM $ "CHANGED: " <> show isC <> "\n"
        return res
 
 instance Show ks => Show (AnnNameCtx ks) where
@@ -289,10 +289,15 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m e) where
     let changed = filter (\(a, Watched state constr) -> state == IsChanged) constrs2
     case changed of
       [] -> return Nothing
-      ((name,Watched _ constr):_) -> return (Just (name, constr))
+      ((name,Watched _ constr):_) -> do
+        meta.constraints %= (\(AnnNameCtx names cs) -> AnnNameCtx names (setValue name (Watched NotChanged constr) cs))
+        return (Just (name, constr))
 
   dischargeConstraint name = meta.constraints %= (\(AnnNameCtx n c) -> AnnNameCtx n (deleteValue name c))
-
+  failConstraint name = do
+    (AnnNameCtx n cs) <- use (meta.constraints)
+    let c = getValue name cs
+    throwError (UnsatisfiableConstraint (show c))
 
 
 
@@ -344,11 +349,12 @@ instance Solve MonadDMTC IsSupremum (DMTypeOf k, DMTypeOf k, DMTypeOf k) where
 -- supremum :: forall isT t e a k. (Normalize (t e) (a k), IsT isT t, MonadTC a (t e), MonadConstraint isT (t e), Solve isT IsSupremum (a k, a k, a k)) => (a k) -> (a k) -> t e (a k)
 
 
-supremum :: (HasNormalize isT t (a k, a k, a k), MonadTC a (t e), MonadConstraint isT (t e), Solve isT IsSupremum (a k, a k, a k), SingI k, Typeable k) => (a k) -> (a k) -> t e (a k)
+supremum :: (IsT isT t, HasNormalize isT t (a k, a k, a k), MonadConstraint isT (t e), MonadTC a (t e), Solve isT IsSupremum (a k, a k, a k), SingI k, Typeable k) => (a k) -> (a k) -> t e (a k)
 supremum x y = do
   (z :: a k) <- newVar
   addConstraint (Solvable (IsSupremum (x, y, z)))
   return z
+
 
 -- instance MonadDMTC e (TC) where
 instance Monad m => MonadDMTC e (TCT m) where
@@ -368,9 +374,9 @@ instance Monad m => MonadImpossible (TCT m e) where
 
 instance MonadDMTC e t => Normalize (t e) (DMTypeOf k) where
   normalize n =
-    do σ <- getSubs @DMTypeOf
+    do σ <- getSubs @_ @DMTypeOf
        n₂ <- σ ↷ n
-       σ <- getSubs @SensitivityOf
+       σ <- getSubs @_ @SensitivityOf
        n₃ <- σ ↷ n₂
        return n₃
 
@@ -387,7 +393,7 @@ instance (Normalize t a, Normalize t b, Normalize t c) => Normalize t (a, b, c) 
 
 instance MonadDMTC e t => Normalize (t e) Sensitivity where
   normalize n =
-    do σ <- getSubs @SensitivityOf
+    do σ <- getSubs @_ @SensitivityOf
        σ ↷ n
 
 instance Monad t => Normalize t (SymbolOf k) where

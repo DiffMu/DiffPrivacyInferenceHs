@@ -9,7 +9,7 @@ import DiffMu.Core.Term
 
 -- class (TermSubstitute x a) => MonadSubstitute x a t where
 
-class (Monad t, Term (VarFam a) a) => MonadTC a t where
+class (Monad t, Term (VarFam a) a) => MonadTC (a :: j -> *) t where
   type VarFam (a :: j -> *) :: j -> *
   newVar :: (Typeable k, SingI k) => t (a k)
   addSub :: (Typeable k) => Sub (VarFam a) a k -> t ()
@@ -57,6 +57,9 @@ class (forall e. isT e t, forall e. Monad (t e)) => IsT (isT :: * -> (* -> * -> 
 class Unify isT a where
   unify_ :: (IsT isT t) => a -> a -> t e a
 
+
+-- instance Unify isT a => (Solve isT IsEqual (a,a)) where
+--   solve_ Dict(IsEqual (a, b)) = unify_ a b
 -- class (forall t e. IsT isT t => Normalize (t e) a) => Unify isT a where
 --   unify_ :: (IsT isT t, Normalize (t e) a) => a -> a -> t e a
 
@@ -116,6 +119,7 @@ class (Monad t) => MonadConstraint isT t | t -> isT where
   addConstraint :: Solvable isT -> t Symbol
   getUnsolvedConstraintMarkNormal :: t (Maybe (Symbol , Solvable isT))
   dischargeConstraint :: Symbol -> t ()
+  failConstraint :: Symbol -> t ()
 
 
 type TCConstraint' c = (forall a. Newtype (c a) a)

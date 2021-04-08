@@ -8,7 +8,7 @@ t₁ :: DMTerm
 t₁ = Var (Symbol "x") JTAny
 
 t₂ :: DMTerm
-t₂ = Sng 2 JTAny
+t₂ = Sng 2 JTNumInt
 
 t₃ a = Arg (Symbol a) JTAny
 

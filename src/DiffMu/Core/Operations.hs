@@ -10,7 +10,7 @@ import DiffMu.Core.MonadicPolynomial2
 import DiffMu.Core.Symbolic
 import DiffMu.Core.Unification
 
-makeTypeOp :: (IsT MonadDMTC t) => DMTypeOp_Some -> Int -> t e ((DMTypeOf NumKind) , [(DMTypeOf NumKind,SVar)])
+makeTypeOp :: (IsT MonadDMTC t) => DMTypeOp_Some -> Int -> t e ((DMNumType) , [(DMNumType,SVar)])
 makeTypeOp (IsUnary op) 1 =
   do s1 <- newSVar "η"
      τ1 <-  TVar <$> newTVar "τa"
@@ -28,22 +28,20 @@ makeTypeOp (IsBinary op) 2 =
 makeTypeOp (IsTernary op) 3 = undefined
 makeTypeOp op lengthArgs = throwError (WrongNumberOfArgsOp op (lengthArgs))
 
-data Solved = IsSolved | NotSolvedYet
-  deriving (Show, Eq)
 
-solveBinaryNum :: IsT MonadDMTC t => DMTypeOps_Binary -> (DMTypeOf NumKind, DMTypeOf NumKind) -> t e (Maybe (Sensitivity , Sensitivity, DMTypeOf NumKind))
+solveBinaryNum :: forall t e. IsT MonadDMTC t => DMTypeOps_Binary -> (DMNumType, DMNumType) -> t e (Maybe (Sensitivity , Sensitivity, DMNumType))
 solveBinaryNum op (τ1, τ2) = f op τ1 τ2
   where
+    ret :: Sensitivity -> Sensitivity -> t e (DMNumType) -> t e (Maybe (Sensitivity, Sensitivity, DMNumType))
     ret s1 s2 τ = do
       τ' <- τ
       return (Just (s1, s2, τ'))
-    -- sup = supremum @MonadDMTC
 
-    f :: IsT MonadDMTC t => DMTypeOps_Binary -> (DMTypeOf NumKind) -> (DMTypeOf NumKind) -> t e (Maybe (Sensitivity , Sensitivity, DMTypeOf NumKind))
-    f DMOpAdd (Const s1 t1) (Const s2 t2) = ret zeroId zeroId (Const (s1 ⋆! s2) <$> supremum @MonadDMTC t1 t2)
-    f DMOpAdd (Const s1 t1) (NonConst t2) = ret zeroId oneId  (NonConst <$> supremum @MonadDMTC t1 t2)
-    f DMOpAdd (NonConst t1) (Const s2 t2) = ret oneId  zeroId (NonConst <$> supremum @MonadDMTC t1 t2)
-    f DMOpAdd (NonConst t1) (NonConst t2) = ret oneId  oneId  (NonConst <$> supremum @MonadDMTC t1 t2)
+    f :: DMTypeOps_Binary -> (DMNumType) -> (DMNumType) -> t e (Maybe (Sensitivity , Sensitivity, DMNumType))
+    f DMOpAdd (Const s1 t1) (Const s2 t2) = ret zeroId zeroId (Const (s1 ⋆! s2) <$> supremum t1 t2)
+    f DMOpAdd (Const s1 t1) (NonConst t2) = ret zeroId oneId  (NonConst <$> supremum t1 t2)
+    f DMOpAdd (NonConst t1) (Const s2 t2) = ret oneId  zeroId (NonConst <$> supremum t1 t2)
+    f DMOpAdd (NonConst t1) (NonConst t2) = ret oneId  oneId  (NonConst <$> supremum t1 t2)
     f DMOpAdd _ _                         = return Nothing
     f _ _ _ = undefined
 
@@ -58,29 +56,16 @@ solveop mode name (IsTypeOpResult (BinaryNum op (τa1 :@ s1 , τa2 :@ s2) τr)) 
   case solveres of
     Nothing -> return ()
     Just (val_s1, val_s2, val_τr) -> do
-      addSub (s1 := val_s1)
-      addSub (s2 := val_s2)
+      -- addSub (s1 := val_s1)
+      -- addSub (s2 := val_s2)
+      unify (svar s1) val_s1
+      unify (svar s2) val_s2
       unify τr val_τr
       dischargeConstraint @MonadDMTC name
 solveop mode name (IsTypeOpResult (Ternary op xx res)) = undefined
 
 instance Solve MonadDMTC (IsTypeOpResult) DMTypeOp where
-  -- solve_ (IsTypeOpResult (UnaryNum op τ res)) = undefined
-  -- solve_ (IsTypeOpResult (BinaryNum op τ res)) = undefined
-  -- solve_ (IsTypeOpResult (Ternary op τ res)) = undefined
-
   solve_ Dict mode name constr = solveop mode name constr
-    -- do
-    -- res <- (solveop mode constr)
-    -- case res of
-    --   IsSolved -> dischargeConstraint @MonadDMTC name
-    --   NotSolvedYet -> return ()
-
-
-
-  -- solve_ Dict _ (IsTypeOpResult (UnaryNum op τ res)) = undefined
-  -- solve_ Dict _ (IsTypeOpResult (BinaryNum op τ res)) = solveop op τ res
-  -- solve_ Dict _ (IsTypeOpResult (Ternary op τ res)) = undefined
 
 
 

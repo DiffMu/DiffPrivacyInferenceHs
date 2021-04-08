@@ -10,7 +10,7 @@ import qualified Prelude as P
 import Data.Singletons.TH
 
 data SymVal =
-  Infty | Fin Float -- a| Ln (SymTerm t)
+  Infty | Fin Rational -- a| Ln (SymTerm t)
   deriving (Generic, Eq)
 instance Show SymVal where
   show Infty = "∞"
@@ -81,6 +81,11 @@ instance Show SensKind where
 type SymTerm :: SensKind -> *
 type SymTerm = CPolyM SymVal Int (SymVar MainSensKind)
 -- SingleKinded (LinCom SymVal (MonCom Int (SymVar MainSensKind)))
+
+instance CheckContains (SymVar MainSensKind) (SymbolOf MainSensKind) where
+  checkContains (Ln _) = Nothing
+  checkContains (HonestVar v) = Just v
+
 
 -- WARNING: This is not implemented, we should actually check for zero here!
 instance Monad m => CheckNeutral m (SymTerm k) where

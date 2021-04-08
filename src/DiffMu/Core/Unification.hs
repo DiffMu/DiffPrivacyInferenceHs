@@ -8,14 +8,11 @@ import DiffMu.Core.MonadTC
 import DiffMu.Core.TC
 import DiffMu.Core.Term
 
-instance Solve MonadDMTC IsEqual (Sensitivity, Sensitivity) where
-  solve_ Dict _ _ _ = pure ()
 
 instance Unify MonadDMTC Sensitivity where
   unify_ s1 s2 = do
     c <- addConstraint @MonadDMTC (Solvable (IsEqual (s1, s2)))
     return s1
-
 
 -- instance (MonadDMTC e t, Unify (TC e) a, Unify (TC e) b) => Unify (TC e) (a :& b) where
 instance (Unify isT a, Unify isT b) => Unify isT (a :& b) where

@@ -13,10 +13,17 @@ import Data.HashMap.Strict as H
 
 import Debug.Trace
 
-createDMTypeNum :: MonadDMTC e t => JuliaType -> t e (DMTypeOf BaseNumKind)
-createDMTypeNum JTInt = pure (DMInt)
-createDMTypeNum JTReal = pure DMReal
-createDMTypeNum JTAny = TVar <$> newTVar "any"
+
+-- https://stackoverflow.com/questions/1164003/how-do-i-test-if-a-floating-point-number-is-an-integer-in-haskell
+--Returns if x is an int to n decimal places
+-- isInt :: (Integral a, RealFrac b) => b -> a -> Bool
+-- isInt x n = (round $ 10^(fromIntegral n)*(x-(fromIntegral $ round x)))==0
+
+
+createDMTypeNum :: MonadDMTC e t => JuliaNumType -> t e (DMTypeOf BaseNumKind)
+createDMTypeNum JTNumInt = pure (DMInt)
+createDMTypeNum JTNumReal = pure DMReal
+-- createDMTypeNum JTAny = TVar <$> newTVar "any"
 
 createDMType :: MonadDMTC e t => JuliaType -> t e (DMTypeOf MainKind)
 createDMType JTInt = pure (Numeric (NonConst DMInt))

@@ -38,6 +38,9 @@ newtype Privacy = Privacy ()
 
 -- data Sensitivity = forall n. KnownNat n => Sens (Polynomial (Ratio Integer) n)
 
+data JuliaNumType =
+  JTNumInt | JTNumReal
+  deriving (Generic, Show)
 
 data JuliaType =
   JTAny | JTInt | JTReal
@@ -74,6 +77,8 @@ instance Show DMKind where
 genSingletons [''DMKind]
 
 type DMType = DMTypeOf MainKind
+type DMNumType = DMTypeOf NumKind
+
 data DMTypeOf (k :: DMKind) where
   -- Num :: DMNumType -> DMType
   DMInt :: DMTypeOf BaseNumKind
@@ -242,6 +247,7 @@ data DMException where
   WrongNumberOfArgsOp :: Show a => a -> Int -> DMException
   ImpossibleError :: String -> DMException
   VariableNotInScope :: Show a => a -> DMException
+  UnsatisfiableConstraint :: String -> DMException
   -- deriving (Generic, Show)
 
 instance Show DMException where
@@ -251,6 +257,7 @@ instance Show DMException where
   show (WrongNumberOfArgsOp op n) = "The operation " <> show op <> " was given a wrong number (" <> show n <> ") of args."
   show (ImpossibleError e) = "Something impossible happened: " <> show e
   show (VariableNotInScope v) = "Variable not in scope: " <> show v
+  show (UnsatisfiableConstraint c) = "The constraint " <> c <> " is not satisfiable."
 
 
 
@@ -260,7 +267,7 @@ data Lam_ = Lam_ [Asgmt JuliaType] DMTerm
 
 data DMTerm =
   Ret DMTerm
-  | Sng Float JuliaType
+  | Sng Rational JuliaNumType
   | Var Symbol JuliaType
   | Arg Symbol JuliaType
   | Op DMTypeOp_Some [DMTerm]

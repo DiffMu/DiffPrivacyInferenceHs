@@ -4,6 +4,7 @@ module DiffMu.Core.MonadicPolynomial2 where
 
 import DiffMu.Prelude
 import DiffMu.Core.Term
+import DiffMu.Core.MonadTC
 
 import qualified Prelude as P
 import Data.HashMap.Strict as H
@@ -53,10 +54,13 @@ instance (HasMonCom t m v, MonoidM t v) => ModuleM t (ActV v) (MonCom m v) where
     -- in (MonCom <$> (f v xs)) -- >>= normalize
     in (MonCom <$> H.fromList <$> (f v (H.toList xs))) -- >>= normalize
 
+
+-----------------------------------------------------------
 -- usage as dictionary
 
 class DictKey k => DictLike k v d | d -> k v where
   setValue :: k -> v -> d -> d
+  getValue :: k -> d -> v
   deleteValue :: k -> d -> d
 
 class ShowDict k v d | d -> k v where
@@ -65,6 +69,7 @@ class ShowDict k v d | d -> k v where
 instance (DictKey k) => DictLike k v (MonCom v k) where
   setValue v m (MonCom h) = MonCom (H.insert v m h)
   deleteValue v (MonCom h) = MonCom (H.delete v h)
+  getValue k (MonCom h) = h H.! k
 
 instance ShowDict k v (MonCom v k) where
   showWith comma merge (MonCom d) =
@@ -249,9 +254,52 @@ instance (Typeable r, Typeable j, Typeable (k :: j), Typeable v, KHashable v, KS
 
   -- var v = coerce $ SingleKinded $ LinCom (MonCom (H.singleton (MonCom (H.singleton v oneId)) oneId))-- (injectVarId v)
 
+-----------------------------------------------------------
+-- unification
 
+-- type HasPolyTerm :: (j -> *) -> * -> j -> Constraint
+class  (Typeable r, Typeable j, Typeable (k :: j), Typeable v, KHashable v, KShow v, Show r, KEq v, Eq r, CheckNeutral Identity r, SemiringM Identity r) => HasPolyTerm v r (k :: j)
+instance (Typeable r, Typeable j, Typeable (k :: j), Typeable v, KHashable v, KShow v, Show r, KEq v, Eq r, CheckNeutral Identity r, SemiringM Identity r) => HasPolyTerm v r (k :: j)
 
+class CheckContains x y where
+  checkContains :: x -> Maybe y
 
+instance forall isT j v r (k :: j). (HasPolyTerm v r k,
+          (forall t e. (IsT isT t => MonadConstraint isT (t e)))
+
+          , forall t e. (IsT isT t => MonadTC @j (CPolyM r Int (v k)) (t e)) --,
+          -- (VarFam (CPolyM r Int (v k)) ~ v)
+          , CheckContains (v k) (VarFam (CPolyM r Int (v k)) k)
+          ) --,
+
+          => Solve isT IsEqual (CPolyM r Int (v k) k, CPolyM r Int (v k) k) where
+  solve_ Dict _ name (IsEqual (x, y)) = solve_impl x y
+    where solve_impl (SingleKinded (LinCom (MonCom a))) (SingleKinded (LinCom (MonCom b))) = f (H.toList a) (H.toList b)
+          f a b | a == b = dischargeConstraint @isT name
+          f [(MonCom avars, ar)] [(MonCom bvars, br)] = g (toList avars) (toList bvars)
+              where g [] []     | ar == br    = dischargeConstraint @isT name
+                    g [] []     | otherwise   = failConstraint @isT name
+                    g [(v,1)] _ | ar == oneId = case checkContains v of
+                                                  Just v' -> addSub (v' := y) >> dischargeConstraint @isT name
+                                                  Nothing -> return ()
+                    g _ [(w,1)] | br == oneId = case checkContains w of
+                                                  Just w' -> addSub (w' := x) >> dischargeConstraint @isT name
+                                                  Nothing -> return ()
+                    g _ _       = return ()
+
+          f [(MonCom avars, ar)] bs = g (toList avars)
+              where g [(v,1)] | ar == oneId = case checkContains v of
+                                                  Just v' -> addSub (v' := y) >> dischargeConstraint @isT name
+                                                  Nothing -> return ()
+                    g _       = return ()
+
+          f as [(MonCom bvars, br)] = g (toList bvars)
+              where g [(w,1)] | br == oneId = case checkContains w of
+                                                Just w' -> addSub (w' := x) >> dischargeConstraint @isT name
+                                                Nothing -> return ()
+                    g _       = return ()
+
+          f _ _ = return ()
 
 
 
