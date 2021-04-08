@@ -109,6 +109,26 @@ normalizeContext = do
 
 
 
+solveAllConstraints :: forall t e. (IsT MonadDMTC t, Normalize (t e) e) => SolvingMode -> t e ()
+solveAllConstraints mode = do
+  normalizeContext
+  openConstr <- getUnsolvedConstraintMarkNormal
+
+  --
+  ctx <- use (meta @e .constraints)
+  traceM ("Solving constraints. I have: " <> show ctx <> ".\n Currently looking at: " <> show openConstr)
+  --
+
+  case openConstr of
+    Nothing -> return ()
+    Just (name, (constr)) -> do
+      solve mode name constr
+      solveAllConstraints mode
+
+
+
+
+
   -- do
   -- curΣ <- use types
   -- normΣ <- normalize curΣ

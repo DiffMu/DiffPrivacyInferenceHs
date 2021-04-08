@@ -19,7 +19,7 @@ instance (KShow x, KShow a) => Show (Sub' x a k j) where
 
 
 data Changed = IsChanged | NotChanged
-  deriving (Generic, Show)
+  deriving (Generic, Show, Eq)
 
 instance Default Changed where
   def = NotChanged

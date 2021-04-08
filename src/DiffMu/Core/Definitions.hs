@@ -63,23 +63,25 @@ data (:&) f x = (:@) f x
 instance (Show a, Show b) => Show (a :& b) where
   show (a :@ b) = show a <> " @ " <> show b
 
-data DMKind = MainKind | NumericKind
+data DMKind = MainKind | NumKind | BaseNumKind
   deriving (Typeable)
 
 instance Show DMKind where
   show MainKind = "*"
-  show NumericKind = "Num"
+  show NumKind = "Num"
+  show BaseNumKind = "BaseNum"
 
 genSingletons [''DMKind]
 
 type DMType = DMTypeOf MainKind
 data DMTypeOf (k :: DMKind) where
   -- Num :: DMNumType -> DMType
-  DMInt :: DMTypeOf NumericKind
-  DMReal :: DMTypeOf NumericKind
+  DMInt :: DMTypeOf BaseNumKind
+  DMReal :: DMTypeOf BaseNumKind
 
-  Const    :: Sensitivity -> DMTypeOf NumericKind -> DMType
-  NonConst :: DMTypeOf NumericKind -> DMType
+  Numeric :: DMTypeOf NumKind -> DMType
+  Const    :: Sensitivity -> DMTypeOf BaseNumKind -> DMTypeOf NumKind
+  NonConst :: DMTypeOf BaseNumKind -> DMTypeOf NumKind
   -- TVar :: forall t ηc τc. (KnownSymbol t, Elem t τc ~ 'True) => DMType
   TVar :: Typeable k => SymbolOf k -> DMTypeOf k
   (:->:) :: [DMType :& Sensitivity] -> DMType -> DMType
@@ -88,8 +90,9 @@ data DMTypeOf (k :: DMKind) where
 instance Show (DMTypeOf k) where
   show DMInt = "Int"
   show DMReal = "Real"
-  show (Const s t) = show t <> "[" <> show t <> "]"
+  show (Const s t) = show t <> "[" <> show s <> "]"
   show (NonConst t) = show t
+  show (Numeric t) = show t
   show (TVar t) = show t
   show (a :->: b) = show a <> " -> " <> show b
 
@@ -140,8 +143,8 @@ instance Show DMTypeOps_Ternary where
 
 -- An application of a type operation to an appropriate number of type arguments
 data DMTypeOp =
-   Unary DMTypeOps_Unary (DMType :& SVar) DMType
-   | Binary DMTypeOps_Binary (DMType :& SVar , DMType :& SVar) DMType
+   UnaryNum DMTypeOps_Unary (DMTypeOf NumKind :& SVar) (DMTypeOf NumKind)
+   | BinaryNum DMTypeOps_Binary (DMTypeOf NumKind :& SVar , DMTypeOf NumKind :& SVar) (DMTypeOf NumKind)
    | Ternary DMTypeOps_Ternary (DMType :& SVar , DMType :& SVar , DMType :& SVar) DMType
   deriving (Show)
 

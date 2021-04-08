@@ -14,3 +14,5 @@ t₃ a = Arg (Symbol a) JTAny
 
 t₄ = Op (IsBinary DMOpAdd) [t₃ "x", t₃ "x"]
 
+t₅ = Op (IsBinary DMOpAdd) [t₂, t₂]
+

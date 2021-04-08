@@ -13,14 +13,14 @@ import Data.HashMap.Strict as H
 
 import Debug.Trace
 
-createDMTypeNum :: MonadDMTC e t => JuliaType -> t e (DMTypeOf NumericKind)
-createDMTypeNum JTInt = pure DMInt
+createDMTypeNum :: MonadDMTC e t => JuliaType -> t e (DMTypeOf BaseNumKind)
+createDMTypeNum JTInt = pure (DMInt)
 createDMTypeNum JTReal = pure DMReal
 createDMTypeNum JTAny = TVar <$> newTVar "any"
 
 createDMType :: MonadDMTC e t => JuliaType -> t e (DMTypeOf MainKind)
-createDMType JTInt = pure (NonConst DMInt)
-createDMType JTReal = pure (NonConst DMReal)
+createDMType JTInt = pure (Numeric (NonConst DMInt))
+createDMType JTReal = pure (Numeric (NonConst DMReal))
 createDMType JTAny = TVar <$> newTVar "any"
 
 -- instance (Eq v, Hashable v) => HashKey v where
@@ -46,7 +46,7 @@ checkSens :: DMTerm -> DMScope -> STC DMType
 
 -- TODO: Here we assume that η really has type τ, and do not check it.
 --       Should probably do that.
-checkSens (Sng η τ) scope  = Const (constCoeff (Fin η)) <$> createDMTypeNum τ
+checkSens (Sng η τ) scope  = Numeric <$> Const (constCoeff (Fin η)) <$> createDMTypeNum τ
 
 -- a special term for function argument variables.
 -- those get sensitivity 1, all other variables are var terms
@@ -77,11 +77,11 @@ checkSens (Op op args) scope =
   let checkOpArg (arg,(τ,s)) = do
         τ_arg <- checkSens arg scope
         mscale (svar s)
-        unify τ τ_arg
+        unify (Numeric τ) τ_arg
   in do
     (res,arg_sens) <- makeTypeOp op (length args)
     _ <- msum ((checkOpArg <$> (zip args arg_sens)))
-    return res
+    return (Numeric res)
 
 checkSens t scope = throwError (UnsupportedTermError t)
 

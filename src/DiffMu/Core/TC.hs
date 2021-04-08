@@ -1,5 +1,7 @@
 
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 
 module DiffMu.Core.TC where
 
@@ -9,6 +11,8 @@ import DiffMu.Core.MonadTC
 import DiffMu.Core.Term
 import DiffMu.Core.MonadicPolynomial2
 import DiffMu.Core.Symbolic
+
+import qualified Data.HashMap.Strict as H
 
 import Debug.Trace
 
@@ -24,6 +28,7 @@ instance Substitute TVarOf DMTypeOf Sensitivity where
 instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs DMInt = pure DMInt
   substitute σs DMReal = pure DMReal
+  substitute σs (Numeric τ) = Numeric <$> substitute σs τ
   substitute σs (NonConst τ) = NonConst <$> substitute σs τ
   substitute σs (Const η τ) = Const <$> substitute σs η <*> substitute σs τ
   substitute σs (TVar x) = σs x
@@ -32,6 +37,7 @@ instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
 instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
   substitute σs DMInt = pure DMInt
   substitute σs DMReal = pure DMReal
+  substitute σs (Numeric τ) = Numeric <$> substitute σs τ
   substitute σs (NonConst τ) = NonConst <$> substitute σs τ
   substitute σs (Const η τ) = Const <$> substitute σs η <*> substitute σs τ
   substitute σs (TVar x) = pure (TVar x)
@@ -73,11 +79,12 @@ type SSubs = Subs SensitivityOf
 --   deriving (Generic)
 
 class (MonadImpossible (t e), MonadWatch (t e),
-       MonadTC TVarOf DMTypeOf (t e), MonadTC SVarOf SensitivityOf (t e),
+       MonadTC DMTypeOf (t e), MonadTC SensitivityOf (t e),
        MonadState (Full e) (t e),
        MonadError DMException (t e),
        -- MonadConstraint' Symbol (TC) (t e),
-       MonadConstraint Symbol (MonadDMTC) (t e),
+       -- MonadConstraint Symbol (MonadDMTC) (t e),
+       MonadConstraint (MonadDMTC) (t e),
        LiftTC t) => MonadDMTC e t where
 
 data Tag = DM
@@ -252,25 +259,42 @@ instance Default (Full e) where
 
 
 
-instance Monad m => MonadTC TVarOf DMTypeOf (TCT m e) where
+instance Monad m => MonadTC DMTypeOf (TCT m e) where
+  type VarFam DMTypeOf = TVarOf
   getSubs = view (meta.typeSubs) <$> get
   addSub σ = do
     σs <- use (meta.typeSubs)
     σs' <- σs ⋆ singletonSub σ
     meta.typeSubs .= σs'
+  newVar = TVar <$> newTVar "τ"
 
-instance Monad m => MonadTC SVarOf SensitivityOf (TCT m e) where
+instance Monad m => MonadTC SensitivityOf (TCT m e) where
+  type VarFam SensitivityOf = SVarOf
   getSubs = view (meta.sensSubs) <$> get
   addSub σ = do
     σs <- use (meta.sensSubs)
+    traceM ("I have the subs " <> show σs <> ", and I want to add: " <> show σ)
     σs' <- σs ⋆ singletonSub σ
     meta.sensSubs .= σs'
+  newVar = coerce <$> svar <$> newSVar "τ"
 
 -- getUnsolved :: MonCom (Solvable' TC) Symbol -> Maybe (Symbol, Solvable' TC)
 -- getUnsolved = undefined
 
-instance Monad m => MonadConstraint Symbol (MonadDMTC) (TCT m e) where
+instance Monad m => MonadConstraint (MonadDMTC) (TCT m e) where
   addConstraint c = meta.constraints %%= (newAnnName "constr" (Watched IsChanged c))
+  getUnsolvedConstraintMarkNormal = do
+    (AnnNameCtx _ (Ctx (MonCom constrs))) <- use (meta.constraints)
+    let constrs2 = H.toList constrs
+    let changed = filter (\(a, Watched state constr) -> state == IsChanged) constrs2
+    case changed of
+      [] -> return Nothing
+      ((name,Watched _ constr):_) -> return (Just (name, constr))
+
+  dischargeConstraint name = meta.constraints %= (\(AnnNameCtx n c) -> AnnNameCtx n (deleteValue name c))
+
+
+
 
 
 
@@ -310,11 +334,24 @@ instance Monad m => MonadWatch (TCT m e) where
 --   notifyChanged = TCT (lift (lift notifyChanged))
 
 instance Solve MonadDMTC IsLessEqual (DMType,DMType) where
-  solve_ Dict (IsLessEqual (a,b)) = undefined
+  -- solve_ (IsLessEqual (a,b)) = undefined
+  solve_ Dict _ _ (IsLessEqual (a,b)) = undefined
+
+instance Solve MonadDMTC IsSupremum (DMTypeOf k, DMTypeOf k, DMTypeOf k) where
+  solve_ Dict _ _ a = pure () -- undefined
+
+
+-- supremum :: forall isT t e a k. (Normalize (t e) (a k), IsT isT t, MonadTC a (t e), MonadConstraint isT (t e), Solve isT IsSupremum (a k, a k, a k)) => (a k) -> (a k) -> t e (a k)
+
+
+supremum :: (HasNormalize isT t (a k, a k, a k), MonadTC a (t e), MonadConstraint isT (t e), Solve isT IsSupremum (a k, a k, a k), SingI k, Typeable k) => (a k) -> (a k) -> t e (a k)
+supremum x y = do
+  (z :: a k) <- newVar
+  addConstraint (Solvable (IsSupremum (x, y, z)))
+  return z
 
 -- instance MonadDMTC e (TC) where
 instance Monad m => MonadDMTC e (TCT m) where
-
 
 -- instance MonadDMTC e t => Normalize (t e) (Solvable' TC) where
 --   normalize solv = liftTC (normalize solv)
@@ -329,11 +366,11 @@ instance Monad m => LiftTC (TCT m) where
 instance Monad m => MonadImpossible (TCT m e) where
   impossible err = throwError (ImpossibleError err)
 
-instance MonadDMTC e t => Normalize (t e) DMType where
+instance MonadDMTC e t => Normalize (t e) (DMTypeOf k) where
   normalize n =
-    do σ <- getSubs @TVarOf @DMTypeOf
+    do σ <- getSubs @DMTypeOf
        n₂ <- σ ↷ n
-       σ <- getSubs @SVarOf @SensitivityOf
+       σ <- getSubs @SensitivityOf
        n₃ <- σ ↷ n₂
        return n₃
 
@@ -350,38 +387,40 @@ instance (Normalize t a, Normalize t b, Normalize t c) => Normalize t (a, b, c) 
 
 instance MonadDMTC e t => Normalize (t e) Sensitivity where
   normalize n =
-    do σ <- getSubs @SVarOf @SensitivityOf
+    do σ <- getSubs @SensitivityOf
        σ ↷ n
 
 instance Monad t => Normalize t (SymbolOf k) where
   normalize = pure
 
+
 instance MonadDMTC e t => Normalize (t e) DMTypeOp where
-  normalize (Unary op τ res) = Unary op <$> normalize τ <*> normalize res
-  normalize (Binary op τ res) = Binary op <$> normalize τ <*> normalize res
+  normalize (UnaryNum op τ res) = UnaryNum op <$> normalize τ <*> normalize res
+  normalize (BinaryNum op τ res) = BinaryNum op <$> normalize τ <*> normalize res
   normalize (Ternary op τ res) = Ternary op <$> normalize τ <*> normalize res
 
 -- instance MonadDMTC e t :=> Normalize (t e) DMTypeOp where
 --   ins = Sub Dict
 
 instance (MonadDMTC e t => Normalize (t e) a) => MonadDMTC e t :=> Normalize (t e) a where
+-- instance (IsT isT t, isT e t => Normalize (t e) a) => isT e t :=> Normalize (t e) a where
   ins = Sub Dict
 
+
 instance Monad m => IsT MonadDMTC (TCT m) where
+-- instance (forall e. MonadDMTC e t) => IsT MonadDMTC (t) where
 
   -- normalize (Binary op σ τ) = Binary op <$> normalize σ <*> normalize τ
   -- normalize (Ternary op ρ σ τ) = Ternary op <$> normalize ρ <*> normalize σ <*> normalize τ
 
-instance Solve MonadDMTC (IsTypeOpResult) DMTypeOp where
-  solve_ Dict (IsTypeOpResult (Unary op τ res)) = undefined
-  solve_ Dict (IsTypeOpResult (Binary op τ res)) = undefined
-  solve_ Dict (IsTypeOpResult (Ternary op τ res)) = undefined
 
 -- instance (forall e t. (MonadDMTC e t => Normalize (t e) a)) => HasNormalize MonadDMTC a where
 
 
+
   -- solve_ (Constr (Binary op σ τ)) = undefined
   -- solve_ (Constr (Ternary op ρ σ τ)) = undefined
+
 
 
 

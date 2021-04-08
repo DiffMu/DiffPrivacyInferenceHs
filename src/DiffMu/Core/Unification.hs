@@ -8,13 +8,19 @@ import DiffMu.Core.MonadTC
 import DiffMu.Core.TC
 import DiffMu.Core.Term
 
+instance Solve MonadDMTC IsEqual (Sensitivity, Sensitivity) where
+  solve_ Dict _ _ _ = pure ()
 
 instance Unify MonadDMTC Sensitivity where
-  unify_ = undefined
+  unify_ s1 s2 = do
+    c <- addConstraint @MonadDMTC (Solvable (IsEqual (s1, s2)))
+    return s1
+
 
 -- instance (MonadDMTC e t, Unify (TC e) a, Unify (TC e) b) => Unify (TC e) (a :& b) where
 instance (Unify isT a, Unify isT b) => Unify isT (a :& b) where
   unify_ (a₁ :@ e₁) (a₂ :@ e₂) = (:@) <$> unify_ a₁ a₂ <*> unify_ e₁ e₂
+
 
 instance (Show a, Unify MonadDMTC a) => Unify MonadDMTC [a] where
   unify_ xs ys | length xs == length ys = mapM (uncurry unify_) (zip xs ys)
@@ -23,6 +29,7 @@ instance (Show a, Unify MonadDMTC a) => Unify MonadDMTC [a] where
 instance Unify MonadDMTC (DMTypeOf k) where
   unify_ DMReal DMReal                 = pure DMReal
   unify_ DMInt DMInt                   = pure DMInt
+  unify_ (Numeric t) (Numeric s)       = Numeric <$> unify_ t s
   unify_ (NonConst τ₁) (NonConst τ₂)   = NonConst <$> unify_ τ₁ τ₂
   unify_ (Const η₁ τ₁) (Const η₂ τ₂)   = Const <$> unify_ η₁ η₂ <*> unify_ τ₁ τ₂
   unify_ (as :->: a) (bs :->: b)       = (:->:) <$> unify_ as bs <*> unify_ a b

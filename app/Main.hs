@@ -8,6 +8,7 @@ import DiffMu.Core.Term
 import DiffMu.Core.Operations
 import DiffMu.Core.Symbolic
 import DiffMu.Core.Context
+import DiffMu.Core.MonadTC
 import DiffMu.Typecheck.Typecheck
 import Example.Terms
 
@@ -21,8 +22,9 @@ main = do
         -- b <- svar <$> newSVar "a"
         -- let x = (traceShowId a) +! (traceShowId b)
         -- traceShow x (checkSens t₄ def)
-        checkSens t₄ def
-        normalizeContext
+        tres <- checkSens t₅ def
+        solveAllConstraints SolveExact
+        normalize tres
 
   let x = runExcept (runStateT (runTCT r) def)
   case x of
