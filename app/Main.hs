@@ -25,22 +25,22 @@ main = do
   putStrLn "Starting DiffMu!"
   let r :: TC Sensitivity DMType
       r = do
-        -- a <- svar <$> newSVar "a"
-        -- b <- svar <$> newSVar "a"
-        -- let x = (traceShowId a) +! (traceShowId b)
-        -- traceShow x (checkSens t₄ def)
 
-        -- tres <- checkSens t₅ def
+        -- typecheck the term t5
+        tres <- checkSens t₅ def
+        solveAllConstraints SolveExact
+        normalize tres
 
+        -- an example of subtyping
+        {-
         let iINT = Numeric (NonConst DMInt)
         let rREAL = Numeric (NonConst DMReal)
         aa <- TVar <$> newTVar @MainKind "a"
 
-        -- addConstraint (Solvable (IsLessEqual (DMInt,DMReal)))
         addConstraint (Solvable (IsLessEqual (([iINT :@ oneId] :->: rREAL),aa)))
         solveAllConstraints SolveExact
-        return (Numeric (NonConst DMInt))
-        -- normalize tres
+        return (aa)
+        -}
 
   let x = runExcept (runStateT (runTCT r) def)
   case x of
