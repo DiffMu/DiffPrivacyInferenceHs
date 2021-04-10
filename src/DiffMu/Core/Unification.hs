@@ -37,15 +37,17 @@ instance Unify MonadDMTC (DMTypeOf k) where
 
 -- instance (MonadDMTC e t) => Unify (TC e) DMType where
 
-instance (IsT MonadDMTC t) => SemigroupM (t e) DMType where
+instance (IsT MonadDMTC t) => SemigroupM (t e) (DMTypeOf k) where
   (⋆) = unify
 
-instance (IsT MonadDMTC t) => MonoidM (t e) DMType where
+instance (SingI k, Typeable k, IsT MonadDMTC t) => MonoidM (t e) (DMTypeOf k) where
   neutral = TVar <$> newTVar ""
 
-instance (IsT MonadDMTC t) => (CheckNeutral (t e) DMType) where
+instance (SingI k, Typeable k, IsT MonadDMTC t) => (CheckNeutral (t e) (DMTypeOf k)) where
   checkNeutral (TVar x) = return True
   checkNeutral (_) = return False
+
+
 
 
 

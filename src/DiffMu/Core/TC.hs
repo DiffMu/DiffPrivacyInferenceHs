@@ -299,6 +299,12 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m e) where
     let c = getValue name cs
     throwError (UnsatisfiableConstraint (show c))
 
+  updateConstraint name c = do
+    meta.constraints %= (\(AnnNameCtx n cs) -> AnnNameCtx n (setValue name (Watched IsChanged c) cs))
+
+    -- (AnnNameCtx n cs) <- use (meta.constraints)
+
+
 
 
 
@@ -337,13 +343,6 @@ instance Monad m => MonadWatch (TCT m e) where
 
 -- instance MonadWatch m => MonadWatch (TCT m e) where
 --   notifyChanged = TCT (lift (lift notifyChanged))
-
-instance Solve MonadDMTC IsLessEqual (DMType,DMType) where
-  -- solve_ (IsLessEqual (a,b)) = undefined
-  solve_ Dict _ _ (IsLessEqual (a,b)) = undefined
-
-instance Solve MonadDMTC IsSupremum (DMTypeOf k, DMTypeOf k, DMTypeOf k) where
-  solve_ Dict _ _ a = pure () -- undefined
 
 
 -- supremum :: forall isT t e a k. (Normalize (t e) (a k), IsT isT t, MonadTC a (t e), MonadConstraint isT (t e), Solve isT IsSupremum (a k, a k, a k)) => (a k) -> (a k) -> t e (a k)
@@ -430,10 +429,10 @@ instance Monad m => IsT MonadDMTC (TCT m) where
 
 
 
-newTVar :: (MonadDMTC e t, SingI k) => Text -> t e (TVarOf k)
+newTVar :: forall k e t. (MonadDMTC e t, SingI k) => Text -> t e (TVarOf k)
 newTVar hint = meta.typeVars %%= ((newKindedName hint))
 
-newSVar :: (SingI k, MonadDMTC e t) => Text -> t e (SVarOf k)
+newSVar :: forall k e t. (SingI k, MonadDMTC e t) => Text -> t e (SVarOf k)
 newSVar hint = meta.sensVars %%= (newKindedName hint)
 
   -- where f names = let (τ , names') = newName hint names

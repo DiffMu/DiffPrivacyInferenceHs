@@ -116,7 +116,7 @@ solveAllConstraints mode = do
 
   --
   ctx <- use (meta @e .constraints)
-  traceM ("Solving constraints. I have: " <> show ctx <> ".\n Currently looking at: " <> show openConstr)
+  traceM ("Solving constraints. I have: " <> show ctx <> ".\n Currently looking at: " <> show (fst <$> openConstr))
   --
 
   case openConstr of

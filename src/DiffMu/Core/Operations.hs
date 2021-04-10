@@ -9,6 +9,7 @@ import DiffMu.Core.Term
 import DiffMu.Core.MonadicPolynomial2
 import DiffMu.Core.Symbolic
 import DiffMu.Core.Unification
+import DiffMu.Core.Subtyping
 
 makeTypeOp :: (IsT MonadDMTC t) => DMTypeOp_Some -> Int -> t e ((DMNumType) , [(DMNumType,SVar)])
 makeTypeOp (IsUnary op) 1 =
@@ -56,10 +57,10 @@ solveop mode name (IsTypeOpResult (BinaryNum op (τa1 :@ s1 , τa2 :@ s2) τr)) 
   case solveres of
     Nothing -> return ()
     Just (val_s1, val_s2, val_τr) -> do
-      -- addSub (s1 := val_s1)
-      -- addSub (s2 := val_s2)
-      unify (svar s1) val_s1
-      unify (svar s2) val_s2
+      addSub (s1 := val_s1)
+      addSub (s2 := val_s2)
+      -- unify (svar s1) val_s1
+      -- unify (svar s2) val_s2
       unify τr val_τr
       dischargeConstraint @MonadDMTC name
 solveop mode name (IsTypeOpResult (Ternary op xx res)) = undefined

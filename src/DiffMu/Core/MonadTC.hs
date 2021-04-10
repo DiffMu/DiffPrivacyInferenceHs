@@ -120,6 +120,7 @@ class (Monad t) => MonadConstraint isT t | t -> isT where
   getUnsolvedConstraintMarkNormal :: t (Maybe (Symbol , Solvable isT))
   dischargeConstraint :: Symbol -> t ()
   failConstraint :: Symbol -> t ()
+  updateConstraint :: Symbol -> Solvable isT -> t ()
 
 
 type TCConstraint' c = (forall a. Newtype (c a) a)

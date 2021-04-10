@@ -28,9 +28,12 @@ library
       DiffMu.Core
       DiffMu.Core.Context
       DiffMu.Core.Definitions
+      DiffMu.Core.INC
+      DiffMu.Core.MonadicGraph
       DiffMu.Core.MonadicPolynomial2
       DiffMu.Core.MonadTC
       DiffMu.Core.Operations
+      DiffMu.Core.Subtyping
       DiffMu.Core.Symbolic
       DiffMu.Core.TC
       DiffMu.Core.Term
@@ -46,7 +49,7 @@ library
       Paths_DiffPrivacyInferenceHs
   hs-source-dirs:
       src
-  default-extensions: QuasiQuotes ConstraintKinds DataKinds GADTs KindSignatures MultiParamTypeClasses NoImplicitPrelude NoMonomorphismRestriction TypeOperators UnicodeSyntax ExistentialQuantification ScopedTypeVariables QuantifiedConstraints KindSignatures PolyKinds GeneralizedNewtypeDeriving DeriveGeneric StandaloneDeriving DerivingVia FlexibleInstances FlexibleContexts FunctionalDependencies OverloadedStrings TypeApplications TypeFamilies RankNTypes OverloadedStrings StandaloneKindSignatures
+  default-extensions: QuasiQuotes ConstraintKinds DataKinds GADTs KindSignatures MultiParamTypeClasses NoImplicitPrelude NoMonomorphismRestriction TypeOperators UnicodeSyntax ExistentialQuantification ScopedTypeVariables QuantifiedConstraints KindSignatures PolyKinds GeneralizedNewtypeDeriving DeriveGeneric StandaloneDeriving DerivingVia FlexibleInstances FlexibleContexts FunctionalDependencies OverloadedStrings TypeApplications TypeFamilies RankNTypes OverloadedStrings StandaloneKindSignatures LambdaCase
   build-depends:
       base >=4.7 && <5
     , bifunctors
@@ -68,7 +71,7 @@ executable diffmu
       Paths_DiffPrivacyInferenceHs
   hs-source-dirs:
       app
-  default-extensions: OverloadedStrings
+  default-extensions: OverloadedStrings TypeApplications DataKinds
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       DiffPrivacyInferenceHs
