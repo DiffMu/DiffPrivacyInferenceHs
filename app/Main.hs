@@ -27,19 +27,20 @@ main = do
       r = do
 
         -- typecheck the term t5
-        tres <- checkSens t₅ def
-        solveAllConstraints SolveExact
-        normalize tres
+        -- tres <- checkSens t₅ def
+        -- solveAllConstraints SolveExact
+        -- normalize tres
 
         -- an example of subtyping
-        {-
         let iINT = Numeric (NonConst DMInt)
         let rREAL = Numeric (NonConst DMReal)
         aa <- TVar <$> newTVar @MainKind "a"
 
         addConstraint (Solvable (IsLessEqual (([iINT :@ oneId] :->: rREAL),aa)))
         solveAllConstraints SolveExact
-        return (aa)
+        normalizeContext
+        normalize aa
+        {-
         -}
 
   let x = runExcept (runStateT (runTCT r) def)

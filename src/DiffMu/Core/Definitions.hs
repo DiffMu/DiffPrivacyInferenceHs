@@ -96,8 +96,8 @@ instance Show (DMTypeOf k) where
   show DMInt = "Int"
   show DMReal = "Real"
   show (Const s t) = show t <> "[" <> show s <> "]"
-  show (NonConst t) = show t
-  show (Numeric t) = show t
+  show (NonConst t) = show t <> "[--]"
+  show (Numeric t) = "Num(" <> show t <> ")"
   show (TVar t) = show t
   show (a :->: b) = show a <> " -> " <> show b
 

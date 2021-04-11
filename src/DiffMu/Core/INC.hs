@@ -22,6 +22,8 @@ evalINC :: forall s m e a. (MonadState s m, Show a, Show e) => INC m e a -> a ->
 evalINC (steps) start = do
   traceM "-----"
   traceM "Beginning incremental computation"
+  let logsteps (INC steps) = traceM $ "I have " <> show (length steps) <> " candidates."
+  logsteps steps
 
   state₀ <- get
   let f :: INC m e a -> [(s, INCRes e a)] -> m [(s, INCRes e a)]
@@ -38,7 +40,7 @@ evalINC (steps) start = do
 
   let finished = [(s,a) | (s, Finished a) <- results]
   let partial  = [(s,a) | (s, Partial a) <- results]
-  let errors    = [e     | (_, Fail e) <- results]
+  let errors   = [e     | (_, Fail e) <- results]
 
 
   case finished of
@@ -55,8 +57,9 @@ evalINC (steps) start = do
                -- 3. If no partial results could be achieved, then return a `wait`
                [] -> put state₀ >> return Wait
 
-               -- 4. In case there is only one partial result, we can commit its state, and simply continue our computation with that.
-               [(s,a)] -> do
+               -- 4. In case there is only one partial result, and the rest were errors, we can commit its state, and simply continue our computation with that.
+               -- NOTE: This branch is probably only very rarely taken.
+               [(s,a)] | (length errors == length results - 1) -> do
                  put s
                  res <- evalINC steps a
                  case res of
@@ -65,7 +68,7 @@ evalINC (steps) start = do
                    Wait       -> return (Partial a) -- If the recursive computation did not give us new results, we still take our current one.
                    Fail e     -> return (Fail e)
 
-               -- 5. If there were multiple partial results, we do a recursive search with each one.
+               -- 5. If there were multiple partial results, or, some of them were `Wait`s, we do a recursive search with each one.
                _ -> do
                  let g (s,a) = do
                        put s

@@ -128,7 +128,6 @@ solveAllConstraints mode = do
 
 
 
-
   -- do
   -- curΣ <- use types
   -- normΣ <- normalize curΣ
