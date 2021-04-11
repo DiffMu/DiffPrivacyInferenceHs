@@ -53,10 +53,7 @@ checkSens (Sng η τ) scope  = Numeric <$> Const (constCoeff (Fin η)) <$> creat
 -- a special term for function argument variables.
 -- those get sensitivity 1, all other variables are var terms
 checkSens (Arg x dτ) scope = do τ <- createDMType dτ
-                                setVar x (τ :@ constCoeff (Fin 1)) --(Fin 1))
-                                -- tt <- use types
-                                -- return (traceShow tt τ)
-
+                                setVar x (τ :@ constCoeff (Fin 1))
                                 return τ
 
 checkSens (Var x dτ) scope = do -- get the term that corresponds to this variable from the scope dict
