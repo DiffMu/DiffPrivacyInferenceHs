@@ -8,7 +8,7 @@ import DiffMu.Prelude
 import DiffMu.Core.Symbolic
 import DiffMu.Core.Term
 import DiffMu.Core.MonadTC
-import DiffMu.Core.MonadicPolynomial2
+import DiffMu.Core.MonadicPolynomial
 -- import GHC.TypeLits
 
 import Data.Singletons.TH

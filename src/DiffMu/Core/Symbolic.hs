@@ -4,7 +4,7 @@ module DiffMu.Core.Symbolic where
 
 import DiffMu.Prelude
 -- import DiffMu.Prelude.MonadicAlgebra
-import DiffMu.Core.MonadicPolynomial2
+import DiffMu.Core.MonadicPolynomial
 import qualified Prelude as P
 
 import Data.Singletons.TH

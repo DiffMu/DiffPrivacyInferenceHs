@@ -30,7 +30,7 @@ library
       DiffMu.Core.Definitions
       DiffMu.Core.INC
       DiffMu.Core.MonadicGraph
-      DiffMu.Core.MonadicPolynomial2
+      DiffMu.Core.MonadicPolynomial
       DiffMu.Core.MonadTC
       DiffMu.Core.Operations
       DiffMu.Core.Subtyping

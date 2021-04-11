@@ -7,7 +7,7 @@ import DiffMu.Core.MonadTC
 import DiffMu.Core.Context
 import DiffMu.Core.TC
 import DiffMu.Core.Term
-import DiffMu.Core.MonadicPolynomial2
+import DiffMu.Core.MonadicPolynomial
 import DiffMu.Core.Symbolic
 import DiffMu.Core.Unification
 import DiffMu.Core.INC

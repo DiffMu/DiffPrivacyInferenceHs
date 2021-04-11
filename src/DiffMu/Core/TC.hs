@@ -9,7 +9,7 @@ import DiffMu.Prelude
 import DiffMu.Core.Definitions
 import DiffMu.Core.MonadTC
 import DiffMu.Core.Term
-import DiffMu.Core.MonadicPolynomial2
+import DiffMu.Core.MonadicPolynomial
 import DiffMu.Core.Symbolic
 
 import qualified Data.HashMap.Strict as H
