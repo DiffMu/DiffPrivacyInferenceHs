@@ -25,24 +25,24 @@ source-repository head
 
 library
   exposed-modules:
+      DiffMu.Abstract.INC
+      DiffMu.Abstract.MonadicGraph
+      DiffMu.Abstract.MonadicPolynomial
+      DiffMu.Abstract.MonadTC
+      DiffMu.Abstract.Term
       DiffMu.Core
       DiffMu.Core.Context
       DiffMu.Core.Definitions
-      DiffMu.Core.INC
-      DiffMu.Core.MonadicGraph
-      DiffMu.Core.MonadicPolynomial
-      DiffMu.Core.MonadTC
-      DiffMu.Core.Operations
-      DiffMu.Core.Subtyping
       DiffMu.Core.Symbolic
       DiffMu.Core.TC
-      DiffMu.Core.Term
       DiffMu.Core.Unification
       DiffMu.Imports
       DiffMu.Prelude
       DiffMu.Prelude.Algebra
       DiffMu.Prelude.MonadicAlgebra
       DiffMu.Prelude.Polynomial
+      DiffMu.Typecheck.Operations
+      DiffMu.Typecheck.Subtyping
       DiffMu.Typecheck.Typecheck
       Lib
   other-modules:

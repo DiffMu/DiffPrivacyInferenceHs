@@ -1,15 +1,15 @@
 
-module DiffMu.Core.Operations where
+module DiffMu.Typecheck.Operations where
 
 import DiffMu.Prelude
+import DiffMu.Abstract.Term
+import DiffMu.Abstract.MonadicPolynomial
+import DiffMu.Abstract.MonadTC
 import DiffMu.Core.Definitions
-import DiffMu.Core.MonadTC
 import DiffMu.Core.TC
-import DiffMu.Core.Term
-import DiffMu.Core.MonadicPolynomial
 import DiffMu.Core.Symbolic
 import DiffMu.Core.Unification
-import DiffMu.Core.Subtyping
+import DiffMu.Typecheck.Subtyping
 
 makeTypeOp :: (IsT MonadDMTC t) => DMTypeOp_Some -> Int -> t e ((DMNumType) , [(DMNumType,SVar)])
 makeTypeOp (IsUnary op) 1 =

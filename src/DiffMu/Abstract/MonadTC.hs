@@ -1,11 +1,11 @@
 
 {-# LANGUAGE UndecidableInstances #-}
 
-module DiffMu.Core.MonadTC where
+module DiffMu.Abstract.MonadTC where
 
 import DiffMu.Prelude
 -- import DiffMu.Core.Definitions
-import DiffMu.Core.Term
+import DiffMu.Abstract.Term
 
 -- class (TermSubstitute x a) => MonadSubstitute x a t where
 

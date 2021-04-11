@@ -2,15 +2,15 @@ module Main where
 
 -- import Lib
 import DiffMu.Prelude
+import DiffMu.Abstract.Term
+import DiffMu.Abstract.MonadTC
 import DiffMu.Core
 import DiffMu.Core.TC
-import DiffMu.Core.Term
 import DiffMu.Core.Definitions
-import DiffMu.Core.Operations
 import DiffMu.Core.Symbolic
 import DiffMu.Core.Context
-import DiffMu.Core.MonadTC
-import DiffMu.Core.Subtyping
+import DiffMu.Typecheck.Operations
+import DiffMu.Typecheck.Subtyping
 import DiffMu.Typecheck.Typecheck
 import Example.Terms
 

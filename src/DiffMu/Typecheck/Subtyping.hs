@@ -1,17 +1,17 @@
 
-module DiffMu.Core.Subtyping where
+module DiffMu.Typecheck.Subtyping where
 
 import DiffMu.Prelude
+import DiffMu.Abstract.MonadTC
+import DiffMu.Abstract.Term
+import DiffMu.Abstract.MonadicPolynomial
+import DiffMu.Abstract.INC
+import DiffMu.Abstract.MonadicGraph
 import DiffMu.Core.Definitions
-import DiffMu.Core.MonadTC
 import DiffMu.Core.Context
 import DiffMu.Core.TC
-import DiffMu.Core.Term
-import DiffMu.Core.MonadicPolynomial
 import DiffMu.Core.Symbolic
-import DiffMu.Core.Unification
-import DiffMu.Core.INC
-import DiffMu.Core.MonadicGraph
+-- import DiffMu.Typecheck.Unification
 
 import Debug.Trace
 

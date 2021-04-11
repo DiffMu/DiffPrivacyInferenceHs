@@ -1,10 +1,10 @@
 
 {-# LANGUAGE UndecidableInstances #-}
-module DiffMu.Core.MonadicPolynomial2 where
+module DiffMu.Abstract.MonadicPolynomial where
 
 import DiffMu.Prelude
-import DiffMu.Core.Term
-import DiffMu.Core.MonadTC
+import DiffMu.Abstract.Term
+import DiffMu.Abstract.MonadTC
 
 import qualified Prelude as P
 import Data.HashMap.Strict as H

@@ -1,5 +1,5 @@
 
-module DiffMu.Core.INC where
+module DiffMu.Abstract.INC where
 
 import DiffMu.Prelude
 

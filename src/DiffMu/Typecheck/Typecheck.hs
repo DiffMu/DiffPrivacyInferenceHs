@@ -2,22 +2,17 @@
 module DiffMu.Typecheck.Typecheck where
 
 import DiffMu.Prelude
+import DiffMu.Abstract.MonadTC
+import DiffMu.Abstract.MonadicPolynomial
 import DiffMu.Core
 import DiffMu.Core.Symbolic
-import DiffMu.Core.MonadicPolynomial
 import DiffMu.Core.TC
-import DiffMu.Core.MonadTC
-import DiffMu.Core.Operations
+import DiffMu.Typecheck.Operations
 
 import Data.HashMap.Strict as H
 
 import Debug.Trace
 
-
--- https://stackoverflow.com/questions/1164003/how-do-i-test-if-a-floating-point-number-is-an-integer-in-haskell
---Returns if x is an int to n decimal places
--- isInt :: (Integral a, RealFrac b) => b -> a -> Bool
--- isInt x n = (round $ 10^(fromIntegral n)*(x-(fromIntegral $ round x)))==0
 
 
 createDMTypeNum :: MonadDMTC e t => JuliaNumType -> t e (DMTypeOf BaseNumKind)

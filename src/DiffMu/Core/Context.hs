@@ -2,11 +2,11 @@
 module DiffMu.Core.Context where
 
 import DiffMu.Prelude
-import DiffMu.Core.Definitions
 -- import DiffMu.Core.MonadicPolynomial
-import DiffMu.Core.MonadTC
+import DiffMu.Abstract.MonadTC
+import DiffMu.Abstract.Term
+import DiffMu.Core.Definitions
 import DiffMu.Core.TC
-import DiffMu.Core.Term
 import DiffMu.Core.Unification
 
 import Data.HashMap.Strict as H

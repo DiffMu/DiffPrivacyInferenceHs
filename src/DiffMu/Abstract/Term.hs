@@ -1,6 +1,6 @@
 {-# LANGUAGE UndecidableInstances #-}
 
-module DiffMu.Core.Term where
+module DiffMu.Abstract.Term where
 
 import DiffMu.Prelude
 
