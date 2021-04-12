@@ -11,13 +11,17 @@ import DiffMu.Core.Symbolic
 
 import Debug.Trace
 
+
+-- An abbreviation for adding a subtyping constraint.
 (⊑!) :: (SingI k, Typeable k, MonadDMTC e t) => DMTypeOf k -> DMTypeOf k -> t e ()
 (⊑!) a b = addConstraint (Solvable (IsLessEqual (a,b))) >> pure ()
 
+-- A helper function used below in defining the subtyping graph.
 getArrowLength :: DMType -> Maybe Int
 getArrowLength (a :->: _) = Just (length a)
 getArrowLength _         = Nothing
 
+-- The subtyping graph for our type system.
 subtypingGraph :: forall e t k. (SingI k, Typeable k, MonadDMTC e t) => EdgeType -> [Edge (t e) (DMTypeOf k)]
 subtypingGraph =
   let case1 = testEquality (typeRep @k) (typeRep @MainKind)
@@ -91,47 +95,42 @@ subtypingGraph =
             }
     (_, _, _) -> \_ -> []
 
--- subtypingGraph :: forall e t k. (SingI k, Typeable k, MonadDMTC e t) => NodeType -> [t e (DMTypeOf k,DMTypeOf k)]
--- subtypingGraph = case testEquality (typeRep @k) (typeRep @MainKind) of
---   Just Refl -> \case { IsReflexive IsStructural  -> [ do a <- TVar <$> newTVar "a"
---                                                          s <- svar <$> newSVar "s"
---                                                          b <- TVar <$> newTVar "b"
---                                                          return ([a :@ s] :->: b, [a :@ s] :->: b)
---                                                     ]
---                      ; IsReflexive NotStructural -> []
---                      ; NotReflexive -> []
---                      }
---   Nothing -> case testEquality (typeRep @k) (typeRep @BaseNumKind) of
---     Just Refl -> \case { IsReflexive NotStructural -> [ return (DMInt, DMInt), return (DMReal, DMReal)]
---                        ; IsReflexive IsStructural  -> []
---                        ; NotReflexive -> [ return (DMInt, DMReal)]
---                        }
---     Nothing -> \case {_ -> []}
 
-
+-- The actual solving is done here.
+-- this simply uses the `findPathM` function from Abstract.Computation.MonadicGraph
 solveSubtyping :: forall t e k. (SingI k, Typeable k, IsT MonadDMTC t) => Symbol -> (DMTypeOf k, DMTypeOf k) -> t e ()
 solveSubtyping name path = do
-  let relevance e = IsGraphRelevant
-  traceM $ "Starting subtyping solving of " <> show path
-  let graph = subtypingGraph @e @t
-  traceM $ "I have " <> show (length (graph (IsReflexive NotStructural))) <> " candidates."
+  -- Here we define which errors should be caught while doing our hypothetical computation.
+  let relevance (UnificationError _ _)      = IsGraphRelevant
+      relevance (UnsatisfiableConstraint _) = IsGraphRelevant
+      relevance _                           = NotGraphRelevant
 
+  -- traceM $ "Starting subtyping solving of " <> show path
+  let graph = subtypingGraph @e @t
+  -- traceM $ "I have " <> show (length (graph (IsReflexive NotStructural))) <> " candidates."
+
+  -- Executing the computation
   res <- findPathM @(Full e) @_ @DMException relevance (GraphM graph) path
+
+  -- We look at the result and if necessary throw errors.
   case res of
-    Finished a -> traceM ("subtyping finished with: " <> show a) >> dischargeConstraint @MonadDMTC name
-    Partial a -> updateConstraint name (Solvable (IsLessEqual a))
-    Wait -> return ()
-    Fail e -> throwError (UnsatisfiableConstraint (show (fst path) <> " ⊑ " <> show (snd path) <> "\n\n"
+    Finished a -> dischargeConstraint @MonadDMTC name
+    Partial a  -> updateConstraint name (Solvable (IsLessEqual a))
+    Wait       -> return ()
+    Fail e     -> throwError (UnsatisfiableConstraint (show (fst path) <> " ⊑ " <> show (snd path) <> "\n\n"
                          <> "Got the following errors while search the subtyping graph:\n"
                          <> show e))
 
 
+-- We can solve `IsLessEqual` constraints for DMTypes.
+-- NOTE: IsLessEqual is interpreted as a subtyping relation.
 instance (SingI k, Typeable k) => Solve MonadDMTC IsLessEqual (DMTypeOf k, DMTypeOf k) where
-  -- solve_ (IsLessEqual (a,b)) = undefined
   solve_ Dict _ name (IsLessEqual (a,b)) = solveSubtyping name (a,b)
 
 
 
+
+-- TODO: Solving of `IsSupremum` constraints is currently not implemented.
 instance Solve MonadDMTC IsSupremum (DMTypeOf k, DMTypeOf k, DMTypeOf k) where
   solve_ Dict _ _ a = pure () -- undefined
 

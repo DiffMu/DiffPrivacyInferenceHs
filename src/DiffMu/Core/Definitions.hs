@@ -134,6 +134,28 @@ data (:&) a b = (:@) a b
 instance (Show a, Show b) => Show (a :& b) where
   show (a :@ b) = show a <> " @ " <> show b
 
+-- Since we want to use (monadic-)algebraic operations on terms of type `(a :& b)`,
+-- we declare these instances here. That is, if `a` and `b` have such instances,
+-- then (a :& b) has them as well:
+
+-- (a :& b) is a monadic semigroup.
+instance (SemigroupM t a, SemigroupM t b) => SemigroupM t (a :& b) where
+  (⋆) (a₁ :@ b₁) (a₂ :@ b₂) = (:@) <$> (a₁ ⋆ a₂) <*> (b₁ ⋆ b₂)
+
+-- (a :& b) is a monadic monoid.
+instance (MonoidM t a, MonoidM t b) => MonoidM t (a :& b) where
+  neutral = (:@) <$> neutral <*> neutral
+
+-- (a :& b) is a monadic monoid in which an explicit equality check with the neutral element
+-- is possible.
+instance (CheckNeutral m a, CheckNeutral m b) => CheckNeutral m (a :& b) where
+  checkNeutral (a :@ b) = (\a b -> and [a,b]) <$> checkNeutral a <*> checkNeutral b
+
+-- NOTE: The monoidal operation for sensitivities is addition.
+--       The operation for DMTypes is unification.
+--       That means, given `(x :@ s), (y :@ t) :: (DMType :& Sensitivity)`,
+--       computing `(x :@ s) ⋆ (y :@ t)` unifies `x` and `y`, and sums `s` and `t`.
+--       The result lives in a monad.
 
 ---------------------------------------------------------
 -- Sensitivity and Privacy
@@ -358,8 +380,6 @@ instance Show DMException where
   show (ImpossibleError e) = "Something impossible happened: " <> show e
   show (VariableNotInScope v) = "Variable not in scope: " <> show v
   show (UnsatisfiableConstraint c) = "The constraint " <> c <> " is not satisfiable."
-
-
 
 
 

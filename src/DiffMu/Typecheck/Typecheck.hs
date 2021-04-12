@@ -13,37 +13,27 @@ import Data.HashMap.Strict as H
 import Debug.Trace
 
 
-
+-- Maps julia num types to DMtypes (of basenumkind)
 createDMTypeNum :: JuliaNumType -> DMTypeOf BaseNumKind
 createDMTypeNum JTNumInt = DMInt
 createDMTypeNum JTNumReal = DMReal
 
+-- Maps julia types to DMTypes (of main kind)
+-- (`JTAny` is turned into a new type variable.)
 createDMType :: MonadDMTC e t => JuliaType -> t e (DMTypeOf MainKind)
-createDMType (JTNum τ) = pure (Numeric (NonConst (createDMTypeNum τ))) -- NOTE: defaulting to non-const might or might not be what we want to do here.
 createDMType JTAny = TVar <$> newTVar "any"
+ -- NOTE: defaulting to non-const might or might not be what we want to do here.
+createDMType (JTNum τ) = pure (Numeric (NonConst (createDMTypeNum τ)))
 
 
-type Scope v a = HashMap v [a]
-instance Default (Scope v a) where
-  def = H.empty
-
-type Scoped v a = State (Scope v a)
-runScoped = runState
-
-popDefinition :: (MonadDMTC e t, DictKey v, Show v) => Scope v a -> v -> t e (a, Scope v a)
-popDefinition scope v =
-  do (d,ds) <- case H.lookup v scope of
-                 Just (x:xs) -> return (x,xs)
-                 _           -> throwError (VariableNotInScope v)
-     return (d, H.insert v ds scope)
 
 
-type DMScope = Scope Symbol DMTerm
+------------------------------------------------------------------------
+-- The typechecking function
 
 checkSens :: DMTerm -> DMScope -> STC DMType
 
--- TODO: Here we assume that η really has type τ, and do not check it.
---       Should probably do that.
+-- TODO: Here we assume that η really has type τ, and do not check it. Should maybe do that.
 checkSens (Sng η τ) scope  = pure $ Numeric (Const (constCoeff (Fin η)) (createDMTypeNum τ))
 
 -- a special term for function argument variables.
@@ -67,19 +57,48 @@ checkSens (Var x dτ) scope = do -- get the term that corresponds to this variab
                                     addConstraint (Solvable (IsLessEqual (τ, dτd) ))
                                     return τ
 
-
+-- typechecking an op
 checkSens (Op op args) scope =
+  -- We create a helper function, which infers the type of arg, unifies it with the given τ
+  -- and scales the current context by s.
   let checkOpArg (arg,(τ,s)) = do
         τ_arg <- checkSens arg scope
-        mscale (svar s)
         unify (Numeric τ) τ_arg
+        mscale (svar s)
   in do
+    -- We get create a new typeop constraint for op
     (res,arg_sens) <- makeTypeOp op (length args)
+
+    -- We call our helper function `checkOpArg` on the argument-terms, zipped with the
+    -- type(variables), sensitivities returned by `makeTypeOp`
     _ <- msum ((checkOpArg <$> (zip args arg_sens)))
+
+    -- We return the `res` type given by `makeTypeOp`
     return (Numeric res)
 
+-- Everything else is currently not supported.
 checkSens t scope = throwError (UnsupportedTermError t)
 
 
 
+-------------------------------------------------------------
+-- Definition of the scope
+
+-- A scope with variables of type `v`, and contents of type `a` is simply a hashmap.
+type Scope v a = HashMap v [a]
+
+-- The default scope is an empty scope.
+instance Default (Scope v a) where
+  def = H.empty
+
+-- Given a scope and a variable name v, we pop the topmost element from the list for v.
+popDefinition :: (MonadDMTC e t, DictKey v, Show v) => Scope v a -> v -> t e (a, Scope v a)
+popDefinition scope v =
+  do (d,ds) <- case H.lookup v scope of
+                 Just (x:xs) -> return (x,xs)
+                 _           -> throwError (VariableNotInScope v)
+     return (d, H.insert v ds scope)
+
+-- Our scopes have symbols as variables, and contain DMTerms.
+type DMScope = Scope Symbol DMTerm
 

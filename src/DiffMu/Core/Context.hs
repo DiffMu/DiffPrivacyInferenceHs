@@ -2,7 +2,6 @@
 module DiffMu.Core.Context where
 
 import DiffMu.Prelude
--- import DiffMu.Core.MonadicPolynomial
 import DiffMu.Abstract
 import DiffMu.Core.Definitions
 import DiffMu.Core.TC
@@ -12,41 +11,22 @@ import Data.HashMap.Strict as H
 
 import Debug.Trace
 
+-------------------------------------------------------------------
+-- Operations on contexts / On the current context in the monad.
+--
 
-
-
-
--- testa :: Hashable a => a -> a
--- testa x = x
-
--- testb :: (Hashable v, Hashable a) => Context v a -> Context v a
--- testb x = testa x
-
--- instance Default (NameCtx) where
-
--- instance Default (Ctx a) where
---   def = Ctx (LinCom (MonCom []))
-
--- instance Default (Full a) where
-
-
-instance (SemigroupM t a, SemigroupM t b) => SemigroupM t (a :& b) where
-  (⋆) (a₁ :@ b₁) (a₂ :@ b₂) = (:@) <$> (a₁ ⋆ a₂) <*> (b₁ ⋆ b₂)
-
-instance (MonoidM t a, MonoidM t b) => MonoidM t (a :& b) where
-  neutral = (:@) <$> neutral <*> neutral
-
-instance (CheckNeutral m a, CheckNeutral m b) => CheckNeutral m (a :& b) where
-  checkNeutral (a :@ b) = (\a b -> and [a,b]) <$> checkNeutral a <*> checkNeutral b
-
+-- A helper function which scale any type context with a given sensitivity `η`.
 scale :: Sensitivity -> TypeCtx Sensitivity -> TypeCtx Sensitivity
 scale η γ = f <$> γ
   where f (τ :@ s) = τ :@ traceShowId ((traceShowId η) ⋅! (traceShowId s))
 
+-- Scales the current type context living in our typechecking-state monad by a given `η`.
 mscale :: MonadDMTC Sensitivity t => Sensitivity -> t Sensitivity ()
 mscale η = types %= scale η
 
--- msum :: [TCT m e a] -> TCT m e [a]
+-- Given a list of computations in a MonadDMTC monad, it executes all computations
+-- on the same input type context, and sums the resulting type contexts.
+-- All additional data (constraints, substitutions, metavariable contexts) are passed sequentially.
 msum :: (Show e, IsT MonadDMTC t, MonoidM (t e) e, CheckNeutral (t e) e) => [t e a] -> t e [a]
 msum ms = do
   initΣ <- use types
@@ -64,13 +44,10 @@ msum ms = do
         return []
 
 
-monadicChange :: MonadState s m => (m a) -> (a -> m s) -> (a -> m a) -> m ()
-monadicChange getF putF change = do
-  curVal <- getF
-  newVal <- change curVal
-  putF newVal
-  return ()
-
+-- Helper function for using a monadic function to update the state of a "by a lens accessible"
+-- value in a state monad. Such an operator does not seem to be defined in the "lenses" library.
+-- This might be because using it is not always well behaved, the following note applies.
+--
 -- NOTE: Warning, this function destroys information if the function `f` which does the update
 -- has monadic effects in m which affect the part of the state which is accessed by the lens.
 (%=~) :: MonadState s m => (forall f. Functor f => LensLike f s s a a) -> (a -> m a) -> m ()
@@ -82,32 +59,17 @@ monadicChange getF putF change = do
 
 infixr 4 %=~
 
-
--- (%=~) :: MonadState s m => (LensLike m s s a a) -> (a -> m a) -> m ()
--- (%=~) lens f = do
---   curState <- get
---   newState <- lens f curState
---   put newState
---   return ()
-
-  -- curV <- use lens
-  -- normV <- f curV
-  -- lens .= normV
-  -- return ()
-
--- mytest lens = do
---   curΣ <- use lens
---   normΣ <- normalize curΣ
---   lens .= normΣ
-
+-- Normalizes all contexts in our typechecking monad, i.e., applies all available substitutions.
 normalizeContext :: (Normalize (t e) e, MonadDMTC e t) => t e ()
 normalizeContext = do
   types %=~ normalize
   meta.constraints %=~ normalize
 
 
-
-
+-- Iterates over all constraints which are currently in a "changed" state, and tries to solve them.
+-- Returns if no "changed" constraints remains.
+-- An unchanged constraint is marked "changed", if it is affected by a new substitution.
+-- A changed constraint is marked "unchanged" if it is read by a call to `getUnsolvedConstraintMarkNormal`.
 solveAllConstraints :: forall t e. (IsT MonadDMTC t, Normalize (t e) e) => SolvingMode -> t e ()
 solveAllConstraints mode = do
   normalizeContext
@@ -123,36 +85,6 @@ solveAllConstraints mode = do
     Just (name, (constr)) -> do
       solve mode name constr
       solveAllConstraints mode
-
-
-
-
-  -- do
-  -- curΣ <- use types
-  -- normΣ <- normalize curΣ
-  -- types .= normΣ
-
-
--- addConstraint :: Constraint -> TC e ()
--- addConstraint c = modify f
---   where f (Full s t cs γ) = Full s t (c:cs) γ
-
-
-
-  -- (⋆) (a₁ :@ b₁) (a₂ :@ b₂) = (a₁ ⋆ a₂ :@ b₁ ⋆ b₂)
-
-
-
-
-
-
--- instance Semigroup (Ctx a) where
---   (<>) a b = undefined
-
--- instance Semigroup (Full a) where
-
-
-
 
 
 

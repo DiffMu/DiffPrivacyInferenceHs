@@ -9,6 +9,9 @@ import DiffMu.Core.Symbolic
 import DiffMu.Core.Unification
 import DiffMu.Typecheck.Subtyping
 
+
+-- Given a kind of a type op (`DMTypeOp_Some`), and a number of given arguments,
+-- we create an `IsTypeOpResult` constraint, and return the contained types/sensitivities.
 makeTypeOp :: (IsT MonadDMTC t) => DMTypeOp_Some -> Int -> t e ((DMNumType) , [(DMNumType,SVar)])
 makeTypeOp (IsUnary op) 1 =
   do s1 <- newSVar "η"
@@ -27,6 +30,7 @@ makeTypeOp (IsBinary op) 2 =
 makeTypeOp op lengthArgs = throwError (WrongNumberOfArgsOp op (lengthArgs))
 
 
+-- We can solve a binary typeop constraint.
 solveBinaryNum :: forall t e. IsT MonadDMTC t => DMTypeOps_Binary -> (DMNumType, DMNumType) -> t e (Maybe (Sensitivity , Sensitivity, DMNumType))
 solveBinaryNum op (τ1, τ2) = f op τ1 τ2
   where
@@ -44,9 +48,7 @@ solveBinaryNum op (τ1, τ2) = f op τ1 τ2
     f _ _ _ = undefined
 
 
-  -- (\a -> Just (s1, s1, a)) <$> Const <$> supremum t1 t2 <*> pure s1
--- solveBinaryNum op _ = pure Nothing
-
+-- we can solve arbitrary dmtypeop constraints
 solveop :: (IsT MonadDMTC t) => SolvingMode -> Symbol -> IsTypeOpResult DMTypeOp -> t e ()
 solveop mode name (IsTypeOpResult (UnaryNum op (τa :@ s) τr)) = undefined
 solveop mode name (IsTypeOpResult (BinaryNum op (τa1 :@ s1 , τa2 :@ s2) τr)) = do
@@ -61,6 +63,8 @@ solveop mode name (IsTypeOpResult (BinaryNum op (τa1 :@ s1 , τa2 :@ s2) τr)) 
       unify τr val_τr
       dischargeConstraint @MonadDMTC name
 
+-- An instance which says that the `IsTypeOpResult DMTypeOp` constraint is solvable
+-- in the `MonadDMTC` class of monads.
 instance Solve MonadDMTC (IsTypeOpResult) DMTypeOp where
   solve_ Dict mode name constr = solveop mode name constr
 
