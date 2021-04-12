@@ -2,11 +2,7 @@
 module DiffMu.Typecheck.Subtyping where
 
 import DiffMu.Prelude
-import DiffMu.Abstract.MonadTC
-import DiffMu.Abstract.Term
-import DiffMu.Abstract.MonadicPolynomial
-import DiffMu.Abstract.INC
-import DiffMu.Abstract.MonadicGraph
+import DiffMu.Abstract
 import DiffMu.Core.Definitions
 import DiffMu.Core.Context
 import DiffMu.Core.TC

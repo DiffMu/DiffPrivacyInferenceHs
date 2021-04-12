@@ -1,10 +1,11 @@
 
 {-# LANGUAGE UndecidableInstances #-}
-module DiffMu.Abstract.MonadicPolynomial where
+module DiffMu.Abstract.Data.MonadicPolynomial where
 
 import DiffMu.Prelude
-import DiffMu.Abstract.Term
-import DiffMu.Abstract.MonadTC
+import DiffMu.Abstract.Class.Term
+import DiffMu.Abstract.Class.Constraint
+import DiffMu.Abstract.Class.IsT
 
 import qualified Prelude as P
 import Data.HashMap.Strict as H
@@ -267,7 +268,7 @@ class CheckContains x y where
 instance forall isT j v r (k :: j). (HasPolyTerm v r k,
           (forall t e. (IsT isT t => MonadConstraint isT (t e)))
 
-          , forall t e. (IsT isT t => MonadTC @j (CPolyM r Int (v k)) (t e)) --,
+          , forall t e. (IsT isT t => MonadTerm @j (CPolyM r Int (v k)) (t e)) --,
           -- (VarFam (CPolyM r Int (v k)) ~ v)
           , CheckContains (v k) (VarFam (CPolyM r Int (v k)) k)
           ) --,

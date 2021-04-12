@@ -2,8 +2,7 @@ module Main where
 
 -- import Lib
 import DiffMu.Prelude
-import DiffMu.Abstract.Term
-import DiffMu.Abstract.MonadTC
+import DiffMu.Abstract
 import DiffMu.Core
 import DiffMu.Core.TC
 import DiffMu.Core.Definitions

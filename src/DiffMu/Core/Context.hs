@@ -3,8 +3,7 @@ module DiffMu.Core.Context where
 
 import DiffMu.Prelude
 -- import DiffMu.Core.MonadicPolynomial
-import DiffMu.Abstract.MonadTC
-import DiffMu.Abstract.Term
+import DiffMu.Abstract
 import DiffMu.Core.Definitions
 import DiffMu.Core.TC
 import DiffMu.Core.Unification

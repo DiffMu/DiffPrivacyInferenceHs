@@ -6,10 +6,7 @@ module DiffMu.Core.Definitions where
 import DiffMu.Prelude
 
 import DiffMu.Core.Symbolic
-import DiffMu.Abstract.Term
-import DiffMu.Abstract.MonadTC
-import DiffMu.Abstract.MonadicPolynomial
--- import GHC.TypeLits
+import DiffMu.Abstract
 
 import Data.Singletons.TH
 
@@ -20,23 +17,12 @@ import           Data.Singletons.Prelude.List hiding (Group)
 import qualified Data.Text as T
 import Data.HashMap.Strict as H
 
--- import Algebra.Ring.Polynomial.Class
-
--- x :: Polynomial (Ratio Integer) 2
--- -- y, f, f1, f2 :: Polynomial (Ratio Integer) 2
--- x = var 0
--- g = x + x
--- test = show g
-
--- type Symbol = String
-
 type SVar = SymbolOf MainSensKind
 type SensitivityOf = SymTerm
 type Sensitivity = SymTerm MainSensKind
 newtype Privacy = Privacy ()
 
 
--- data Sensitivity = forall n. KnownNat n => Sens (Polynomial (Ratio Integer) n)
 
 data JuliaNumType =
   JTNumInt | JTNumReal
@@ -52,15 +38,8 @@ type SVarOf = SymbolOf @SensKind
 
 
 
--- data DMNumType where
---   DMInt :: DMNumType
---   DMReal :: DMNumType
---   deriving (Generic, Show, Eq)
-
--- type (:&) :: (k -> j -> *) -> (j -> *) -> k -> j -> *
--- data (:&) (f :: k -> j -> *) (x :: k -> *) a b = (:@) (f a b) (x a)
 infix 3 :@
-data (:&) f x = (:@) f x
+data (:&) a b = (:@) a b
   deriving (Generic)
 
 instance (Show a, Show b) => Show (a :& b) where
@@ -155,6 +134,29 @@ data DMTypeOp =
 
 
 --------------------------------------------------------------------------
+-- == Constraints ==
+
+-- NOTE: Currently, unfortunately implementing them requires quite some bit of boilerplate.
+-- This could change in the future, but at least it does not incur any runtime cost,
+-- because we are using newtypes.
+
+newtype Constr a = On a
+instance TCConstraint (Constr) where
+  constr = On
+  runConstr (On c) = c
+
+newtype IsTypeOpResult a = IsTypeOpResult a
+  deriving (Show)
+instance Newtype (IsTypeOpResult a) a
+instance TCConstraint IsTypeOpResult where
+  constr = IsTypeOpResult
+  runConstr (IsTypeOpResult c) = c
+  -- deriving (TCConstraint)
+
+
+
+
+--------------------------------------------------------------------------
 -- Other ...
 
 data Asgmt a = (:-) Symbol a
@@ -178,67 +180,8 @@ instance (Show v, Show x, DictKey v) => Show (Ctx v x) where
 instance Default (Ctx v x)
 type TypeCtx extra = Ctx Symbol (DMType :& extra)
 
--- newtype TypeCtx extra = TypeCtx ([Asgmt (DMType :& extra)] )
--- newtype TypeCtx extra = TypeCtx (MonCom (DMType :& extra) Symbol)
--- ([Asgmt (DMType :& extra)] )
-  -- deriving (Generic, Show, DictLike Symbol (DMType :& extra))
--- instance Default (TypeCtx e)
-
--- data DMTypeOp where
---   Op1 :: DMTypeOp
---   deriving (Generic, Show)
-
-data ConstraintOld = ConstraintOld
-  -- IsNumeric (DMType)
-  -- | IsEqualSens Sensitivity Sensitivity
-  -- | IsEqual DMType DMType
-  -- | Substitute Symbol DMType
-  -- | IsLessOrEqual Sensitivity Sensitivity
-  -- | IsTypeOpResult [Sensitivity] (DMType) DMTypeOp
-  -- -- a | IsEqualPriv (Privacy ηc) (Privacy ηc)
-  -- | IsSubtypeOf (DMType) (DMType)
-  -- | IsSupremumOf (DMType) (DMType) (DMType)
-  -- | IsChoice (DMType) ([([JuliaType], Sensitivity , DMType)])
-  deriving (Generic, Show)
 
 
-type ConstraintOlds = [Watch ConstraintOld]
-
-data NameCtx = NameCtx
-  { names :: [Symbol]
-  , currentCtr :: Int
-  }
-  deriving (Generic)
-instance Default NameCtx
-instance Show NameCtx where
-  show (NameCtx names _) = "[" <> intercalate ", " (show <$> names) <> "]"
-
-newName :: Text -> NameCtx -> (Symbol, NameCtx)
-newName (hint) (NameCtx names ctr) =
-  let name = Symbol (hint <> "_" <> T.pack (show ctr))
-  in (name , NameCtx (name : names) (ctr +! 1))
-
-data SingSomeK (v :: j -> *) where
-  SingSomeK :: (Show (Demote (KindOf k)), SingKind (KindOf k), SingI k) => v k -> SingSomeK v
-
-instance KShow v => Show (SingSomeK v) where
-  show (SingSomeK (s :: v k)) = show s <> " : " <> show (demote @k)
-
-data KindedNameCtx (v :: j -> *) = KindedNameCtx
-  {
-    namesK :: [SingSomeK v]
-  , currentCtrK :: Int
-  }
-instance Default (KindedNameCtx v) where
-  def = KindedNameCtx [] 0
-
-instance KShow v => Show (KindedNameCtx v) where
-  show (KindedNameCtx names _) = "[" <> intercalate ", " (show <$> names) <> "]"
-
-newKindedName :: (Show (Demote (KindOf k)), SingKind (KindOf k), SingI k, FromSymbol v) => Text -> KindedNameCtx v -> (v k, KindedNameCtx v)
-newKindedName (hint) (KindedNameCtx names ctr) =
-  let name = (fromSymbol (Symbol (hint <> "_" <> T.pack (show ctr))))
-  in (name , KindedNameCtx (SingSomeK (name) : names) (ctr +! 1))
 
 data DMException where
   UnsupportedTermError :: DMTerm -> DMException

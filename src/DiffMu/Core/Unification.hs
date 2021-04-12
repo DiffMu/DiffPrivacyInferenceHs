@@ -3,8 +3,7 @@ module DiffMu.Core.Unification where
 
 import DiffMu.Prelude
 -- import DiffMu.Core.Context
-import DiffMu.Abstract.MonadTC
-import DiffMu.Abstract.Term
+import DiffMu.Abstract
 import DiffMu.Core.Definitions
 import DiffMu.Core.TC
 

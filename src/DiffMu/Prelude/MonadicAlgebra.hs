@@ -39,6 +39,8 @@ extractIdentity2 f a b = runIdentity (f a b)
 class Monad t => Normalize t n where
   normalize :: n -> t n
 
+instance (Normalize t a, Normalize t b) => Normalize t (a,b) where
+  normalize (a,b) = (,) <$> normalize a <*> normalize b
 
 -- class Has a where
 --   mempty :: a

@@ -2,8 +2,7 @@
 module DiffMu.Typecheck.Typecheck where
 
 import DiffMu.Prelude
-import DiffMu.Abstract.MonadTC
-import DiffMu.Abstract.MonadicPolynomial
+import DiffMu.Abstract
 import DiffMu.Core
 import DiffMu.Core.Symbolic
 import DiffMu.Core.TC

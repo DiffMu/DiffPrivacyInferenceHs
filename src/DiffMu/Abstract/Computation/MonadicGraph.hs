@@ -1,8 +1,8 @@
 
-module DiffMu.Abstract.MonadicGraph where
+module DiffMu.Abstract.Computation.MonadicGraph where
 
 import DiffMu.Prelude
-import DiffMu.Abstract.INC
+import DiffMu.Abstract.Computation.INC
 
 -- Since our nodes/edges live in a monad, the source/target of an edge need not necessarily be *really* equal, for the edge to having to be considered as reflexive.
 -- Thus we add this as annotation.

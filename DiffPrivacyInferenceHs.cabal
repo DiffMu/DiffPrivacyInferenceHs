@@ -25,11 +25,15 @@ source-repository head
 
 library
   exposed-modules:
-      DiffMu.Abstract.INC
-      DiffMu.Abstract.MonadicGraph
-      DiffMu.Abstract.MonadicPolynomial
-      DiffMu.Abstract.MonadTC
-      DiffMu.Abstract.Term
+      DiffMu.Abstract
+      DiffMu.Abstract.Class.Constraint
+      DiffMu.Abstract.Class.IsT
+      DiffMu.Abstract.Class.Term
+      DiffMu.Abstract.Class.Unify
+      DiffMu.Abstract.Computation.INC
+      DiffMu.Abstract.Computation.MonadicGraph
+      DiffMu.Abstract.Data.MonadicPolynomial
+      DiffMu.Abstract.Data.NameCtx
       DiffMu.Core
       DiffMu.Core.Context
       DiffMu.Core.Definitions

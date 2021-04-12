@@ -6,9 +6,7 @@
 module DiffMu.Core.TC where
 
 import DiffMu.Prelude
-import DiffMu.Abstract.MonadTC
-import DiffMu.Abstract.Term
-import DiffMu.Abstract.MonadicPolynomial
+import DiffMu.Abstract
 import DiffMu.Core.Definitions
 import DiffMu.Core.Symbolic
 
@@ -79,7 +77,7 @@ type SSubs = Subs SensitivityOf
 --   deriving (Generic)
 
 class (MonadImpossible (t e), MonadWatch (t e),
-       MonadTC DMTypeOf (t e), MonadTC SensitivityOf (t e),
+       MonadTerm DMTypeOf (t e), MonadTerm SensitivityOf (t e),
        MonadState (Full e) (t e),
        MonadError DMException (t e),
        -- MonadConstraint' Symbol (TC) (t e),
@@ -259,7 +257,7 @@ instance Default (Full e) where
 
 
 
-instance Monad m => MonadTC DMTypeOf (TCT m e) where
+instance Monad m => MonadTerm DMTypeOf (TCT m e) where
   type VarFam DMTypeOf = TVarOf
   getSubs = view (meta.typeSubs) <$> get
   addSub σ = do
@@ -268,7 +266,7 @@ instance Monad m => MonadTC DMTypeOf (TCT m e) where
     meta.typeSubs .= σs'
   newVar = TVar <$> newTVar "τ"
 
-instance Monad m => MonadTC SensitivityOf (TCT m e) where
+instance Monad m => MonadTerm SensitivityOf (TCT m e) where
   type VarFam SensitivityOf = SVarOf
   getSubs = view (meta.sensSubs) <$> get
   addSub σ = do
@@ -345,10 +343,10 @@ instance Monad m => MonadWatch (TCT m e) where
 --   notifyChanged = TCT (lift (lift notifyChanged))
 
 
--- supremum :: forall isT t e a k. (Normalize (t e) (a k), IsT isT t, MonadTC a (t e), MonadConstraint isT (t e), Solve isT IsSupremum (a k, a k, a k)) => (a k) -> (a k) -> t e (a k)
+-- supremum :: forall isT t e a k. (Normalize (t e) (a k), IsT isT t, MonadTerm a (t e), MonadConstraint isT (t e), Solve isT IsSupremum (a k, a k, a k)) => (a k) -> (a k) -> t e (a k)
 
 
-supremum :: (IsT isT t, HasNormalize isT t (a k, a k, a k), MonadConstraint isT (t e), MonadTC a (t e), Solve isT IsSupremum (a k, a k, a k), SingI k, Typeable k) => (a k) -> (a k) -> t e (a k)
+supremum :: (IsT isT t, HasNormalize isT t (a k, a k, a k), MonadConstraint isT (t e), MonadTerm a (t e), Solve isT IsSupremum (a k, a k, a k), SingI k, Typeable k) => (a k) -> (a k) -> t e (a k)
 supremum x y = do
   (z :: a k) <- newVar
   addConstraint (Solvable (IsSupremum (x, y, z)))

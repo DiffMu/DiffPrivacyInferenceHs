@@ -1,6 +1,6 @@
 {-# LANGUAGE UndecidableInstances #-}
 
-module DiffMu.Abstract.Term where
+module DiffMu.Abstract.Class.Term where
 
 import DiffMu.Prelude
 
@@ -183,6 +183,12 @@ instance (MonadImpossible t, MonadWatch t, Term v a, Substitute v a x) => Module
   (↷) σs a = substitute (trySubstitute σs) a
 
 
+
+class (Monad t, Term (VarFam a) a) => MonadTerm (a :: j -> *) t where
+  type VarFam (a :: j -> *) :: j -> *
+  newVar :: (Typeable k, SingI k) => t (a k)
+  addSub :: (Typeable k) => Sub (VarFam a) a k -> t ()
+  getSubs :: t (Subs (VarFam a) a)
 
 
 
