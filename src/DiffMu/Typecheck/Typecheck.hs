@@ -14,17 +14,14 @@ import Debug.Trace
 
 
 
-createDMTypeNum :: MonadDMTC e t => JuliaNumType -> t e (DMTypeOf BaseNumKind)
-createDMTypeNum JTNumInt = pure (DMInt)
-createDMTypeNum JTNumReal = pure DMReal
--- createDMTypeNum JTAny = TVar <$> newTVar "any"
+createDMTypeNum :: JuliaNumType -> DMTypeOf BaseNumKind
+createDMTypeNum JTNumInt = DMInt
+createDMTypeNum JTNumReal = DMReal
 
 createDMType :: MonadDMTC e t => JuliaType -> t e (DMTypeOf MainKind)
-createDMType JTInt = pure (Numeric (NonConst DMInt))
-createDMType JTReal = pure (Numeric (NonConst DMReal))
+createDMType (JTNum τ) = pure (Numeric (NonConst (createDMTypeNum τ))) -- NOTE: defaulting to non-const might or might not be what we want to do here.
 createDMType JTAny = TVar <$> newTVar "any"
 
--- instance (Eq v, Hashable v) => HashKey v where
 
 type Scope v a = HashMap v [a]
 instance Default (Scope v a) where
@@ -47,7 +44,7 @@ checkSens :: DMTerm -> DMScope -> STC DMType
 
 -- TODO: Here we assume that η really has type τ, and do not check it.
 --       Should probably do that.
-checkSens (Sng η τ) scope  = Numeric <$> Const (constCoeff (Fin η)) <$> createDMTypeNum τ
+checkSens (Sng η τ) scope  = pure $ Numeric (Const (constCoeff (Fin η)) (createDMTypeNum τ))
 
 -- a special term for function argument variables.
 -- those get sensitivity 1, all other variables are var terms

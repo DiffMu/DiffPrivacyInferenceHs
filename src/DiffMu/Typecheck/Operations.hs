@@ -24,7 +24,6 @@ makeTypeOp (IsBinary op) 2 =
      res <- TVar <$> newTVar "τr"
      addConstraint (Solvable (IsTypeOpResult (BinaryNum op (τ1:@s1, τ2:@s2) res)))
      return (res , [(τ1,s1),(τ2,s2)])
-makeTypeOp (IsTernary op) 3 = undefined
 makeTypeOp op lengthArgs = throwError (WrongNumberOfArgsOp op (lengthArgs))
 
 
@@ -61,7 +60,6 @@ solveop mode name (IsTypeOpResult (BinaryNum op (τa1 :@ s1 , τa2 :@ s2) τr)) 
       -- unify (svar s2) val_s2
       unify τr val_τr
       dischargeConstraint @MonadDMTC name
-solveop mode name (IsTypeOpResult (Ternary op xx res)) = undefined
 
 instance Solve MonadDMTC (IsTypeOpResult) DMTypeOp where
   solve_ Dict mode name constr = solveop mode name constr

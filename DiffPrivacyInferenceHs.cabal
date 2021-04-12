@@ -33,6 +33,7 @@ library
       DiffMu.Abstract.Computation.INC
       DiffMu.Abstract.Computation.MonadicGraph
       DiffMu.Abstract.Data.MonadicPolynomial
+      DiffMu.Abstract.Data.MonComCtx
       DiffMu.Abstract.Data.NameCtx
       DiffMu.Core
       DiffMu.Core.Context

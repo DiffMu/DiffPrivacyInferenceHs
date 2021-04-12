@@ -47,8 +47,8 @@ instance (SingI k, Typeable k, IsT MonadDMTC t) => (CheckNeutral (t e) (DMTypeOf
   checkNeutral (_) = return False
 
 
-
-
+instance Solve MonadDMTC IsEqual (DMTypeOf k,DMTypeOf k) where
+  solve_ Dict _ _ (IsEqual (a,b)) = unify_ a b >> pure ()
 
 
 

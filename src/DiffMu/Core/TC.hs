@@ -145,6 +145,9 @@ newAnnName hint k (AnnNameCtx names kinds) =
 -- instance Default Watching where
 --   def = NotWatching
 
+
+type TypeCtx extra = Ctx Symbol (DMType :& extra)
+
 data Watcher = Watcher Changed
   deriving (Generic)
 
@@ -400,7 +403,7 @@ instance Monad t => Normalize t (SymbolOf k) where
 instance MonadDMTC e t => Normalize (t e) DMTypeOp where
   normalize (UnaryNum op τ res) = UnaryNum op <$> normalize τ <*> normalize res
   normalize (BinaryNum op τ res) = BinaryNum op <$> normalize τ <*> normalize res
-  normalize (Ternary op τ res) = Ternary op <$> normalize τ <*> normalize res
+  -- normalize (Ternary op τ res) = Ternary op <$> normalize τ <*> normalize res
 
 -- instance MonadDMTC e t :=> Normalize (t e) DMTypeOp where
 --   ins = Sub Dict

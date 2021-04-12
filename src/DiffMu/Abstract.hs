@@ -7,6 +7,7 @@ import DiffMu.Abstract.Class.Term as All
 import DiffMu.Abstract.Class.Constraint as All
 import DiffMu.Abstract.Class.Unify as All
 
+import DiffMu.Abstract.Data.MonComCtx as All
 import DiffMu.Abstract.Data.NameCtx as All
 import DiffMu.Abstract.Data.MonadicPolynomial as All
 
