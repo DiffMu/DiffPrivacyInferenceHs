@@ -67,9 +67,9 @@ checkSens (Lam (Lam_ xτs body)) scope = do
 
   -- put a special term to mark x as a function argument. those get special tratment
   -- because we're interested in their sensitivity
-  let scope' = mconcat ((\(x :- τ) -> setValue x [(Arg x τ)]) <$> xτs) scope
+  let scope' = composeFun ((\(x :- τ) -> setValue x [(Arg x τ)]) <$> xτs) scope
 
-  τr <- checkSens body scope
+  τr <- checkSens body scope'
   xrτs <- getArgList xτs
   return (xrτs :->: τr)
 

@@ -11,6 +11,7 @@ module DiffMu.Prelude
   , KShow (..)
   , KEq (..)
   , FromSymbol (..)
+  , composeFun
   )
   where
 
@@ -72,6 +73,10 @@ type KShow v = (forall k. Show (v k))
 
 type KEq :: (j -> *) -> Constraint
 type KEq v = (forall k. Eq (v k))
+
+composeFun :: [a -> a] -> a -> a
+composeFun [] a = a
+composeFun (f:fs) a = f (composeFun fs a)
 
 -- import           Prelude                                 hiding
 --                                                           (Fractional (..),

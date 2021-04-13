@@ -8,7 +8,7 @@ import DiffMu.Core.TC
 import DiffMu.Core.Unification
 import DiffMu.Core.Symbolic
 
-import Data.HashMap.Strict as H
+import qualified Data.HashMap.Strict as H
 
 import Debug.Trace
 
@@ -88,16 +88,26 @@ solveAllConstraints mode = do
       solveAllConstraints mode
 
 
+-- Look up the types and sensitivities/privacies of the variables in `xτs` from the current context.
+-- If a variable is not present in Σ (this means it was not used in the lambda body),
+-- create a new type/typevar according to type hint given in `xτs` and give it zero annotation
 getArgList :: forall t. MonadDMTC Sensitivity t => [Asgmt JuliaType] -> t Sensitivity [DMType :& Sensitivity]
 getArgList xτs = do
-  γ <- use types
-  -- let f :: Symbol -> 
-  -- let f :: Asgmt JuliaType -> t e (DMType :& e)
-  --     f ((x :: Symbol) :- (τ :: JuliaType)) = case getValue x γ of
-  --       Just τ -> return τ
-  --       Nothing -> (:@) <$> createDMType τ <*> pure (injectCoeff (Fin 0))
-  -- let xτs' = f <$> xτs
+  (γ :: Ctx Symbol (DMType :& Sensitivity)) <- use types
 
-  return undefined
+  let f :: Asgmt JuliaType -> t Sensitivity (DMType :& Sensitivity)
+      f (x :- τ) = case getValue x γ of
+        -- If the symbol was in the context γ, then we get its type and sensitivity
+        Just τe -> return τe
+        -- if the type hint is DMDUnkown, we just add a typevar. otherwise we can be more specific
+        Nothing -> (:@) <$> createDMType τ <*> pure (constCoeff (Fin 0))
+  xτs' <- mapM f xτs
+
+  -- We have to remove all symbols x from the context
+  let γ' = composeFun ((\(x :- _) -> deleteValue x) <$> xτs) γ
+
+  types .= γ'
+
+  return xτs'
 
 
