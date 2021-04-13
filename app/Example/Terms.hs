@@ -10,9 +10,13 @@ t₁ = Var (Symbol "x") JTAny
 t₂ :: DMTerm
 t₂ = Sng 2 JTNumInt
 
-t₃ a = Arg (Symbol a) JTAny
+t₃ a = Var (Symbol a) JTAny
 
 t₄ = Op (IsBinary DMOpAdd) [t₃ "x", t₃ "x"]
 
-t₅ = Op (IsBinary DMOpAdd) [t₂, t₂]
+t₅ a b = Op (IsBinary DMOpAdd) [a, b]
+
+t₇ = Lam (Lam_ [Symbol "x" :- (JTNum JTNumInt), Symbol "y" :- JTAny] (t₅ t₄ t₂))
+
+
 
