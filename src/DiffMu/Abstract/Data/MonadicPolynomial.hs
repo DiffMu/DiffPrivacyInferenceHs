@@ -61,7 +61,7 @@ instance (HasMonCom t m v, MonoidM t v) => ModuleM t (ActV v) (MonCom m v) where
 
 class DictKey k => DictLike k v d | d -> k v where
   setValue :: k -> v -> d -> d
-  getValue :: k -> d -> v
+  getValue :: k -> d -> Maybe v
   deleteValue :: k -> d -> d
 
 class ShowDict k v d | d -> k v where
@@ -70,7 +70,7 @@ class ShowDict k v d | d -> k v where
 instance (DictKey k) => DictLike k v (MonCom v k) where
   setValue v m (MonCom h) = MonCom (H.insert v m h)
   deleteValue v (MonCom h) = MonCom (H.delete v h)
-  getValue k (MonCom h) = h H.! k
+  getValue k (MonCom h) = h H.!? k
 
 instance ShowDict k v (MonCom v k) where
   showWith comma merge (MonCom d) =

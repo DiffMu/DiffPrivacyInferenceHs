@@ -6,6 +6,7 @@ import DiffMu.Abstract
 import DiffMu.Core.Definitions
 import DiffMu.Core.TC
 import DiffMu.Core.Unification
+import DiffMu.Core.Symbolic
 
 import Data.HashMap.Strict as H
 
@@ -87,6 +88,16 @@ solveAllConstraints mode = do
       solveAllConstraints mode
 
 
+getArgList :: forall t. MonadDMTC Sensitivity t => [Asgmt JuliaType] -> t Sensitivity [DMType :& Sensitivity]
+getArgList xτs = do
+  γ <- use types
+  -- let f :: Symbol -> 
+  -- let f :: Asgmt JuliaType -> t e (DMType :& e)
+  --     f ((x :: Symbol) :- (τ :: JuliaType)) = case getValue x γ of
+  --       Just τ -> return τ
+  --       Nothing -> (:@) <$> createDMType τ <*> pure (injectCoeff (Fin 0))
+  -- let xτs' = f <$> xτs
 
+  return undefined
 
 

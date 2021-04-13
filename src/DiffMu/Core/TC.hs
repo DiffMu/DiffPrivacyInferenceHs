@@ -452,6 +452,19 @@ setVar k v = types %= setValue k v
 
 
 
+-- Maps julia num types to DMtypes (of basenumkind)
+createDMTypeNum :: JuliaNumType -> DMTypeOf BaseNumKind
+createDMTypeNum JTNumInt = DMInt
+createDMTypeNum JTNumReal = DMReal
+
+-- Maps julia types to DMTypes (of main kind)
+-- (`JTAny` is turned into a new type variable.)
+createDMType :: MonadDMTC e t => JuliaType -> t e (DMTypeOf MainKind)
+createDMType JTAny = TVar <$> newTVar "any"
+ -- NOTE: defaulting to non-const might or might not be what we want to do here.
+createDMType (JTNum τ) = pure (Numeric (NonConst (createDMTypeNum τ)))
+
+
 
 
 

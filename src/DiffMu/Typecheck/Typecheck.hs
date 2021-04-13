@@ -13,19 +13,6 @@ import Data.HashMap.Strict as H
 import Debug.Trace
 
 
--- Maps julia num types to DMtypes (of basenumkind)
-createDMTypeNum :: JuliaNumType -> DMTypeOf BaseNumKind
-createDMTypeNum JTNumInt = DMInt
-createDMTypeNum JTNumReal = DMReal
-
--- Maps julia types to DMTypes (of main kind)
--- (`JTAny` is turned into a new type variable.)
-createDMType :: MonadDMTC e t => JuliaType -> t e (DMTypeOf MainKind)
-createDMType JTAny = TVar <$> newTVar "any"
- -- NOTE: defaulting to non-const might or might not be what we want to do here.
-createDMType (JTNum τ) = pure (Numeric (NonConst (createDMTypeNum τ)))
-
-
 
 
 ------------------------------------------------------------------------
@@ -76,6 +63,16 @@ checkSens (Op op args) scope =
     -- We return the `res` type given by `makeTypeOp`
     return (Numeric res)
 
+checkSens (Lam (Lam_ xτs body)) scope = do
+
+  -- put a special term to mark x as a function argument. those get special tratment
+  -- because we're interested in their sensitivity
+  let scope' = mconcat ((\(x :- τ) -> setValue x [(Arg x τ)]) <$> xτs) scope
+
+  τr <- checkSens body scope
+  xrτs <- getArgList xτs
+  return (xrτs :->: τr)
+
 -- Everything else is currently not supported.
 checkSens t scope = throwError (UnsupportedTermError t)
 
@@ -101,4 +98,10 @@ popDefinition scope v =
 
 -- Our scopes have symbols as variables, and contain DMTerms.
 type DMScope = Scope Symbol DMTerm
+
+-- All hashmaps are `DictLike`
+instance (DictKey k) => DictLike k v (HashMap k v) where
+  setValue v m (h) = (H.insert v m h)
+  deleteValue v (h) = (H.delete v h)
+  getValue k (h) = h H.!? k
 
