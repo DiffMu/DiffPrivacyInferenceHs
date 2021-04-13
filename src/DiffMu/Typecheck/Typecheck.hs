@@ -73,6 +73,17 @@ checkSens (Lam (Lam_ xτs body)) scope = do
   xrτs <- getArgList xτs
   return (xrτs :->: τr)
 
+checkSens (SLet (x :- dτ) term body) scope = do
+
+  case dτ of
+     JTAny -> return dτ
+     dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
+
+  scope' <- pushDefinition scope x term
+  τ <- checkSens body scope'
+  return τ
+
+
 -- Everything else is currently not supported.
 checkSens t scope = throwError (UnsupportedTermError t)
 
@@ -95,6 +106,15 @@ popDefinition scope v =
                  Just (x:xs) -> return (x,xs)
                  _           -> throwError (VariableNotInScope v)
      return (d, H.insert v ds scope)
+
+-- Given a scope, a variable name v , and a DMTerm t, we push t to the list for v.
+pushDefinition :: (MonadDMTC e t, DictKey v, Show v) => Scope v a -> v -> a -> t e (Scope v a)
+pushDefinition scope v term =
+   do (ds) <- case H.lookup v scope of
+                  Just [xs] -> return (term:[xs])
+                  _         -> return [term]
+      return (H.insert v ds scope)
+
 
 -- Our scopes have symbols as variables, and contain DMTerms.
 type DMScope = Scope Symbol DMTerm

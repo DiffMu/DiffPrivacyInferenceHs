@@ -354,6 +354,7 @@ data DMTerm =
   | Apply DMTerm [DMTerm]
   | Iter DMTerm DMTerm DMTerm
   | FLet Symbol [JuliaType] Lam_ DMTerm
+  | SLet (Asgmt JuliaType) DMTerm DMTerm
 -- ....
   deriving (Generic, Show)
 

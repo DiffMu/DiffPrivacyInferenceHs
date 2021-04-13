@@ -45,6 +45,13 @@ solveBinaryNum op (τ1, τ2) = f op τ1 τ2
     f DMOpAdd (NonConst t1) (Const s2 t2) = ret oneId  zeroId (NonConst <$> supremum t1 t2)
     f DMOpAdd (NonConst t1) (NonConst t2) = ret oneId  oneId  (NonConst <$> supremum t1 t2)
     f DMOpAdd _ _                         = return Nothing
+
+    f DMOpMul (Const s1 t1) (Const s2 t2) = ret zeroId zeroId (Const (s1 ⋅! s2) <$> supremum t1 t2)
+    f DMOpMul (Const s1 t1) (NonConst t2) = ret zeroId s1 (NonConst <$> supremum t1 t2)
+    f DMOpMul (NonConst t1) (Const s2 t2) = ret s2 zeroId (NonConst <$> supremum t1 t2)
+    f DMOpMul (NonConst t1) (NonConst t2) = ret (constCoeff Infty) (constCoeff Infty) (NonConst <$> supremum t1 t2)
+    f DMOpMul _ _                         = return Nothing
+
     f _ _ _ = undefined
 
 
