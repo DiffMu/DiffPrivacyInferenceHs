@@ -34,16 +34,14 @@ instance Default Sensitivity where
 instance Default Privacy where
   def = (def,def)
 
-truncate :: f -> TypeCtx e -> TypeCtx f
+truncate :: forall f e. (CMonoidM Identity f, CMonoidM Identity e, Eq e) => f -> TypeCtx e -> TypeCtx f
 truncate η γ = truncate_annotation <$> γ
    where
       truncate_annotation :: (DMType :& e) -> (DMType :& f)
-      truncate_annotation (τ :@ annotation) = do
-         n <- checkNeutral annotation
-         zero <- zeroAnnotation
-         return (case n of
-            True -> (τ :@ zero)
-            _    -> (τ :@ η))
+      truncate_annotation (τ :@ annotation) =
+        (case annotation == zeroId of
+            True -> τ :@ zeroId
+            _    -> τ :@ η)
 
 -- Given a list of computations in a MonadDMTC monad, it executes all computations
 -- on the same input type context, and sums the resulting type contexts.
