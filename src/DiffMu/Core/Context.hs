@@ -25,6 +25,26 @@ scale η γ = f <$> γ
 mscale :: MonadDMTC Sensitivity t => Sensitivity -> t Sensitivity ()
 mscale η = types %= scale η
 
+zeroAnnotation :: (MonadDMTC e t, Default e) => t e e
+zeroAnnotation = return def
+
+instance Default Sensitivity where
+  def = constCoeff (Fin 0)
+
+instance Default Privacy where
+  def = (def,def)
+
+truncate :: f -> TypeCtx e -> TypeCtx f
+truncate η γ = truncate_annotation <$> γ
+   where
+      truncate_annotation :: (DMType :& e) -> (DMType :& f)
+      truncate_annotation (τ :@ annotation) = do
+         n <- checkNeutral annotation
+         zero <- zeroAnnotation
+         return (case n of
+            True -> (τ :@ zero)
+            _    -> (τ :@ η))
+
 -- Given a list of computations in a MonadDMTC monad, it executes all computations
 -- on the same input type context, and sums the resulting type contexts.
 -- All additional data (constraints, substitutions, metavariable contexts) are passed sequentially.
@@ -109,5 +129,12 @@ getArgList xτs = do
   types .= γ'
 
   return xτs'
+
+removeVar :: forall t e. MonadDMTC e t => Symbol -> t e (Maybe (DMType :& e))
+removeVar x = do
+  (γ :: Ctx Symbol (DMType :& e)) <- use types
+  let v = getValue x γ
+  let γ' = deleteValue x γ
+  return v
 
 

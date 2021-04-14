@@ -18,6 +18,9 @@ import Debug.Trace
 ------------------------------------------------------------------------
 -- The typechecking function
 
+--------------------
+-- Sensitivity terms
+
 checkSens :: DMTerm -> DMScope -> STC DMType
 
 -- TODO: Here we assume that η really has type τ, and do not check it. Should maybe do that.
@@ -67,19 +70,23 @@ checkSens (Lam (Lam_ xτs body)) scope = do
 
   -- put a special term to mark x as a function argument. those get special tratment
   -- because we're interested in their sensitivity
-  let scope' = composeFun ((\(x :- τ) -> setValue x [(Arg x τ)]) <$> xτs) scope
+  let scope' = mconcat ((\(x :- τ) -> setValue x [(Arg x τ)]) <$> xτs) scope
 
-  τr <- checkSens body scope'
+  τr <- checkSens body scope
   xrτs <- getArgList xτs
   return (xrτs :->: τr)
 
 checkSens (SLet (x :- dτ) term body) scope = do
 
+  -- TODO this requires saving the annotation in the dict.
   case dτ of
      JTAny -> return dτ
      dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
 
+  -- we're very lazy, only adding the new term for v to its scope entry
   scope' <- pushDefinition scope x term
+
+  --check body, this will put the seinsitivity it has in the arguments in the monad context.
   τ <- checkSens body scope'
   return τ
 
@@ -87,6 +94,40 @@ checkSens (SLet (x :- dτ) term body) scope = do
 -- Everything else is currently not supported.
 checkSens t scope = throwError (UnsupportedTermError t)
 
+
+--------------------
+-- Privacy terms
+
+checkPriv :: DMTerm -> DMScope -> PTC DMType
+
+checkPriv (Ret t) scope = do
+   τ <- checkSens t scope
+   throwError (ImpossibleError "?!")
+--   _ <- truncate(∞)
+--   return τ -- TODO truncate to inf
+
+checkPriv (SLet (x :- dτ) term body) scope =
+  -- push x to scope, check body, and discard x from the result context.
+  -- this is the bind rule; as we expect the body to be a privacy term we don't need to worry about x's sensitivity
+  let mbody = do
+         scope' <- pushDefinition scope x (Arg x dτ)
+         τ <- checkPriv body scope'
+         _ <- removeVar x
+         return τ
+  in do
+     -- TODO this requires saving the annotation in the dict.
+     case dτ of
+          JTAny -> return dτ
+          dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
+
+     sum <- msum [mbody, (checkPriv term scope)]
+     res <- case sum of
+                    [τ::DMType,_] -> return τ
+                    _ -> throwError (ImpossibleError "?!")
+
+     return res
+
+checkPriv t scope = checkPriv (Ret t) scope
 
 
 -------------------------------------------------------------

@@ -21,6 +21,7 @@ instance Hashable SymVal
 instance Monad t => CheckNeutral t SymVal where
   checkNeutral a = return (a == Fin 0)
 
+
 -- data SymTerm = SymTerm SymVal
 --   deriving (Generic, Show)
 
@@ -100,3 +101,14 @@ svar a = injectVarId (HonestVar a)
 
 -- type SymTerm t = Combination t SymVal Rational Symbol
 
+instance (SemigroupM m a, SemigroupM m b) => SemigroupM m (a,b) where
+  (⋆) (a1,a2) (b1,b2) = (,) <$> (a1 ⋆ b1) <*> (a2 ⋆ b2)
+
+instance (MonoidM m a, MonoidM m b) => MonoidM m (a,b) where
+  neutral = (,) <$> neutral <*> neutral
+
+instance (CheckNeutral m a, CheckNeutral m b) => CheckNeutral m (a,b) where
+  checkNeutral (a,b) = do
+    x <- checkNeutral a
+    y <- checkNeutral b
+    return (and [x,y])
