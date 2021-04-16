@@ -116,7 +116,7 @@ checkSens (Choice d) scope = let
       in do
 
          dd <- mapM checkChoice d
-         τ <- newVar "τa"
+         -- τ <- newVar "τa"
          throwError (ImpossibleError "Invalid scope entry.")
 
 
@@ -197,4 +197,8 @@ instance (DictKey k) => DictLike k v (HashMap k v) where
   setValue v m (h) = (H.insert v m h)
   deleteValue v (h) = (H.delete v h)
   getValue k (h) = h H.!? k
+
+
+
+
 

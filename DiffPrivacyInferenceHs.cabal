@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.34.3.
+-- This file has been generated from package.yaml by hpack version 0.34.4.
 --
 -- see: https://github.com/sol/hpack
 
@@ -32,6 +32,7 @@ library
       DiffMu.Abstract.Class.Unify
       DiffMu.Abstract.Computation.INC
       DiffMu.Abstract.Computation.MonadicGraph
+      DiffMu.Abstract.Data.HashMap
       DiffMu.Abstract.Data.MonadicPolynomial
       DiffMu.Abstract.Data.MonComCtx
       DiffMu.Abstract.Data.NameCtx
@@ -54,7 +55,36 @@ library
       Paths_DiffPrivacyInferenceHs
   hs-source-dirs:
       src
-  default-extensions: QuasiQuotes ConstraintKinds DataKinds GADTs KindSignatures MultiParamTypeClasses NoImplicitPrelude NoMonomorphismRestriction TypeOperators UnicodeSyntax ExistentialQuantification ScopedTypeVariables QuantifiedConstraints KindSignatures PolyKinds GeneralizedNewtypeDeriving DeriveGeneric StandaloneDeriving DerivingVia FlexibleInstances FlexibleContexts FunctionalDependencies OverloadedStrings TypeApplications TypeFamilies RankNTypes OverloadedStrings StandaloneKindSignatures LambdaCase
+  default-extensions:
+      QuasiQuotes
+      ConstraintKinds
+      DataKinds
+      GADTs
+      KindSignatures
+      MultiParamTypeClasses
+      NoImplicitPrelude
+      NoMonomorphismRestriction
+      TypeOperators
+      UnicodeSyntax
+      ExistentialQuantification
+      ScopedTypeVariables
+      QuantifiedConstraints
+      KindSignatures
+      PolyKinds
+      GeneralizedNewtypeDeriving
+      DeriveGeneric
+      StandaloneDeriving
+      DerivingVia
+      FlexibleInstances
+      FlexibleContexts
+      FunctionalDependencies
+      OverloadedStrings
+      TypeApplications
+      TypeFamilies
+      RankNTypes
+      OverloadedStrings
+      StandaloneKindSignatures
+      LambdaCase
   build-depends:
       base >=4.7 && <5
     , bifunctors
@@ -76,7 +106,10 @@ executable diffmu
       Paths_DiffPrivacyInferenceHs
   hs-source-dirs:
       app
-  default-extensions: OverloadedStrings TypeApplications DataKinds
+  default-extensions:
+      OverloadedStrings
+      TypeApplications
+      DataKinds
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       DiffPrivacyInferenceHs
