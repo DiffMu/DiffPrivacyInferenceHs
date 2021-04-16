@@ -75,3 +75,10 @@ instance TCConstraint IsSupremum where
   constr = IsSupremum
   runConstr (IsSupremum c) = c
 
+---- Choices
+newtype IsChoice a = IsChoice a deriving Show
+
+instance TCConstraint IsChoice where
+  constr = IsChoice
+  runConstr (IsChoice c) = c
+

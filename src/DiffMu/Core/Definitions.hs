@@ -16,6 +16,7 @@ import           Data.Singletons.Prelude.List hiding (Group)
 
 import qualified Data.Text as T
 
+import Data.HashMap.Strict
 
 ---------------------------------------------------------
 -- Definition of Meta variables
@@ -185,10 +186,14 @@ type Privacy = PrivacyOf MainSensKind
 -- to annotate singleton terms with their type.
 
 data JuliaNumType = JTNumInt | JTNumReal
-  deriving (Generic, Show)
+  deriving (Generic, Show, Eq)
+
+instance Hashable JuliaNumType
 
 data JuliaType = JTAny | JTNum JuliaNumType
-  deriving (Generic, Show)
+  deriving (Generic, Show, Eq)
+
+instance Hashable JuliaType
 
 -- NOTE: The "deriving(Generic,Show)" part is a feature of Haskell which
 --       allows us to automatically generate instances for type classes.
@@ -353,7 +358,8 @@ data DMTerm =
   | DPhi [Lam_]
   | Apply DMTerm [DMTerm]
   | Iter DMTerm DMTerm DMTerm
-  | FLet Symbol [JuliaType] Lam_ DMTerm
+  | FLet Symbol [JuliaType] DMTerm DMTerm
+  | Choice (HashMap [JuliaType] DMTerm)
   | SLet (Asgmt JuliaType) DMTerm DMTerm
 -- ....
   deriving (Generic, Show)

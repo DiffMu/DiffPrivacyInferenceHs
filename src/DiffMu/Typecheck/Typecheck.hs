@@ -90,6 +90,38 @@ checkSens (SLet (x :- dτ) term body) scope = do
   τ <- checkSens body scope'
   return τ
 
+checkSens (FLet fname sign term body) scope = do
+
+  -- make a Choice term to put in the scope
+   scope' <- case (H.lookup fname scope) of
+                  Nothing -> pushDefinition scope fname (Choice (H.singleton sign term))
+                  Just [Choice d] -> do
+                                        (_, scope'') <- popDefinition scope fname
+                                        pushDefinition scope'' fname (Choice (H.insert sign term d))
+                  _ -> throwError (ImpossibleError "Invalid scope entry.")
+
+
+   result <- checkSens body scope'
+   _ <- removeVar fname
+   return result
+
+
+checkSens (Choice d) scope = let
+      checkChoice :: DMTerm -> STC DMType
+      checkChoice t = do
+         τ <- checkSens t scope
+         flag <- newSVar "ch"
+         _ <- mscale (svar flag)
+         return τ
+      in do
+
+         dd <- mapM checkChoice d
+         τ <- newVar "τa"
+         throwError (ImpossibleError "Invalid scope entry.")
+
+
+
+
 
 -- Everything else is currently not supported.
 checkSens t scope = throwError (UnsupportedTermError t)
@@ -101,8 +133,8 @@ checkSens t scope = throwError (UnsupportedTermError t)
 checkPriv :: DMTerm -> DMScope -> PTC DMType
 
 checkPriv (Ret t) scope = do
-   τ <- checkSens t scope
    throwError (ImpossibleError "?!")
+--   τ <- checkSens t scope
 --   _ <- truncate(∞)
 --   return τ -- TODO truncate to inf
 
