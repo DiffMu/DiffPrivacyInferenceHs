@@ -66,6 +66,20 @@ checkSens (Op op args) scope =
     -- We return the `res` type given by `makeTypeOp`
     return (Numeric res)
 
+checkSens (Phi cond ifbr elsebr) scope =
+   let mcond = do
+        τ_cond <- checkSens cond scope
+        mscale (constCoeff Infty)
+        return τ_cond
+   in do
+      τ_sum <- msum [(checkSens ifbr scope), (checkSens elsebr scope), mcond]
+      (τif, τelse) <- case τ_sum of
+                           (τ1 : τ2 : _) -> return (τ1, τ2)
+                           _ -> throwError (ImpossibleError "Sum cannot return empty.")
+      τ <- newVar
+      addConstraint (Solvable (IsSupremum (τ, τif, τelse)))
+      return τ
+
 checkSens (Lam (Lam_ xτs body)) scope = do
 
   -- put a special term to mark x as a function argument. those get special tratment

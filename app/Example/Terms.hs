@@ -23,3 +23,5 @@ t₇ = Lam (Lam_ [Symbol "x" :- (JTNum JTNumInt), Symbol "y" :- JTAny] (t₅ t�
 t8 = FLet (Symbol "f") [JTNum JTNumInt, JTAny] t₇ (FLet (Symbol "f") [JTNum JTNumInt, JTAny] t₆ (FLet (Symbol "f") [JTAny, JTAny] t₆ (Var (Symbol "f") JTAny)))
 
 t9 = Apply t8 [t₂, t₂]
+
+t10 = Lam (Lam_ [Symbol "x" :- (JTNum JTNumInt), Symbol "y" :- JTAny] (Phi (t₃ "x") t₂ (t₃ "y")))
