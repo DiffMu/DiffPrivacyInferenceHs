@@ -72,7 +72,7 @@ checkSens (Lam (Lam_ xτs body)) scope = do
   -- because we're interested in their sensitivity
   let scope' = mconcat ((\(x :- τ) -> setValue x [(Arg x τ)]) <$> xτs) scope
 
-  τr <- checkSens body scope
+  τr <- checkSens body scope'
   xrτs <- getArgList xτs
   return (xrτs :->: τr)
 
@@ -90,6 +90,30 @@ checkSens (SLet (x :- dτ) term body) scope = do
   τ <- checkSens body scope'
   return τ
 
+
+checkSens (Apply f args) scope = let
+   -- check a single argument, scale its context with the corresponding sensitivity variable
+   checkFArg :: DMTerm -> Sensitivity -> STC DMType
+   checkFArg arg s = do
+      τ <- checkSens arg scope
+      mscale s
+      return τ
+   in do
+      svars :: [Sensitivity] <- mapM (\x -> newVar) args -- create an svar for each argument
+      let margs = zipWith checkFArg args svars -- check args and scale with their respective svar
+
+      let mf = checkSens f scope -- check function term
+
+      τ_sum <- msum (mf : margs) -- sum args and f's context
+      (τ_lam, argτs) <- case τ_sum of
+                             (τ : τs) -> return (τ, zipWith (\x->(\y-> x:@y)) τs svars)
+                             [] -> throwError (ImpossibleError "Sum cannot return empty list.")
+
+      τ_ret <- newVar -- a type var for the function return type
+      addConstraint (Solvable (IsLessEqual (τ_lam, (argτs :->: τ_ret)))) -- f's type must be subtype of an arrow matching arg types.
+      return τ_ret
+
+
 checkSens (FLet fname sign term body) scope = do
 
   -- make a Choice term to put in the scope
@@ -100,7 +124,7 @@ checkSens (FLet fname sign term body) scope = do
                                         pushDefinition scope'' fname (Choice (H.insert sign term d))
                   _ -> throwError (ImpossibleError "Invalid scope entry.")
 
-
+   -- check body with that new scope. Choice terms will result in IsChoice constraints upon ivocation of fname
    result <- checkSens body scope'
    _ <- removeVar fname
    return result
@@ -176,6 +200,7 @@ popDefinition scope v =
   do (d,ds) <- case H.lookup v scope of
                  Just (x:xs) -> return (x,xs)
                  _           -> throwError (VariableNotInScope v)
+
      return (d, H.insert v ds scope)
 
 -- Given a scope, a variable name v , and a DMTerm t, we push t to the list for v.

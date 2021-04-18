@@ -54,13 +54,13 @@ class (Monad t) => MonadConstraint isT t | t -> isT where
 -- Basic constraints
 newtype IsEqual a = IsEqual a
   deriving (Show)
---   deriving (TCConstraint)
+
 instance TCConstraint IsEqual where
   constr = IsEqual
   runConstr (IsEqual c) = c
 
 
----- Less Equal
+---- Less Equal (subtyping)
 newtype IsLessEqual a = IsLessEqual a
   deriving (Show)
 

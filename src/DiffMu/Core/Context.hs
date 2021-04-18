@@ -60,7 +60,7 @@ msum ms = do
         mΣ <- use types
         m_acc_Σ <- (traceShowId mΣ) ⋆ (traceShowId accΣ)
         as <- f initΣ ms (m_acc_Σ)
-        return []
+        return (a : as)
 
 
 -- Helper function for using a monadic function to update the state of a "by a lens accessible"

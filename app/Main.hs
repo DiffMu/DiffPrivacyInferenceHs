@@ -26,7 +26,7 @@ main = do
       r = do
 
         -- typecheck the term t5
-        tres <- checkSens t₇ def
+        tres <- checkSens t9 def
         solveAllConstraints SolveExact
         normalize tres
 
@@ -46,7 +46,6 @@ main = do
   case x of
     Left err -> putStrLn $ "Encountered error: " <> show err
     Right x -> putStrLn $ "Result: " <> show x
-
   traceStack "This is a string" (putStrLn "This is a value of any type a, which 'forces' this command to actually be evaluated")
   return ()
 

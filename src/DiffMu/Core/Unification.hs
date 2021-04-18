@@ -49,11 +49,13 @@ instance (Show a, Unify MonadDMTC a) => Unify MonadDMTC [a] where
   unify_ xs ys = throwError (UnificationError xs ys)
 
 -- Using the unification instance, we implement solving of the `IsEqual` constraint for DMTypes.
-instance Solve MonadDMTC IsEqual (DMTypeOf k,DMTypeOf k) where
+instance Solve MonadDMTC IsEqual (DMTypeOf k, DMTypeOf k) where
   solve_ Dict _ _ (IsEqual (a,b)) = unify_ a b >> pure ()
 
+
+-- TODO: not implemented yet, need julia subtyping access.
 instance Solve MonadDMTC IsChoice (DMType, (HashMap [JuliaType] DMType)) where
-  solve_ Dict _ _ (IsChoice (τ, cs)) = throwError (ImpossibleError "Choice simplification not implemented.")
+  solve_ Dict _ _ (IsChoice (τ, cs)) = pure ()
 
 -------------------------------------------------------------------
 -- Monadic monoid structure on dmtypes

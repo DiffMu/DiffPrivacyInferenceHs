@@ -128,15 +128,8 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsLessEqual (DMTypeOf k, DMTyp
   solve_ Dict _ name (IsLessEqual (a,b)) = solveSubtyping name (a,b)
 
 
-
-
 -- TODO: Solving of `IsSupremum` constraints is currently not implemented.
 instance Solve MonadDMTC IsSupremum (DMTypeOf k, DMTypeOf k, DMTypeOf k) where
   solve_ Dict _ _ a = pure () -- undefined
-
-
-
-
-
 
 
