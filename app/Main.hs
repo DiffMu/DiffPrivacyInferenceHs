@@ -46,7 +46,8 @@ main = do
   case x of
     Left err -> putStrLn $ "Encountered error: " <> show err
     Right x -> putStrLn $ "Result: " <> show x
-  putStrLn "Done!"
+
+  traceStack "This is a string" (putStrLn "This is a value of any type a, which 'forces' this command to actually be evaluated")
   return ()
 
 
