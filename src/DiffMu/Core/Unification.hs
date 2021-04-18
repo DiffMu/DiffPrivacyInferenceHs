@@ -6,6 +6,7 @@ import DiffMu.Abstract
 import DiffMu.Core.Definitions
 import DiffMu.Core.TC
 
+import Data.HashMap.Strict
 -------------------------------------------------------------------
 -- Unification of dmtypes
 --
@@ -51,6 +52,8 @@ instance (Show a, Unify MonadDMTC a) => Unify MonadDMTC [a] where
 instance Solve MonadDMTC IsEqual (DMTypeOf k,DMTypeOf k) where
   solve_ Dict _ _ (IsEqual (a,b)) = unify_ a b >> pure ()
 
+instance Solve MonadDMTC IsChoice (DMType, (HashMap [JuliaType] DMType)) where
+  solve_ Dict _ _ (IsChoice (τ, cs)) = throwError (ImpossibleError "Choice simplification not implemented.")
 
 -------------------------------------------------------------------
 -- Monadic monoid structure on dmtypes

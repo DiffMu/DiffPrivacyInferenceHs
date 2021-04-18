@@ -116,11 +116,9 @@ checkSens (Choice d) scope = let
       in do
 
          dd <- mapM checkChoice d
-         -- τ <- newVar "τa"
-         throwError (ImpossibleError "Invalid scope entry.")
-
-
-
+         τ <- newVar
+         addConstraint (Solvable (IsChoice (τ, dd)))
+         return τ
 
 
 -- Everything else is currently not supported.
