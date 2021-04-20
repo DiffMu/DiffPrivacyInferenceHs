@@ -154,12 +154,13 @@ getArgList xτs = do
 
   return xτs'
 
-removeVar :: forall t e. MonadDMTC t => Symbol -> t (Maybe (DMType :& e))
-removeVar x = undefined -- do
+removeVar :: forall e t. (MonadDMTC t, DMExtra e) => Symbol -> t (Maybe (DMType :& e))
+removeVar x =  do
   -- (γ :: Ctx Symbol (DMType :& e)) <- use types
-  -- let v = getValue x γ
-  -- let γ' = deleteValue x γ
-  -- TODO: γ' has to be written into the context again.
-  -- return v
+  γ <- use types
+  v <- getValueM x γ
+  γ' <- deleteValueM x γ
+  types .= γ'
+  cast v
 
 

@@ -167,6 +167,10 @@ instance (Cast (Either a b) x) => Cast (Either (z :& a) (z :& b)) (z :& x) where
   cast (Left (x :@ e)) = (x :@) <$> cast @(Either a b) (Left e)
   cast (Right (x :@ e)) = (x :@) <$> cast @(Either a b) (Right e)
 
+instance (Cast a b) => Cast (Maybe a) (Maybe b) where
+  cast Nothing = pure Nothing
+  cast (Just a) = Just <$> cast a
+
 -- instance Cast (Either (DMType :& Sensitivity) (DMType :& Privacy)) (DMType :& Sensitivity) where
 --   cast (Left e) = return e
 --   cast (Right e) = internalError "Expected a sensitivity but got a privacy."

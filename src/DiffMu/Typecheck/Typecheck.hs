@@ -107,7 +107,7 @@ checkSens (SLet (x :- dτ) term body) scope = do
 
 checkSens (Apply f args) scope = let
    -- check a single argument, scale its context with the corresponding sensitivity variable
-   checkFArg :: DMTerm -> Sensitivity -> STC DMType
+   checkFArg :: DMTerm -> Sensitivity -> TC DMType
    checkFArg arg s = do
       τ <- checkSens arg scope
       mscale s
@@ -140,7 +140,7 @@ checkSens (FLet fname sign term body) scope = do
 
    -- check body with that new scope. Choice terms will result in IsChoice constraints upon ivocation of fname
    result <- checkSens body scope'
-   _ <- removeVar fname
+   _ <- removeVar @Sensitivity fname
    return result
 
 
@@ -180,7 +180,7 @@ checkPriv (SLet (x :- dτ) term body) scope =
   let mbody = do
          scope' <- pushDefinition scope x (Arg x dτ)
          τ <- checkPriv body scope'
-         _ <- removeVar x
+         _ <- removeVar @Privacy x
          return τ
   in do
      -- TODO this requires saving the annotation in the dict.
