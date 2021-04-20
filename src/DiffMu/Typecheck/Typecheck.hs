@@ -21,7 +21,7 @@ import Debug.Trace
 --------------------
 -- Sensitivity terms
 
-checkSens :: DMTerm -> DMScope -> STC DMType
+checkSens :: DMTerm -> DMScope -> TC DMType
 
 -- TODO: Here we assume that η really has type τ, and do not check it. Should maybe do that.
 checkSens (Sng η τ) scope  = pure $ Numeric (Const (constCoeff (Fin η)) (createDMTypeNum τ))
@@ -145,7 +145,7 @@ checkSens (FLet fname sign term body) scope = do
 
 
 checkSens (Choice d) scope = let
-      checkChoice :: DMTerm -> STC DMType
+      checkChoice :: DMTerm -> TC DMType
       checkChoice t = do
          τ <- checkSens t scope
          flag <- newSVar "ch"
@@ -166,7 +166,7 @@ checkSens t scope = throwError (UnsupportedTermError t)
 --------------------
 -- Privacy terms
 
-checkPriv :: DMTerm -> DMScope -> PTC DMType
+checkPriv :: DMTerm -> DMScope -> TC DMType
 
 checkPriv (Ret t) scope = do
    throwError (ImpossibleError "?!")
@@ -209,7 +209,7 @@ instance Default (Scope v a) where
   def = H.empty
 
 -- Given a scope and a variable name v, we pop the topmost element from the list for v.
-popDefinition :: (MonadDMTC e t, DictKey v, Show v) => Scope v a -> v -> t e (a, Scope v a)
+popDefinition :: (MonadDMTC t, DictKey v, Show v) => Scope v a -> v -> t (a, Scope v a)
 popDefinition scope v =
   do (d,ds) <- case H.lookup v scope of
                  Just (x:xs) -> return (x,xs)
@@ -218,7 +218,7 @@ popDefinition scope v =
      return (d, H.insert v ds scope)
 
 -- Given a scope, a variable name v , and a DMTerm t, we push t to the list for v.
-pushDefinition :: (MonadDMTC e t, DictKey v, Show v) => Scope v a -> v -> a -> t e (Scope v a)
+pushDefinition :: (MonadDMTC t, DictKey v, Show v) => Scope v a -> v -> a -> t (Scope v a)
 pushDefinition scope v term =
    do (ds) <- case H.lookup v scope of
                   Just [xs] -> return (term:[xs])

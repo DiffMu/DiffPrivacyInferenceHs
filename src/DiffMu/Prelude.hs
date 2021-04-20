@@ -12,6 +12,9 @@ module DiffMu.Prelude
   , KEq (..)
   , FromSymbol (..)
   , composeFun
+  , composeFunM
+  , MonadImpossible (..)
+  , MonadInternalError (..)
   )
   where
 
@@ -77,6 +80,18 @@ type KEq v = (forall k. Eq (v k))
 composeFun :: [a -> a] -> a -> a
 composeFun [] a = a
 composeFun (f:fs) a = f (composeFun fs a)
+
+composeFunM :: Monad t => [a -> t a] -> a -> t a
+composeFunM [] a = return a
+composeFunM (f:fs) a = do
+  rs <- composeFunM fs a
+  f rs
+
+class Monad t => MonadImpossible t where
+  impossible :: String -> t a
+
+class Monad t => MonadInternalError t where
+  internalError :: String -> t a
 
 -- import           Prelude                                 hiding
 --                                                           (Fractional (..),

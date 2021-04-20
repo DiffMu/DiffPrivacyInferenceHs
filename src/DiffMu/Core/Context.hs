@@ -17,15 +17,18 @@ import Debug.Trace
 --
 
 -- A helper function which scale any type context with a given sensitivity `η`.
-scale :: Sensitivity -> TypeCtx Sensitivity -> TypeCtx Sensitivity
-scale η γ = f <$> γ
-  where f (τ :@ s) = τ :@ traceShowId ((traceShowId η) ⋅! (traceShowId s))
+scale :: Sensitivity -> TypeCtxSP -> TypeCtxSP
+scale η (Left γ) = Left (f <$> γ)
+  where f (τ :@ s) = τ :@ (η ⋅! s)
+scale η (Right γ) = Right (f <$> γ)
+  where f :: DMType :& Privacy -> DMType :& Privacy
+        f (τ :@ (δ,ε)) = τ :@ (η ⋅! δ, η ⋅! ε)
 
 -- Scales the current type context living in our typechecking-state monad by a given `η`.
-mscale :: MonadDMTC Sensitivity t => Sensitivity -> t Sensitivity ()
+mscale :: MonadDMTC t => Sensitivity -> t ()
 mscale η = types %= scale η
 
-zeroAnnotation :: (MonadDMTC e t, Default e) => t e e
+zeroAnnotation :: (MonadDMTC t, Default e) => t e
 zeroAnnotation = return def
 
 instance Default Sensitivity where
@@ -43,16 +46,29 @@ truncate η γ = truncate_annotation <$> γ
             True -> τ :@ zeroId
             _    -> τ :@ η)
 
+instance (MonadInternalError t, SemigroupM t a, SemigroupM t b) => SemigroupM t (Either a b) where
+  (⋆) (Left a) (Left b) = Left <$> (a ⋆ b)
+  (⋆) (Right a) (Right b) = Right <$> (a ⋆ b)
+  (⋆) _ _ = internalError "Could not match left and right. (Probably a sensitivity / privacy context mismatch.)"
+-- instance (MonoidM t a, MonoidM t b) => MonoidM t (Either a b) where
+
+resetToDefault :: (Default a, Default b) => Either a b -> Either a b
+resetToDefault (Left a) = Left def
+resetToDefault (Right b) = Right def
+
 -- Given a list of computations in a MonadDMTC monad, it executes all computations
 -- on the same input type context, and sums the resulting type contexts.
 -- All additional data (constraints, substitutions, metavariable contexts) are passed sequentially.
-msum :: (Show e, IsT MonadDMTC t, MonoidM (t e) e, CheckNeutral (t e) e) => [t e a] -> t e [a]
+msum :: (IsT MonadDMTC t) => [t a] -> t [a]
+-- msum :: (Show e, IsT MonadDMTC t, MonoidM (t) e, CheckNeutral (t) e) => [t a] -> t [a]
+-- msum :: [t a] -> t [a]
 msum ms = do
   initΣ <- use types
-  f initΣ ms def
+  f initΣ ms (resetToDefault initΣ)
 
     where
-      f :: (Show e, IsT MonadDMTC t, MonoidM (t e) e, CheckNeutral (t e) e) => TypeCtx e -> [t e a] -> TypeCtx e -> t e [a]
+      -- f :: (Show e, IsT MonadDMTC t, MonoidM (t) e, CheckNeutral (t) e) => TypeCtxSP -> [t a] -> TypeCtxSP -> t [a]
+      f :: (IsT MonadDMTC t) => TypeCtxSP -> [t a] -> TypeCtxSP -> t [a]
       f initΣ [] accΣ = types .= accΣ >> return []
       f initΣ (m:ms) accΣ = do
         types .= initΣ
@@ -78,8 +94,12 @@ msum ms = do
 
 infixr 4 %=~
 
+setVar :: MonadDMTC t => Symbol -> DMType :& Sensitivity -> t ()
+setVar k v = types %=~ setValueM k (Left v :: Either (DMType :& Sensitivity) (DMType :& Privacy))
+
+
 -- Normalizes all contexts in our typechecking monad, i.e., applies all available substitutions.
-normalizeContext :: (Normalize (t e) e, MonadDMTC e t) => t e ()
+normalizeContext :: (MonadDMTC t) => t ()
 normalizeContext = do
   types %=~ normalize
   meta.constraints %=~ normalize
@@ -89,13 +109,13 @@ normalizeContext = do
 -- Returns if no "changed" constraints remains.
 -- An unchanged constraint is marked "changed", if it is affected by a new substitution.
 -- A changed constraint is marked "unchanged" if it is read by a call to `getUnsolvedConstraintMarkNormal`.
-solveAllConstraints :: forall t e. (IsT MonadDMTC t, Normalize (t e) e) => SolvingMode -> t e ()
+solveAllConstraints :: forall t. (IsT MonadDMTC t) => SolvingMode -> t ()
 solveAllConstraints mode = do
   normalizeContext
   openConstr <- getUnsolvedConstraintMarkNormal
 
   --
-  ctx <- use (meta @e .constraints)
+  ctx <- use (meta .constraints)
   traceM ("Solving constraints. I have: " <> show ctx <> ".\n Currently looking at: " <> show (fst <$> openConstr))
   --
 
@@ -109,30 +129,37 @@ solveAllConstraints mode = do
 -- Look up the types and sensitivities/privacies of the variables in `xτs` from the current context.
 -- If a variable is not present in Σ (this means it was not used in the lambda body),
 -- create a new type/typevar according to type hint given in `xτs` and give it zero annotation
-getArgList :: forall t. MonadDMTC Sensitivity t => [Asgmt JuliaType] -> t Sensitivity [DMType :& Sensitivity]
+getArgList :: forall t e. (MonadDMTC t, DMExtra e, CMonoidM t e) => [Asgmt JuliaType] -> t [DMType :& e]
 getArgList xτs = do
-  (γ :: Ctx Symbol (DMType :& Sensitivity)) <- use types
+  (γ :: TypeCtxSP) <- use types
 
-  let f :: Asgmt JuliaType -> t Sensitivity (DMType :& Sensitivity)
-      f (x :- τ) = case getValue x γ of
-        -- If the symbol was in the context γ, then we get its type and sensitivity
-        Just τe -> return τe
-        -- if the type hint is DMDUnkown, we just add a typevar. otherwise we can be more specific
-        Nothing -> (:@) <$> createDMType τ <*> pure (constCoeff (Fin 0))
+  let f :: Asgmt JuliaType -> t (DMType :& e)
+      f (x :- τ) = do
+        val <- getValueM x γ
+        case val of
+          -- If the symbol was in the context γ, then we get its type and sensitivity
+          Just τe -> cast τe
+            --castExtra -- TODO: Cast does not quite work here, because we also have an dmtype inside
+          -- if the type hint is DMDUnkown, we just add a typevar. otherwise we can be more specific
+          Nothing -> (:@) <$> createDMType τ <*> zero
   xτs' <- mapM f xτs
 
   -- We have to remove all symbols x from the context
-  let γ' = composeFun ((\(x :- _) -> deleteValue x) <$> xτs) γ
+  let deleteSingle :: [TypeCtxSP -> t (TypeCtxSP)]
+      deleteSingle = ((\(x :- _) -> deleteValueM x) <$> xτs)
+      -- temp = mapM (\(x :- _) -> deleteValueM x) xτs
+  γ' <- composeFunM deleteSingle γ
 
   types .= γ'
 
   return xτs'
 
-removeVar :: forall t e. MonadDMTC e t => Symbol -> t e (Maybe (DMType :& e))
-removeVar x = do
-  (γ :: Ctx Symbol (DMType :& e)) <- use types
-  let v = getValue x γ
-  let γ' = deleteValue x γ
-  return v
+removeVar :: forall t e. MonadDMTC t => Symbol -> t (Maybe (DMType :& e))
+removeVar x = undefined -- do
+  -- (γ :: Ctx Symbol (DMType :& e)) <- use types
+  -- let v = getValue x γ
+  -- let γ' = deleteValue x γ
+  -- TODO: γ' has to be written into the context again.
+  -- return v
 
 

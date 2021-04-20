@@ -56,8 +56,6 @@ class Monad t => MonadWatch t where
 -- instance (Eq x, Hashable x) => Subs x a (HashMap x a) where
 --   getTerm s x = H.lookup x s
 
-class Monad t => MonadImpossible t where
-  impossible :: String -> t a
 
 class (Typeable v, Typeable a, forall k. Eq (v k)) => Substitute (v :: j -> *) (a :: j -> *) x where
   substitute :: (Monad t) => (forall k. (Typeable k) => v k -> t (a k)) -> (x -> t x)

@@ -13,7 +13,7 @@ import Debug.Trace
 
 
 -- An abbreviation for adding a subtyping constraint.
-(⊑!) :: (SingI k, Typeable k, MonadDMTC e t) => DMTypeOf k -> DMTypeOf k -> t e ()
+(⊑!) :: (SingI k, Typeable k, MonadDMTC t) => DMTypeOf k -> DMTypeOf k -> t ()
 (⊑!) a b = addConstraint (Solvable (IsLessEqual (a,b))) >> pure ()
 
 -- A helper function used below in defining the subtyping graph.
@@ -22,7 +22,7 @@ getArrowLength (a :->: _) = Just (length a)
 getArrowLength _         = Nothing
 
 -- The subtyping graph for our type system.
-subtypingGraph :: forall e t k. (SingI k, Typeable k, MonadDMTC e t) => EdgeType -> [Edge (t e) (DMTypeOf k)]
+subtypingGraph :: forall e t k. (SingI k, Typeable k, MonadDMTC t) => EdgeType -> [Edge t (DMTypeOf k)]
 subtypingGraph =
   let case1 = testEquality (typeRep @k) (typeRep @MainKind)
       case2 = testEquality (typeRep @k) (typeRep @NumKind)
@@ -98,7 +98,7 @@ subtypingGraph =
 
 -- The actual solving is done here.
 -- this simply uses the `findPathM` function from Abstract.Computation.MonadicGraph
-solveSubtyping :: forall t e k. (SingI k, Typeable k, IsT MonadDMTC t) => Symbol -> (DMTypeOf k, DMTypeOf k) -> t e ()
+solveSubtyping :: forall t e k. (SingI k, Typeable k, IsT MonadDMTC t) => Symbol -> (DMTypeOf k, DMTypeOf k) -> t ()
 solveSubtyping name path = do
   -- Here we define which errors should be caught while doing our hypothetical computation.
   let relevance (UnificationError _ _)      = IsGraphRelevant
@@ -110,7 +110,7 @@ solveSubtyping name path = do
   -- traceM $ "I have " <> show (length (graph (IsReflexive NotStructural))) <> " candidates."
 
   -- Executing the computation
-  res <- findPathM @(Full e) @_ @DMException relevance (GraphM graph) path
+  res <- findPathM @(Full) @_ @DMException relevance (GraphM graph) path
 
   -- We look at the result and if necessary throw errors.
   case res of

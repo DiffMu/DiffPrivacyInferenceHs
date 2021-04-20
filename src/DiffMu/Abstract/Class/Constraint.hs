@@ -18,23 +18,23 @@ class TCConstraint c where
   insideConstr :: (Monad t) => (a -> t a) -> c a -> t (c a)
   insideConstr f c = constr <$> f (runConstr c)
 
-class TCConstraint c => Solve (isT :: * -> (* -> * -> *) -> Constraint) c a where
-  solve_ :: Dict ((IsT isT t)) -> SolvingMode -> Symbol -> c a -> t e ()
+class TCConstraint c => Solve (isT :: (* -> *) -> Constraint) c a where
+  solve_ :: Dict ((IsT isT t)) -> SolvingMode -> Symbol -> c a -> t ()
 
 
 
 data Solvable isT where
-  Solvable :: (Solve isT c a, (HasNormalize isT t a), Show (c a)) => c a -> Solvable isT
+  Solvable :: (Solve isT c a, (HasNormalize isT a), Show (c a)) => c a -> Solvable isT
 
--- solve' :: (Solve isT c a, IsT isT t, Normalize (t e) a) => c a -> t e ()
-solve :: (Monad (t e), IsT isT t) => SolvingMode -> Symbol -> (Solvable isT) -> t e ()
+-- solve' :: (Solve isT c a, IsT isT t, Normalize (t) a) => c a -> t ()
+solve :: (Monad (t), IsT isT t) => SolvingMode -> Symbol -> (Solvable isT) -> t ()
 solve mode name (Solvable (c :: c a) :: Solvable isT) = f Proxy
-  where f :: (Monad (t e), IsT isT t) => Proxy (t e) -> t e ()
-        f (_ :: Proxy (t e)) = (insideConstr normalize c >>= solve_ @isT Dict mode name)
+  where f :: (Monad (t), IsT isT t) => Proxy (t) -> t ()
+        f (_ :: Proxy (t)) = (insideConstr normalize c >>= solve_ @isT Dict mode name)
 
 
-instance (isT e t, Monad (t e)) => Normalize (t e) (Solvable isT) where
-  normalize (Solvable (c :: c a)) = (Solvable @isT <$> insideConstr (normalize @(t e)) c)
+instance (isT t, Monad (t)) => Normalize (t) (Solvable isT) where
+  normalize (Solvable (c :: c a)) = (Solvable @isT <$> insideConstr (normalize @(t)) c)
 
 instance Show (Solvable isT) where
   show (Solvable c) = show c
