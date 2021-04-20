@@ -8,7 +8,7 @@ import DiffMu.Core.Symbolic
 import DiffMu.Core.TC
 import DiffMu.Typecheck.Operations
 
-import Data.HashMap.Strict as H
+import qualified Data.HashMap.Strict as H
 
 import Debug.Trace
 
@@ -84,7 +84,7 @@ checkSens (Lam (Lam_ xτs body)) scope = do
 
   -- put a special term to mark x as a function argument. those get special tratment
   -- because we're interested in their sensitivity
-  let scope' = mconcat ((\(x :- τ) -> setValue x [(Arg x τ)]) <$> xτs) scope
+  let scope' = mconcat ((\(x :- τ) -> setValue x (Arg x τ)) <$> xτs) scope
 
   τr <- checkSens body scope'
   xrτs <- getArgList xτs
@@ -133,7 +133,7 @@ checkSens (FLet fname sign term body) scope = do
   -- make a Choice term to put in the scope
    scope' <- case (H.lookup fname scope) of
                   Nothing -> pushDefinition scope fname (Choice (H.singleton sign term))
-                  Just [Choice d] -> do
+                  Just (Choice d) -> do
                                         (_, scope'') <- popDefinition scope fname
                                         pushDefinition scope'' fname (Choice (H.insert sign term d))
                   _ -> throwError (ImpossibleError "Invalid scope entry.")
@@ -206,7 +206,7 @@ checkPriv t scope = checkPriv (Ret t) scope
 -- Definition of the scope
 
 -- A scope with variables of type `v`, and contents of type `a` is simply a hashmap.
-type Scope v a = HashMap v [a]
+type Scope v a = H.HashMap v a
 
 -- The default scope is an empty scope.
 instance Default (Scope v a) where
@@ -215,30 +215,53 @@ instance Default (Scope v a) where
 -- Given a scope and a variable name v, we pop the topmost element from the list for v.
 popDefinition :: (MonadDMTC e t, DictKey v, Show v) => Scope v a -> v -> t e (a, Scope v a)
 popDefinition scope v =
-  do (d,ds) <- case H.lookup v scope of
-                 Just (x:xs) -> return (x,xs)
-                 _           -> throwError (VariableNotInScope v)
+  do d <- case H.lookup v scope of
+                 Just x  -> return x
+                 Nothing -> throwError (VariableNotInScope v)
 
-     return (d, H.insert v ds scope)
+     return (d, H.delete v scope) -- TODO
 
 -- Given a scope, a variable name v , and a DMTerm t, we push t to the list for v.
-pushDefinition :: (MonadDMTC e t, DictKey v, Show v) => Scope v a -> v -> a -> t e (Scope v a)
-pushDefinition scope v term =
-   do (ds) <- case H.lookup v scope of
-                  Just [xs] -> return (term:[xs])
-                  _         -> return [term]
-      return (H.insert v ds scope)
+pushDefinition :: (MonadDMTC e t) => Scope Symbol DMTerm -> Symbol -> DMTerm-> t e (Scope Symbol DMTerm)
+pushDefinition scope v term = do
+   tt <- substituteScope scope term
+   return (H.insert v tt scope)
 
 
 -- Our scopes have symbols as variables, and contain DMTerms.
 type DMScope = Scope Symbol DMTerm
 
 -- All hashmaps are `DictLike`
-instance (DictKey k) => DictLike k v (HashMap k v) where
+instance (DictKey k) => DictLike k v (H.HashMap k v) where
   setValue v m (h) = (H.insert v m h)
   deleteValue v (h) = (H.delete v h)
   getValue k (h) = h H.!? k
 
+substituteScope :: (MonadDMTC e t) => Scope Symbol DMTerm -> DMTerm -> t e DMTerm
+substituteScope scope term = do
+   case term of
+      Lam _ -> return term
+      LamStar _ -> return term
+      Choice _ -> return term
+      Sng _ _ -> return term
+
+      Var vs τ -> case H.lookup vs scope of
+                        Just t -> return t --TODO what about vt
+                        _ -> throwError (VariableNotInScope vs)
+
+      Arg vs τ -> case H.lookup vs scope of
+                        Just t -> return t --TODO what about vt
+                        _ -> throwError (ImpossibleError "Arg var term must be in scope.")
+
+      Ret t -> Ret <$> substituteScope scope t
+      Op op ts -> Op op <$> (mapM (substituteScope scope) ts)
+      Phi tc ti te -> Phi <$> (substituteScope scope tc) <*> (substituteScope scope ti) <*> (substituteScope scope te)
+      Apply tf ts -> Apply <$> (substituteScope scope tf) <*> (mapM (substituteScope scope) ts)
+      Iter t1 t2 t3 -> Iter <$> (substituteScope scope t1) <*> (substituteScope scope t2) <*> (substituteScope scope t3)
+      FLet fname jτs ft body -> FLet fname jτs <$> (substituteScope scope ft) <*> (substituteScope scope body)
+      SLet v t body -> SLet v <$> (substituteScope scope t) <*> (substituteScope scope body)
+      Tup ts -> Tup <$> (mapM (substituteScope scope) ts)
+      TLet vs t body -> TLet vs <$> (substituteScope scope t) <*> (substituteScope scope body)
 
 
 
