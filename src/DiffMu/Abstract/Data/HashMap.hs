@@ -9,3 +9,5 @@ instance Normalize t v => Normalize t (HashMap k v) where
   normalize map = mapM normalize map
 
 
+
+

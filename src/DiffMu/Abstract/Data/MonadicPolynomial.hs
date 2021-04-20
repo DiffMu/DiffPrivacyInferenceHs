@@ -266,9 +266,9 @@ class CheckContains x y where
   checkContains :: x -> Maybe y
 
 instance forall isT j v r (k :: j). (HasPolyTerm v r k,
-          (forall t e. (IsT isT t => MonadConstraint isT (t e)))
+          (forall t e. (IsT isT t => MonadConstraint isT (t)))
 
-          , forall t e. (IsT isT t => MonadTerm @j (CPolyM r Int (v k)) (t e)) --,
+          , forall t e. (IsT isT t => MonadTerm @j (CPolyM r Int (v k)) (t)) --,
           -- (VarFam (CPolyM r Int (v k)) ~ v)
           , CheckContains (v k) (VarFam (CPolyM r Int (v k)) k)
           ) --,

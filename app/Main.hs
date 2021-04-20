@@ -22,7 +22,7 @@ import Debug.Trace
 main :: IO ()
 main = do
   putStrLn "Starting DiffMu!"
-  let r :: TC Sensitivity DMType
+  let r :: TC DMType
       r = do
 
         -- typecheck the term t5
@@ -46,7 +46,7 @@ main = do
   case x of
     Left err -> putStrLn $ "Encountered error: " <> show err
     Right x -> putStrLn $ "Result: " <> show x
-  traceStack "This is a string" (putStrLn "This is a value of any type a, which 'forces' this command to actually be evaluated")
+  -- traceStack "This is a string" (putStrLn "This is a value of any type a, which 'forces' this command to actually be evaluated")
   return ()
 
 

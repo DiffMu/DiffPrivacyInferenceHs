@@ -63,16 +63,16 @@ instance Solve MonadDMTC IsChoice (DMType, (HashMap [JuliaType] DMType)) where
 
 -- We define a monadic semigroup structure on `DMTypeOf k`,
 -- which is simply unification.
-instance (IsT MonadDMTC t) => SemigroupM (t e) (DMTypeOf k) where
+instance (IsT MonadDMTC t) => SemigroupM (t) (DMTypeOf k) where
   (⋆) = unify
 
 -- This is even a monadic monoid, with the neutral element given by a new type variable.
-instance (SingI k, Typeable k, IsT MonadDMTC t) => MonoidM (t e) (DMTypeOf k) where
+instance (SingI k, Typeable k, IsT MonadDMTC t) => MonoidM (t) (DMTypeOf k) where
   neutral = TVar <$> newTVar ""
 
 -- An optimized check for whether a given DMType is a neutral does not create new typevariables,
 -- but simply checks if the given DMType is one.
-instance (SingI k, Typeable k, IsT MonadDMTC t) => (CheckNeutral (t e) (DMTypeOf k)) where
+instance (SingI k, Typeable k, IsT MonadDMTC t) => (CheckNeutral (t) (DMTypeOf k)) where
   checkNeutral (TVar x) = return True
   checkNeutral (_) = return False
 

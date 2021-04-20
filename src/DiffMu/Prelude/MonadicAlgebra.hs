@@ -42,6 +42,10 @@ class Monad t => Normalize t n where
 instance (Normalize t a, Normalize t b) => Normalize t (a,b) where
   normalize (a,b) = (,) <$> normalize a <*> normalize b
 
+instance (Normalize t a, Normalize t b) => Normalize t (Either a b) where
+  normalize (Left a) = Left <$> normalize a
+  normalize (Right a) = Right <$> normalize a
+
 -- class Has a where
 --   mempty :: a
 -- class Pointed a where

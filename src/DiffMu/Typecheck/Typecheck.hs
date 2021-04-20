@@ -21,7 +21,7 @@ import Debug.Trace
 --------------------
 -- Sensitivity terms
 
-checkSens :: DMTerm -> DMScope -> STC DMType
+checkSens :: DMTerm -> DMScope -> TC DMType
 
 -- TODO: Here we assume that η really has type τ, and do not check it. Should maybe do that.
 checkSens (Sng η τ) scope  = pure $ Numeric (Const (constCoeff (Fin η)) (createDMTypeNum τ))
@@ -107,7 +107,7 @@ checkSens (SLet (x :- dτ) term body) scope = do
 
 checkSens (Apply f args) scope = let
    -- check a single argument, scale its context with the corresponding sensitivity variable
-   checkFArg :: DMTerm -> Sensitivity -> STC DMType
+   checkFArg :: DMTerm -> Sensitivity -> TC DMType
    checkFArg arg s = do
       τ <- checkSens arg scope
       mscale s
@@ -140,12 +140,12 @@ checkSens (FLet fname sign term body) scope = do
 
    -- check body with that new scope. Choice terms will result in IsChoice constraints upon ivocation of fname
    result <- checkSens body scope'
-   _ <- removeVar fname
+   _ <- removeVar @Sensitivity fname
    return result
 
 
 checkSens (Choice d) scope = let
-      checkChoice :: DMTerm -> STC DMType
+      checkChoice :: DMTerm -> TC DMType
       checkChoice t = do
          τ <- checkSens t scope
          flag <- newSVar "chflag"
@@ -170,7 +170,7 @@ checkSens t scope = throwError (UnsupportedTermError t)
 --------------------------------------------------------------------------------
 -- Privacy terms
 
-checkPriv :: DMTerm -> DMScope -> PTC DMType
+checkPriv :: DMTerm -> DMScope -> TC DMType
 
 checkPriv (Ret t) scope = do
    throwError (ImpossibleError "?!")
@@ -184,7 +184,7 @@ checkPriv (SLet (x :- dτ) term body) scope =
   let mbody = do
          scope' <- pushDefinition scope x (Arg x dτ)
          τ <- checkPriv body scope'
-         _ <- removeVar x
+         _ <- removeVar @Privacy x
          return τ
   in do
      -- TODO this requires saving the annotation in the dict.
@@ -213,7 +213,7 @@ instance Default (Scope v a) where
   def = H.empty
 
 -- Given a scope and a variable name v, we pop the topmost element from the list for v.
-popDefinition :: (MonadDMTC e t, DictKey v, Show v) => Scope v a -> v -> t e (a, Scope v a)
+popDefinition :: (MonadDMTC t, DictKey v, Show v) => Scope v a -> v -> t (a, Scope v a)
 popDefinition scope v =
   do d <- case H.lookup v scope of
                  Just x  -> return x
@@ -222,7 +222,7 @@ popDefinition scope v =
      return (d, H.delete v scope) -- TODO
 
 -- Given a scope, a variable name v , and a DMTerm t, we push t to the list for v.
-pushDefinition :: (MonadDMTC e t) => Scope Symbol DMTerm -> Symbol -> DMTerm-> t e (Scope Symbol DMTerm)
+pushDefinition :: (MonadDMTC t) => Scope Symbol DMTerm -> Symbol -> DMTerm-> t (Scope Symbol DMTerm)
 pushDefinition scope v term = do
    tt <- substituteScope scope term
    return (H.insert v tt scope)
@@ -237,7 +237,7 @@ instance (DictKey k) => DictLike k v (H.HashMap k v) where
   deleteValue v (h) = (H.delete v h)
   getValue k (h) = h H.!? k
 
-substituteScope :: (MonadDMTC e t) => Scope Symbol DMTerm -> DMTerm -> t e DMTerm
+substituteScope :: (MonadDMTC t) => Scope Symbol DMTerm -> DMTerm -> t DMTerm
 substituteScope scope term = do
    case term of
       Lam _ -> return term

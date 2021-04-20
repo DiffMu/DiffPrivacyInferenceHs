@@ -382,6 +382,7 @@ data DMException where
   WrongNumberOfArgs       :: Show a => a -> a -> DMException
   WrongNumberOfArgsOp     :: Show a => a -> Int -> DMException
   ImpossibleError         :: String -> DMException
+  InternalError           :: String -> DMException
   VariableNotInScope      :: Show a => a -> DMException
   UnsatisfiableConstraint :: String -> DMException
 

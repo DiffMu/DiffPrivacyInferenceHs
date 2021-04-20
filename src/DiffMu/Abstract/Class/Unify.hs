@@ -9,9 +9,9 @@ import DiffMu.Abstract.Class.IsT
 
 
 class Unify isT a where
-  unify_ :: (IsT isT t) => a -> a -> t e a
+  unify_ :: (IsT isT t) => a -> a -> t a
 
-unify :: (IsT isT t, Unify isT a, Normalize (t e) a) => a -> a -> t e a
+unify :: (IsT isT t, Unify isT a, Normalize (t) a) => a -> a -> t a
 unify a b = (chainM2 unify_ (normalize a) (normalize b))
 
 
