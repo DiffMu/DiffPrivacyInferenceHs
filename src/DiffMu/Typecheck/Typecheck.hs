@@ -120,7 +120,7 @@ checkSens (Apply f args) scope = let
 
       τ_sum <- msum (mf : margs) -- sum args and f's context
       (τ_lam, argτs) <- case τ_sum of
-                             (τ : τs) -> return (τ, zipWith (\x->(\y-> x:@y)) τs svars)
+                             (τ : τs) -> return (τ, (zipWith (:@) τs svars))
                              [] -> throwError (ImpossibleError "Sum cannot return empty list.")
 
       τ_ret <- newVar -- a type var for the function return type
@@ -148,7 +148,7 @@ checkSens (Choice d) scope = let
       checkChoice :: DMTerm -> STC DMType
       checkChoice t = do
          τ <- checkSens t scope
-         flag <- newSVar "ch"
+         flag <- newSVar "chflag"
          _ <- mscale (svar flag)
          return τ
       in do
@@ -158,12 +158,16 @@ checkSens (Choice d) scope = let
          addConstraint (Solvable (IsChoice (τ, dd)))
          return τ
 
+checkSens (Tup ts) scope = do
+   τs <- msum (DiffMu.Prelude.map (\t -> (checkSens t scope)) ts)
+   return (DMTup τs)
+
 
 -- Everything else is currently not supported.
 checkSens t scope = throwError (UnsupportedTermError t)
 
 
---------------------
+--------------------------------------------------------------------------------
 -- Privacy terms
 
 checkPriv :: DMTerm -> DMScope -> PTC DMType

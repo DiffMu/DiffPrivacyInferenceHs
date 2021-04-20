@@ -108,6 +108,9 @@ data DMTypeOf (k :: DMKind) where
   -- the arrow type
   (:->:) :: [DMType :& Sensitivity] -> DMType -> DMType
 
+  -- tuples
+  DMTup :: [DMType] -> DMType
+
 
 -- Types are pretty printed as follows.
 instance Show (DMTypeOf k) where
@@ -118,6 +121,7 @@ instance Show (DMTypeOf k) where
   show (Numeric t) = "Num(" <> show t <> ")"
   show (TVar t) = show t
   show (a :->: b) = show a <> " -> " <> show b
+  show (DMTup ts) = "Tupl(" <> show ts <> ")"
 
 
 --------------------
@@ -355,12 +359,14 @@ data DMTerm =
   | Phi DMTerm DMTerm DMTerm
   | Lam Lam_
   | LamStar Lam_
-  | DPhi [Lam_]
+--  | DPhi [Lam_]
   | Apply DMTerm [DMTerm]
   | Iter DMTerm DMTerm DMTerm
   | FLet Symbol [JuliaType] DMTerm DMTerm
   | Choice (HashMap [JuliaType] DMTerm)
   | SLet (Asgmt JuliaType) DMTerm DMTerm
+  | Tup [DMTerm]
+  | TLet [(Asgmt JuliaType)] DMTerm DMTerm
 -- ....
   deriving (Generic, Show)
 

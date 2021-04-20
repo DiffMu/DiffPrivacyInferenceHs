@@ -31,6 +31,7 @@ instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs (Const η τ) = Const <$> substitute σs η <*> substitute σs τ
   substitute σs (TVar x) = σs x
   substitute σs (τ1 :->: τ2) = (:->:) <$> substitute σs τ1 <*> substitute σs τ2
+  substitute σs (DMTup τs) = DMTup <$> substitute σs τs
 
 instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
   substitute σs DMInt = pure DMInt
@@ -40,6 +41,7 @@ instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
   substitute σs (Const η τ) = Const <$> substitute σs η <*> substitute σs τ
   substitute σs (TVar x) = pure (TVar x)
   substitute σs (τ1 :->: τ2) = (:->:) <$> substitute σs τ1 <*> substitute σs τ2
+  substitute σs (DMTup τs) = DMTup <$> substitute σs τs
 
 
 instance Term TVarOf DMTypeOf where
