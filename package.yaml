@@ -81,6 +81,22 @@ library:
     - DisambiguateRecordFields
     - DuplicateRecordFields
 
+verbatim: |
+  foreign-library diffmu-wrapper
+    type:                native-shared
+
+    if os(Windows)
+      options: standalone
+      mod-def-file: DiffMuWrapper.def
+
+    other-modules:       Wrapper
+    build-depends:
+      base >=4.7 && <5
+      , lens == 4.*
+      , deepseq == 1.4.*
+    hs-source-dirs:      ffisrc
+    c-sources:           csrc/wrapper.cpp
+    default-language:    Haskell2010
 
 
 executables:
