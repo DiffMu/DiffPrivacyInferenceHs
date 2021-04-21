@@ -7,4 +7,4 @@ extern "C" void wrapperExit(void);
 
 extern "C" void test(void);
 
-extern "C" void typecheckFromDMTerm(char*);
+/* extern "C" void typecheckFromCString_DMTerm(char*); */

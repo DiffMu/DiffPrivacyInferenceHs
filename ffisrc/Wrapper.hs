@@ -81,10 +81,11 @@ setAdder fptr ptr = do
 freeComplicated :: StablePtr Complicated -> IO ()
 freeComplicated = freeStablePtr
 
-typecheckDMTerm_ViaCString :: CString -> IO ()
-typecheckDMTerm_ViaCString str = do
+typecheckFromCString_DMTerm :: CString -> IO ()
+typecheckFromCString_DMTerm str = do
   str' <- peekCString str
-  putStrLn $ "I got the string: {" <> str' <> "}"
+  typecheckFromString_DMTerm str'
+  -- putStrLn $ "I got the string: {" <> str' <> "}"
 
 
 foreign export ccall basicWrapper :: IO ()
@@ -94,6 +95,6 @@ foreign export ccall freeComplicated :: StablePtr Complicated -> IO ()
 foreign export ccall mutateComplicated :: CFloat -> StablePtr Complicated -> IO (StablePtr Complicated)
 foreign export ccall setAdder :: FunPtr (CInt -> CInt) -> StablePtr Complicated -> IO (StablePtr Complicated)
 
-foreign export ccall typecheckDMTerm_ViaCString :: CString -> IO ()
+foreign export ccall typecheckFromCString_DMTerm :: CString -> IO ()
 
 

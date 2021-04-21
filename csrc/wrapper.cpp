@@ -52,8 +52,8 @@ void test()
   freeComplicated(ptr);
 }
 
-void typecheckFromDMTerm(char* input) {
-  typecheckDMTerm_ViaCString(input);
-}
+// void typecheckFromCString_DMTerm(char* input) {
+//   typecheckFromCString_DMTerm(input);
+// }
 
 
