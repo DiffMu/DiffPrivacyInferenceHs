@@ -256,7 +256,7 @@ instance Show (MetaCtx) where
     -- <> "- cnst vars: " <> show c <> "\n"
     <> "- sens subs:   " <> show sσ <> "\n"
     <> "- type subs:   " <> show tσ <> "\n"
-    <> "- constraints: " <> show cs <> "\n"
+    <> "- constraints:\n" <> show cs <> "\n"
     -- <> "- types:       " <> show γ <> "\n"
 
 instance Show Watcher where

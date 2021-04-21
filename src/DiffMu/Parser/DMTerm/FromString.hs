@@ -27,7 +27,11 @@ pSymbol = (Symbol . T.pack) <$> (char ':' *> pIdentifier)
 
 -- TODO: Add more types.
 pJuliaType :: Parser JuliaType
-pJuliaType = try (string "Any" *> pure JTAny)
+pJuliaType =
+      try (string "Any" *> pure JTAny)
+  <|> try (string "Integer" *> pure (JTNum JTNumInt))
+  <|> try (string "Real" *> pure (JTNum JTNumReal))
+
 
 pJuliaNumType :: Parser JuliaNumType
 pJuliaNumType = undefined
@@ -63,7 +67,7 @@ pDMTerm =
       try ("ret"       `with` (Ret     <$> pDMTerm))
   <|> try ("sng"       `with` (pSng))
   <|> try ("var"       `with` (Var     <$> pSymbol <*､> pJuliaType))
-  <|> try ("arg"       `with` (Var     <$> pSymbol <*､> pJuliaType))
+  <|> try ("arg"       `with` (Arg     <$> pSymbol <*､> pJuliaType))
   <|> try ("op"        `with` (Op      <$> pDMTypeOp <*､> pArray "DMTerm" pDMTerm))
   <|> try ("phi"       `with` (Phi     <$> pDMTerm <*､> pDMTerm <*､> pDMTerm))
   <|> try ("lam"       `with` (Lam     <$> pArray "Tuple{Symbol, DataType}" (pAsgmt (:-)) <*､> pDMTerm ))
@@ -71,6 +75,11 @@ pDMTerm =
   <|> try ("apply"     `with` (Apply   <$> pDMTerm <*､> pArray "DMTerm" pDMTerm))
   <|> try ("iter"      `with` (Iter    <$> pDMTerm <*､> pDMTerm <*､> pDMTerm))
   <|> try ("flet"      `with` (FLet    <$> pSymbol <*､> pArray "DataType" pJuliaType <*､> pDMTerm <*､> pDMTerm))
+  -- no choice
+  <|> try ("slet"      `with` (SLet    <$> (pAsgmt (:-)) <*､> pDMTerm <*､> pDMTerm))
+  <|> try ("tup"       `with` (Tup     <$> pArray "DMTerm" pDMTerm))
+  <|> try ("tlet"      `with` (TLet    <$> pArray "Tuple{Symbol, DataType}" (pAsgmt (:-)) <*､> pDMTerm <*､> pDMTerm))
+
 
 -- flet(:f, DataType[Any, Any], lam(Tuple{Symbol, DataType}[(:a, Any), (:b, Any)], op(:+, DMTerm[var(:a, Any), op(:+, DMTerm[op(:*, DMTerm[var(:b, Any), var(:b, Any)]), var(:a, Any)])])), var(:f, Any))
 
