@@ -68,9 +68,12 @@ packages:
 ghc-options:
   "$locals": -fwarn-incomplete-patterns
 
-build:
-  library-profiling: true
-  executable-profiling: true
+# ------------------------------
+# only enable for stack traces / profiling (?)
+# build:
+#   library-profiling: true
+#   executable-profiling: true
+#------------------------------
 
 # Dependency packages to be pulled from upstream that are not in the resolver.
 # These entries can reference officially published versions as well as
