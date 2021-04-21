@@ -80,7 +80,7 @@ checkSens (Phi cond ifbr elsebr) scope =
       addConstraint (Solvable (IsSupremum (τ, τif, τelse)))
       return τ
 
-checkSens (Lam (Lam_ xτs body)) scope = do
+checkSens (Lam xτs body) scope = do
 
   -- put a special term to mark x as a function argument. those get special tratment
   -- because we're interested in their sensitivity
@@ -240,8 +240,8 @@ instance (DictKey k) => DictLike k v (H.HashMap k v) where
 substituteScope :: (MonadDMTC t) => Scope Symbol DMTerm -> DMTerm -> t DMTerm
 substituteScope scope term = do
    case term of
-      Lam _ -> return term
-      LamStar _ -> return term
+      Lam _ _ -> return term
+      LamStar _ _ -> return term
       Choice _ -> return term
       Sng _ _ -> return term
 

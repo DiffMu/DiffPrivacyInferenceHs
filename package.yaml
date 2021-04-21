@@ -38,6 +38,8 @@ library:
     - singletons
     - newtype
     - constraints
+    - parsec
+    - parsec3-numbers
     # - computational-algebra
     # - type-natural
     # - algebra

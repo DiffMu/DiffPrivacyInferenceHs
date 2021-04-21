@@ -116,6 +116,8 @@ library
     , lens
     , mtl
     , newtype
+    , parsec
+    , parsec3-numbers
     , singletons
     , text
     , unordered-containers

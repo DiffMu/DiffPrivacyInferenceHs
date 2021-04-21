@@ -40,6 +40,9 @@ packages:
 # drop-packages:
 #   - sized
 
+extra-deps:
+  - parsec3-numbers-0.1.0
+
 # extra-deps:
 # - git: https://github.com/MxmUrw/computational-algebra
 #   commit: 119d14b41aded829ec9c4894d0eaf2a1abf7ba70
