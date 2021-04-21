@@ -9,6 +9,9 @@ copyright:           "2021 Author name here"
 extra-source-files:
 - README.md
 - ChangeLog.md
+- csrc/wrapper.cpp
+- csrc/wrapper.h
+
 
 # Metadata used when publishing your package
 # synopsis:            Short description of your package
@@ -94,6 +97,7 @@ verbatim: |
       base >=4.7 && <5
       , lens == 4.*
       , deepseq == 1.4.*
+      , DiffPrivacyInferenceHs
     hs-source-dirs:      ffisrc
     c-sources:           csrc/wrapper.cpp
     default-language:    Haskell2010

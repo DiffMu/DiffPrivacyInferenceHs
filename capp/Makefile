@@ -37,8 +37,8 @@ ifeq ($(UNAME), Darwin)
 endif
 
 
-run: wrappermain
-	./wrappermain
+run: diffmu-wrapper
+	./diffmu-wrapper
 
 clean:
 	rm -rf *.o *.a *.dSYM *.dylib wrappermain

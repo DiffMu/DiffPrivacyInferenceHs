@@ -51,3 +51,9 @@ void test()
   std::cout << "cleanup" << std::endl;
   freeComplicated(ptr);
 }
+
+void typecheckFromDMTerm(char* input) {
+  typecheckDMTerm_ViaCString(input);
+}
+
+

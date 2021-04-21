@@ -14,11 +14,14 @@ module Wrapper (
 import           Foreign.C.Types
 import           Foreign.Ptr
 import           Foreign.StablePtr
+import           Foreign.C.String
 
 import           Control.DeepSeq
 import           Control.Lens
 import           Data.Int          (Int32)
 import           GHC.Generics      (Generic)
+
+import DiffMu.Runner
 
 foreign import ccall "dynamic" mkFun :: FunPtr (CInt -> CInt) -> (CInt -> CInt)
 
@@ -45,7 +48,7 @@ makeLenses ''Complicated
 
 
 basicWrapper :: IO ()
-basicWrapper = print "wrapper"
+basicWrapper = print "wrapper" >> run
 
 getComplicated :: IO (StablePtr Complicated)
 getComplicated = newStablePtr newComplicated
@@ -78,6 +81,10 @@ setAdder fptr ptr = do
 freeComplicated :: StablePtr Complicated -> IO ()
 freeComplicated = freeStablePtr
 
+typecheckDMTerm_ViaCString :: CString -> IO ()
+typecheckDMTerm_ViaCString str = do
+  str' <- peekCString str
+  putStrLn $ "I got the string: {" <> str' <> "}"
 
 
 foreign export ccall basicWrapper :: IO ()
@@ -86,5 +93,7 @@ foreign export ccall printComplicated :: StablePtr Complicated -> IO ()
 foreign export ccall freeComplicated :: StablePtr Complicated -> IO ()
 foreign export ccall mutateComplicated :: CFloat -> StablePtr Complicated -> IO (StablePtr Complicated)
 foreign export ccall setAdder :: FunPtr (CInt -> CInt) -> StablePtr Complicated -> IO (StablePtr Complicated)
+
+foreign export ccall typecheckDMTerm_ViaCString :: CString -> IO ()
 
 

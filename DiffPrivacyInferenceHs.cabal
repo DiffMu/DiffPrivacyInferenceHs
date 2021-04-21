@@ -18,6 +18,8 @@ build-type:     Simple
 extra-source-files:
     README.md
     ChangeLog.md
+    csrc/wrapper.cpp
+    csrc/wrapper.h
 foreign-library diffmu-wrapper
   type:                native-shared
 
@@ -30,6 +32,7 @@ foreign-library diffmu-wrapper
     base >=4.7 && <5
     , lens == 4.*
     , deepseq == 1.4.*
+    , DiffPrivacyInferenceHs
   hs-source-dirs:      ffisrc
   c-sources:           csrc/wrapper.cpp
   default-language:    Haskell2010
@@ -62,6 +65,7 @@ library
       DiffMu.Prelude.Algebra
       DiffMu.Prelude.MonadicAlgebra
       DiffMu.Prelude.Polynomial
+      DiffMu.Runner
       DiffMu.Typecheck.Operations
       DiffMu.Typecheck.Subtyping
       DiffMu.Typecheck.Typecheck
