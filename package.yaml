@@ -78,6 +78,8 @@ library:
     - OverloadedStrings
     - StandaloneKindSignatures
     - LambdaCase
+    - DisambiguateRecordFields
+    - DuplicateRecordFields
 
 
 

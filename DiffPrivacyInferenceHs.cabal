@@ -85,6 +85,8 @@ library
       OverloadedStrings
       StandaloneKindSignatures
       LambdaCase
+      DisambiguateRecordFields
+      DuplicateRecordFields
   build-depends:
       base >=4.7 && <5
     , bifunctors

@@ -46,7 +46,8 @@ import Prelude as All (not)
 import Prelude as All ((<$>), (<*>), pure, curry, uncurry, (.))
 
 import Prelude as All (Float(..), Rational, Int, Ordering(..), Ord(..), Eq(..))
-import Prelude as All ((-))
+import Data.Ratio as All (numerator, denominator)
+import Prelude as All ((-), fromRational)
 import Prelude as All (Bool(..), String(..), Maybe(..), Either(..), Integer(..), Integral(..))
 import Prelude as All (Functor(..), Applicative(..))
 

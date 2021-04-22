@@ -236,7 +236,7 @@ instance (Typeable j, Typeable r, Typeable v, Typeable (k :: j), KEq v, Eq r, KH
 -- type CPolyM r e v = SingleKinded (LinCom r (MonCom e v))
 
 instance (Show r , Show v) => Show (LinCom r (MonCom Int v)) where
-  show (poly) = showWith " + " (\vars r -> show r <> "*" <> showWith "*" f vars) poly
+  show (poly) = showWith " + " (\vars r -> show r <> "" <> showWith "*" f vars) poly
     where f v 1 = show v
           f v e = show v <> "^" <> show e
 

@@ -14,7 +14,11 @@ data SymVal =
   deriving (Generic, Eq)
 instance Show SymVal where
   show Infty = "∞"
-  show (Fin f) = show f
+  show (Fin f) =
+    let a = numerator f
+        b = denominator f
+    in if b == 1 then show a
+                 else show @Float (fromRational f)
 
 instance Hashable SymVal
 
