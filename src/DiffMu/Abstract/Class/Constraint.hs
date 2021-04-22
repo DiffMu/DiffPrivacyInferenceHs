@@ -43,11 +43,14 @@ instance Show (Solvable isT) where
 
 class (Monad t) => MonadConstraint isT t | t -> isT where
 -- class (IsT isT t) => MonadConstraint v isT t e | t -> isT where
+  type ConstraintBackup t
   addConstraint :: Solvable isT -> t Symbol
   getUnsolvedConstraintMarkNormal :: t (Maybe (Symbol , Solvable isT))
   dischargeConstraint :: Symbol -> t ()
   failConstraint :: Symbol -> t ()
   updateConstraint :: Symbol -> Solvable isT -> t ()
+  clearConstraints :: t (ConstraintBackup t)
+  restoreConstraints :: ConstraintBackup t -> t ()
 
 
 

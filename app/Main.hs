@@ -21,14 +21,15 @@ import Debug.Trace
 
 main :: IO ()
 main = do
+  error "print something"
   putStrLn "Starting DiffMu!"
   let r :: TC DMType
       r = do
 
         -- typecheck the term t5
-        tres <- checkSens t11 def
-        solveAllConstraints SolveExact
-        normalize tres
+        -- tres <- checkSens t11 def
+        -- solveAllConstraints SolveExact
+        -- normalize tres
 
         -- an example of subtyping
         {-
@@ -41,6 +42,12 @@ main = do
         normalizeContext
         normalize aa
         -}
+        -- example of supremum
+        a <- newVar
+        addConstraint (Solvable (IsSupremum (Const oneId DMInt, NonConst DMReal, a)))
+        solveAllConstraints SolveExact
+        normalizeContext
+        normalize (Numeric (a))
 
   let x = runExcept (runStateT (runTCT r) def)
   case x of
