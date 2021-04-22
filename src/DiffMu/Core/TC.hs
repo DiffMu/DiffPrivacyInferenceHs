@@ -98,7 +98,11 @@ class (MonadImpossible (t), MonadWatch (t),
 
 data Tag = DM
 
-data AnnNameCtx ks = AnnNameCtx NameCtx ks
+data AnnNameCtx ks = AnnNameCtx
+  {
+    _annnames :: NameCtx,
+    _anncontent :: ks
+  }
   deriving (Generic)
 -- data DMSolvable where
 --   DMSolvable :: (forall e t. MonadDMTC t => Solve (t) c a) => c a -> DMSolvable
@@ -122,7 +126,24 @@ instance (MonadWatch t, Normalize t a) => Normalize t (Watched a) where
        newc <- getChanged
        return (Watched (c <> newc) a')
 
-type ConstraintCtx = AnnNameCtx (Ctx Symbol (Watched (Solvable MonadDMTC)))
+data CtxStack v a = CtxStack
+  {
+    _topctx :: Ctx v a,
+    _otherctxs :: [Ctx v a]
+  }
+type ConstraintCtx = AnnNameCtx (CtxStack Symbol (Watched (Solvable MonadDMTC)))
+instance DictKey v => DictLike v x (CtxStack v x) where
+  setValue k v (CtxStack d other) = CtxStack (setValue k v d) other
+  getValue k (CtxStack d _) = getValue k d
+  deleteValue k (CtxStack d other) = CtxStack (deleteValue k d) other
+  emptyDict = CtxStack emptyDict []
+instance Normalize t a => Normalize t (CtxStack v a) where
+  normalize (CtxStack top other) = CtxStack <$> normalize top <*> normalize other
+
+instance (Show v, Show a, DictKey v) => Show (CtxStack v a) where
+  show (CtxStack top other) = "   - top:\n" <> show top <> "\n"
+                              <> "   - others:\n" <> show other
+
 -- type ConstraintCtx = AnnNameCtx (Ctx Symbol (Solvable' TC))
 
 instance (MonadWatch t, Normalize t ks) => Normalize t (AnnNameCtx ks) where
@@ -240,6 +261,8 @@ type TC = TCT Identity
 
 -- $(makeLenses ''Meta1Ctx)
 -- $(makeLenses ''Meta0Ctx)
+$(makeLenses ''AnnNameCtx)
+$(makeLenses ''CtxStack)
 $(makeLenses ''MetaCtx)
 $(makeLenses ''Full)
 $(makeLenses ''TCState)
@@ -295,6 +318,8 @@ instance Show (Full) where
 
 -- instance Default (Meta1Ctx) where
 -- instance Default (Meta0Ctx e) where
+instance Default (CtxStack v a) where
+  def = CtxStack def []
 instance Default (Watcher) where
 instance Default (TCState) where
 instance Default (MetaCtx) where
@@ -336,16 +361,16 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
   type ConstraintBackup (TCT m) = (Ctx Symbol (Watched (Solvable MonadDMTC)))
   addConstraint c = meta.constraints %%= (newAnnName "constr" (Watched IsChanged c))
   getUnsolvedConstraintMarkNormal = do
-    (AnnNameCtx _ (Ctx (MonCom constrs))) <- use (meta.constraints)
+    (Ctx (MonCom constrs)) <- use (meta.constraints.anncontent.topctx)
     let constrs2 = H.toList constrs
     let changed = filter (\(a, Watched state constr) -> state == IsChanged) constrs2
     case changed of
       [] -> return Nothing
       ((name,Watched _ constr):_) -> do
-        meta.constraints %= (\(AnnNameCtx names cs) -> AnnNameCtx names (setValue name (Watched NotChanged constr) cs))
+        meta.constraints.anncontent.topctx %= (setValue name (Watched NotChanged constr))
         return (Just (name, constr))
 
-  dischargeConstraint name = meta.constraints %= (\(AnnNameCtx n c) -> AnnNameCtx n (deleteValue name c))
+  dischargeConstraint name = meta.constraints.anncontent.topctx %= (deleteValue name)
   failConstraint name = do
     (AnnNameCtx n cs) <- use (meta.constraints)
     let c = getValue name cs
@@ -354,13 +379,13 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
   updateConstraint name c = do
     meta.constraints %= (\(AnnNameCtx n cs) -> AnnNameCtx n (setValue name (Watched IsChanged c) cs))
 
-  clearConstraints = do
-    (AnnNameCtx ns ctx) <- use (meta.constraints)
-    meta.constraints .= AnnNameCtx ns emptyDict
-    return ctx
-  restoreConstraints ctx1 = do
-    (AnnNameCtx ns _) <- use (meta.constraints)
-    meta.constraints .= AnnNameCtx ns ctx1
+  clearConstraints = undefined
+    -- (AnnNameCtx ns ctx) <- use (meta.constraints)
+    -- meta.constraints .= AnnNameCtx ns emptyDict
+    -- return ctx
+  restoreConstraints ctx1 = undefined --do
+    -- (AnnNameCtx ns _) <- use (meta.constraints)
+    -- meta.constraints .= AnnNameCtx ns ctx1
 
     -- (AnnNameCtx n cs) <- use (meta.constraints)
 

@@ -21,7 +21,6 @@ import Debug.Trace
 
 main :: IO ()
 main = do
-  --error "print something"
   putStrLn "Starting DiffMu!"
   let r :: TC DMType
       r = do
