@@ -103,7 +103,7 @@ checkSens (LamStar (Lam_ xτs body)) scope = do
   τr <- checkPriv body scope'
   xrτs <- getArgList xτs
   mtruncateS (constCoeff Infty)
-  return (xrτs :->: τr)
+  return (xrτs :->*: τr)
 
 
 checkSens (SLet (x :- dτ) term body) scope = do

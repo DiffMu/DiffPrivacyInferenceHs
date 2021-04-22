@@ -42,11 +42,11 @@ main = do
         normalize aa
         -}
         -- example of supremum
-        a <- newVar
-        addConstraint (Solvable (IsSupremum (Const oneId DMInt, NonConst DMReal, a)))
-        solveAllConstraints SolveExact
-        normalizeContext
-        normalize (Numeric (a))
+        -- a <- newVar
+        -- addConstraint (Solvable (IsSupremum (Const oneId DMInt, NonConst DMReal, a)))
+        -- solveAllConstraints SolveExact
+        -- normalizeContext
+        -- normalize (Numeric (a))
 
   let x = runExcept (runStateT (runTCT r) def)
   case x of

@@ -163,7 +163,6 @@ getArgList xτs = do
         case val of
           -- If the symbol was in the context γ, then we get its type and sensitivity
           Just τe -> cast τe
-            --castExtra -- TODO: Cast does not quite work here, because we also have an dmtype inside
           -- if the type hint is DMDUnkown, we just add a typevar. otherwise we can be more specific
           Nothing -> (:@) <$> createDMType τ <*> zero
   xτs' <- mapM f xτs

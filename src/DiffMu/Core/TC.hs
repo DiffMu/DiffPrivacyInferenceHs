@@ -187,10 +187,10 @@ type DMExtra = Cast (Either Sensitivity Privacy)
 
 instance Cast (Either Sensitivity Privacy) Sensitivity where
   cast (Left e) = return e
-  cast (Right e) = internalError "Expected a sensitivity but got a privacy."
+  cast (Right e) = error $ "Expected a sensitivity but got a privacy (" <> show e <> ")."
 
 instance Cast (Either Sensitivity Privacy) Privacy where
-  cast (Left e) = internalError "Expected a privacy but got a sensitivity."
+  cast (Left e) = error $ "Expected a privacy but got a sensitivity (" <> show e <> ")."
   cast (Right e) = return e
 
 instance (Cast (Either a b) x) => Cast (Either (z :& a) (z :& b)) (z :& x) where
