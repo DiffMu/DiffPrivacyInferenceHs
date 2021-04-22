@@ -403,4 +403,10 @@ instance Show DMException where
 data Asgmt a = (:-) Symbol a
   deriving (Generic, Show)
 
+fstA :: Asgmt a -> Symbol
+fstA (x :- τ) = x
+
+sndA :: Asgmt a -> a
+sndA (x :- τ) = τ
+
 

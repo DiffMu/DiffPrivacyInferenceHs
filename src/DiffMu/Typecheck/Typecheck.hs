@@ -222,7 +222,7 @@ popDefinition scope v =
      return (d, H.delete v scope) -- TODO
 
 -- Given a scope, a variable name v , and a DMTerm t, we push t to the list for v.
-pushDefinition :: (MonadDMTC t) => Scope Symbol DMTerm -> Symbol -> DMTerm-> t (Scope Symbol DMTerm)
+pushDefinition :: (MonadDMTC t) => DMScope -> Symbol -> DMTerm-> t DMScope
 pushDefinition scope v term = do
    tt <- substituteScope scope term
    return (H.insert v tt scope)
@@ -237,32 +237,79 @@ instance (DictKey k) => DictLike k v (H.HashMap k v) where
   deleteValue v (h) = (H.delete v h)
   getValue k (h) = h H.!? k
 
-substituteScope :: (MonadDMTC t) => Scope Symbol DMTerm -> DMTerm -> t DMTerm
-substituteScope scope term = do
-   case term of
-      Lam _ -> return term
-      LamStar _ -> return term
-      Choice _ -> return term
-      Sng _ _ -> return term
+substituteScope :: (MonadDMTC t) => DMScope -> DMTerm -> t DMTerm
+substituteScope scope term = let
+      sub = substituteScope scope
+   in do
+      case term of
+         Lam _ -> return term
+         LamStar _ -> return term
+         Choice _ -> return term
+         Sng _ _ -> return term
+         Arg _ _ -> return term
 
-      Var vs τ -> case H.lookup vs scope of
-                        Just t -> return t --TODO what about vt
-                        _ -> throwError (VariableNotInScope vs)
+         Var vs τ -> case H.lookup vs scope of
+                           Just t -> return t --TODO what about vt
+                           _ -> throwError (VariableNotInScope vs)
 
-      Arg vs τ -> case H.lookup vs scope of
-                        Just t -> return t --TODO what about vt
-                        _ -> throwError (ImpossibleError "Arg var term must be in scope.")
+         Ret t -> Ret <$> sub t
+         Op op ts -> Op op <$> (mapM (sub) ts)
+         Phi tc ti te -> Phi <$> (sub tc) <*> (sub ti) <*> (sub te)
+         Apply tf ts -> Apply <$> (sub tf) <*> (mapM (sub) ts)
+         Iter t1 t2 t3 -> Iter <$> (sub t1) <*> (sub t2) <*> (sub t3)
+         FLet fname jτs ft body -> FLet fname jτs <$> (sub ft) <*> (sub body)
+         Tup ts -> Tup <$> (mapM (sub) ts)
 
-      Ret t -> Ret <$> substituteScope scope t
-      Op op ts -> Op op <$> (mapM (substituteScope scope) ts)
-      Phi tc ti te -> Phi <$> (substituteScope scope tc) <*> (substituteScope scope ti) <*> (substituteScope scope te)
-      Apply tf ts -> Apply <$> (substituteScope scope tf) <*> (mapM (substituteScope scope) ts)
-      Iter t1 t2 t3 -> Iter <$> (substituteScope scope t1) <*> (substituteScope scope t2) <*> (substituteScope scope t3)
-      FLet fname jτs ft body -> FLet fname jτs <$> (substituteScope scope ft) <*> (substituteScope scope body)
-      SLet v t body -> SLet v <$> (substituteScope scope t) <*> (substituteScope scope body)
-      Tup ts -> Tup <$> (mapM (substituteScope scope) ts)
-      TLet vs t body -> TLet vs <$> (substituteScope scope t) <*> (substituteScope scope body)
+         SLet v t body -> let vname = fstA v in
+                              case H.member vname scope of -- does v exist in scope already?
+                                 True -> do -- if so:
+                                    newname <- uniqueName vname -- create a new name for v
+                                    -- rename all occurances of v in the body with newname before substituting.
+                                    SLet (newname :- (sndA v)) <$> (sub t) <*> (sub (rename vname newname body))
+                                 False -> SLet v <$> (sub t) <*> (sub body) -- else just substitute ahead.
+         TLet vs t body ->  case any (\v -> H.member (fstA v) scope) vs of -- is one of the assignees in scope?
+                                 True -> do -- if so:
+                                            let k = intersect (map fstA vs) (H.keys scope) -- get the names of all of them
+                                            newvs <- mapM uniqueName k -- create a new name for each
+                                            -- rename all occurances of all names in k in the body into their respective new names.
+                                            let newbody = foldl (\b -> \(v, newv) -> rename v newv b) body (zip k newvs)
+                                            TLet vs <$> (sub t) <*> (sub newbody) -- then substitute.
+                                 False -> TLet vs <$> (sub t) <*> (sub body)
 
 
+uniqueName :: (MonadDMTC t) => Symbol -> t Symbol
+uniqueName s = return (Symbol "unique") -- TODO do this properly
 
+rename :: Symbol -> Symbol -> DMTerm -> DMTerm
+rename olds news term =
+   let re = rename olds news in
+      case term of
+         Sng _ _ -> term
+         Arg _ _ -> term
 
+         Var s τ -> if s == olds
+            then Var news τ -- variable sold gets renamed.
+            else term
+
+         Ret t -> re t
+         Op op ts -> Op op (re <$> ts)
+         Phi tc ti te -> Phi (re tc) (re tc) (re tc)
+         FLet fname jτs ft body -> FLet fname jτs (re ft) (re body)
+         Choice cs -> Choice (H.map re cs)
+         Apply t ts -> Apply (re t) (re <$> ts)
+         Iter t1 t2 t3 -> Iter (re t1) (re t2) (re t3)
+         Tup ts -> Tup (re <$> ts)
+
+         Lam (Lam_ xτs body) -> case olds `elem` (map fstA xτs) of
+                                     True -> term -- we don't rename the function argument variable.
+                                     False -> Lam (Lam_ xτs (re body))
+         LamStar (Lam_ xτs body) -> case olds `elem` (map fstA xτs) of
+                                     True -> term -- we don't rename the function argument variable.
+                                     False -> LamStar (Lam_ xτs (re body))
+
+         SLet s r body -> if (fstA s) == olds
+                             then SLet s (re r) body -- don't rename in the body if this slet overwrites olds
+                             else SLet s (re r) (re body)
+         TLet vs t body -> case olds `elem` (map fstA vs) of
+                                True -> TLet vs (re t) body
+                                False -> TLet vs (re t) (re body)
