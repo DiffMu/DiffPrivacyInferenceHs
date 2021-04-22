@@ -28,3 +28,8 @@ t10 = Lam (Lam_ [Symbol "x" :- (JTNum JTNumInt), Symbol "y" :- JTAny] (Phi (t₃
 
 vz = Var (Symbol "z") JTAny
 t11 = SLet (Symbol "z" :- JTAny) (Sng 1 JTNumInt) (SLet (Symbol "z" :- JTAny) (t₅ (Sng 1 JTNumInt) vz) (SLet (Symbol "z" :- JTAny) (t₅ (Sng 2 JTNumInt) vz) vz))
+
+t12 = LamStar (Lam_ [Symbol "x" :- (JTNum JTNumInt), Symbol "y" :- JTAny] (Ret (Phi (t₃ "x") t₂ (t₃ "y"))))
+
+t13 = Ret (Phi (t₃ "x") t₂ (t₃ "y"))
+

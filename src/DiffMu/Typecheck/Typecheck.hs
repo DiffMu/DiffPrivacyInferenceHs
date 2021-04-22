@@ -67,6 +67,7 @@ checkSens (Op op args) scope =
     -- We return the `res` type given by `makeTypeOp`
     return (Numeric res)
 
+
 checkSens (Phi cond ifbr elsebr) scope =
    let mcond = do
         τ_cond <- checkSens cond scope
@@ -81,6 +82,7 @@ checkSens (Phi cond ifbr elsebr) scope =
       addConstraint (Solvable (IsSupremum (τ, τif, τelse)))
       return τ
 
+
 checkSens (Lam (Lam_ xτs body)) scope = do
 
   -- put a special term to mark x as a function argument. those get special tratment
@@ -90,6 +92,19 @@ checkSens (Lam (Lam_ xτs body)) scope = do
   τr <- checkSens body scope'
   xrτs <- getArgList xτs
   return (xrτs :->: τr)
+
+
+checkSens (LamStar (Lam_ xτs body)) scope = do
+
+  -- put a special term to mark x as a function argument. those get special tratment
+  -- because we're interested in their sensitivity
+  let scope' = mconcat ((\(x :- τ) -> setValue x (Arg x τ)) <$> xτs) scope
+
+  τr <- checkPriv body scope'
+  xrτs <- getArgList xτs
+  mtruncateS (constCoeff Infty)
+  return (xrτs :->: τr)
+
 
 checkSens (SLet (x :- dτ) term body) scope = do
 
@@ -174,10 +189,9 @@ checkSens t scope = throwError (UnsupportedTermError t)
 checkPriv :: DMTerm -> DMScope -> TC DMType
 
 checkPriv (Ret t) scope = do
-   throwError (ImpossibleError "?!")
---   τ <- checkSens t scope
---   _ <- truncate(∞)
---   return τ -- TODO truncate to inf
+   τ <- checkSens t scope
+   mtruncateP (constCoeff Infty, constCoeff Infty)
+   return τ
 
 checkPriv (SLet (x :- dτ) term body) scope =
   -- push x to scope, check body, and discard x from the result context.
@@ -200,6 +214,6 @@ checkPriv (SLet (x :- dτ) term body) scope =
 
      return res
 
-checkPriv t scope = checkPriv (Ret t) scope
+checkPriv t scope = checkPriv (Ret t) scope -- secretly return if the term has the wrong color.
 
 

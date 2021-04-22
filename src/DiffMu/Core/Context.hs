@@ -56,6 +56,14 @@ truncateP :: Privacy -> TypeCtxSP -> TypeCtxSP
 truncateP η (Left γ) = Right (truncate_impl η γ)
 truncateP η (Right γ) = Right (truncate_impl η γ)
 
+-- Truncates the current type context living in our typechecking-state monad by a given Sensitivity `η`.
+mtruncateS :: MonadDMTC t => Sensitivity -> t ()
+mtruncateS η = types %= truncateS η
+
+-- Truncates the current type context living in our typechecking-state monad by a given Privacy `η`.
+mtruncateP :: MonadDMTC t => Privacy -> t ()
+mtruncateP η = types %= truncateP η
+
 instance (MonadInternalError t, SemigroupM t a, SemigroupM t b) => SemigroupM t (Either a b) where
   (⋆) (Left a) (Left b) = Left <$> (a ⋆ b)
   (⋆) (Right a) (Right b) = Right <$> (a ⋆ b)

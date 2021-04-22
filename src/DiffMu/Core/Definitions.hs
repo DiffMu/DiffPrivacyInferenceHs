@@ -108,6 +108,9 @@ data DMTypeOf (k :: DMKind) where
   -- the arrow type
   (:->:) :: [DMType :& Sensitivity] -> DMType -> DMType
 
+  -- the privacy-arrow type
+  (:->*:) :: [DMType :& Privacy] -> DMType -> DMType
+
   -- tuples
   DMTup :: [DMType] -> DMType
 
@@ -121,6 +124,7 @@ instance Show (DMTypeOf k) where
   show (Numeric t) = "Num(" <> show t <> ")"
   show (TVar t) = show t
   show (a :->: b) = show a <> " -> " <> show b
+  show (a :->*: b) = show a <> " ->* " <> show b
   show (DMTup ts) = "Tupl(" <> show ts <> ")"
 
 
@@ -392,6 +396,7 @@ instance Show DMException where
   show (WrongNumberOfArgs a b) = "While unifying: the terms '" <> show a <> "' and '" <> show b <> "' have different numbers of arguments"
   show (WrongNumberOfArgsOp op n) = "The operation " <> show op <> " was given a wrong number (" <> show n <> ") of args."
   show (ImpossibleError e) = "Something impossible happened: " <> show e
+  show (InternalError e) = "Internal error: " <> show e
   show (VariableNotInScope v) = "Variable not in scope: " <> show v
   show (UnsatisfiableConstraint c) = "The constraint " <> c <> " is not satisfiable."
 
