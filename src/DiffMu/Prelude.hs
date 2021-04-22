@@ -29,7 +29,7 @@ import DiffMu.Prelude.MonadicAlgebra as All
 import qualified Prelude (String)
 import Data.Text as T
 newtype Symbol = Symbol Text
-  deriving (Eq,Ord,Hashable)
+  deriving (Eq,Ord,Hashable,Semigroup,Monoid)
 
 class FromSymbol (v :: j -> *) where
   fromSymbol :: Symbol -> v k
