@@ -23,6 +23,9 @@ instance Substitute v x a => Substitute v x [a] where
 instance Substitute TVarOf DMTypeOf Sensitivity where
   substitute σs η = pure η
 
+--instance Substitute TVarOf DMTypeOf Privacy where
+--  substitute σs η = pure η
+
 instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs DMInt = pure DMInt
   substitute σs DMReal = pure DMReal
@@ -65,6 +68,8 @@ instance Substitute SVarOf SensitivityOf (SensitivityOf k) where
           f (HonestVar a) = σs (a)
           f b = pure $ var (b)
 
+instance (Substitute v a x, Substitute v a y) => Substitute v a (x,y) where
+  substitute σs (x,y) = (,) <$> substitute σs x <*> substitute σs y
 
 instance Term SVarOf SensitivityOf where
   var (v) = var (HonestVar v)
