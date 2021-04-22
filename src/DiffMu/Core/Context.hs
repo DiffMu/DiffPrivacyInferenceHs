@@ -37,14 +37,24 @@ instance Default Sensitivity where
 instance Default Privacy where
   def = (def,def)
 
-truncate :: forall f e. (CMonoidM Identity f, CMonoidM Identity e, Eq e) => f -> TypeCtx e -> TypeCtx f
-truncate η γ = truncate_annotation <$> γ
+instance (CMonoidM t a, CMonoidM t b) => CMonoidM t (a,b)
+
+truncate_impl :: forall f e. (CMonoidM Identity f, CMonoidM Identity e, Eq e) => f -> TypeCtx e -> TypeCtx f
+truncate_impl η γ = truncate_annotation <$> γ
    where
       truncate_annotation :: (DMType :& e) -> (DMType :& f)
       truncate_annotation (τ :@ annotation) =
         (case annotation == zeroId of
             True -> τ :@ zeroId
             _    -> τ :@ η)
+
+truncateS :: Sensitivity -> TypeCtxSP -> TypeCtxSP
+truncateS η (Left γ) = Left (truncate_impl η γ)
+truncateS η (Right γ) = Left (truncate_impl η γ)
+
+truncateP :: Privacy -> TypeCtxSP -> TypeCtxSP
+truncateP η (Left γ) = Right (truncate_impl η γ)
+truncateP η (Right γ) = Right (truncate_impl η γ)
 
 instance (MonadInternalError t, SemigroupM t a, SemigroupM t b) => SemigroupM t (Either a b) where
   (⋆) (Left a) (Left b) = Left <$> (a ⋆ b)
