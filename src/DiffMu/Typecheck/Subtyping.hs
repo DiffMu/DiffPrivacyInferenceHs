@@ -98,7 +98,7 @@ subtypingGraph =
 
 -- The actual solving is done here.
 -- this simply uses the `findPathM` function from Abstract.Computation.MonadicGraph
-solveSubtyping :: forall t e k. (SingI k, Typeable k, IsT MonadDMTC t) => Symbol -> (DMTypeOf k, DMTypeOf k) -> t ()
+solveSubtyping :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => Symbol -> (DMTypeOf k, DMTypeOf k) -> t ()
 solveSubtyping name path = do
   -- Here we define which errors should be caught while doing our hypothetical computation.
   let relevance (UnificationError _ _)      = IsGraphRelevant
@@ -106,7 +106,7 @@ solveSubtyping name path = do
       relevance _                           = NotGraphRelevant
 
   -- traceM $ "Starting subtyping solving of " <> show path
-  let graph = subtypingGraph @e @t
+  let graph = subtypingGraph @t
   -- traceM $ "I have " <> show (length (graph (IsReflexive NotStructural))) <> " candidates."
 
   -- Executing the computation
@@ -128,8 +128,38 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsLessEqual (DMTypeOf k, DMTyp
   solve_ Dict _ name (IsLessEqual (a,b)) = solveSubtyping name (a,b)
 
 
--- TODO: Solving of `IsSupremum` constraints is currently not implemented.
-instance Solve MonadDMTC IsSupremum (DMTypeOf k, DMTypeOf k, DMTypeOf k) where
-  solve_ Dict _ _ a = pure () -- undefined
+
+------------------------------------------------------------
+-- Solve supremum
+
+-- The actual solving is done here.
+-- this simply uses the `findSupremumM` function from Abstract.Computation.MonadicGraph
+solveSupremum :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => Symbol -> (DMTypeOf k, DMTypeOf k, DMTypeOf k) -> t ()
+solveSupremum name (a,b,x) = do
+  -- Here we define which errors should be caught while doing our hypothetical computation.
+  let relevance (UnificationError _ _)      = IsGraphRelevant
+      relevance (UnsatisfiableConstraint _) = IsGraphRelevant
+      relevance _                           = NotGraphRelevant
+
+  -- traceM $ "Starting subtyping solving of " <> show path
+  let graph = subtypingGraph @t
+  -- traceM $ "I have " <> show (length (graph (IsReflexive NotStructural))) <> " candidates."
+
+  -- Executing the computation
+  res <- findSupremumM @(Full) @_ @DMException relevance (GraphM graph) (a,b,x)
+
+  -- We look at the result and if necessary throw errors.
+  case res of
+    Finished a -> dischargeConstraint @MonadDMTC name
+    Partial a  -> updateConstraint name (Solvable (IsSupremum a))
+    Wait       -> return ()
+    Fail e     -> throwError (UnsatisfiableConstraint ("sup(" <> show (a) <> ", " <> show b <> ") = " <> show x <> "\n\n"
+                         <> "Got the following errors while search the subtyping graph:\n"
+                         <> show e))
+
+
+-- TODO: Check whether this does the correct thing.
+instance (SingI k, Typeable k) => Solve MonadDMTC IsSupremum (DMTypeOf k, DMTypeOf k, DMTypeOf k) where
+  solve_ Dict _ name (IsSupremum a) = solveSupremum name a
 
 

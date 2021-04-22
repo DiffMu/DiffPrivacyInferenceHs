@@ -63,6 +63,7 @@ class DictKey k => DictLike k v d | d -> k v where
   setValue :: k -> v -> d -> d
   getValue :: k -> d -> Maybe v
   deleteValue :: k -> d -> d
+  emptyDict :: d
 
 class ShowDict k v d | d -> k v where
   showWith :: String -> (k -> v -> String) -> d -> String
@@ -71,6 +72,7 @@ instance (DictKey k) => DictLike k v (MonCom v k) where
   setValue v m (MonCom h) = MonCom (H.insert v m h)
   deleteValue v (MonCom h) = MonCom (H.delete v h)
   getValue k (MonCom h) = h H.!? k
+  emptyDict = MonCom H.empty
 
 instance ShowDict k v (MonCom v k) where
   showWith comma merge (MonCom d) =

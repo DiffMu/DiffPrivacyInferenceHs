@@ -328,6 +328,7 @@ instance Monad m => MonadTerm SensitivityOf (TCT m) where
 -- getUnsolved = undefined
 
 instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
+  type ConstraintBackup (TCT m) = (Ctx Symbol (Watched (Solvable MonadDMTC)))
   addConstraint c = meta.constraints %%= (newAnnName "constr" (Watched IsChanged c))
   getUnsolvedConstraintMarkNormal = do
     (AnnNameCtx _ (Ctx (MonCom constrs))) <- use (meta.constraints)
@@ -347,6 +348,14 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
 
   updateConstraint name c = do
     meta.constraints %= (\(AnnNameCtx n cs) -> AnnNameCtx n (setValue name (Watched IsChanged c) cs))
+
+  clearConstraints = do
+    (AnnNameCtx ns ctx) <- use (meta.constraints)
+    meta.constraints .= AnnNameCtx ns emptyDict
+    return ctx
+  restoreConstraints ctx1 = do
+    (AnnNameCtx ns _) <- use (meta.constraints)
+    meta.constraints .= AnnNameCtx ns ctx1
 
     -- (AnnNameCtx n cs) <- use (meta.constraints)
 

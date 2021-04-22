@@ -144,6 +144,12 @@ solveAllConstraints mode = do
       solveAllConstraints mode
 
 
+-- solvingAllNewConstraints :: (IsT MonadDMTC t) => t a -> t ()
+-- solvingAllNewConstraints f = do
+--   backup <- clearConstraints
+--   res <- f
+--   restoreConstraints backup
+
 -- Look up the types and sensitivities/privacies of the variables in `xτs` from the current context.
 -- If a variable is not present in Σ (this means it was not used in the lambda body),
 -- create a new type/typevar according to type hint given in `xτs` and give it zero annotation

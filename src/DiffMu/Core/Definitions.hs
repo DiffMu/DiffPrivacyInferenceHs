@@ -400,7 +400,7 @@ instance Show DMException where
   show (VariableNotInScope v) = "Variable not in scope: " <> show v
   show (UnsatisfiableConstraint c) = "The constraint " <> c <> " is not satisfiable."
 
-
+-- instance Exception DMException where
 
 --------------------------------------------------------------------------
 -- Other ...

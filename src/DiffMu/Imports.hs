@@ -13,6 +13,7 @@ import Control.Monad.Writer as All hiding (getLast, getFirst, Last, First)
 import Control.Monad.Identity as All
 import Control.Monad.Trans as All
 import Control.Monad as All
+import Control.Exception as All
 
 import Control.Lens as All hiding (Const)
 import Control.Lens.TH as All
@@ -41,6 +42,7 @@ import Data.Hashable as All
 
 import qualified Prelude
 
+import Prelude as All (error)
 import Prelude as All (Show(..), IO, putStrLn, undefined, otherwise, fst, snd, ($))
 import Prelude as All (not)
 import Prelude as All ((<$>), (<*>), pure, curry, uncurry, (.))
