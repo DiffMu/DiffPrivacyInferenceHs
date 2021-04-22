@@ -278,7 +278,7 @@ substituteScope scope term = let
 
 
 uniqueName :: (MonadDMTC t) => Symbol -> t Symbol
-uniqueName s = return (Symbol "unique") -- TODO do this properly
+uniqueName s = return (s <> (Symbol "_unique")) -- TODO do this properly
 
 rename :: Symbol -> Symbol -> DMTerm -> DMTerm
 rename olds news term =

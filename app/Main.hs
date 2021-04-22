@@ -26,7 +26,7 @@ main = do
       r = do
 
         -- typecheck the term t5
-        tres <- checkSens t9 def
+        tres <- checkSens t11 def
         solveAllConstraints SolveExact
         normalize tres
 

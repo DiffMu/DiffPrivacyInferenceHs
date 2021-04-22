@@ -25,3 +25,6 @@ t8 = FLet (Symbol "f") [JTNum JTNumInt, JTAny] t₇ (FLet (Symbol "f") [JTNum JT
 t9 = Apply t8 [t₂, t₂]
 
 t10 = Lam (Lam_ [Symbol "x" :- (JTNum JTNumInt), Symbol "y" :- JTAny] (Phi (t₃ "x") t₂ (t₃ "y")))
+
+vz = Var (Symbol "z") JTAny
+t11 = SLet (Symbol "z" :- JTAny) (Sng 1 JTNumInt) (SLet (Symbol "z" :- JTAny) (t₅ (Sng 1 JTNumInt) vz) (SLet (Symbol "z" :- JTAny) (t₅ (Sng 2 JTNumInt) vz) vz))
