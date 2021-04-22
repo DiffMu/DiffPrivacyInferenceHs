@@ -14,6 +14,23 @@ import qualified Data.HashMap.Strict as H
 
 import Debug.Trace
 
+-- Helper function for using a monadic function to update the state of a "by a lens accessible"
+-- value in a state monad. Such an operator does not seem to be defined in the "lenses" library.
+-- This might be because using it is not always well behaved, the following note applies.
+--
+-- NOTE: Warning, this function destroys information if the function `f` which does the update
+-- has monadic effects in m which affect the part of the state which is accessed by the lens.
+(%=~) :: MonadState s m => (forall f. Functor f => LensLike f s s a a) -> (a -> m a) -> m ()
+(%=~) lens f = do
+  curVal <- use lens
+  newVal <- f curVal
+  lens .= newVal
+  return ()
+
+infixr 4 %=~
+
+
+
 instance (Substitute v x a, Substitute v x b) => Substitute v x (a :& b) where
   substitute σs (a :@ b) = (:@) <$> substitute σs a <*> substitute σs b
 
@@ -92,7 +109,8 @@ class (MonadImpossible (t), MonadWatch (t),
        MonadInternalError t,
        -- MonadConstraint' Symbol (TC) (t),
        -- MonadConstraint Symbol (MonadDMTC) (t),
-       MonadConstraint (MonadDMTC) (t)
+       MonadConstraint (MonadDMTC) (t),
+       MonadNormalize t
        -- LiftTC t
       ) => MonadDMTC t where
 
@@ -332,7 +350,22 @@ instance Default (Full) where
 -- type TC extra = StateT (Full extra) (Except DMException)
 -- newtype TC extra a = TC {runTC :: (StateT (Full extra) (Except DMException) a)}
 --   deriving (Functor, Applicative, Monad, MonadState (Full extra), MonadError DMException)
+instance (SemigroupM t a) => SemigroupM t (Watched a) where
+  (⋆) (Watched x a) (Watched y b) = Watched (x <> y) <$> a ⋆ b
 
+instance (MonoidM t a) => MonoidM t (Watched a) where
+  neutral = Watched NotChanged <$> neutral
+-- instance MonadInternalError t => MonoidM t (Watched a) where
+
+instance (CheckNeutral t a) => CheckNeutral t (Watched a) where
+  checkNeutral a = pure False
+
+instance Monad t => (SemigroupM t (Solvable a)) where
+  (⋆) (Solvable a) (Solvable b) = error "Trying to combine two constraints with the same name."
+instance Monad t => (MonoidM t (Solvable a)) where
+  neutral = error "Trying to get neutral of solvable"
+instance Monad t => (CheckNeutral t (Solvable a)) where
+  checkNeutral a = pure False
 
 
 instance Monad m => MonadTerm DMTypeOf (TCT m) where
@@ -342,6 +375,7 @@ instance Monad m => MonadTerm DMTypeOf (TCT m) where
     σs <- use (meta.typeSubs)
     σs' <- σs ⋆ singletonSub σ
     meta.typeSubs .= σs'
+    meta.typeVars %= (removeNameBySubstitution σ)
   newVar = TVar <$> newTVar "τ"
 
 instance Monad m => MonadTerm SensitivityOf (TCT m) where
@@ -352,6 +386,7 @@ instance Monad m => MonadTerm SensitivityOf (TCT m) where
     traceM ("I have the subs " <> show σs <> ", and I want to add: " <> show σ)
     σs' <- σs ⋆ singletonSub σ
     meta.sensSubs .= σs'
+    meta.sensVars %= (removeNameBySubstitution σ)
   newVar = coerce <$> svar <$> newSVar "τ"
 
 -- getUnsolved :: MonCom (Solvable' TC) Symbol -> Maybe (Symbol, Solvable' TC)
@@ -379,11 +414,50 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
   updateConstraint name c = do
     meta.constraints %= (\(AnnNameCtx n cs) -> AnnNameCtx n (setValue name (Watched IsChanged c) cs))
 
-  clearConstraints = undefined
-    -- (AnnNameCtx ns ctx) <- use (meta.constraints)
-    -- meta.constraints .= AnnNameCtx ns emptyDict
-    -- return ctx
-  restoreConstraints ctx1 = undefined --do
+  openNewConstraintSet = do
+    (CtxStack top other) <- use (meta.constraints.anncontent)
+    meta.constraints.anncontent .= (CtxStack emptyDict (top:other))
+    return ()
+
+  mergeTopConstraintSet = do
+    (CtxStack (Ctx (MonCom top)) other) <- use (meta.constraints.anncontent)
+    case other of
+      ((Ctx o):os) -> case null top of
+        False -> do
+          o' <- MonCom top ⋆ o
+          meta.constraints.anncontent .= (CtxStack (Ctx o') os)
+          return ConstraintSet_WasNotEmpty
+        True -> do
+          meta.constraints.anncontent .= (CtxStack (Ctx o) os)
+          return ConstraintSet_WasEmpty
+      [] -> error "Trying to merge top constraint set, but there are non in the stack."
+
+  getConstraintsByType (Proxy :: Proxy (c a)) = do
+    (Ctx (MonCom cs)) <- use (meta.constraints.anncontent.topctx)
+    let f :: (Watched (Solvable MonadDMTC)) -> Maybe (c a)
+        f (Watched _ (Solvable (c :: c' a'))) = case testEquality (typeRep @(c a)) (typeRep @(c' a')) of
+          Just Refl -> Just c
+          Nothing -> Nothing
+
+    let cs' = H.toList cs
+        cs'' = second f <$> cs'
+    return [(name,c) | (name, Just c) <- cs'' ]
+
+  tracePrintConstraints = do
+    ctrs <- use (meta.constraints.anncontent)
+    traceM $ "## Constraints ##"
+    traceM $ show ctrs
+    traceM $ "## ----------- ##"
+
+    -- case null top of
+    --   True  -> 
+    --   False -> return Failure_WasNotEmpty
+
+  -- clearConstraints = undefined
+  --   -- (AnnNameCtx ns ctx) <- use (meta.constraints)
+  --   -- meta.constraints .= AnnNameCtx ns emptyDict
+  --   -- return ctx
+  -- restoreConstraints ctx1 = undefined --do
     -- (AnnNameCtx ns _) <- use (meta.constraints)
     -- meta.constraints .= AnnNameCtx ns ctx1
 
@@ -433,6 +507,14 @@ instance Monad m => MonadWatch (TCT m) where
 -- supremum :: forall isT t a k. (Normalize (t) (a k), IsT isT t, MonadTerm a (t), MonadConstraint isT (t), Solve isT IsSupremum (a k, a k, a k)) => (a k) -> (a k) -> t (a k)
 
 
+
+
+
+
+
+
+
+
 supremum :: (IsT isT t, HasNormalize isT (a k, a k, a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsSupremum (a k, a k, a k), SingI k, Typeable k) => (a k) -> (a k) -> t (a k)
 supremum x y = do
   (z :: a k) <- newVar
@@ -440,6 +522,20 @@ supremum x y = do
   return z
 instance Monad m => MonadInternalError (TCT m) where
   internalError = throwError . InternalError
+
+
+
+
+-- Normalizes all contexts in our typechecking monad, i.e., applies all available substitutions.
+normalizeContext :: (MonadDMTC t) => t ()
+normalizeContext = do
+  types %=~ normalize
+  meta.constraints %=~ normalize
+
+
+
+instance Monad m => MonadNormalize (TCT m) where
+  normalizeState = normalizeContext
 
 -- instance MonadDMTC e (TC) where
 instance Monad m => MonadDMTC (TCT m) where
@@ -515,10 +611,10 @@ instance Monad m => IsT MonadDMTC (TCT m) where
 
 
 
-newTVar :: forall k e t. (MonadDMTC t, SingI k) => Text -> t (TVarOf k)
+newTVar :: forall k e t. (MonadDMTC t, SingI k, Typeable k) => Text -> t (TVarOf k)
 newTVar hint = meta.typeVars %%= ((newKindedName hint))
 
-newSVar :: forall k e t. (SingI k, MonadDMTC t) => Text -> t (SVarOf k)
+newSVar :: forall k e t. (SingI k, MonadDMTC t, Typeable k) => Text -> t (SVarOf k)
 newSVar hint = meta.sensVars %%= (newKindedName hint)
 
   -- where f names = let (τ , names') = newName hint names

@@ -8,8 +8,10 @@ import DiffMu.Prelude
 import DiffMu.Abstract.Class.IsT
 import DiffMu.Abstract.Class.Term
 -- import DiffMu.Abstract.Class.MonadTerm
+import Debug.Trace
 
 data SolvingMode = SolveExact | SolveAssumeWorst
+
 
 class TCConstraint c where
   constr :: a -> c a
@@ -21,10 +23,11 @@ class TCConstraint c where
 class TCConstraint c => Solve (isT :: (* -> *) -> Constraint) c a where
   solve_ :: Dict ((IsT isT t)) -> SolvingMode -> Symbol -> c a -> t ()
 
-
+class MonadNormalize t where
+  normalizeState :: t ()
 
 data Solvable isT where
-  Solvable :: (Solve isT c a, (HasNormalize isT a), Show (c a)) => c a -> Solvable isT
+  Solvable :: (Solve isT c a, (HasNormalize isT a), Show (c a), Typeable c, Typeable a) => c a -> Solvable isT
 
 -- solve' :: (Solve isT c a, IsT isT t, Normalize (t) a) => c a -> t ()
 solve :: (Monad (t), IsT isT t) => SolvingMode -> Symbol -> (Solvable isT) -> t ()
@@ -39,7 +42,7 @@ instance (isT t, Monad (t)) => Normalize (t) (Solvable isT) where
 instance Show (Solvable isT) where
   show (Solvable c) = show c
 
-
+data CloseConstraintSetResult = ConstraintSet_WasEmpty | ConstraintSet_WasNotEmpty
 
 class (Monad t) => MonadConstraint isT t | t -> isT where
 -- class (IsT isT t) => MonadConstraint v isT t e | t -> isT where
@@ -49,8 +52,12 @@ class (Monad t) => MonadConstraint isT t | t -> isT where
   dischargeConstraint :: Symbol -> t ()
   failConstraint :: Symbol -> t ()
   updateConstraint :: Symbol -> Solvable isT -> t ()
-  clearConstraints :: t (ConstraintBackup t)
-  restoreConstraints :: ConstraintBackup t -> t ()
+  openNewConstraintSet :: t ()
+  mergeTopConstraintSet :: t CloseConstraintSetResult
+  tracePrintConstraints :: t ()
+  getConstraintsByType :: (Typeable c, Typeable a) => Proxy (c a) -> t [(Symbol, c a)]
+  -- clearConstraints :: t (ConstraintBackup t)
+  -- restoreConstraints :: ConstraintBackup t -> t ()
 
 
 
@@ -84,4 +91,42 @@ newtype IsChoice a = IsChoice a deriving Show
 instance TCConstraint IsChoice where
   constr = IsChoice
   runConstr (IsChoice c) = c
+
+
+----------------------------------------------------------
+-- functions for Constraint
+
+
+-- Iterates over all constraints which are currently in a "changed" state, and tries to solve them.
+-- Returns if no "changed" constraints remains.
+-- An unchanged constraint is marked "changed", if it is affected by a new substitution.
+-- A changed constraint is marked "unchanged" if it is read by a call to `getUnsolvedConstraintMarkNormal`.
+solveAllConstraints :: forall isT t. (MonadConstraint isT t, MonadNormalize t, IsT isT t) => SolvingMode -> t ()
+solveAllConstraints mode = do
+  normalizeState
+  openConstr <- getUnsolvedConstraintMarkNormal
+
+  case openConstr of
+    Nothing -> return ()
+    Just (name, (constr)) -> do
+      traceM $ "[Solver]: currently solving " <> show name <> " : " <> show constr
+      solve mode name constr
+      solveAllConstraints mode
+
+solvingAllNewConstraints :: (MonadConstraint isT t, MonadNormalize t, IsT isT t) => SolvingMode -> t a -> t (CloseConstraintSetResult, a)
+solvingAllNewConstraints mode f = do
+  traceM ""
+  traceM "============ BEGIN solve all new constraints >>>>>>>>>>>>>>>>"
+  openNewConstraintSet
+  tracePrintConstraints
+  res <- f
+  solveAllConstraints mode
+  traceM "============ AFTER solving all new constraints >>>>>>>>>>>>>>>>"
+  tracePrintConstraints
+  closeRes <- mergeTopConstraintSet
+  traceM "============ AFTER merging constraint sets >>>>>>>>>>>>>>>>"
+  tracePrintConstraints
+  traceM "============ END solve all new constraints <<<<<<<<<<<<<<<<"
+  return (closeRes, res)
+
 

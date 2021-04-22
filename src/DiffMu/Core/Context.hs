@@ -97,58 +97,11 @@ msum ms = do
         return (a : as)
 
 
--- Helper function for using a monadic function to update the state of a "by a lens accessible"
--- value in a state monad. Such an operator does not seem to be defined in the "lenses" library.
--- This might be because using it is not always well behaved, the following note applies.
---
--- NOTE: Warning, this function destroys information if the function `f` which does the update
--- has monadic effects in m which affect the part of the state which is accessed by the lens.
-(%=~) :: MonadState s m => (forall f. Functor f => LensLike f s s a a) -> (a -> m a) -> m ()
-(%=~) lens f = do
-  curVal <- use lens
-  newVal <- f curVal
-  lens .= newVal
-  return ()
-
-infixr 4 %=~
-
 setVar :: MonadDMTC t => Symbol -> DMType :& Sensitivity -> t ()
 setVar k v = types %=~ setValueM k (Left v :: Either (DMType :& Sensitivity) (DMType :& Privacy))
 
 
--- Normalizes all contexts in our typechecking monad, i.e., applies all available substitutions.
-normalizeContext :: (MonadDMTC t) => t ()
-normalizeContext = do
-  types %=~ normalize
-  meta.constraints %=~ normalize
 
-
--- Iterates over all constraints which are currently in a "changed" state, and tries to solve them.
--- Returns if no "changed" constraints remains.
--- An unchanged constraint is marked "changed", if it is affected by a new substitution.
--- A changed constraint is marked "unchanged" if it is read by a call to `getUnsolvedConstraintMarkNormal`.
-solveAllConstraints :: forall t. (IsT MonadDMTC t) => SolvingMode -> t ()
-solveAllConstraints mode = do
-  normalizeContext
-  openConstr <- getUnsolvedConstraintMarkNormal
-
-  --
-  ctx <- use (meta .constraints)
-  traceM ("Solving constraints. I have: " <> show ctx <> ".\n Currently looking at: " <> show (fst <$> openConstr))
-  --
-
-  case openConstr of
-    Nothing -> return ()
-    Just (name, (constr)) -> do
-      solve mode name constr
-      solveAllConstraints mode
-
-
--- solvingAllNewConstraints :: (IsT MonadDMTC t) => t a -> t ()
--- solvingAllNewConstraints f = do
---   backup <- clearConstraints
---   res <- f
---   restoreConstraints backup
 
 -- Look up the types and sensitivities/privacies of the variables in `xτs` from the current context.
 -- If a variable is not present in Σ (this means it was not used in the lambda body),

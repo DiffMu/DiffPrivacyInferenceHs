@@ -43,7 +43,7 @@ main = do
         -}
         -- example of supremum
         -- a <- newVar
-        -- addConstraint (Solvable (IsSupremum (Const oneId DMInt, NonConst DMReal, a)))
+        -- addConstraint (Solvable (IsSupremum (Const oneId DMInt, Const (oneId ⋆! oneId) DMReal, a)))
         -- solveAllConstraints SolveExact
         -- normalizeContext
         -- normalize (Numeric (a))

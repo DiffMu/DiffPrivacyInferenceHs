@@ -96,6 +96,22 @@ subtypingGraph =
     (_, _, _) -> \_ -> []
 
 
+convertSubtypingToSupremum :: forall k t. (SingI k, Typeable k, IsT MonadDMTC t) => Symbol -> (DMTypeOf k, DMTypeOf k) -> t ()
+convertSubtypingToSupremum name (lower, TVar upper) = do
+  allSubtypings <- getConstraintsByType (Proxy @(IsLessEqual (DMTypeOf k, DMTypeOf k)))
+  let withSameVar = [(name', lower') | (name', IsLessEqual (lower', TVar upper')) <- allSubtypings,
+                              name' /= name,
+                              upper' == upper]
+  case withSameVar of
+    [] -> return ()
+    ((name',lower'):[]) -> do
+      dischargeConstraint name'
+      dischargeConstraint name
+      addConstraint (Solvable (IsSupremum (lower, lower', TVar upper)))
+      return ()
+    ((name',lower'):xs) -> error "Not implemented yet: When more than two subtyping constrs are merged to a single supremum. Don't worry, this case shouldn't be hard!"
+convertSubtypingToSupremum name _                   = pure ()
+
 -- The actual solving is done here.
 -- this simply uses the `findPathM` function from Abstract.Computation.MonadicGraph
 solveSubtyping :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => Symbol -> (DMTypeOf k, DMTypeOf k) -> t ()
@@ -110,13 +126,13 @@ solveSubtyping name path = do
   -- traceM $ "I have " <> show (length (graph (IsReflexive NotStructural))) <> " candidates."
 
   -- Executing the computation
-  res <- findPathM @(Full) @_ @DMException relevance (GraphM graph) path
+  res <- findPathM @(Full) relevance (GraphM graph) path
 
   -- We look at the result and if necessary throw errors.
   case res of
     Finished a -> dischargeConstraint @MonadDMTC name
     Partial a  -> updateConstraint name (Solvable (IsLessEqual a))
-    Wait       -> return ()
+    Wait       -> convertSubtypingToSupremum name path -- in this case we try to change this one into a sup
     Fail e     -> throwError (UnsatisfiableConstraint (show (fst path) <> " ⊑ " <> show (snd path) <> "\n\n"
                          <> "Got the following errors while search the subtyping graph:\n"
                          <> show e))
@@ -146,7 +162,7 @@ solveSupremum name (a,b,x) = do
   -- traceM $ "I have " <> show (length (graph (IsReflexive NotStructural))) <> " candidates."
 
   -- Executing the computation
-  res <- findSupremumM @(Full) @_ @DMException relevance (GraphM graph) (a,b,x)
+  res <- findSupremumM @(Full) relevance (GraphM graph) (a,b,x)
 
   -- We look at the result and if necessary throw errors.
   case res of
