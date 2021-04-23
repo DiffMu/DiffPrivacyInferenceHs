@@ -23,6 +23,8 @@ instance Unify MonadDMTC Sensitivity where
     c <- addConstraint @MonadDMTC (Solvable (IsEqual (s1, s2)))
     return s1
 
+instance Unify MonadDMTC Privacy where
+  unify_ (a1,b1) (a2,b2) = (,) <$> (unify_ a1 a2) <*> (unify_ b1 b2)
 
 -- Unification of DMTypes (of any kind k) is given by:
 instance Unify MonadDMTC (DMTypeOf k) where
@@ -32,6 +34,8 @@ instance Unify MonadDMTC (DMTypeOf k) where
   unify_ (NonConst τ₁) (NonConst τ₂)   = NonConst <$> unify_ τ₁ τ₂
   unify_ (Const η₁ τ₁) (Const η₂ τ₂)   = Const <$> unify_ η₁ η₂ <*> unify_ τ₁ τ₂
   unify_ (as :->: a) (bs :->: b)       = (:->:) <$> unify_ as bs <*> unify_ a b
+  unify_ (as :->*: a) (bs :->*: b)     = (:->*:) <$> unify_ as bs <*> unify_ a b
+  unify_ (DMTup as) (DMTup bs)         = DMTup <$> unify_ as bs
   unify_ (TVar x) (TVar y) | x == y    = pure $ TVar x
   unify_ (TVar x) t                    = addSub (x := t) >> pure t
   unify_ t (TVar x)                    = addSub (x := t) >> pure t
