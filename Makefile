@@ -1,6 +1,6 @@
 
 # Change this to install into a different directory
-LIB_INSTALL_DIR = $${HOME}/.local/lib64
+LIB_INSTALL_DIR = $${HOME}/.local/lib
 
 
 all: capp
