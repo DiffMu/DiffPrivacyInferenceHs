@@ -38,3 +38,7 @@ t14 = (Apply t12 [t₁, t₁])
 t15 = Phi t₂ t13 t₂
 
 t16 = Gauss t₂ t₂ t₂ t₆
+
+t17 = MCreate (Sng 1 JTNumInt) (Sng 1 JTNumInt) (Lam [Symbol "x" :- (JTNumInt), Symbol "y" :- JTAny] t₂)
+
+

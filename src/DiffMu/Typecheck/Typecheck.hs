@@ -236,6 +236,42 @@ checkSen' (Gauss rp εp δp f) scope = let
       return ((map (\t -> (t :@ (ε, δ))) τs) :->*: τgauss)
 
 
+checkSen' (MCreate n m body) scope =
+   let setDim :: DMTerm -> Sensitivity -> TC DMType
+       setDim t s = do
+          τ <- checkSens t scope -- check dimension term
+          unify τ (Numeric (Const s DMInt)) -- dimension must be integral
+          mscale zeroId
+          return τ
+
+       checkBody :: Sensitivity -> Sensitivity -> TC DMType
+       checkBody nv mv = do
+          τ <- checkSens body scope -- check body lambda
+
+          mscale (nv ⋅! mv) -- scale with dimension penalty
+
+          τbody <- case τ of -- extract body lambda return type
+                        xss :->: τret -> return τret
+                        _ -> throwError (ImpossibleError "MCreate term must have Arr argument.")
+
+          -- body lambda input vars must be integer
+          addConstraint (Solvable (IsLessEqual (τ, [((Numeric (NonConst DMInt)) :@ inftyS), ((Numeric (NonConst DMInt)) :@ inftyS)] :->: τbody)))
+
+          return τbody
+   in do
+       -- variables for matrix dimension
+       nv <- newVar
+       mv <- newVar
+
+       sum <- msumS [checkBody nv mv, setDim n nv, setDim m mv]
+
+       τbody <- case sum of -- extract element type from constructing lambda
+                  (τ : _) -> return τ
+                  _ -> throwError (ImpossibleError "?!")
+
+       nrm <- newVar -- variable for norm
+       return (DMMat nrm U nv mv τbody)
+
 
 -- Everything else is currently not supported.
 checkSen' t scope = throwError (UnsupportedTermError t)

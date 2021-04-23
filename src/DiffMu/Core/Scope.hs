@@ -71,6 +71,7 @@ substituteScope scope term = let
          FLet fname jτs ft body -> FLet fname jτs <$> (sub ft) <*> (sub body)
          Tup ts -> Tup <$> (mapM (sub) ts)
          Gauss r e d f -> Gauss <$> (sub r) <*> (sub e) <*> (sub d) <*> (sub f)
+         MCreate n m bf -> MCreate <$> (sub n) <*> (sub m) <*> (sub bf)
 
          SLet v t body -> let vname = fstA v in
                               case H.member vname scope of -- does v exist in scope already?
@@ -113,6 +114,7 @@ rename olds news term =
          Iter t1 t2 t3 -> Iter (re t1) (re t2) (re t3)
          Tup ts -> Tup (re <$> ts)
          Gauss r e d f -> Gauss (re r) (re e) (re d) (re f)
+         MCreate n m bf -> MCreate (re n) (re m) (re bf)
 
          Lam xτs body -> case olds `elem` (map fstA xτs) of
                                      True -> term -- we don't rename the function argument variable.

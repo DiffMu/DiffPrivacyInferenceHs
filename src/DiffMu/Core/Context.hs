@@ -148,4 +148,8 @@ removeVar x =  do
   types .= γ'
   cast v
 
-
+lookupVar :: forall e t. (MonadDMTC t, DMExtra e) => Symbol -> t (Maybe (DMType :& e))
+lookupVar x =  do
+  γ <- use types
+  v <- getValueM x γ
+  cast v

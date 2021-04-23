@@ -90,6 +90,15 @@ type DMNumType = DMTypeOf NumKind
 -- the terms in `DMKind` in a place where normally haskell types would be expected.
 data DMTypeOf (k :: DMKind) where
 
+   --- matrix norms
+  L1 :: DMTypeOf NormKind
+  L2 :: DMTypeOf NormKind
+  LInf :: DMTypeOf NormKind
+
+  -- matrix clipping
+  U :: DMTypeOf ClipKind
+  Norm  :: DMTypeOf ClipKind -> DMType
+
   -- the base numeric constructors
   DMInt    :: DMTypeOf BaseNumKind
   DMReal   :: DMTypeOf BaseNumKind
@@ -114,9 +123,16 @@ data DMTypeOf (k :: DMKind) where
   -- tuples
   DMTup :: [DMType] -> DMType
 
+  -- matrices
+  DMMat :: (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> Sensitivity -> DMType -> DMType
 
 -- Types are pretty printed as follows.
 instance Show (DMTypeOf k) where
+  show L1 = "L1"
+  show L2 = "L2"
+  show LInf = "L∞"
+  show U = "U"
+  show (Norm n) = "Norm(" <> show n <> ")"
   show DMInt = "Int"
   show DMReal = "Real"
   show (Const s t) = show t <> "[" <> show s <> "]"
@@ -126,6 +142,7 @@ instance Show (DMTypeOf k) where
   show (a :->: b) = show a <> " -> " <> show b
   show (a :->*: b) = show a <> " ->* " <> show b
   show (DMTup ts) = "Tupl(" <> show ts <> ")"
+  show (DMMat nrm clp n m τ) = "Matrix[" <> show n <> " × " <> show m <> "](" <> show τ <> ")"
 
 
 --------------------
@@ -386,6 +403,7 @@ data DMTerm =
   | Tup [DMTerm]
   | TLet [(Asgmt JuliaType)] DMTerm DMTerm
   | Gauss DMTerm DMTerm DMTerm DMTerm
+  | MCreate DMTerm DMTerm DMTerm
 -- ....
   deriving (Generic, Show)
 

@@ -44,6 +44,11 @@ instance Substitute TVarOf DMTypeOf Sensitivity where
 --  substitute σs η = pure η
 
 instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
+  substitute σs L1 = pure L1
+  substitute σs L2 = pure L2
+  substitute σs LInf = pure LInf
+  substitute σs U = pure U
+  substitute σs (Norm n) = Norm <$> substitute σs n
   substitute σs DMInt = pure DMInt
   substitute σs DMReal = pure DMReal
   substitute σs (Numeric τ) = Numeric <$> substitute σs τ
@@ -53,8 +58,14 @@ instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs (τ1 :->: τ2) = (:->:) <$> substitute σs τ1 <*> substitute σs τ2
   substitute σs (τ1 :->*: τ2) = (:->*:) <$> substitute σs τ1 <*> substitute σs τ2
   substitute σs (DMTup τs) = DMTup <$> substitute σs τs
+  substitute σs (DMMat nrm clp n m τ) = DMMat nrm clp <$> substitute σs n <*> substitute σs m <*> substitute σs τ
 
 instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
+  substitute σs L1 = pure L1
+  substitute σs L2 = pure L2
+  substitute σs LInf = pure LInf
+  substitute σs U = pure U
+  substitute σs (Norm n) = Norm <$> substitute σs n
   substitute σs DMInt = pure DMInt
   substitute σs DMReal = pure DMReal
   substitute σs (Numeric τ) = Numeric <$> substitute σs τ
@@ -64,6 +75,7 @@ instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
   substitute σs (τ1 :->: τ2) = (:->:) <$> substitute σs τ1 <*> substitute σs τ2
   substitute σs (τ1 :->*: τ2) = (:->*:) <$> substitute σs τ1 <*> substitute σs τ2
   substitute σs (DMTup τs) = DMTup <$> substitute σs τs
+  substitute σs (DMMat nrm clp n m τ) = DMMat nrm clp <$> substitute σs n <*> substitute σs m <*> substitute σs τ
 
 
 instance Term TVarOf DMTypeOf where
