@@ -11,10 +11,10 @@ import DiffMu.Core.Unification
 
 import Debug.Trace
 
-
 -- An abbreviation for adding a subtyping constraint.
 (⊑!) :: (SingI k, Typeable k, MonadDMTC t) => DMTypeOf k -> DMTypeOf k -> t ()
 (⊑!) a b = addConstraint (Solvable (IsLessEqual (a,b))) >> pure ()
+
 
 -- A helper function used below in defining the subtyping graph.
 getArrowLength :: DMType -> Maybe Int

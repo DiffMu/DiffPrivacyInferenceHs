@@ -34,8 +34,8 @@ pSymbol = (Symbol . T.pack) <$> (char ':' *> pIdentifier)
 pJuliaType :: ParserIO JuliaType
 pJuliaType = do
   ident <- pIdentifier
-  cident <- liftIO (newCString ident)
-  return (JuliaType ident cident)
+  -- cident <- liftIO (newCString ident)
+  return (JuliaType ident)
   --     try (string "Any" *> pure JTAny)
   -- <|> try (string "Integer" *> pure (JTNum JTNumInt))
   -- <|> try (string "Real" *> pure (JTNum JTNumReal))
@@ -50,12 +50,12 @@ pSng = do
   case n of
     Left a -> do
       let ident = "Integer"
-      cident <- liftIO (newCString ident)
-      return $ Sng (fromIntegral a) (JuliaType ident cident)
+      -- cident <- liftIO (newCString ident)
+      return $ Sng (fromIntegral a) (JuliaType ident)
     Right a -> do
       let ident = "Real"
-      cident <- liftIO (newCString ident)
-      return $ Sng a (JuliaType ident cident)
+      -- cident <- liftIO (newCString ident)
+      return $ Sng a (JuliaType ident)
 
 
 infixl 2 <*､>

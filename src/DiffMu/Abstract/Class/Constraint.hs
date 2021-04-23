@@ -60,6 +60,13 @@ class (Monad t) => MonadConstraint isT t | t -> isT where
   -- restoreConstraints :: ConstraintBackup t -> t ()
 
 
+(==!) :: (MonadConstraint isT t, Solve isT IsEqual (a,a), (HasNormalize isT a), Show (a), Typeable a, IsT isT t) => a -> a -> t ()
+(==!) a b = addConstraint (Solvable (IsEqual (a,b))) >> pure ()
+
+-- An abbreviation for adding a less equal constraint.
+(≤!) :: (MonadConstraint isT t, Solve isT IsLessEqual (a,a), (HasNormalize isT a), Show (a), Typeable a, IsT isT t) => a -> a -> t ()
+(≤!) a b = addConstraint (Solvable (IsLessEqual (a,b))) >> pure ()
+
 
 -- Basic constraints
 newtype IsEqual a = IsEqual a

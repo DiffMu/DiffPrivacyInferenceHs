@@ -8,6 +8,7 @@ import DiffMu.Core.Symbolic
 import DiffMu.Core.TC
 import DiffMu.Typecheck.Operations
 import DiffMu.Core.Scope
+import DiffMu.Typecheck.JuliaType
 
 import qualified Data.HashMap.Strict as H
 
@@ -72,7 +73,7 @@ checkSen' (Var x dτ) scope = do -- get the term that corresponds to this variab
                                 τ <- checkSens vt scope'
 
                                 case dτ of
-                                  JTAny _ -> return τ
+                                  JTAny -> return τ
                                   dτ -> do
                                     -- if the user has given an annotation
                                     -- inferred type must be a subtype of the user annotation
@@ -141,7 +142,7 @@ checkSen' (SLet (x :- dτ) term body) scope = do
 
   -- TODO this requires saving the annotation in the dict.
   case dτ of
-     JTAny _ -> return dτ
+     JTAny -> return dτ
      dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
 
   -- we're very lazy, only adding the new term for v to its scope entry
@@ -192,12 +193,12 @@ checkSen' (FLet fname sign term body) scope = do
 
 
 checkSen' (Choice d) scope = let
-      checkChoice :: DMTerm -> TC DMType
+      checkChoice :: DMTerm -> TC (DMType, Sensitivity)
       checkChoice t = do
          τ <- checkSens t scope
          flag <- newSVar "chflag"
          _ <- mscale (svar flag)
-         return τ
+         return (τ, svar flag)
       in do
 
          dd <- mapM checkChoice d
@@ -312,7 +313,7 @@ checkPri' (SLet (x :- dτ) term body) scope =
   in do
      -- TODO this requires saving the annotation in the dict.
      case dτ of
-          JTAny _ -> return dτ
+          JTAny -> return dτ
           dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
 
      sum <- msumP [mbody, (checkPriv term scope)]

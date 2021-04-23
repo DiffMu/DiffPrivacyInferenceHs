@@ -58,7 +58,6 @@ library
       DiffMu.Core
       DiffMu.Core.Context
       DiffMu.Core.Definitions
-      DiffMu.Core.JuliaType
       DiffMu.Core.Scope
       DiffMu.Core.Symbolic
       DiffMu.Core.TC
@@ -70,6 +69,7 @@ library
       DiffMu.Prelude.MonadicAlgebra
       DiffMu.Prelude.Polynomial
       DiffMu.Runner
+      DiffMu.Typecheck.JuliaType
       DiffMu.Typecheck.Operations
       DiffMu.Typecheck.Subtyping
       DiffMu.Typecheck.Typecheck

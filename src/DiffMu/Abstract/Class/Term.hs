@@ -61,6 +61,10 @@ class (Typeable v, Typeable a, forall k. Eq (v k)) => Substitute (v :: j -> *) (
   substitute :: (Monad t) => (forall k. (Typeable k) => v k -> t (a k)) -> (x -> t x)
 
 
+class (Typeable v, Typeable a, forall k. Eq (v k)) => FreeVars (v :: j -> *) (a :: *) where
+  freeVars :: a -> [SomeK v]
+
+
 
 
 
@@ -71,8 +75,11 @@ class (Typeable v, Typeable a, forall k. Eq (v k)) => Substitute (v :: j -> *) (
 
 -- class (KHashable v, KShow v, KShow a, KEq v, forall k. Substitute v a (a k)) => Term v a where
 -- class (KHashable v, KShow v, KShow a, KEq v, forall k. SingI k => Substitute v a (a k)) => Term v a where
+
+
 class (KHashable v, KShow v, KShow a, KEq v, forall k. (Substitute v a (a k))) => Term v a where
   var :: Typeable k => v k -> a k
+  isVar :: Typeable k => a k -> Maybe (v k)
 
 data SomeK (v :: j -> *) where
   SomeK :: (Typeable v, Typeable k) => v k -> SomeK v

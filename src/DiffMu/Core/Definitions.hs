@@ -231,17 +231,33 @@ type Privacy = PrivacyOf MainSensKind
 -- data JuliaType = JTAny | JTNum JuliaNumType
 --   deriving (Generic, Show, Eq)
 
-data JuliaType = JuliaType String CString
+newtype JuliaType = JuliaType String
   deriving (Generic, Eq)
 
 instance Hashable JuliaType where
 
 instance Show JuliaType where
-  show (JuliaType str _) = show str
+  show (JuliaType str) = show str
 
-pattern JTAny a = JuliaType "Any" a
-pattern JTNumInt a = JuliaType "Integer" a
-pattern JTNumReal a = JuliaType "Real" a
+pattern JTAny = JuliaType "Any"
+pattern JTNumInt = JuliaType "Integer"
+pattern JTNumReal = JuliaType "Real"
+
+--------------------------------------
+-- Tracked CString
+-- data JuliaType = JuliaType String CString
+--   deriving (Generic, Eq)
+
+-- instance Hashable JuliaType where
+
+-- instance Show JuliaType where
+--   show (JuliaType str _) = show str
+
+-- pattern JTAny a = JuliaType "Any" a
+-- pattern JTNumInt a = JuliaType "Integer" a
+-- pattern JTNumReal a = JuliaType "Real" a
+
+-------------------------------------
 
 -- instance Hashable JuliaType
 
@@ -434,6 +450,7 @@ data DMException where
   VariableNotInScope      :: Show a => a -> DMException
   UnsatisfiableConstraint :: String -> DMException
   TypeMismatchError       :: String -> DMException
+  NoChoiceFoundError      :: String -> DMException
 
 instance Show DMException where
   show (UnsupportedTermError t) = "The term '" <> show t <> "' is currently not supported."
@@ -445,6 +462,8 @@ instance Show DMException where
   show (VariableNotInScope v) = "Variable not in scope: " <> show v
   show (UnsatisfiableConstraint c) = "The constraint " <> c <> " is not satisfiable."
   show (TypeMismatchError e) = "Type mismatch: " <> e
+  show (NoChoiceFoundError e) = "No choice found: " <> e
+
 
 
 --------------------------------------------------------------------------

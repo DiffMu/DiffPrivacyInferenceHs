@@ -24,7 +24,7 @@ import Data.IORef
 
 import DiffMu.Runner
 import DiffMu.Core.Definitions
-import DiffMu.Core.JuliaType
+import DiffMu.Typecheck.JuliaType
 
 foreign import ccall "dynamic" mkFun :: FunPtr (CInt -> CInt) -> (CInt -> CInt)
 
@@ -87,22 +87,27 @@ foreign import ccall "dynamic" mkFun :: FunPtr (CInt -> CInt) -> (CInt -> CInt)
 
 
 
-typecheckFromCString_DMTerm :: FunPtr (CString -> CString -> Bool) -> CString -> IO ()
-typecheckFromCString_DMTerm fun str = do
-  -- let ident = "Integer"
-  -- int <- (newCString ident)
-  -- let int = (JuliaType ident cident)
+typecheckFromCString_DMTerm :: FunPtr (FunPtr (String -> IO CString)) -> CString -> IO ()
+typecheckFromCString_DMTerm = undefined
+-- typecheckFromCString_DMTerm fun str = do
+--   let ident = "Integer"
+--   int <- (newCString ident)
+--   let int = (JuliaType ident)
 
-  -- let ident = "Real"
-  -- real <- (newCString ident)
-  -- -- let real = (JuliaType ident cident)
-  -- putStrLn $ "I want to call: " <> show fun <> "with " <> show int <> " and " <> show real
-  -- let myres = call_StringStringBool fun int real
-  -- putStrLn $ "myres is" <> show myres
+--   let ident = "Real"
+--   real <- (newCString ident)
+--   -- let real = (JuliaType ident cident)
+--   putStrLn $ "I want to call: " <> show fun <> "with " <> show int <> " and " <> show real
+--   let myres = call_StringIOStringIOBool fun int real
+--   putStrLn $ "myres is" <> show myres
 
-  writeIORef global_callback_issubtype (makeDMEnv (fun))
-  str' <- peekCString str
-  typecheckFromString_DMTerm str'
+
+
+
+
+  -- writeIORef global_callback_issubtype (makeDMEnv (fun))
+  -- str' <- peekCString str
+  -- typecheckFromString_DMTerm str'
 
   -- putStrLn $ "I got the string: {" <> str' <> "}"
 
@@ -114,8 +119,9 @@ typecheckFromCString_DMTerm fun str = do
 -- foreign export ccall mutateComplicated :: CFloat -> StablePtr Complicated -> IO (StablePtr Complicated)
 -- foreign export ccall setAdder :: FunPtr (CInt -> CInt) -> StablePtr Complicated -> IO (StablePtr Complicated)
 
-foreign export ccall typecheckFromCString_DMTerm :: FunPtr (CString -> CString -> Bool) -> CString -> IO ()
+-- foreign export ccall typecheckFromCString_DMTerm :: FunPtr ((() -> IO CString) -> (() -> IO CString) -> Bool) -> CString -> IO ()
+-- foreign export ccall typecheckFromCString_DMTerm :: FunPtr ((() -> IO CString) -> (() -> IO CString) -> Bool) -> CString -> IO ()
 
-foreign import ccall "dynamic" call_StringStringBool :: FunPtr (CString -> CString -> Bool) -> CString -> CString -> Bool
+foreign import ccall "dynamic" call_StringIOStringIOBool :: FunPtr (FunPtr (StablePtr String -> IO CString) -> StablePtr String -> StablePtr String -> Bool) -> FunPtr (StablePtr String -> IO CString) -> StablePtr String -> StablePtr String -> Bool
 
 

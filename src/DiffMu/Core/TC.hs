@@ -82,6 +82,25 @@ instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
 
 instance Term TVarOf DMTypeOf where
   var x = TVar x
+  isVar (TVar x) = Just x
+  isVar _        = Nothing
+
+instance FreeVars v a => FreeVars v [a] where
+  freeVars [] = []
+  freeVars (τ:τs) = freeVars τ <> freeVars τs
+
+instance Typeable k => FreeVars TVarOf (DMTypeOf k) where
+  freeVars DMInt = []
+  freeVars DMReal = []
+  freeVars (Numeric τ) = freeVars τ
+  freeVars (NonConst τ) = freeVars τ
+  freeVars (Const _ τ) = freeVars τ
+  freeVars (TVar x) = [SomeK x]
+  freeVars (τ1 :->: τ2) = freeVars (fstAnn <$> τ1) <> freeVars τ2
+  freeVars (τ1 :->*: τ2) = freeVars (fstAnn <$> τ1) <> freeVars τ2
+  freeVars (DMTup τs) = freeVars τs
+
+
 
 
 
@@ -102,8 +121,12 @@ instance Substitute SVarOf SensitivityOf (SensitivityOf k) where
 instance (Substitute v a x, Substitute v a y) => Substitute v a (x,y) where
   substitute σs (x,y) = (,) <$> substitute σs x <*> substitute σs y
 
+-- TODO: implement isVar and freeVars
 instance Term SVarOf SensitivityOf where
   var (v) = var (HonestVar v)
+  isVar s = case isVar s of
+    Just (HonestVar v) -> Just v
+    _ -> Nothing
 
 type TSubs = Subs DMTypeOf
 type SSubs = Subs SensitivityOf
@@ -651,16 +674,16 @@ newSVar hint = meta.sensVars %%= (newKindedName hint)
 -- createDMTypeNum JTNumInt = DMInt
 -- createDMTypeNum JTNumReal = DMReal
 createDMTypeNum :: MonadDMTC t => JuliaType -> t (DMTypeOf BaseNumKind)
-createDMTypeNum (JuliaType "Integer" _)= pure DMInt
-createDMTypeNum (JuliaType "Real" _) = pure  DMReal
-createDMTypeNum (JuliaType str _) = throwError (TypeMismatchError $ "expected " <> show str <> " to be either Integer or Real.")
+createDMTypeNum (JuliaType "Integer") = pure DMInt
+createDMTypeNum (JuliaType "Real")  = pure  DMReal
+createDMTypeNum (JuliaType str)  = throwError (TypeMismatchError $ "expected " <> show str <> " to be either Integer or Real.")
 
 -- Maps julia types to DMTypes (of main kind)
 -- (`JTAny` is turned into a new type variable.)
 createDMType :: MonadDMTC t => JuliaType -> t (DMTypeOf MainKind)
  -- NOTE: defaulting to non-const might or might not be what we want to do here.
-createDMType (JuliaType "Integer" _) = pure $ Numeric (NonConst DMInt)
-createDMType (JuliaType "Real" _) = pure $ Numeric (NonConst DMReal)
+createDMType (JuliaType "Integer") = pure $ Numeric (NonConst DMInt)
+createDMType (JuliaType "Real") = pure $ Numeric (NonConst DMReal)
 -- TODO: is it correct to create tvars for anything else?
 createDMType _ = TVar <$> newTVar "any"
 

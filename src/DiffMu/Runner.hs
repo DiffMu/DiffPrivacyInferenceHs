@@ -13,7 +13,7 @@ import DiffMu.Typecheck.Subtyping
 import DiffMu.Typecheck.Typecheck
 import DiffMu.Parser.DMTerm.FromString
 
-import DiffMu.Core.JuliaType
+import DiffMu.Typecheck.JuliaType
 
 import Algebra.PartialOrd
 

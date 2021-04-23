@@ -70,7 +70,6 @@ neutralId = runIdentity neutral
 
 class MonoidM t a => CheckNeutral t a where
   checkNeutral :: a -> t Bool
-
 -- instance (SemigroupM t a) => MonoidM t a
 
 class (MonoidM t a) => CMonoidM t a where
