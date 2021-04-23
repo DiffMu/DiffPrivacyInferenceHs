@@ -160,6 +160,12 @@ instance (MonoidM t a, MonoidM t b) => MonoidM t (a :& b) where
 instance (CheckNeutral m a, CheckNeutral m b) => CheckNeutral m (a :& b) where
   checkNeutral (a :@ b) = (\a b -> and [a,b]) <$> checkNeutral a <*> checkNeutral b
 
+fstAnn :: (a :& b) -> a
+fstAnn (a :@ b) = a
+
+sndAnn :: (a :& b) -> b
+sndAnn (a :@ b) = b
+
 -- NOTE: The monoidal operation for sensitivities is addition.
 --       The operation for DMTypes is unification.
 --       That means, given `(x :@ s), (y :@ t) :: (DMType :& Sensitivity)`,
@@ -225,7 +231,6 @@ instance Hashable JuliaType
 -- The type of all possible unary type operations.
 data DMTypeOps_Unary =
    DMOpCeil
-   | DMOpGauss
 
 -- The type of all possible binary type operations.
 data DMTypeOps_Binary =
@@ -242,7 +247,6 @@ data DMTypeOp_Some = IsUnary DMTypeOps_Unary | IsBinary DMTypeOps_Binary
 
 instance Show DMTypeOps_Unary where
   show DMOpCeil = "ceil"
-  show DMOpGauss = "gauss"
 
 instance Show DMTypeOps_Binary where
   show DMOpAdd = "+"
@@ -371,6 +375,7 @@ data DMTerm =
   | SLet (Asgmt JuliaType) DMTerm DMTerm
   | Tup [DMTerm]
   | TLet [(Asgmt JuliaType)] DMTerm DMTerm
+  | Gauss DMTerm DMTerm DMTerm DMTerm
 -- ....
   deriving (Generic, Show)
 

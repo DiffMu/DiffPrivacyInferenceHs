@@ -33,3 +33,8 @@ t12 = LamStar [Symbol "x" :- (JTNum JTNumInt), Symbol "y" :- JTAny] (Ret (Phi (t
 
 t13 = Ret (Phi (t₃ "x") t₂ (t₃ "y"))
 
+t14 = (Apply t12 [t₁, t₁])
+
+t15 = Phi t₂ t13 t₂
+
+t16 = Gauss t₂ t₂ t₂ t₆

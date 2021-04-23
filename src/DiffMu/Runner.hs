@@ -45,7 +45,7 @@ typecheckFromDMTerm term = do
         normalize aa
         -}
 
-  let x = runExcept (runStateT (runTCT r) def)
+  let x = runExcept (runStateT (runTCT r) (Full def def (Right def)))
   case x of
     Left err -> putStrLn $ "Encountered error: " <> show err
     Right x -> putStrLn $ "Result: " <> show x

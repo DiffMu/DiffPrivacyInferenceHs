@@ -92,6 +92,12 @@ instance TCConstraint IsChoice where
   constr = IsChoice
   runConstr (IsChoice c) = c
 
+---- Gauss or Mgauss? 
+newtype IsGaussResult a = IsGaussResult a deriving Show
+
+instance TCConstraint IsGaussResult where
+  constr = IsGaussResult
+  runConstr (IsGaussResult c) = c
 
 ----------------------------------------------------------
 -- functions for Constraint

@@ -89,7 +89,6 @@ msum :: (IsT MonadDMTC t) => TypeCtxSP -> [t a] -> t [a]
 -- msum :: [t a] -> t [a]
 msum emptyΣ ms = do
   initΣ <- use types
-  traceM ("init summing with " <> (show initΣ))
   f initΣ ms (emptyΣ)
 
     where
@@ -97,7 +96,6 @@ msum emptyΣ ms = do
       f :: (IsT MonadDMTC t) => TypeCtxSP -> [t a] -> TypeCtxSP -> t [a]
       f initΣ [] accΣ = types .= accΣ >> return []
       f initΣ (m:ms) accΣ = do
-        traceM ("summing with " <> (show initΣ))
         types .= initΣ
         a <- m
         mΣ <- use types
