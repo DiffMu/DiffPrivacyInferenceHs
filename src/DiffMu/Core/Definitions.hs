@@ -18,6 +18,10 @@ import qualified Data.Text as T
 
 import Data.HashMap.Strict
 
+import           Foreign.C.String
+import           Foreign.C.Types
+import           Foreign.Ptr
+
 ---------------------------------------------------------
 -- Definition of Meta variables
 --
@@ -207,15 +211,17 @@ type Privacy = PrivacyOf MainSensKind
 -- data JuliaType = JTAny | JTNum JuliaNumType
 --   deriving (Generic, Show, Eq)
 
-newtype JuliaType = JuliaType String
-  deriving (Generic, Eq, Hashable)
+data JuliaType = JuliaType String CString
+  deriving (Generic, Eq)
+
+instance Hashable JuliaType where
 
 instance Show JuliaType where
-  show (JuliaType str) = show str
+  show (JuliaType str _) = show str
 
-pattern JTAny = JuliaType "Any"
-pattern JTNumInt = JuliaType "Integer"
-pattern JTNumReal = JuliaType "Real"
+pattern JTAny a = JuliaType "Any" a
+pattern JTNumInt a = JuliaType "Integer" a
+pattern JTNumReal a = JuliaType "Real" a
 
 -- instance Hashable JuliaType
 
@@ -423,16 +429,20 @@ instance Show DMException where
 
 data DMEnv = DMEnv
   {
-    askJuliaSubtypeOf :: Maybe (JuliaType -> JuliaType -> Bool)
+    -- askJuliaSubtypeOf :: Maybe (FunPtr (JuliaType -> JuliaType -> Bool))
+    askJuliaSubtypeOf :: Maybe (FunPtr (CString -> CString -> Bool))
   }
-makeDMEnv :: (String -> String -> Bool) -> DMEnv
+makeDMEnv :: FunPtr (CString -> CString -> Bool) -> DMEnv
 makeDMEnv subtype = DMEnv
-  { askJuliaSubtypeOf = Just $ \(JuliaType a) (JuliaType b) -> subtype a b
+  { askJuliaSubtypeOf = Just $ subtype
+  -- { askJuliaSubtypeOf = Just $ \(JuliaType _ a) (JuliaType _ b) -> subtype a b
   }
-makeTestingDMEnv :: DMEnv
-makeTestingDMEnv = DMEnv
+makeEmptyDMEnv :: DMEnv
+makeEmptyDMEnv = DMEnv
   { askJuliaSubtypeOf = Nothing
   }
+
+
 
 --------------------------------------------------------------------------
 -- Other ...

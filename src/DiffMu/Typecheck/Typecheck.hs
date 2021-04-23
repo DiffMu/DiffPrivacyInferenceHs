@@ -72,7 +72,7 @@ checkSen' (Var x dτ) scope = do -- get the term that corresponds to this variab
                                 τ <- checkSens vt scope'
 
                                 case dτ of
-                                  JTAny -> return τ
+                                  JTAny _ -> return τ
                                   dτ -> do
                                     -- if the user has given an annotation
                                     -- inferred type must be a subtype of the user annotation
@@ -141,7 +141,7 @@ checkSen' (SLet (x :- dτ) term body) scope = do
 
   -- TODO this requires saving the annotation in the dict.
   case dτ of
-     JTAny -> return dτ
+     JTAny _ -> return dτ
      dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
 
   -- we're very lazy, only adding the new term for v to its scope entry
@@ -262,7 +262,7 @@ checkPri' (SLet (x :- dτ) term body) scope =
   in do
      -- TODO this requires saving the annotation in the dict.
      case dτ of
-          JTAny -> return dτ
+          JTAny _ -> return dτ
           dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
 
      sum <- msumP [mbody, (checkPriv term scope)]

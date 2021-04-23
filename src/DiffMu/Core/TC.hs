@@ -637,16 +637,16 @@ newSVar hint = meta.sensVars %%= (newKindedName hint)
 -- createDMTypeNum JTNumInt = DMInt
 -- createDMTypeNum JTNumReal = DMReal
 createDMTypeNum :: MonadDMTC t => JuliaType -> t (DMTypeOf BaseNumKind)
-createDMTypeNum (JuliaType "Integer")= pure DMInt
-createDMTypeNum (JuliaType "Real") = pure  DMReal
-createDMTypeNum (JuliaType str) = throwError (TypeMismatchError $ "expected " <> show str <> " to be either Integer or Real.")
+createDMTypeNum (JuliaType "Integer" _)= pure DMInt
+createDMTypeNum (JuliaType "Real" _) = pure  DMReal
+createDMTypeNum (JuliaType str _) = throwError (TypeMismatchError $ "expected " <> show str <> " to be either Integer or Real.")
 
 -- Maps julia types to DMTypes (of main kind)
 -- (`JTAny` is turned into a new type variable.)
 createDMType :: MonadDMTC t => JuliaType -> t (DMTypeOf MainKind)
  -- NOTE: defaulting to non-const might or might not be what we want to do here.
-createDMType (JuliaType "Integer") = pure $ Numeric (NonConst DMInt)
-createDMType (JuliaType "Real") = pure $ Numeric (NonConst DMReal)
+createDMType (JuliaType "Integer" _) = pure $ Numeric (NonConst DMInt)
+createDMType (JuliaType "Real" _) = pure $ Numeric (NonConst DMReal)
 -- TODO: is it correct to create tvars for anything else?
 createDMType _ = TVar <$> newTVar "any"
 
