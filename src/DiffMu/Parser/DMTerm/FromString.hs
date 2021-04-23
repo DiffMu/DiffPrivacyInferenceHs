@@ -13,56 +13,70 @@ import Text.Parsec.Number
 -- import Text.Parsec.String.Combinator (many1)
 import qualified Data.Text as T
 
-newtype JuliaType' = JuliaType' String
+import           Foreign.C.String
+
+-- newtype JuliaType' = JuliaType' String
+
+type ParserIO = ParsecT String () IO
+
 
 specialChar :: [Char]
 specialChar = "(){}, []"
 
 
-pIdentifier :: Parser String
+pIdentifier :: ParserIO String
 pIdentifier = many1 (noneOf specialChar)
 
-pSymbol :: Parser Symbol
+pSymbol :: ParserIO Symbol
 pSymbol = (Symbol . T.pack) <$> (char ':' *> pIdentifier)
 
 -- TODO: Add more types.
-pJuliaType :: Parser JuliaType
-pJuliaType = JuliaType <$> pIdentifier
+pJuliaType :: ParserIO JuliaType
+pJuliaType = do
+  ident <- pIdentifier
+  cident <- liftIO (newCString ident)
+  return (JuliaType ident cident)
   --     try (string "Any" *> pure JTAny)
   -- <|> try (string "Integer" *> pure (JTNum JTNumInt))
   -- <|> try (string "Real" *> pure (JTNum JTNumReal))
 
 
--- pJuliaNumType :: Parser JuliaNumType
+-- pJuliaNumType :: ParserIO JuliaNumType
 -- pJuliaNumType = undefined
 
-pSng :: Parser DMTerm
+pSng :: ParserIO DMTerm
 pSng = do
   n <- decFloat False
   case n of
-    Left a -> pure $ Sng (fromIntegral a) (JuliaType "Integer")
-    Right a -> pure $ Sng a (JuliaType "Real")
+    Left a -> do
+      let ident = "Integer"
+      cident <- liftIO (newCString ident)
+      return $ Sng (fromIntegral a) (JuliaType ident cident)
+    Right a -> do
+      let ident = "Real"
+      cident <- liftIO (newCString ident)
+      return $ Sng a (JuliaType ident cident)
 
 
 infixl 2 <*､>
-(<*､>) :: Parser (a -> b) -> Parser a -> Parser b
+(<*､>) :: ParserIO (a -> b) -> ParserIO a -> ParserIO b
 (<*､>) f a = (f <* string ", ") <*> a
 
-pAsgmt :: (Symbol -> JuliaType -> c) -> Parser c
+pAsgmt :: (Symbol -> JuliaType -> c) -> ParserIO c
 pAsgmt f = between (char '(') (char ')') (f <$> pSymbol <*､> pJuliaType)
 
-pArray :: String -> Parser a -> Parser [a]
+pArray :: String -> ParserIO a -> ParserIO [a]
 pArray prefix p = string prefix *> between (char '[') (char ']') (p `sepBy` (string ", "))
 
-pDMTypeOp :: Parser DMTypeOp_Some
+pDMTypeOp :: ParserIO DMTypeOp_Some
 pDMTypeOp =
       try (string ":+" >> pure (IsBinary DMOpAdd))
   <|> try (string ":*" >> pure (IsBinary DMOpAdd))
 
-with :: String -> Parser a -> Parser a
+with :: String -> ParserIO a -> ParserIO a
 with name content = string name >> between (char '(') (char ')') content
 
-pDMTerm :: Parser DMTerm
+pDMTerm :: ParserIO DMTerm
 pDMTerm =
       try ("ret"       `with` (Ret     <$> pDMTerm))
   <|> try ("sng"       `with` (pSng))
@@ -83,10 +97,12 @@ pDMTerm =
 
 -- flet(:f, DataType[Any, Any], lam(Tuple{Symbol, DataType}[(:a, Any), (:b, Any)], op(:+, DMTerm[var(:a, Any), op(:+, DMTerm[op(:*, DMTerm[var(:b, Any), var(:b, Any)]), var(:a, Any)])])), var(:f, Any))
 
-pDMTermFromString :: String -> Either DMException DMTerm
-pDMTermFromString s = case parse pDMTerm "jl-hs-communication" s of
-  Left e  -> Left (InternalError $ "Communication Error: Could not parse DMTerm from string:\n" <> show e)
-  Right a -> Right a
+pDMTermFromString :: String -> IO (Either DMException DMTerm)
+pDMTermFromString s = do
+  res <- runParserT pDMTerm () "jl-hs-communication" s
+  case res of
+    Left e  -> return $ Left (InternalError $ "Communication Error: Could not parse DMTerm from string:\n" <> show e)
+    Right a -> return $ Right a
 
 
 
