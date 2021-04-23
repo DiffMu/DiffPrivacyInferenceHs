@@ -199,15 +199,25 @@ type Privacy = PrivacyOf MainSensKind
 -- It is split into two parts because we use the `JuliaNumType`
 -- to annotate singleton terms with their type.
 
-data JuliaNumType = JTNumInt | JTNumReal
-  deriving (Generic, Show, Eq)
+-- data JuliaNumType = JTNumInt | JTNumReal
+--   deriving (Generic, Show, Eq)
 
-instance Hashable JuliaNumType
+-- instance Hashable JuliaNumType
 
-data JuliaType = JTAny | JTNum JuliaNumType
-  deriving (Generic, Show, Eq)
+-- data JuliaType = JTAny | JTNum JuliaNumType
+--   deriving (Generic, Show, Eq)
 
-instance Hashable JuliaType
+newtype JuliaType = JuliaType String
+  deriving (Generic, Eq, Hashable)
+
+instance Show JuliaType where
+  show (JuliaType str) = show str
+
+pattern JTAny = JuliaType "Any"
+pattern JTNumInt = JuliaType "Integer"
+pattern JTNumReal = JuliaType "Real"
+
+-- instance Hashable JuliaType
 
 -- NOTE: The "deriving(Generic,Show)" part is a feature of Haskell which
 --       allows us to automatically generate instances for type classes.
@@ -360,7 +370,7 @@ instance TCConstraint IsTypeOpResult where
 
 data DMTerm =
   Ret DMTerm
-  | Sng Float JuliaNumType
+  | Sng Float JuliaType
   | Var Symbol JuliaType
   | Arg Symbol JuliaType
   | Op DMTypeOp_Some [DMTerm]
@@ -394,16 +404,35 @@ data DMException where
   InternalError           :: String -> DMException
   VariableNotInScope      :: Show a => a -> DMException
   UnsatisfiableConstraint :: String -> DMException
+  TypeMismatchError       :: String -> DMException
 
 instance Show DMException where
   show (UnsupportedTermError t) = "The term '" <> show t <> "' is currently not supported."
   show (UnificationError a b) = "Could not unify '" <> show a <> "' with '" <> show b <> "'."
   show (WrongNumberOfArgs a b) = "While unifying: the terms '" <> show a <> "' and '" <> show b <> "' have different numbers of arguments"
   show (WrongNumberOfArgsOp op n) = "The operation " <> show op <> " was given a wrong number (" <> show n <> ") of args."
-  show (ImpossibleError e) = "Something impossible happened: " <> show e
-  show (InternalError e) = "Internal error: " <> show e
+  show (ImpossibleError e) = "Something impossible happened: " <> e
+  show (InternalError e) = "Internal error: " <> e
   show (VariableNotInScope v) = "Variable not in scope: " <> show v
   show (UnsatisfiableConstraint c) = "The constraint " <> c <> " is not satisfiable."
+  show (TypeMismatchError e) = "Type mismatch: " <> e
+
+
+--------------------------------------------------------------------------
+-- The environment for executing typechecking
+
+data DMEnv = DMEnv
+  {
+    askJuliaSubtypeOf :: Maybe (JuliaType -> JuliaType -> Bool)
+  }
+makeDMEnv :: (String -> String -> Bool) -> DMEnv
+makeDMEnv subtype = DMEnv
+  { askJuliaSubtypeOf = Just $ \(JuliaType a) (JuliaType b) -> subtype a b
+  }
+makeTestingDMEnv :: DMEnv
+makeTestingDMEnv = DMEnv
+  { askJuliaSubtypeOf = Nothing
+  }
 
 --------------------------------------------------------------------------
 -- Other ...
