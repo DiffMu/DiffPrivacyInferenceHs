@@ -84,13 +84,13 @@ resetToDefault (Right b) = Right def
 -- Given a list of computations in a MonadDMTC monad, it executes all computations
 -- on the same input type context, and sums the resulting type contexts.
 -- All additional data (constraints, substitutions, metavariable contexts) are passed sequentially.
-msum :: (IsT MonadDMTC t) => [t a] -> t [a]
+msum :: (IsT MonadDMTC t) => TypeCtxSP -> [t a] -> t [a]
 -- msum :: (Show e, IsT MonadDMTC t, MonoidM (t) e, CheckNeutral (t) e) => [t a] -> t [a]
 -- msum :: [t a] -> t [a]
-msum ms = do
+msum emptyΣ ms = do
   initΣ <- use types
   traceM ("init summing with " <> (show initΣ))
-  f initΣ ms (resetToDefault initΣ)
+  f initΣ ms (emptyΣ)
 
     where
       -- f :: (Show e, IsT MonadDMTC t, MonoidM (t) e, CheckNeutral (t) e) => TypeCtxSP -> [t a] -> TypeCtxSP -> t [a]
@@ -105,6 +105,8 @@ msum ms = do
         as <- f initΣ ms (m_acc_Σ)
         return (a : as)
 
+msumP = msum (Right def)
+msumS = msum (Left def)
 
 setVar :: MonadDMTC t => Symbol -> DMType :& Sensitivity -> t ()
 setVar k v = types %=~ setValueM k (Left v :: Either (DMType :& Sensitivity) (DMType :& Privacy))

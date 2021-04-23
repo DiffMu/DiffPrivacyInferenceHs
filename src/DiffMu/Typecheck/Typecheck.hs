@@ -62,7 +62,7 @@ checkSens (Op op args) scope =
 
     -- We call our helper function `checkOpArg` on the argument-terms, zipped with the
     -- type(variables), sensitivities returned by `makeTypeOp`
-    _ <- msum ((checkOpArg <$> (zip args arg_sens)))
+    _ <- msumS ((checkOpArg <$> (zip args arg_sens)))
 
     -- We return the `res` type given by `makeTypeOp`
     return (Numeric res)
@@ -74,7 +74,7 @@ checkSens (Phi cond ifbr elsebr) scope =
         mscale inftyS
         return τ_cond
    in do
-      τ_sum <- msum [(checkSens ifbr scope), (checkSens elsebr scope), mcond]
+      τ_sum <- msumS [(checkSens ifbr scope), (checkSens elsebr scope), mcond]
       (τif, τelse) <- case τ_sum of
                            (τ1 : τ2 : _) -> return (τ1, τ2)
                            _ -> throwError (ImpossibleError "Sum cannot return empty.")
@@ -134,7 +134,7 @@ checkSens (Apply f args) scope = let
 
       let mf = checkSens f scope -- check function term
 
-      τ_sum <- msum (mf : margs) -- sum args and f's context
+      τ_sum <- msumS (mf : margs) -- sum args and f's context
       (τ_lam, argτs) <- case τ_sum of
                              (τ : τs) -> return (τ, (zipWith (:@) τs svars))
                              [] -> throwError (ImpossibleError "Sum cannot return empty list.")
@@ -175,7 +175,7 @@ checkSens (Choice d) scope = let
          return τ
 
 checkSens (Tup ts) scope = do
-   τs <- msum (DiffMu.Prelude.map (\t -> (checkSens t scope)) ts)
+   τs <- msumS (DiffMu.Prelude.map (\t -> (checkSens t scope)) ts)
    return (DMTup τs)
 
 
@@ -207,7 +207,7 @@ checkPriv (SLet (x :- dτ) term body) scope =
           JTAny -> return dτ
           dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
 
-     sum <- msum [mbody, (checkPriv term scope)]
+     sum <- msumP [mbody, (checkPriv term scope)]
      res <- case sum of
                     [τ::DMType,_] -> return τ
                     _ -> throwError (ImpossibleError "?!")
@@ -236,7 +236,7 @@ checkPriv (Phi cond ifbr elsebr) scope = -- this is the same as with checkSens
         mscale inftyS
         return τ_cond
    in do
-      τ_sum <- msum [(checkPriv ifbr scope), (checkPriv elsebr scope), mcond]
+      τ_sum <- msumP [(checkPriv ifbr scope), (checkPriv elsebr scope), mcond]
       (τif, τelse) <- case τ_sum of
                            (τ1 : τ2 : _) -> return (τ1, τ2)
                            _ -> throwError (ImpossibleError "Sum cannot return empty.")
@@ -261,7 +261,7 @@ checkPriv (Apply f args) scope = let
       let pvars = (inftyP :  (zip εvars δvars)) -- constext of f gets truncated to ∞
       let margs = zipWith checkFArg (f : args) pvars -- check f and args and scale with their respective pvar
 
-      τ_sum <- msum margs -- sum args and f's context
+      τ_sum <- msumP margs -- sum args and f's context
       (τ_lam, argτs) <- case τ_sum of
                              (τ : τs) -> return (τ, (zipWith (:@) τs pvars))
                              [] -> throwError (ImpossibleError "Sum cannot return empty list.")
