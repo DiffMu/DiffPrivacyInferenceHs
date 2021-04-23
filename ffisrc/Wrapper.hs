@@ -20,7 +20,11 @@ import           Control.Lens
 import           Data.Int          (Int32)
 import           GHC.Generics      (Generic)
 
+import Data.IORef
+
 import DiffMu.Runner
+import DiffMu.Core.Definitions
+import DiffMu.Core.JuliaType
 
 foreign import ccall "dynamic" mkFun :: FunPtr (CInt -> CInt) -> (CInt -> CInt)
 
@@ -82,10 +86,24 @@ foreign import ccall "dynamic" mkFun :: FunPtr (CInt -> CInt) -> (CInt -> CInt)
 
 
 
+
 typecheckFromCString_DMTerm :: FunPtr (CString -> CString -> Bool) -> CString -> IO ()
 typecheckFromCString_DMTerm fun str = do
+  -- let ident = "Integer"
+  -- int <- (newCString ident)
+  -- let int = (JuliaType ident cident)
+
+  -- let ident = "Real"
+  -- real <- (newCString ident)
+  -- -- let real = (JuliaType ident cident)
+  -- putStrLn $ "I want to call: " <> show fun <> "with " <> show int <> " and " <> show real
+  -- let myres = call_StringStringBool fun int real
+  -- putStrLn $ "myres is" <> show myres
+
+  writeIORef global_callback_issubtype (makeDMEnv (fun))
   str' <- peekCString str
   typecheckFromString_DMTerm str'
+
   -- putStrLn $ "I got the string: {" <> str' <> "}"
 
 

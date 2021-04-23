@@ -20,6 +20,7 @@ extra-source-files:
     ChangeLog.md
     csrc/wrapper.cpp
     csrc/wrapper.h
+    ffisrc/Wrapper.hs
 foreign-library diffmu-wrapper
   type:                native-shared
 
@@ -57,6 +58,7 @@ library
       DiffMu.Core
       DiffMu.Core.Context
       DiffMu.Core.Definitions
+      DiffMu.Core.JuliaType
       DiffMu.Core.Scope
       DiffMu.Core.Symbolic
       DiffMu.Core.TC
@@ -109,6 +111,7 @@ library
       DisambiguateRecordFields
       DuplicateRecordFields
       PatternSynonyms
+      ImplicitParams
   build-depends:
       base >=4.7 && <5
     , bifunctors

@@ -13,18 +13,27 @@ import DiffMu.Typecheck.Subtyping
 import DiffMu.Typecheck.Typecheck
 import DiffMu.Parser.DMTerm.FromString
 
+import DiffMu.Core.JuliaType
+
+import Algebra.PartialOrd
+
+import           Foreign.C.String
+
 run :: IO ()
 run = putStrLn "Hello?"
 
 typecheckFromString_DMTerm :: String -> IO ()
-typecheckFromString_DMTerm term = case pDMTermFromString term of
-  Left err -> putStrLn $ "Error while parsing DMTerm from string: " <> show err
-  Right term -> typecheckFromDMTerm term
+typecheckFromString_DMTerm term = do
+  res <- pDMTermFromString term
+  case res of
+    Left err -> putStrLn $ "Error while parsing DMTerm from string: " <> show err
+    Right term -> typecheckFromDMTerm term
 
 
 typecheckFromDMTerm :: DMTerm -> IO ()
 typecheckFromDMTerm term = do
   putStrLn "Starting DiffMu!"
+
   let r :: TC DMType
       r = do
 

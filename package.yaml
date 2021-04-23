@@ -11,6 +11,7 @@ extra-source-files:
 - ChangeLog.md
 - csrc/wrapper.cpp
 - csrc/wrapper.h
+- ffisrc/Wrapper.hs
 
 
 # Metadata used when publishing your package
@@ -88,6 +89,7 @@ library:
     - DisambiguateRecordFields
     - DuplicateRecordFields
     - PatternSynonyms
+    - ImplicitParams
 
 verbatim: |
   foreign-library diffmu-wrapper
