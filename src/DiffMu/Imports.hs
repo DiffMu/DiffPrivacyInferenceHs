@@ -13,9 +13,9 @@ import Control.Monad.Writer as All hiding (getLast, getFirst, Last, First)
 import Control.Monad.Identity as All
 import Control.Monad.Trans as All
 import Control.Monad as All
-import Control.Exception as All
+-- import Control.Exception as All -- We currently do not need C-style exceptions
 
-import Control.Lens as All hiding (Const)
+import Control.Lens as All hiding (Const, noneOf)
 import Control.Lens.TH as All
 
 import Control.Newtype as All hiding (ala, under, over, op)
@@ -49,8 +49,8 @@ import Prelude as All ((<$>), (<*>), pure, curry, uncurry, (.))
 
 import Prelude as All (Float(..), Rational, Int, Ordering(..), Ord(..), Eq(..))
 import Data.Ratio as All (numerator, denominator)
-import Prelude as All ((-), fromRational)
-import Prelude as All (Bool(..), String(..), Maybe(..), Either(..), Integer(..), Integral(..))
+import Prelude as All ((-), fromRational, fromIntegral)
+import Prelude as All (Bool(..), String(..), Maybe(..), Either(..), Integer(..), Integral(..), Char(..))
 import Prelude as All (Functor(..), Applicative(..))
 
 import qualified Data.Semigroup as PP

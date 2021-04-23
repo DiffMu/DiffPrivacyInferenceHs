@@ -351,18 +351,18 @@ instance TCConstraint IsTypeOpResult where
 --
 
 
-data Lam_ = Lam_ [Asgmt JuliaType] DMTerm
-  deriving (Generic, Show)
+-- data Lam_ = Lam_ [Asgmt JuliaType] DMTerm
+--   deriving (Generic, Show)
 
 data DMTerm =
   Ret DMTerm
-  | Sng Rational JuliaNumType
+  | Sng Float JuliaNumType
   | Var Symbol JuliaType
   | Arg Symbol JuliaType
   | Op DMTypeOp_Some [DMTerm]
   | Phi DMTerm DMTerm DMTerm
-  | Lam Lam_
-  | LamStar Lam_
+  | Lam     [Asgmt JuliaType] DMTerm
+  | LamStar [Asgmt JuliaType] DMTerm
 --  | DPhi [Lam_]
   | Apply DMTerm [DMTerm]
   | Iter DMTerm DMTerm DMTerm
@@ -399,8 +399,6 @@ instance Show DMException where
   show (InternalError e) = "Internal error: " <> show e
   show (VariableNotInScope v) = "Variable not in scope: " <> show v
   show (UnsatisfiableConstraint c) = "The constraint " <> c <> " is not satisfiable."
-
--- instance Exception DMException where
 
 --------------------------------------------------------------------------
 -- Other ...
