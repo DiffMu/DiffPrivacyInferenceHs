@@ -272,6 +272,20 @@ checkSen' (MCreate n m body) scope =
        nrm <- newVar -- variable for norm
        return (DMMat nrm U nv mv τbody)
 
+checkSen' (ClipM c m) scope = do
+   τb <- checkSens m scope -- check the matrix
+
+   -- variables for norm and clip parameters and dimension
+   nrm <- newVar
+   clp <- newVar
+   n <- newVar
+   m <- newVar
+
+   -- set correct matrix type
+   unify τb (DMMat nrm clp n m (Numeric DMData))
+
+   -- change clip parameter to input
+   return (DMMat nrm c n m (Numeric DMData))
 
 -- Everything else is currently not supported.
 checkSen' t scope = throwError (UnsupportedTermError t)

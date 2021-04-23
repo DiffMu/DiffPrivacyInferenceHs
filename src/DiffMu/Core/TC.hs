@@ -48,9 +48,10 @@ instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs L2 = pure L2
   substitute σs LInf = pure LInf
   substitute σs U = pure U
-  substitute σs (Norm n) = Norm <$> substitute σs n
+  substitute σs (Clip n) = Clip <$> substitute σs n
   substitute σs DMInt = pure DMInt
   substitute σs DMReal = pure DMReal
+  substitute σs DMData = pure DMData
   substitute σs (Numeric τ) = Numeric <$> substitute σs τ
   substitute σs (NonConst τ) = NonConst <$> substitute σs τ
   substitute σs (Const η τ) = Const <$> substitute σs η <*> substitute σs τ
@@ -65,9 +66,10 @@ instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
   substitute σs L2 = pure L2
   substitute σs LInf = pure LInf
   substitute σs U = pure U
-  substitute σs (Norm n) = Norm <$> substitute σs n
+  substitute σs (Clip n) = Clip <$> substitute σs n
   substitute σs DMInt = pure DMInt
   substitute σs DMReal = pure DMReal
+  substitute σs DMData = pure DMData
   substitute σs (Numeric τ) = Numeric <$> substitute σs τ
   substitute σs (NonConst τ) = NonConst <$> substitute σs τ
   substitute σs (Const η τ) = Const <$> substitute σs η <*> substitute σs τ
@@ -400,7 +402,7 @@ instance Monad m => MonadTerm SensitivityOf (TCT m) where
     σs' <- σs ⋆ singletonSub σ
     meta.sensSubs .= σs'
     meta.sensVars %= (removeNameBySubstitution σ)
-  newVar = coerce <$> svar <$> newSVar "τ"
+  newVar = coerce <$> svar <$> newSVar "s"
 
 -- getUnsolved :: MonCom (Solvable' TC) Symbol -> Maybe (Symbol, Solvable' TC)
 -- getUnsolved = undefined

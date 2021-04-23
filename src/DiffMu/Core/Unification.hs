@@ -30,15 +30,23 @@ instance Unify MonadDMTC Privacy where
 instance Unify MonadDMTC (DMTypeOf k) where
   unify_ DMReal DMReal                 = pure DMReal
   unify_ DMInt DMInt                   = pure DMInt
-  unify_ (Numeric t) (Numeric s)       = Numeric <$> unify_ t s
-  unify_ (NonConst τ₁) (NonConst τ₂)   = NonConst <$> unify_ τ₁ τ₂
-  unify_ (Const η₁ τ₁) (Const η₂ τ₂)   = Const <$> unify_ η₁ η₂ <*> unify_ τ₁ τ₂
-  unify_ (as :->: a) (bs :->: b)       = (:->:) <$> unify_ as bs <*> unify_ a b
-  unify_ (as :->*: a) (bs :->*: b)     = (:->*:) <$> unify_ as bs <*> unify_ a b
-  unify_ (DMTup as) (DMTup bs)         = DMTup <$> unify_ as bs
+  unify_ DMData DMData                 = pure DMData
+  unify_ (Numeric t) (Numeric s)       = Numeric <$> unify t s
+  unify_ (NonConst τ₁) (NonConst τ₂)   = NonConst <$> unify τ₁ τ₂
+  unify_ (Const η₁ τ₁) (Const η₂ τ₂)   = Const <$> unify η₁ η₂ <*> unify τ₁ τ₂
+  unify_ (as :->: a) (bs :->: b)       = (:->:) <$> unify as bs <*> unify a b
+  unify_ (as :->*: a) (bs :->*: b)     = (:->*:) <$> unify as bs <*> unify a b
+  unify_ (DMTup as) (DMTup bs)         = DMTup <$> unify as bs
   unify_ (TVar x) (TVar y) | x == y    = pure $ TVar x
   unify_ (TVar x) t                    = addSub (x := t) >> pure t
   unify_ t (TVar x)                    = addSub (x := t) >> pure t
+  unify_ L1 L1                         = pure L1
+  unify_ L2 L2                         = pure L2
+  unify_ LInf LInf                     = pure LInf
+  unify_ U U                           = pure U
+  unify_ (Clip k) (Clip s)             = Clip <$> unify k s
+  unify_ (DMMat nrm1 clp1 n1 m1 τ1) (DMMat nrm2 clp2 n2 m2 τ2) =
+     DMMat <$> unify nrm1 nrm2 <*> unify clp1 clp2 <*> unify n1 n2 <*> unify m1 m2 <*> unify τ1 τ2
   unify_ t s                           = throwError (UnificationError t s)
 
 -- Above we implictly use unification of terms of the type (a :& b).
@@ -61,17 +69,6 @@ instance Solve MonadDMTC IsEqual (DMTypeOf k, DMTypeOf k) where
 instance Solve MonadDMTC IsChoice (DMType, (HashMap [JuliaType] DMType)) where
   solve_ Dict _ _ (IsChoice (τ, cs)) = pure ()
 
--- is it gauss or mgauss?
-instance Solve MonadDMTC IsGaussResult (DMType, DMType) where
-  solve_ Dict _ name (IsGaussResult (τgauss, τin)) =
-     case τin of
-        TVar x -> pure ()
-        _ -> do
-                τ <- newVar
-                addConstraint (Solvable (IsEqual (τin, Numeric τ)))
-                addConstraint (Solvable (IsEqual (τgauss, Numeric (NonConst DMReal))))
-                dischargeConstraint @MonadDMTC name
-                return ()
 
 -- TODO implement this
 instance Solve MonadDMTC IsLessEqual (Sensitivity, Sensitivity) where

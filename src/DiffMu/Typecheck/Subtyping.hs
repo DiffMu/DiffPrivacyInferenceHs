@@ -7,7 +7,7 @@ import DiffMu.Core.Definitions
 import DiffMu.Core.Context
 import DiffMu.Core.TC
 import DiffMu.Core.Symbolic
--- import DiffMu.Typecheck.Unification
+import DiffMu.Core.Unification
 
 import Debug.Trace
 
@@ -52,7 +52,22 @@ subtypingGraph =
                       a₀ ⊑! a₁
                       return (Numeric a₀, Numeric a₁)
                  ]
-            ; IsReflexive NotStructural -> []
+            ; IsReflexive NotStructural -> [ SingleEdge $
+                   do nrm <- newVar
+                      clp <- newVar
+                      n <- newVar
+                      m <- newVar
+                      a₀ <- newVar
+                      a₁ <- newVar
+                      a₀ ⊑! a₁
+                      return ((DMMat nrm clp n m a₀), (DMMat nrm clp n m a₁))
+                 , SingleEdge $ -- this is the conv rule made implicit, for converting DMData to DMReal
+                   do nrm <- newVar
+                      clp <- newVar
+                      n <- newVar
+                      m <- newVar
+                      return ((DMMat nrm (Clip clp) n m (Numeric DMData)), (DMMat clp U n m (Numeric (NonConst DMReal))))
+                 ]
             ; NotReflexive -> []
             }
 
@@ -72,12 +87,14 @@ subtypingGraph =
                       a₀ ⊑! a₁
                       s₀ <- newVar
                       return (Const s₀ a₀, Const s₀ a₁)
+                 , SingleEdge $ return (DMData, DMData)
                  ]
             ; NotReflexive
               -> [ SingleEdge $
                    do a₀ <- newVar
                       s₀ <- newVar
                       return (Const s₀ a₀, NonConst a₀)
+                 , SingleEdge $ return (NonConst DMReal, DMData)
                  ]
             }
 
@@ -178,5 +195,28 @@ solveSupremum name (a,b,x) = do
 -- TODO: Check whether this does the correct thing.
 instance (SingI k, Typeable k) => Solve MonadDMTC IsSupremum (DMTypeOf k, DMTypeOf k, DMTypeOf k) where
   solve_ Dict _ name (IsSupremum a) = solveSupremum name a
+
+
+------------------------------------------------------------
+-- Solve supremum (TODO this should live somewhere else.)
+
+
+-- is it gauss or mgauss?
+instance Solve MonadDMTC IsGaussResult (DMType, DMType) where
+  solve_ Dict _ name (IsGaussResult (τgauss, τin)) =
+     case τin of
+        TVar x -> pure ()
+        DMMat nrm clp n m τ -> do
+           iclp <- newVar -- clip of input matrix can be anything
+           -- set constraints for in- and output types as given in the rule
+           addConstraint (Solvable (IsLessEqual (τin, (DMMat L2 iclp n m (Numeric (NonConst DMReal))))))
+           addConstraint (Solvable (IsEqual (τgauss, (DMMat LInf U n m (Numeric (NonConst DMReal))))))
+           dischargeConstraint @MonadDMTC name
+        _ -> do -- regular gauss or invalid subtyping constraint later
+           τ <- newVar
+           addConstraint (Solvable (IsEqual (τin, Numeric τ)))
+           addConstraint (Solvable (IsEqual (τgauss, Numeric (NonConst DMReal))))
+           dischargeConstraint @MonadDMTC name
+           return ()
 
 

@@ -94,22 +94,14 @@ type DMNumType = DMTypeOf NumKind
 -- the terms in `DMKind` in a place where normally haskell types would be expected.
 data DMTypeOf (k :: DMKind) where
 
-   --- matrix norms
-  L1 :: DMTypeOf NormKind
-  L2 :: DMTypeOf NormKind
-  LInf :: DMTypeOf NormKind
-
-  -- matrix clipping
-  U :: DMTypeOf ClipKind
-  Norm  :: DMTypeOf ClipKind -> DMType
-
   -- the base numeric constructors
   DMInt    :: DMTypeOf BaseNumKind
   DMReal   :: DMTypeOf BaseNumKind
 
-  -- a base numeric type can be either constant or non constant
+  -- a base numeric type can be either constant or non constant or data
   Const    :: Sensitivity -> DMTypeOf BaseNumKind -> DMTypeOf NumKind
   NonConst :: DMTypeOf BaseNumKind -> DMTypeOf NumKind
+  DMData   :: DMTypeOf NumKind
 
   -- we include numeric types into main types using this constructor
   Numeric  :: DMTypeOf NumKind -> DMType
@@ -127,18 +119,23 @@ data DMTypeOf (k :: DMKind) where
   -- tuples
   DMTup :: [DMType] -> DMType
 
+   --- matrix norms
+  L1 :: DMTypeOf NormKind
+  L2 :: DMTypeOf NormKind
+  LInf :: DMTypeOf NormKind
+
+  -- embed norms into ClipKind
+  U :: DMTypeOf ClipKind
+  Clip :: DMTypeOf NormKind -> DMTypeOf ClipKind
+
   -- matrices
   DMMat :: (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> Sensitivity -> DMType -> DMType
 
 -- Types are pretty printed as follows.
 instance Show (DMTypeOf k) where
-  show L1 = "L1"
-  show L2 = "L2"
-  show LInf = "L∞"
-  show U = "U"
-  show (Norm n) = "Norm(" <> show n <> ")"
   show DMInt = "Int"
   show DMReal = "Real"
+  show DMData = "Data"
   show (Const s t) = show t <> "[" <> show s <> "]"
   show (NonConst t) = show t <> "[--]"
   show (Numeric t) = "Num(" <> show t <> ")"
@@ -146,7 +143,13 @@ instance Show (DMTypeOf k) where
   show (a :->: b) = show a <> " -> " <> show b
   show (a :->*: b) = show a <> " ->* " <> show b
   show (DMTup ts) = "Tupl(" <> show ts <> ")"
-  show (DMMat nrm clp n m τ) = "Matrix[" <> show n <> " × " <> show m <> "](" <> show τ <> ")"
+  show L1 = "L1"
+  show L2 = "L2"
+  show LInf = "L∞"
+  show U = "U"
+  show (Clip n) = "Clip(" <> show n <> ")"
+  show (DMMat nrm clp n m τ) = "Matrix<n: "<> show nrm <> ", c: " <> show clp <> ">[" <> show n <> " × " <> show m <> "](" <> show τ <> ")"
+
 
 
 --------------------
@@ -387,6 +390,7 @@ instance TCConstraint IsTypeOpResult where
 -- DMTerm
 --
 
+type Clip = DMTypeOf ClipKind
 
 -- data Lam_ = Lam_ [Asgmt JuliaType] DMTerm
 --   deriving (Generic, Show)
@@ -410,6 +414,7 @@ data DMTerm =
   | TLet [(Asgmt JuliaType)] DMTerm DMTerm
   | Gauss DMTerm DMTerm DMTerm DMTerm
   | MCreate DMTerm DMTerm DMTerm
+  | ClipM Clip DMTerm
 -- ....
   deriving (Generic, Show)
 

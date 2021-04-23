@@ -72,6 +72,7 @@ substituteScope scope term = let
          Tup ts -> Tup <$> (mapM (sub) ts)
          Gauss r e d f -> Gauss <$> (sub r) <*> (sub e) <*> (sub d) <*> (sub f)
          MCreate n m bf -> MCreate <$> (sub n) <*> (sub m) <*> (sub bf)
+         ClipM c m -> ClipM c <$> (sub m)
 
          SLet v t body -> let vname = fstA v in
                               case H.member vname scope of -- does v exist in scope already?
@@ -115,6 +116,7 @@ rename olds news term =
          Tup ts -> Tup (re <$> ts)
          Gauss r e d f -> Gauss (re r) (re e) (re d) (re f)
          MCreate n m bf -> MCreate (re n) (re m) (re bf)
+         ClipM c m -> ClipM c (re m)
 
          Lam xτs body -> case olds `elem` (map fstA xτs) of
                                      True -> term -- we don't rename the function argument variable.
