@@ -26,7 +26,7 @@ main = do
       r = do
 
         -- typecheck the term t5
-        tres <- checkPriv t12 def
+        tres <- checkPriv t13 def
         solveAllConstraints SolveExact
         normalize tres
 
@@ -48,7 +48,8 @@ main = do
         -- normalizeContext
         -- normalize (Numeric (a))
 
-  let x = runExcept (runStateT (runTCT r) def)
+  let x = runExcept (runStateT (runTCT r) (Full def def (Right def)))
+  -- let x = runExcept (runStateT (runTCT r) def)
   case x of
     Left err -> putStrLn $ "Encountered error: " <> show err
     Right x -> putStrLn $ "Result: " <> show x

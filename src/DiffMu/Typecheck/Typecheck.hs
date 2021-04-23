@@ -22,18 +22,34 @@ import Debug.Trace
 --------------------
 -- Sensitivity terms
 
+checkSen' :: DMTerm -> DMScope -> TC DMType
+
+checkPriv :: DMTerm -> DMScope -> TC DMType
+checkPriv t scope = do
+  res <- checkPri' t scope
+  γ <- use types
+  case γ of
+    Right γ -> return res
+    Left γ -> error $ "checkPriv returned a sensitivity context!\n" <> "It is:\n" <> show γ <> "\nThe input term was:\n" <> show t
+
 checkSens :: DMTerm -> DMScope -> TC DMType
+checkSens t scope = do
+  res <- checkSen' t scope
+  γ <- use types
+  case γ of
+    Left γ -> return res
+    Right γ -> error $ "checkSens returned a privacy context!\n" <> "It is:\n" <> show γ <> "\nThe input term was:\n" <> show t
 
 -- TODO: Here we assume that η really has type τ, and do not check it. Should maybe do that.
-checkSens (Sng η τ) scope  = pure $ Numeric (Const (constCoeff (Fin η)) (createDMTypeNum τ))
+checkSen' (Sng η τ) scope  = pure $ Numeric (Const (constCoeff (Fin η)) (createDMTypeNum τ))
 
 -- a special term for function argument variables.
 -- those get sensitivity 1, all other variables are var terms
-checkSens (Arg x dτ) scope = do τ <- createDMType dτ
+checkSen' (Arg x dτ) scope = do τ <- createDMType dτ
                                 setVar x (τ :@ constCoeff (Fin 1))
                                 return τ
 
-checkSens (Var x dτ) scope = do -- get the term that corresponds to this variable from the scope dict
+checkSen' (Var x dτ) scope = do -- get the term that corresponds to this variable from the scope dict
                                 (vt, scope') <- popDefinition scope x
 
                                 -- check the term in the new, smaller scope'
@@ -49,7 +65,7 @@ checkSens (Var x dτ) scope = do -- get the term that corresponds to this variab
                                     return τ
 
 -- typechecking an op
-checkSens (Op op args) scope =
+checkSen' (Op op args) scope =
   -- We create a helper function, which infers the type of arg, unifies it with the given τ
   -- and scales the current context by s.
   let checkOpArg (arg,(τ,s)) = do
@@ -68,7 +84,7 @@ checkSens (Op op args) scope =
     return (Numeric res)
 
 
-checkSens (Phi cond ifbr elsebr) scope =
+checkSen' (Phi cond ifbr elsebr) scope =
    let mcond = do
         τ_cond <- checkSens cond scope
         mscale inftyS
@@ -83,7 +99,7 @@ checkSens (Phi cond ifbr elsebr) scope =
       return τ
 
 
-checkSens (Lam (Lam_ xτs body)) scope = do
+checkSen' (Lam (Lam_ xτs body)) scope = do
 
   -- put a special term to mark x as a function argument. those get special tratment
   -- because we're interested in their sensitivity
@@ -94,7 +110,7 @@ checkSens (Lam (Lam_ xτs body)) scope = do
   return (xrτs :->: τr)
 
 
-checkSens (LamStar (Lam_ xτs body)) scope = do
+checkSen' (LamStar (Lam_ xτs body)) scope = do
 
   -- put a special term to mark x as a function argument. those get special tratment
   -- because we're interested in their sensitivity
@@ -106,7 +122,7 @@ checkSens (LamStar (Lam_ xτs body)) scope = do
   return (xrτs :->*: τr)
 
 
-checkSens (SLet (x :- dτ) term body) scope = do
+checkSen' (SLet (x :- dτ) term body) scope = do
 
   -- TODO this requires saving the annotation in the dict.
   case dτ of
@@ -121,7 +137,7 @@ checkSens (SLet (x :- dτ) term body) scope = do
   return τ
 
 
-checkSens (Apply f args) scope = let
+checkSen' (Apply f args) scope = let
    -- check a single argument, scale its context with the corresponding sensitivity variable
    checkFArg :: DMTerm -> Sensitivity -> TC DMType
    checkFArg arg s = do
@@ -144,7 +160,7 @@ checkSens (Apply f args) scope = let
       return τ_ret
 
 
-checkSens (FLet fname sign term body) scope = do
+checkSen' (FLet fname sign term body) scope = do
 
   -- make a Choice term to put in the scope
    scope' <- case (H.lookup fname scope) of
@@ -160,7 +176,7 @@ checkSens (FLet fname sign term body) scope = do
    return result
 
 
-checkSens (Choice d) scope = let
+checkSen' (Choice d) scope = let
       checkChoice :: DMTerm -> TC DMType
       checkChoice t = do
          τ <- checkSens t scope
@@ -174,26 +190,26 @@ checkSens (Choice d) scope = let
          addConstraint (Solvable (IsChoice (τ, dd)))
          return τ
 
-checkSens (Tup ts) scope = do
+checkSen' (Tup ts) scope = do
    τs <- msumS (DiffMu.Prelude.map (\t -> (checkSens t scope)) ts)
    return (DMTup τs)
 
 
 -- Everything else is currently not supported.
-checkSens t scope = throwError (UnsupportedTermError t)
+checkSen' t scope = throwError (UnsupportedTermError t)
 
 
 --------------------------------------------------------------------------------
 -- Privacy terms
 
-checkPriv :: DMTerm -> DMScope -> TC DMType
+checkPri' :: DMTerm -> DMScope -> TC DMType
 
-checkPriv (Ret t) scope = do
+checkPri' (Ret t) scope = do
    τ <- checkSens t scope
    mtruncateP inftyP
    return τ
 
-checkPriv (SLet (x :- dτ) term body) scope =
+checkPri' (SLet (x :- dτ) term body) scope =
   -- push x to scope, check body, and discard x from the result context.
   -- this is the bind rule; as we expect the body to be a privacy term we don't need to worry about x's sensitivity
   let mbody = do
@@ -214,7 +230,7 @@ checkPriv (SLet (x :- dτ) term body) scope =
 
      return res
 
-checkPriv (FLet fname sign term body) scope = do -- this is the same as with checkSens
+checkPri' (FLet fname sign term body) scope = do -- this is the same as with checkSens
 
   -- make a Choice term to put in the scope
    scope' <- case (H.lookup fname scope) of
@@ -230,7 +246,7 @@ checkPriv (FLet fname sign term body) scope = do -- this is the same as with che
    return result
 
 
-checkPriv (Phi cond ifbr elsebr) scope = -- this is the same as with checkSens
+checkPri' (Phi cond ifbr elsebr) scope = -- this is the same as with checkSens
    let mcond = do
         τ_cond <- checkSens cond scope -- this one must be a sensitivity term.
         mscale inftyS
@@ -245,7 +261,7 @@ checkPriv (Phi cond ifbr elsebr) scope = -- this is the same as with checkSens
       return τ
 
 
-checkPriv (Apply f args) scope = let
+checkPri' (Apply f args) scope = let
    -- check a single argument, scale its context with the corresponding sensitivity variable
    checkFArg :: DMTerm -> Privacy -> TC DMType
    checkFArg arg p = do
@@ -272,6 +288,6 @@ checkPriv (Apply f args) scope = let
 
 
 
-checkPriv t scope = checkPriv (Ret t) scope -- secretly return if the term has the wrong color.
+checkPri' t scope = checkPriv (Ret t) scope -- secretly return if the term has the wrong color.
 
 
