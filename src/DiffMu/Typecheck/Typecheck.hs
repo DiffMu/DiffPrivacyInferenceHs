@@ -71,7 +71,7 @@ checkSens (Op op args) scope =
 checkSens (Phi cond ifbr elsebr) scope =
    let mcond = do
         τ_cond <- checkSens cond scope
-        mscale (constCoeff Infty)
+        mscale inftyS
         return τ_cond
    in do
       τ_sum <- msum [(checkSens ifbr scope), (checkSens elsebr scope), mcond]
@@ -102,7 +102,7 @@ checkSens (LamStar (Lam_ xτs body)) scope = do
 
   τr <- checkPriv body scope'
   xrτs <- getArgList xτs
-  mtruncateS (constCoeff Infty)
+  mtruncateS inftyS
   return (xrτs :->*: τr)
 
 
@@ -190,7 +190,7 @@ checkPriv :: DMTerm -> DMScope -> TC DMType
 
 checkPriv (Ret t) scope = do
    τ <- checkSens t scope
-   mtruncateP (constCoeff Infty, constCoeff Infty)
+   mtruncateP inftyP
    return τ
 
 checkPriv (SLet (x :- dτ) term body) scope =
@@ -213,6 +213,64 @@ checkPriv (SLet (x :- dτ) term body) scope =
                     _ -> throwError (ImpossibleError "?!")
 
      return res
+
+checkPriv (FLet fname sign term body) scope = do -- this is the same as with checkSens
+
+  -- make a Choice term to put in the scope
+   scope' <- case (H.lookup fname scope) of
+                  Nothing -> pushDefinition scope fname (Choice (H.singleton sign term))
+                  Just (Choice d) -> do
+                                        (_, scope'') <- popDefinition scope fname
+                                        pushDefinition scope'' fname (Choice (H.insert sign term d))
+                  _ -> throwError (ImpossibleError "Invalid scope entry.")
+
+   -- check body with that new scope. Choice terms will result in IsChoice constraints upon ivocation of fname
+   result <- checkPriv body scope'
+   _ <- removeVar @Privacy fname
+   return result
+
+
+checkPriv (Phi cond ifbr elsebr) scope = -- this is the same as with checkSens
+   let mcond = do
+        τ_cond <- checkSens cond scope -- this one must be a sensitivity term.
+        mscale inftyS
+        return τ_cond
+   in do
+      τ_sum <- msum [(checkPriv ifbr scope), (checkPriv elsebr scope), mcond]
+      (τif, τelse) <- case τ_sum of
+                           (τ1 : τ2 : _) -> return (τ1, τ2)
+                           _ -> throwError (ImpossibleError "Sum cannot return empty.")
+      τ <- newVar
+      addConstraint (Solvable (IsSupremum (τ, τif, τelse)))
+      return τ
+
+
+checkPriv (Apply f args) scope = let
+   -- check a single argument, scale its context with the corresponding sensitivity variable
+   checkFArg :: DMTerm -> Privacy -> TC DMType
+   checkFArg arg p = do
+      traceM ("checking " <> show arg <> " with scalar " <> show p)
+      τ <- checkSens arg scope
+      traceM ("done, got type " <> show τ)
+      mtruncateP p
+      traceM "truncated"
+      return τ
+   in do
+      εvars :: [Sensitivity] <- mapM (\x -> newVar) args -- create privacy variables for all arguments
+      δvars :: [Sensitivity] <- mapM (\x -> newVar) args
+      let pvars = (inftyP :  (zip εvars δvars)) -- constext of f gets truncated to ∞
+      let margs = zipWith checkFArg (f : args) pvars -- check f and args and scale with their respective pvar
+
+      τ_sum <- msum margs -- sum args and f's context
+      (τ_lam, argτs) <- case τ_sum of
+                             (τ : τs) -> return (τ, (zipWith (:@) τs pvars))
+                             [] -> throwError (ImpossibleError "Sum cannot return empty list.")
+
+      τ_ret <- newVar -- a type var for the function return type
+      addConstraint (Solvable (IsLessEqual (τ_lam, (argτs :->*: τ_ret)))) -- f's type must be subtype of an arrow* matching arg types.
+      return τ_ret
+
+
 
 checkPriv t scope = checkPriv (Ret t) scope -- secretly return if the term has the wrong color.
 

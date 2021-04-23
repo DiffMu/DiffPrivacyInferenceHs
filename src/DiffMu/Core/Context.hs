@@ -37,6 +37,12 @@ instance Default Sensitivity where
 instance Default Privacy where
   def = (def,def)
 
+inftyS :: Sensitivity
+inftyS = constCoeff Infty
+
+inftyP :: Privacy
+inftyP = (constCoeff Infty, constCoeff Infty)
+
 instance (CMonoidM t a, CMonoidM t b) => CMonoidM t (a,b)
 
 truncate_impl :: forall f e. (CMonoidM Identity f, CMonoidM Identity e, Eq e) => f -> TypeCtx e -> TypeCtx f
@@ -67,7 +73,8 @@ mtruncateP η = types %= truncateP η
 instance (MonadInternalError t, SemigroupM t a, SemigroupM t b) => SemigroupM t (Either a b) where
   (⋆) (Left a) (Left b) = Left <$> (a ⋆ b)
   (⋆) (Right a) (Right b) = Right <$> (a ⋆ b)
-  (⋆) _ _ = internalError "Could not match left and right. (Probably a sensitivity / privacy context mismatch.)"
+  (⋆) _ _ = error "Could not match left and right. (Probably a sensitivity / privacy context mismatch.)"
+--  (⋆) _ _ = internalError "Could not match left and right. (Probably a sensitivity / privacy context mismatch.)"
 -- instance (MonoidM t a, MonoidM t b) => MonoidM t (Either a b) where
 
 resetToDefault :: (Default a, Default b) => Either a b -> Either a b
@@ -82,6 +89,7 @@ msum :: (IsT MonadDMTC t) => [t a] -> t [a]
 -- msum :: [t a] -> t [a]
 msum ms = do
   initΣ <- use types
+  traceM ("init summing with " <> (show initΣ))
   f initΣ ms (resetToDefault initΣ)
 
     where
@@ -89,6 +97,7 @@ msum ms = do
       f :: (IsT MonadDMTC t) => TypeCtxSP -> [t a] -> TypeCtxSP -> t [a]
       f initΣ [] accΣ = types .= accΣ >> return []
       f initΣ (m:ms) accΣ = do
+        traceM ("summing with " <> (show initΣ))
         types .= initΣ
         a <- m
         mΣ <- use types
