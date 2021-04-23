@@ -26,19 +26,35 @@ checkSen' :: DMTerm -> DMScope -> TC DMType
 
 checkPriv :: DMTerm -> DMScope -> TC DMType
 checkPriv t scope = do
-  res <- checkPri' t scope
-  γ <- use types
-  case γ of
-    Right γ -> return res
-    Left γ -> error $ "checkPriv returned a sensitivity context!\n" <> "It is:\n" <> show γ <> "\nThe input term was:\n" <> show t
+   γ <- use types
+   case γ of -- TODO prettify.
+      Left (Ctx (MonCom c)) | H.null c -> return ()
+      Right (Ctx (MonCom c)) | H.null c -> return ()
+      _   -> throwError (ImpossibleError "Input context for checking must be empty.")
+   types .= Right def -- cast to privacy context.
+
+   res <- checkPri' t scope
+
+   γ <- use types
+   case γ of
+      Right γ -> return res
+      Left γ -> error $ "checkPriv returned a sensitivity context!\n" <> "It is:\n" <> show γ <> "\nThe input term was:\n" <> show t
 
 checkSens :: DMTerm -> DMScope -> TC DMType
 checkSens t scope = do
-  res <- checkSen' t scope
-  γ <- use types
-  case γ of
-    Left γ -> return res
-    Right γ -> error $ "checkSens returned a privacy context!\n" <> "It is:\n" <> show γ <> "\nThe input term was:\n" <> show t
+   γ <- use types
+   case γ of -- TODO prettify.
+      Left (Ctx (MonCom c)) | H.null c -> return ()
+      Right (Ctx (MonCom c)) | H.null c -> return ()
+      _   -> throwError (ImpossibleError "Input context for checking must be empty.")
+   types .= Left def -- cast to sensitivity context.
+
+   res <- checkSen' t scope
+
+   γ <- use types
+   case γ of
+      Left γ -> return res
+      Right γ -> error $ "checkSens returned a privacy context!\n" <> "It is:\n" <> show γ <> "\nThe input term was:\n" <> show t
 
 -- TODO: Here we assume that η really has type τ, and do not check it. Should maybe do that.
 checkSen' (Sng η τ) scope  = pure $ Numeric (Const (constCoeff (Fin η)) (createDMTypeNum τ))
@@ -189,9 +205,36 @@ checkSen' (Choice d) scope = let
          addConstraint (Solvable (IsChoice (τ, dd)))
          return τ
 
+
 checkSen' (Tup ts) scope = do
    τs <- msumS (DiffMu.Prelude.map (\t -> (checkSens t scope)) ts)
    return (DMTup τs)
+
+
+checkSen' (Gauss rp εp δp f) scope = let
+   setParam :: DMTerm -> TC Sensitivity
+   setParam t = do -- parameters must be const numbers.
+      τ <- checkSens t scope
+      v <- newVar
+      addConstraint (Solvable (IsLessEqual (τ, Numeric (Const v DMReal))))
+      return v
+   in do
+      τf <- checkSens f scope
+      (τs, senss, τfret) <- case τf of -- extract f's input types, sensitivities and return type.
+                                 xss :->: τ -> return ((map fstAnn xss), (map sndAnn xss), τ)
+                                 _ -> throwError (ImpossibleError "Gauss term must have Arr argument.")
+
+      τgauss <- newVar
+      addConstraint (Solvable (IsGaussResult (τgauss, τfret))) -- we decide later if its gauss or mgauss according to return type
+
+      r <- setParam rp
+      mapM (\s -> addConstraint (Solvable (IsLessEqual (s, r)))) senss -- all of f's sensitivities must be bounded by r
+
+      ε <- setParam εp
+      δ <- setParam δp
+
+      return ((map (\t -> (t :@ (ε, δ))) τs) :->*: τgauss)
+
 
 
 -- Everything else is currently not supported.
@@ -264,11 +307,8 @@ checkPri' (Apply f args) scope = let
    -- check a single argument, scale its context with the corresponding sensitivity variable
    checkFArg :: DMTerm -> Privacy -> TC DMType
    checkFArg arg p = do
-      traceM ("checking " <> show arg <> " with scalar " <> show p)
       τ <- checkSens arg scope
-      traceM ("done, got type " <> show τ)
       mtruncateP p
-      traceM "truncated"
       return τ
    in do
       εvars :: [Sensitivity] <- mapM (\x -> newVar) args -- create privacy variables for all arguments
@@ -284,8 +324,6 @@ checkPri' (Apply f args) scope = let
       τ_ret <- newVar -- a type var for the function return type
       addConstraint (Solvable (IsLessEqual (τ_lam, (argτs :->*: τ_ret)))) -- f's type must be subtype of an arrow* matching arg types.
       return τ_ret
-
-
 
 checkPri' t scope = checkPriv (Ret t) scope -- secretly return if the term has the wrong color.
 
