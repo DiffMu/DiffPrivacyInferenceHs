@@ -41,7 +41,7 @@ checkSens t scope = do
     Right γ -> error $ "checkSens returned a privacy context!\n" <> "It is:\n" <> show γ <> "\nThe input term was:\n" <> show t
 
 -- TODO: Here we assume that η really has type τ, and do not check it. Should maybe do that.
-checkSen' (Sng η τ) scope  = pure $ Numeric (Const (constCoeff (Fin η)) (createDMTypeNum τ))
+checkSen' (Sng η τ) scope  = Numeric <$> (Const (constCoeff (Fin η)) <$> (createDMTypeNum τ))
 
 -- a special term for function argument variables.
 -- those get sensitivity 1, all other variables are var terms

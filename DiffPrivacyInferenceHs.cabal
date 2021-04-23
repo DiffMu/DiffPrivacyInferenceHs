@@ -108,17 +108,20 @@ library
       LambdaCase
       DisambiguateRecordFields
       DuplicateRecordFields
+      PatternSynonyms
   build-depends:
       base >=4.7 && <5
     , bifunctors
     , constraints
     , data-default
     , hashable
+    , lattices
     , lens
     , mtl
     , newtype
     , parsec
     , parsec3-numbers
+    , pomaps
     , singletons
     , text
     , unordered-containers

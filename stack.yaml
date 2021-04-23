@@ -42,6 +42,7 @@ packages:
 
 extra-deps:
   - parsec3-numbers-0.1.0
+  - pomaps-0.2.0.1
 
 # extra-deps:
 # - git: https://github.com/MxmUrw/computational-algebra

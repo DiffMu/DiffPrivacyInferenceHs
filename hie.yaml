@@ -4,3 +4,5 @@ cradle:
       component: 'DiffPrivacyInferenceHs:lib'
     - path: './app'
       component: 'DiffPrivacyInferenceHs:exe:diffmu'
+    - path: './ffisrc'
+      component: 'DiffPrivacyInferenceHs:lib'
