@@ -17,3 +17,10 @@ packages:
       sha256: a3d23f56cc2a9d17ed24ac5119a7b2102d40c0afeed5271f6b41b7597f181df0
       size: 264
     hackage: parsec3-numbers-0.1.0@sha256:2f32295f9f4023f7f97da851549aaaf5e72866e98bf016a1ac3c6e8715bbaf8a,685
+- original:
+    hackage: pomaps-0.2.0.1
+  completed:
+    pantry-tree:
+      sha256: 1f53c725e4d29ef41ad5b590658c3c48853f95d0789adf18bc563cd502cf65a7
+      size: 1036
+    hackage: pomaps-0.2.0.1@sha256:b9b50a8d6836decbd249a167682aeaeec637970eeb56af9a93184694f7fac69e,2948

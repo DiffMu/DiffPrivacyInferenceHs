@@ -40,6 +40,8 @@ library:
     - constraints
     - parsec
     - parsec3-numbers
+    - pomaps
+    - lattices
     # - computational-algebra
     # - type-natural
     # - algebra
@@ -85,6 +87,7 @@ library:
     - LambdaCase
     - DisambiguateRecordFields
     - DuplicateRecordFields
+    - PatternSynonyms
 
 verbatim: |
   foreign-library diffmu-wrapper

@@ -6,17 +6,16 @@
 {-# LANGUAGE TemplateHaskell          #-}
 {-# OPTIONS_GHC -fno-warn-unused-top-binds #-}
 
-module Wrapper (
-  basicWrapper
-) where
+module Wrapper where
 
+import DiffMu.Prelude
 
 import           Foreign.C.Types
 import           Foreign.Ptr
 import           Foreign.StablePtr
 import           Foreign.C.String
 
-import           Control.DeepSeq
+-- import           Control.DeepSeq
 import           Control.Lens
 import           Data.Int          (Int32)
 import           GHC.Generics      (Generic)
@@ -25,76 +24,80 @@ import DiffMu.Runner
 
 foreign import ccall "dynamic" mkFun :: FunPtr (CInt -> CInt) -> (CInt -> CInt)
 
-data SubComplicated = SubComplicated Int Float String deriving(Show, Generic, NFData)
+-- data SubComplicated = SubComplicated Int Float String deriving(Show, Generic, NFData)
 
-data Complicated = Complicated {
-  _f1 :: SubComplicated,
-  _f2 :: [Float],
-  _f3 :: Int32 -> Int32
-}
+-- data Complicated = Complicated {
+--   _f1 :: SubComplicated,
+--   _f2 :: [Float],
+--   _f3 :: Int32 -> Int32
+-- }
 
-instance Show Complicated where
-  show (Complicated f1' f2' f3') = "Complicated:\n\t" ++ show f1' ++ "\n\t" ++ show f2' ++ "\n\tf3(0)=" ++ show (f3' 0)
-
-
-newComplicated :: Complicated
-newComplicated = Complicated {
-  _f1 = SubComplicated 5 0.5 "hi",
-  _f2 = [0.1,0.2,5],
-  _f3 = (+2)
-}
-
-makeLenses ''Complicated
+-- instance Show Complicated where
+--   show (Complicated f1' f2' f3') = "Complicated:\n\t" ++ show f1' ++ "\n\t" ++ show f2' ++ "\n\tf3(0)=" ++ show (f3' 0)
 
 
-basicWrapper :: IO ()
-basicWrapper = print "wrapper" >> run
+-- newComplicated :: Complicated
+-- newComplicated = Complicated {
+--   _f1 = SubComplicated 5 0.5 "hi",
+--   _f2 = [0.1,0.2,5],
+--   _f3 = (+2)
+-- }
 
-getComplicated :: IO (StablePtr Complicated)
-getComplicated = newStablePtr newComplicated
-
-printComplicated :: StablePtr Complicated -> IO ()
-printComplicated ptr = do
-  v <- deRefStablePtr ptr
-  print v
-
-mutateComplicated :: CFloat -> StablePtr Complicated -> IO (StablePtr Complicated)
-mutateComplicated (CFloat addme) ptr = do
-  v <- deRefStablePtr ptr
-  let
-    newcomp = over f2 (++[addme]) v
-  freeStablePtr ptr
-  newStablePtr newcomp
+-- makeLenses ''Complicated
 
 
+-- basicWrapper :: IO ()
+-- basicWrapper = print "wrapper" >> run
 
-setAdder :: FunPtr (CInt -> CInt) -> StablePtr Complicated -> IO (StablePtr Complicated)
-setAdder fptr ptr = do
-  v <- deRefStablePtr ptr
-  let
-    newAdder x = r where
-      CInt r = (mkFun fptr) (CInt x)
-    newcomp = set f3 newAdder v
-  freeStablePtr ptr
-  newStablePtr newcomp
+-- getComplicated :: IO (StablePtr Complicated)
+-- getComplicated = newStablePtr newComplicated
 
-freeComplicated :: StablePtr Complicated -> IO ()
-freeComplicated = freeStablePtr
+-- printComplicated :: StablePtr Complicated -> IO ()
+-- printComplicated ptr = do
+--   v <- deRefStablePtr ptr
+--   print v
 
-typecheckFromCString_DMTerm :: CString -> IO ()
-typecheckFromCString_DMTerm str = do
+-- mutateComplicated :: CFloat -> StablePtr Complicated -> IO (StablePtr Complicated)
+-- mutateComplicated (CFloat addme) ptr = do
+--   v <- deRefStablePtr ptr
+--   let
+--     newcomp = over f2 (++[addme]) v
+--   freeStablePtr ptr
+--   newStablePtr newcomp
+
+
+
+-- setAdder :: FunPtr (CInt -> CInt) -> StablePtr Complicated -> IO (StablePtr Complicated)
+-- setAdder fptr ptr = do
+--   v <- deRefStablePtr ptr
+--   let
+--     newAdder x = r where
+--       CInt r = (mkFun fptr) (CInt x)
+--     newcomp = set f3 newAdder v
+--   freeStablePtr ptr
+--   newStablePtr newcomp
+
+-- freeComplicated :: StablePtr Complicated -> IO ()
+-- freeComplicated = freeStablePtr
+
+
+
+typecheckFromCString_DMTerm :: FunPtr (CString -> CString -> Bool) -> CString -> IO ()
+typecheckFromCString_DMTerm fun str = do
   str' <- peekCString str
   typecheckFromString_DMTerm str'
   -- putStrLn $ "I got the string: {" <> str' <> "}"
 
 
-foreign export ccall basicWrapper :: IO ()
-foreign export ccall getComplicated :: IO (StablePtr Complicated)
-foreign export ccall printComplicated :: StablePtr Complicated -> IO ()
-foreign export ccall freeComplicated :: StablePtr Complicated -> IO ()
-foreign export ccall mutateComplicated :: CFloat -> StablePtr Complicated -> IO (StablePtr Complicated)
-foreign export ccall setAdder :: FunPtr (CInt -> CInt) -> StablePtr Complicated -> IO (StablePtr Complicated)
+-- foreign export ccall basicWrapper :: IO ()
+-- foreign export ccall getComplicated :: IO (StablePtr Complicated)
+-- foreign export ccall printComplicated :: StablePtr Complicated -> IO ()
+-- foreign export ccall freeComplicated :: StablePtr Complicated -> IO ()
+-- foreign export ccall mutateComplicated :: CFloat -> StablePtr Complicated -> IO (StablePtr Complicated)
+-- foreign export ccall setAdder :: FunPtr (CInt -> CInt) -> StablePtr Complicated -> IO (StablePtr Complicated)
 
-foreign export ccall typecheckFromCString_DMTerm :: CString -> IO ()
+foreign export ccall typecheckFromCString_DMTerm :: FunPtr (CString -> CString -> Bool) -> CString -> IO ()
+
+foreign import ccall "dynamic" call_StringStringBool :: FunPtr (CString -> CString -> Bool) -> CString -> CString -> Bool
 
 

@@ -16,7 +16,7 @@ import qualified Data.Text as T
 newtype JuliaType' = JuliaType' String
 
 specialChar :: [Char]
-specialChar = "(){}, "
+specialChar = "(){}, []"
 
 
 pIdentifier :: Parser String
@@ -27,21 +27,21 @@ pSymbol = (Symbol . T.pack) <$> (char ':' *> pIdentifier)
 
 -- TODO: Add more types.
 pJuliaType :: Parser JuliaType
-pJuliaType =
-      try (string "Any" *> pure JTAny)
-  <|> try (string "Integer" *> pure (JTNum JTNumInt))
-  <|> try (string "Real" *> pure (JTNum JTNumReal))
+pJuliaType = JuliaType <$> pIdentifier
+  --     try (string "Any" *> pure JTAny)
+  -- <|> try (string "Integer" *> pure (JTNum JTNumInt))
+  -- <|> try (string "Real" *> pure (JTNum JTNumReal))
 
 
-pJuliaNumType :: Parser JuliaNumType
-pJuliaNumType = undefined
+-- pJuliaNumType :: Parser JuliaNumType
+-- pJuliaNumType = undefined
 
 pSng :: Parser DMTerm
 pSng = do
   n <- decFloat False
   case n of
-    Left a -> pure $ Sng (fromIntegral a) JTNumInt
-    Right a -> pure $ Sng a JTNumReal
+    Left a -> pure $ Sng (fromIntegral a) (JuliaType "Integer")
+    Right a -> pure $ Sng a (JuliaType "Real")
 
 
 infixl 2 <*､>

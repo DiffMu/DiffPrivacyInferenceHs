@@ -155,6 +155,7 @@ instance DictKey v => DictLike v x (CtxStack v x) where
   getValue k (CtxStack d _) = getValue k d
   deleteValue k (CtxStack d other) = CtxStack (deleteValue k d) other
   emptyDict = CtxStack emptyDict []
+  isEmptyDict (CtxStack top others) = isEmptyDict top
 instance Normalize t a => Normalize t (CtxStack v a) where
   normalize (CtxStack top other) = CtxStack <$> normalize top <*> normalize other
 
@@ -632,16 +633,22 @@ newSVar hint = meta.sensVars %%= (newKindedName hint)
 
 
 -- Maps julia num types to DMtypes (of basenumkind)
-createDMTypeNum :: JuliaNumType -> DMTypeOf BaseNumKind
-createDMTypeNum JTNumInt = DMInt
-createDMTypeNum JTNumReal = DMReal
+-- createDMTypeNum :: JuliaNumType -> DMTypeOf BaseNumKind
+-- createDMTypeNum JTNumInt = DMInt
+-- createDMTypeNum JTNumReal = DMReal
+createDMTypeNum :: MonadDMTC t => JuliaType -> t (DMTypeOf BaseNumKind)
+createDMTypeNum (JuliaType "Integer")= pure DMInt
+createDMTypeNum (JuliaType "Real") = pure  DMReal
+createDMTypeNum (JuliaType str) = throwError (TypeMismatchError $ "expected " <> show str <> " to be either Integer or Real.")
 
 -- Maps julia types to DMTypes (of main kind)
 -- (`JTAny` is turned into a new type variable.)
 createDMType :: MonadDMTC t => JuliaType -> t (DMTypeOf MainKind)
-createDMType JTAny = TVar <$> newTVar "any"
  -- NOTE: defaulting to non-const might or might not be what we want to do here.
-createDMType (JTNum τ) = pure (Numeric (NonConst (createDMTypeNum τ)))
+createDMType (JuliaType "Integer") = pure $ Numeric (NonConst DMInt)
+createDMType (JuliaType "Real") = pure $ Numeric (NonConst DMReal)
+-- TODO: is it correct to create tvars for anything else?
+createDMType _ = TVar <$> newTVar "any"
 
 
 
