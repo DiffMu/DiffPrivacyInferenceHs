@@ -53,8 +53,8 @@ substituteScope scope term = let
       sub = substituteScope scope
    in do
       case term of
-         Lam _ -> return term
-         LamStar _ -> return term
+         Lam _ _ -> return term
+         LamStar _ _ -> return term
          Choice _ -> return term
          Sng _ _ -> return term
          Arg _ _ -> return term
@@ -112,12 +112,12 @@ rename olds news term =
          Iter t1 t2 t3 -> Iter (re t1) (re t2) (re t3)
          Tup ts -> Tup (re <$> ts)
 
-         Lam (Lam_ xτs body) -> case olds `elem` (map fstA xτs) of
+         Lam xτs body -> case olds `elem` (map fstA xτs) of
                                      True -> term -- we don't rename the function argument variable.
-                                     False -> Lam (Lam_ xτs (re body))
-         LamStar (Lam_ xτs body) -> case olds `elem` (map fstA xτs) of
+                                     False -> Lam xτs (re body)
+         LamStar xτs body -> case olds `elem` (map fstA xτs) of
                                      True -> term -- we don't rename the function argument variable.
-                                     False -> LamStar (Lam_ xτs (re body))
+                                     False -> LamStar xτs (re body)
 
          SLet s r body -> if (fstA s) == olds
                              then SLet s (re r) body -- don't rename in the body if this slet overwrites olds

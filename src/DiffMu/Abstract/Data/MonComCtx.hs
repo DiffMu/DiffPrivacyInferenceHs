@@ -20,7 +20,7 @@ instance (SemigroupM m x, HasMonCom m x v) => SemigroupM m (Ctx v x) where
   (⋆) (Ctx c) (Ctx d) = Ctx <$> (c ⋆ d)
 
 instance (Show v, Show x, DictKey v) => Show (Ctx v x) where
-  show (Ctx γ) = showWith ", " (\x τ -> show x <> " : " <> show τ) γ
+  show (Ctx γ) = showWith ",\n" (\x τ -> show x <> " : " <> show τ) γ
 
 instance Default (Ctx v x)
 

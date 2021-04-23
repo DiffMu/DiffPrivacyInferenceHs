@@ -98,8 +98,7 @@ checkSen' (Phi cond ifbr elsebr) scope =
       addConstraint (Solvable (IsSupremum (τ, τif, τelse)))
       return τ
 
-
-checkSen' (Lam (Lam_ xτs body)) scope = do
+checkSen' (Lam xτs body) scope = do
 
   -- put a special term to mark x as a function argument. those get special tratment
   -- because we're interested in their sensitivity
@@ -110,7 +109,7 @@ checkSen' (Lam (Lam_ xτs body)) scope = do
   return (xrτs :->: τr)
 
 
-checkSen' (LamStar (Lam_ xτs body)) scope = do
+checkSen' (LamStar xτs body) scope = do
 
   -- put a special term to mark x as a function argument. those get special tratment
   -- because we're interested in their sensitivity

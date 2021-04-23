@@ -10,15 +10,15 @@ import qualified Prelude as P
 import Data.Singletons.TH
 
 data SymVal =
-  Infty | Fin Rational -- a| Ln (SymTerm t)
+  Infty | Fin Float -- a| Ln (SymTerm t)
   deriving (Generic, Eq)
 instance Show SymVal where
   show Infty = "∞"
-  show (Fin f) =
-    let a = numerator f
-        b = denominator f
-    in if b == 1 then show a
-                 else show @Float (fromRational f)
+  show (Fin f) = show f
+    -- let a = numerator f
+    --     b = denominator f
+    -- in if b == 1 then show a
+    --              else show @Float (fromRational f)
 
 instance Hashable SymVal
 
