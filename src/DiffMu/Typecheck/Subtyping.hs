@@ -99,6 +99,7 @@ subtypingGraph =
 convertSubtypingToSupremum :: forall k t. (SingI k, Typeable k, IsT MonadDMTC t) => Symbol -> (DMTypeOf k, DMTypeOf k) -> t ()
 convertSubtypingToSupremum name (lower, TVar upper) = do
   allSubtypings <- getConstraintsByType (Proxy @(IsLessEqual (DMTypeOf k, DMTypeOf k)))
+  -- TODO: We are actually not allowed to do this always, but only if there is nothing which could be broken...
   let withSameVar = [(name', lower') | (name', IsLessEqual (lower', TVar upper')) <- allSubtypings,
                               name' /= name,
                               upper' == upper]
