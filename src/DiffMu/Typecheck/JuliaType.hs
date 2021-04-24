@@ -41,6 +41,7 @@ juliatype (_ :->*: _) = JuliaType "Function"
 juliatype (DMTup xs) =
   let js = (\(JuliaType j) -> j) . juliatype <$> xs
   in JuliaType $ "Tuple{" <> intercalate ", " js <> "}"
+juliatype τ = error $ "juliatype(" <> show τ <> ") not implemented."
 
 global_callback_issubtype :: IORef (DMEnv)
 global_callback_issubtype = unsafePerformIO (newIORef makeEmptyDMEnv)

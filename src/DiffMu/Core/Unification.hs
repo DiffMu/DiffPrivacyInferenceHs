@@ -65,17 +65,6 @@ instance Solve MonadDMTC IsEqual (DMTypeOf k, DMTypeOf k) where
   solve_ Dict _ _ (IsEqual (a,b)) = unify_ a b >> pure ()
 
 
--- is it gauss or mgauss?
-instance Solve MonadDMTC IsGaussResult (DMType, DMType) where
-  solve_ Dict _ name (IsGaussResult (τgauss, τin)) =
-     case τin of
-        TVar x -> pure ()
-        _ -> do
-                τ <- newVar
-                addConstraint (Solvable (IsEqual (τin, Numeric τ)))
-                addConstraint (Solvable (IsEqual (τgauss, Numeric (NonConst DMReal))))
-                dischargeConstraint @MonadDMTC name
-                return ()
 
 -- TODO implement this
 instance Solve MonadDMTC IsLessEqual (Sensitivity, Sensitivity) where

@@ -92,6 +92,12 @@ instance FreeVars v a => FreeVars v [a] where
 instance Typeable k => FreeVars TVarOf (DMTypeOf k) where
   freeVars DMInt = []
   freeVars DMReal = []
+  freeVars DMData = []
+  freeVars L1 = []
+  freeVars L2 = []
+  freeVars LInf = []
+  freeVars U = []
+  freeVars (Clip τ) = freeVars τ
   freeVars (Numeric τ) = freeVars τ
   freeVars (NonConst τ) = freeVars τ
   freeVars (Const _ τ) = freeVars τ
@@ -99,6 +105,7 @@ instance Typeable k => FreeVars TVarOf (DMTypeOf k) where
   freeVars (τ1 :->: τ2) = freeVars (fstAnn <$> τ1) <> freeVars τ2
   freeVars (τ1 :->*: τ2) = freeVars (fstAnn <$> τ1) <> freeVars τ2
   freeVars (DMTup τs) = freeVars τs
+  freeVars (DMMat nrm clp n m τ) = freeVars nrm <> freeVars clp <> freeVars τ
 
 
 
