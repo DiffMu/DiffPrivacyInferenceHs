@@ -45,3 +45,9 @@ t17 = MCreate (Sng 1 JTNumInt) (Sng 1 JTNumInt) (Lam [Symbol "x" :- JTNumInt, Sy
 
 t18 = Gauss t₂ t₂ t₂ (Lam [Symbol "y" :- (JTAny)] t17)
 --t19 = ClipM (Clip L1) t17
+--
+t20 = Tup [t₅ t₂ t₂, t₂, t₂]
+
+arg a = (Symbol a :- (JTAny))
+
+t21 = TLet [arg "x", arg "y", arg "z"] t20 (Op (IsBinary DMOpAdd) [t₃ "x", t₃ "y"])

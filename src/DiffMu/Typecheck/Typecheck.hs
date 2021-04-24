@@ -211,6 +211,49 @@ checkSen' (Tup ts) scope = do
    τs <- msumS (DiffMu.Prelude.map (\t -> (checkSens t scope)) ts)
    return (DMTup τs)
 
+checkSen' (TLet xs tu body) scope =
+   -- remove all Nothings.
+   let listAnnotation :: [Maybe (DMType :& Sensitivity)] -> [Sensitivity]
+       listAnnotation lst = case lst of
+          [] -> []
+          (Just (τ :@ s) : xs) -> (s : listAnnotation xs)
+          (Nothing : xs) -> listAnnotation xs
+   -- remove all Nothings.
+       listTypes :: [Maybe (DMType :& Sensitivity)] -> TC [DMType]
+       listTypes lst = case lst of
+          [] -> return []
+          (Just (τ :@ s) : xs) -> (:) <$> return τ <*> listTypes xs
+          (Nothing : xs) -> (:) <$> newVar <*> listTypes xs
+   in do
+      --TODO chekc uniqueness
+      maxs <- newVar
+
+      let mtup = do -- checn and scale
+             τ <- checkSens tu scope
+             mscale maxs
+             return τ
+
+      let mbody = do
+             let scope' = mconcat ((\(x :- dτ) -> setValue x (Arg x dτ)) <$> xs) scope -- TODO unique names
+             let xnames = map fstA xs
+
+             τb <- checkSens body scope'
+
+             sτs <- mapM (removeVar @Sensitivity) xnames -- get inference result for xs
+
+             let s = Max (listAnnotation sτs) -- set maxs to maximum of inferred sensitivites
+             injectVarId s ==! maxs
+
+             τs <- listTypes sτs -- extract inferred types for tuple entries (or TVar if unused)
+
+             return (τb, τs)
+
+      ((τb, τs), τt) <- msumTup (mbody, mtup)
+
+      unify τt (DMTup τs) -- set correct tuple type
+
+      return τb
+
 
 checkSen' (Gauss rp εp δp f) scope = let
    setParam :: DMTerm -> TC Sensitivity

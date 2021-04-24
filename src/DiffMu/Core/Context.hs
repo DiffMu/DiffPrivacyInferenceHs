@@ -106,6 +106,22 @@ msum emptyΣ ms = do
 msumP = msum (Right def)
 msumS = msum (Left def)
 
+msumTup :: (IsT MonadDMTC t) => (t a, t b) -> t (a,b)
+msumTup (ma, mb) = do
+  tΣ <- use types
+  types .= resetToDefault tΣ
+  a <- ma
+  aΣ <- use types
+
+  types .= resetToDefault tΣ
+  b <- mb
+  bΣ <- use types
+
+  m_acc_Σ <- (traceShowId aΣ) ⋆ (traceShowId bΣ)
+
+  return (a , b)
+
+
 setVar :: MonadDMTC t => Symbol -> DMType :& Sensitivity -> t ()
 setVar k v = types %=~ setValueM k (Left v :: Either (DMType :& Sensitivity) (DMType :& Privacy))
 

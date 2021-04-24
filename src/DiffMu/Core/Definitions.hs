@@ -420,7 +420,6 @@ data DMTerm =
   | Phi DMTerm DMTerm DMTerm
   | Lam     [Asgmt JuliaType] DMTerm
   | LamStar [Asgmt JuliaType] DMTerm
---  | DPhi [Lam_]
   | Apply DMTerm [DMTerm]
   | Iter DMTerm DMTerm DMTerm
   | FLet Symbol [JuliaType] DMTerm DMTerm
@@ -431,6 +430,7 @@ data DMTerm =
   | Gauss DMTerm DMTerm DMTerm DMTerm
   | MCreate DMTerm DMTerm DMTerm
   | ClipM Clip DMTerm
+--  | Loop DMTerm DMTerm DMTerm
 -- ....
   deriving (Generic, Show)
 

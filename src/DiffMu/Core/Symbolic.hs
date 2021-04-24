@@ -59,12 +59,15 @@ genSingletons [''SensKind]
 
 
 data SymVar (k :: SensKind) =
-  HonestVar (SymbolOf k) | Ln (SymTerm MainSensKind)
+  HonestVar (SymbolOf k)
+  | Ln (SymTerm MainSensKind)
+  | Max [SymTerm MainSensKind]
   deriving (Generic, Eq)
 
 instance Show (SymVar k) where
   show (HonestVar v) = show v
   show (Ln te) = "ln(" <> show te <> ")"
+  show (Max te) = "max(" <> show te <> ")"
 
 instance Hashable (SymVar k)
 
@@ -89,6 +92,7 @@ type SymTerm = CPolyM SymVal Int (SymVar MainSensKind)
 
 instance CheckContains (SymVar MainSensKind) (SymbolOf MainSensKind) where
   checkContains (Ln _) = Nothing
+  checkContains (Max _) = Nothing
   checkContains (HonestVar v) = Just v
 
 
