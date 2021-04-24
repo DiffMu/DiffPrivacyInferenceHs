@@ -106,6 +106,12 @@ instance TCConstraint IsGaussResult where
   constr = IsGaussResult
   runConstr (IsGaussResult c) = c
 
+---- Loop or SLoop
+newtype IsLoopResult a = IsLoopResult a deriving Show
+
+instance TCConstraint IsLoopResult where
+  constr = IsLoopResult
+  runConstr (IsLoopResult c) = c
 ----------------------------------------------------------
 -- functions for Constraint
 

@@ -109,22 +109,45 @@ msumS = msum (Left def)
 msumTup :: (IsT MonadDMTC t) => (t a, t b) -> t (a,b)
 msumTup (ma, mb) = do
   tΣ <- use types
-  types .= resetToDefault tΣ
+  types .= tΣ
   a <- ma
   aΣ <- use types
 
-  types .= resetToDefault tΣ
+  types .= tΣ
   b <- mb
   bΣ <- use types
 
-  m_acc_Σ <- (traceShowId aΣ) ⋆ (traceShowId bΣ)
+  resΣ <- (aΣ ⋆ bΣ)
+  types .= resΣ
 
   return (a , b)
 
 
+msum3Tup :: (IsT MonadDMTC t) => (t a, t b, t c) -> t (a,b,c)
+msum3Tup (ma, mb, mc) = do
+  tΣ <- use types
+  types .= tΣ
+  a <- ma
+  aΣ <- use types
+
+  types .= tΣ
+  b <- mb
+  bΣ <- use types
+
+  types .= tΣ
+  c <- mc
+  cΣ <- use types
+
+  m_acc_Σ <- (aΣ ⋆ bΣ)
+  resΣ <- (m_acc_Σ ⋆ cΣ)
+  types .= resΣ
+
+  return (a, b, c)
+
+
+
 setVar :: MonadDMTC t => Symbol -> DMType :& Sensitivity -> t ()
 setVar k v = types %=~ setValueM k (Left v :: Either (DMType :& Sensitivity) (DMType :& Privacy))
-
 
 
 
@@ -155,14 +178,17 @@ getArgList xτs = do
 
   return xτs'
 
-removeVar :: forall e t. (MonadDMTC t, DMExtra e) => Symbol -> t (Maybe (DMType :& e))
+removeVar :: forall e t. (MonadDMTC t, DMExtra e, CMonoidM Identity e) => Symbol -> t (DMType :& e)
 removeVar x =  do
   -- (γ :: Ctx Symbol (DMType :& e)) <- use types
   γ <- use types
   v <- getValueM x γ
+  vr <- case v of
+     Just vv -> cast vv
+     Nothing -> (:@) <$> newVar <*> return zeroId
   γ' <- deleteValueM x γ
   types .= γ'
-  cast v
+  return vr
 
 lookupVar :: forall e t. (MonadDMTC t, DMExtra e) => Symbol -> t (Maybe (DMType :& e))
 lookupVar x =  do

@@ -70,6 +70,13 @@ instance Solve MonadDMTC IsEqual (DMTypeOf k, DMTypeOf k) where
 instance Solve MonadDMTC IsLessEqual (Sensitivity, Sensitivity) where
   solve_ Dict _ _ (IsLessEqual (s1, s2)) = pure ()
 
+
+-- TODO implement this
+instance Solve MonadDMTC IsLoopResult ((Sensitivity, Sensitivity, Sensitivity), Sensitivity, DMType) where
+  solve_ Dict _ _ (IsLoopResult ((s1, s2, s3), s, τ_iter)) = pure ()
+
+
+
 -------------------------------------------------------------------
 -- Monadic monoid structure on dmtypes
 --

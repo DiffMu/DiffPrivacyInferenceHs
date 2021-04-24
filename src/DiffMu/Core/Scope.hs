@@ -67,12 +67,26 @@ substituteScope scope term = let
          Op op ts -> Op op <$> (mapM (sub) ts)
          Phi tc ti te -> Phi <$> (sub tc) <*> (sub ti) <*> (sub te)
          Apply tf ts -> Apply <$> (sub tf) <*> (mapM (sub) ts)
-         Iter t1 t2 t3 -> Iter <$> (sub t1) <*> (sub t2) <*> (sub t3)
          FLet fname jτs ft body -> FLet fname jτs <$> (sub ft) <*> (sub body)
          Tup ts -> Tup <$> (mapM (sub) ts)
          Gauss r e d f -> Gauss <$> (sub r) <*> (sub e) <*> (sub d) <*> (sub f)
          MCreate n m bf -> MCreate <$> (sub n) <*> (sub m) <*> (sub bf)
          ClipM c m -> ClipM c <$> (sub m)
+         Iter t1 t2 t3 -> Iter <$> (sub t1) <*> (sub t2) <*> (sub t3)
+         Loop it cs (x1, x2) body -> do
+            (x11, body1) <- case H.member x1 scope of
+               True -> do
+                  newname <- uniqueName x1 -- create a new name for x1
+                  return (newname, (rename x1 newname body))
+               False -> return (x1, body)
+
+            (x22, body2) <- case H.member x2 scope of
+               True -> do
+                  newname <- uniqueName x2 -- create a new name for x2
+                  return (newname, (rename x2 newname body1))
+               False -> return (x2, body1)
+
+            Loop <$> (sub it) <*> (sub cs) <*> (return (x11,x22)) <*> (sub body2)
 
          SLet v t body -> let vname = fstA v in
                               case H.member vname scope of -- does v exist in scope already?
@@ -112,11 +126,14 @@ rename olds news term =
          FLet fname jτs ft body -> FLet fname jτs (re ft) (re body)
          Choice cs -> Choice (H.map re cs)
          Apply t ts -> Apply (re t) (re <$> ts)
-         Iter t1 t2 t3 -> Iter (re t1) (re t2) (re t3)
          Tup ts -> Tup (re <$> ts)
          Gauss r e d f -> Gauss (re r) (re e) (re d) (re f)
          MCreate n m bf -> MCreate (re n) (re m) (re bf)
          ClipM c m -> ClipM c (re m)
+         Iter t1 t2 t3 -> Iter (re t1) (re t2) (re t3)
+         Loop it cs (x1, x2) b -> case olds `elem` [x1, x2] of
+                                     True -> Loop (re it) (re cs) (x1, x2) b
+                                     False -> Loop (re it) (re cs) (x1, x2) (re b)
 
          Lam xτs body -> case olds `elem` (map fstA xτs) of
                                      True -> term -- we don't rename the function argument variable.

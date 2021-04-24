@@ -211,48 +211,64 @@ checkSen' (Tup ts) scope = do
    τs <- msumS (DiffMu.Prelude.map (\t -> (checkSens t scope)) ts)
    return (DMTup τs)
 
-checkSen' (TLet xs tu body) scope =
-   -- remove all Nothings.
-   let listAnnotation :: [Maybe (DMType :& Sensitivity)] -> [Sensitivity]
-       listAnnotation lst = case lst of
-          [] -> []
-          (Just (τ :@ s) : xs) -> (s : listAnnotation xs)
-          (Nothing : xs) -> listAnnotation xs
-   -- remove all Nothings.
-       listTypes :: [Maybe (DMType :& Sensitivity)] -> TC [DMType]
-       listTypes lst = case lst of
-          [] -> return []
-          (Just (τ :@ s) : xs) -> (:) <$> return τ <*> listTypes xs
-          (Nothing : xs) -> (:) <$> newVar <*> listTypes xs
-   in do
-      --TODO chekc uniqueness
-      maxs <- newVar
+checkSen' (TLet xs tu body) scope = do
+   --TODO chekc uniqueness
+   maxs <- newVar
 
-      let mtup = do -- checn and scale
-             τ <- checkSens tu scope
-             mscale maxs
-             return τ
+   let mtup = do -- checn and scale
+          τ <- checkSens tu scope
+          mscale maxs
+          return τ
 
-      let mbody = do
-             let scope' = mconcat ((\(x :- dτ) -> setValue x (Arg x dτ)) <$> xs) scope -- TODO unique names
-             let xnames = map fstA xs
+   let mbody = do
+          let scope' = mconcat ((\(x :- dτ) -> setValue x (Arg x dτ)) <$> xs) scope -- TODO unique names
+          let xnames = map fstA xs
 
-             τb <- checkSens body scope'
+          τb <- checkSens body scope'
 
-             sτs <- mapM (removeVar @Sensitivity) xnames -- get inference result for xs
+          sτs <- mapM (removeVar @Sensitivity) xnames -- get inference result for xs
 
-             let s = Max (listAnnotation sτs) -- set maxs to maximum of inferred sensitivites
-             injectVarId s ==! maxs
+          let s = Max (map sndAnn sτs) -- set maxs to maximum of inferred sensitivites
+          injectVarId s ==! maxs
 
-             τs <- listTypes sτs -- extract inferred types for tuple entries (or TVar if unused)
+          return (τb, (map fstAnn sτs))
 
-             return (τb, τs)
+   ((τb, τs), τt) <- msumTup (mbody, mtup)
 
-      ((τb, τs), τt) <- msumTup (mbody, mtup)
+   unify τt (DMTup τs) -- set correct tuple type
 
-      unify τt (DMTup τs) -- set correct tuple type
+   return τb
 
-      return τb
+checkSen' (Loop it cs (xi, xc) b) scope = do
+   niter <- case it of
+                  Iter fs stp ls -> return (opCeil ((ls `opSub` (fs `opSub` (Sng 1 JTNumInt))) `opDiv` stp))
+                  _ -> throwError (ImpossibleError "Loop iterator must be an Iter term.")
+
+   let checkScale :: DMTerm -> TC (DMType, Sensitivity)
+       checkScale term = do
+          τ <- checkSens term scope
+          s <- newVar
+          mscale s
+          return (τ, s)
+
+   let mbody = do
+         scope' <- pushDefinition scope xi (Arg xi JTNumInt)
+         scope'' <- pushDefinition scope' xc (Arg xc JTAny)
+         τ <- checkSens b scope
+         xii <- removeVar @Sensitivity xi
+         xci <- removeVar @Sensitivity xc
+         s <- newVar
+         mscale s
+         return (τ, s, xii, xci)
+
+   ((τit, sit), (τcs, scs), (τb, sb, (τbit :@ sbit), (τbcs :@ sbcs))) <- msum3Tup (checkScale niter, checkScale cs, mbody)
+
+   addConstraint (Solvable (IsLessEqual (τit, τbit))) -- number of iterations must match typer equested by body
+   addConstraint (Solvable (IsLessEqual (τcs, τbcs))) --  capture type must match type requested by body
+   addConstraint (Solvable (IsLessEqual (τb, τbcs))) -- body output type must match body capture input type
+   addConstraint (Solvable (IsLoopResult ((sit, scs, sb), sbcs, τit))) -- compute the right scalars once we know if τ_iter is const or not.
+
+   return τb
 
 
 checkSen' (Gauss rp εp δp f) scope = let

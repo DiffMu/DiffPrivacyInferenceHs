@@ -421,7 +421,6 @@ data DMTerm =
   | Lam     [Asgmt JuliaType] DMTerm
   | LamStar [Asgmt JuliaType] DMTerm
   | Apply DMTerm [DMTerm]
-  | Iter DMTerm DMTerm DMTerm
   | FLet Symbol [JuliaType] DMTerm DMTerm
   | Choice (HashMap [JuliaType] DMTerm)
   | SLet (Asgmt JuliaType) DMTerm DMTerm
@@ -430,7 +429,8 @@ data DMTerm =
   | Gauss DMTerm DMTerm DMTerm DMTerm
   | MCreate DMTerm DMTerm DMTerm
   | ClipM Clip DMTerm
---  | Loop DMTerm DMTerm DMTerm
+  | Iter DMTerm DMTerm DMTerm
+  | Loop DMTerm DMTerm (Symbol, Symbol) DMTerm
 -- ....
   deriving (Generic, Show)
 

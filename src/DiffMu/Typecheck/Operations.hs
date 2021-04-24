@@ -76,6 +76,11 @@ instance Solve MonadDMTC (IsTypeOpResult) DMTypeOp where
   solve_ Dict mode name constr = solveop mode name constr
 
 
+opAdd x y = Op (IsBinary DMOpAdd) [x,y]
+opSub x y = Op (IsBinary DMOpSub) [x,y]
+opCeil x = Op (IsUnary DMOpCeil) [x]
+opDiv x y = Op (IsBinary DMOpDiv) [x,y]
+
 
 
 
