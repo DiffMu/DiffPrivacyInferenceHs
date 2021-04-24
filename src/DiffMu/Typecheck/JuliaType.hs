@@ -28,20 +28,26 @@ import           Foreign.Marshal.Unsafe
 import Debug.Trace
 
 
-juliatype :: DMTypeOf k -> JuliaType
-juliatype (Numeric τ) = juliatype τ
-juliatype DMInt = JTNumInt
-juliatype DMReal = JTNumReal
-juliatype (Const _ τ) = juliatype τ
-juliatype (NonConst τ) = juliatype τ
+juliatypes :: DMTypeOf k -> [JuliaType]
+juliatypes (Numeric (Const _ τ)) = juliatypes τ
+juliatypes (Numeric (NonConst τ)) = juliatypes τ
+juliatypes (Numeric (TVar x)) = [JTNumInt, JTNumReal]
+juliatypes DMInt = [JTNumInt]
+juliatypes DMReal = [JTNumReal]
+juliatypes (Const _ τ) = juliatypes τ
+juliatypes (NonConst τ) = juliatypes τ
 -- TODO: This is not like in DM.jl, and another workaround should be found!
-juliatype (TVar x) = JTAny --  error $ "Tried to create a julia type from a TVar(" <> show x <> ")"
-juliatype (_ :->: _) = JuliaType "Function"
-juliatype (_ :->*: _) = JuliaType "Function"
-juliatype (DMTup xs) =
-  let js = (\(JuliaType j) -> j) . juliatype <$> xs
-  in JuliaType $ "Tuple{" <> intercalate ", " js <> "}"
-juliatype τ = error $ "juliatype(" <> show τ <> ") not implemented."
+juliatypes (TVar x) = [JuliaType "Union{}"]
+juliatypes (_ :->: _) = [JuliaType "Function"]
+juliatypes (_ :->*: _) = [JuliaType "Function"]
+juliatypes (DMTup xs) =
+  let jss :: [[JuliaType]]
+      jss = juliatypes `mapM` xs
+      jss' :: [[String]]
+      jss' = fmap (\(JuliaType j) -> j) <$> jss
+      f js = JuliaType $ "Tuple{" <> intercalate ", " js <> "}"
+  in f <$> jss'
+juliatypes τ = error $ "juliatypes(" <> show τ <> ") not implemented."
 
 global_callback_issubtype :: IORef (DMEnv)
 global_callback_issubtype = unsafePerformIO (newIORef makeEmptyDMEnv)
@@ -125,9 +131,7 @@ choiceCouldMatch :: [DMType] -> [JuliaType] -> Bool
 choiceCouldMatch args cs =
   case length args == length cs of
     False -> False
-    True -> let couldMatch t c = case isVar t of
-                  Just (_ :: SymbolOf MainKind) -> True
-                  Nothing -> juliatype t `leq` c
+    True -> let couldMatch t c = or ((`leq` c) <$> juliatypes t)
             in and (zipWith couldMatch args cs)
 
 
