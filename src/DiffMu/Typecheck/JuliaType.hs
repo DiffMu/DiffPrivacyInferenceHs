@@ -23,25 +23,35 @@ import System.IO.Unsafe
 import           Foreign.C.String
 import           Foreign.C.Types
 import           Foreign.Ptr
+import           Foreign.Marshal.Unsafe
 
 import Debug.Trace
 
 
 juliatype :: DMTypeOf k -> JuliaType
-juliatype = undefined
--- juliatype (Numeric τ) = juliatype τ
--- juliatype DMInt = undefined
+juliatype (Numeric τ) = juliatype τ
+juliatype DMInt = JTNumInt
+juliatype DMReal = JTNumReal
+juliatype (Const _ τ) = juliatype τ
+juliatype (NonConst τ) = juliatype τ
+-- TODO: This is not like in DM.jl, and another workaround should be found!
+juliatype (TVar x) = JTAny --  error $ "Tried to create a julia type from a TVar(" <> show x <> ")"
+juliatype (_ :->: _) = JuliaType "Function"
+juliatype (_ :->*: _) = JuliaType "Function"
+juliatype (DMTup xs) =
+  let js = (\(JuliaType j) -> j) . juliatype <$> xs
+  in JuliaType $ "Tuple{" <> intercalate ", " js <> "}"
 
 global_callback_issubtype :: IORef (DMEnv)
 global_callback_issubtype = unsafePerformIO (newIORef makeEmptyDMEnv)
 
 instance PartialOrd JuliaType where
-  leq = undefined
-  -- leq (JuliaType _ t) (JuliaType _ s) =
-  --   let callback = (askJuliaSubtypeOf $ unsafePerformIO (readIORef global_callback_issubtype))
-  --   in case (callback) of
-  --     Nothing -> error "Julia callback (issubtype) is not set."
-  --     Just f  -> call_StringStringBool f t s
+  leq (JuliaType a) (JuliaType b) =
+    let callback = (askJuliaSubtypeOf $ unsafePerformIO (readIORef global_callback_issubtype))
+    in case (callback) of
+      Nothing -> error "Julia callback (issubtype) is not set."
+      Just fun  -> unsafeLocalState (withCString a (\ca -> withCString b (\cb -> return $ call_StringStringBool fun ca cb)))
+      -- Just f  -> call_StringStringBool f t s
 
 
 foreign import ccall "dynamic" call_StringStringBool :: FunPtr (CString -> CString -> Bool) -> CString -> CString -> Bool

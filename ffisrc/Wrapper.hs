@@ -14,6 +14,7 @@ import           Foreign.C.Types
 import           Foreign.Ptr
 import           Foreign.StablePtr
 import           Foreign.C.String
+import           Foreign.Marshal.Unsafe
 
 -- import           Control.DeepSeq
 import           Control.Lens
@@ -85,29 +86,36 @@ foreign import ccall "dynamic" mkFun :: FunPtr (CInt -> CInt) -> (CInt -> CInt)
 -- freeComplicated = freeStablePtr
 
 
-
-
-typecheckFromCString_DMTerm :: FunPtr (FunPtr (String -> IO CString)) -> CString -> IO ()
-typecheckFromCString_DMTerm = undefined
--- typecheckFromCString_DMTerm fun str = do
---   let ident = "Integer"
---   int <- (newCString ident)
---   let int = (JuliaType ident)
-
---   let ident = "Real"
---   real <- (newCString ident)
---   -- let real = (JuliaType ident cident)
---   putStrLn $ "I want to call: " <> show fun <> "with " <> show int <> " and " <> show real
---   let myres = call_StringIOStringIOBool fun int real
---   putStrLn $ "myres is" <> show myres
+callWithCString :: FunPtr (CString -> CString -> Bool) -> String -> String -> Bool
+callWithCString f a b = unsafeLocalState $ do
+  withCString a (\ca -> withCString b (\cb -> return $ call_StringStringBool f ca cb))
 
 
 
+typecheckFromCString_DMTerm :: FunPtr (CString -> CString -> Bool) -> CString -> IO ()
+typecheckFromCString_DMTerm fun str = do
+  putStrLn "hello!"
+  -- let ident = "Integer"
+  -- int <- (newCString ident)
+  -- let int = (JuliaType ident)
+
+  -- let ident = "Real"
+  -- real <- (newCString ident)
+  -- -- let real = (JuliaType ident cident)
+  -- putStrLn $ "I want to call: " <> show fun <> "with " <> show int <> " and " <> show real
+  -- -- let myres = callWithCString fun "Integer" "Real"
+  -- let a = "Integer"
+  -- let b = "Real"
+  -- let myres2 = unsafeLocalState (withCString a (\ca -> withCString b (\cb -> return $ call_StringStringBool fun ca cb)))
+  -- putStrLn $ "myres is" <> show myres2
 
 
-  -- writeIORef global_callback_issubtype (makeDMEnv (fun))
-  -- str' <- peekCString str
-  -- typecheckFromString_DMTerm str'
+
+
+
+  writeIORef global_callback_issubtype (makeDMEnv (fun))
+  str' <- peekCString str
+  typecheckFromString_DMTerm str'
 
   -- putStrLn $ "I got the string: {" <> str' <> "}"
 
@@ -119,9 +127,12 @@ typecheckFromCString_DMTerm = undefined
 -- foreign export ccall mutateComplicated :: CFloat -> StablePtr Complicated -> IO (StablePtr Complicated)
 -- foreign export ccall setAdder :: FunPtr (CInt -> CInt) -> StablePtr Complicated -> IO (StablePtr Complicated)
 
--- foreign export ccall typecheckFromCString_DMTerm :: FunPtr ((() -> IO CString) -> (() -> IO CString) -> Bool) -> CString -> IO ()
+foreign export ccall typecheckFromCString_DMTerm :: FunPtr (CString -> CString -> Bool) -> CString -> IO ()
 -- foreign export ccall typecheckFromCString_DMTerm :: FunPtr ((() -> IO CString) -> (() -> IO CString) -> Bool) -> CString -> IO ()
 
-foreign import ccall "dynamic" call_StringIOStringIOBool :: FunPtr (FunPtr (StablePtr String -> IO CString) -> StablePtr String -> StablePtr String -> Bool) -> FunPtr (StablePtr String -> IO CString) -> StablePtr String -> StablePtr String -> Bool
+-- foreign import ccall "dynamic" call_StringStringBool :: FunPtr (CString -> CString -> Bool) -> CString -> CString -> Bool
+
+-- foreign import ccall "dynamic" call_StringStringBool :: FunPtr (FunPtr (StablePtr String -> IO CString) -> StablePtr String -> StablePtr String -> Bool) -> FunPtr (StablePtr String -> IO CString) -> StablePtr String -> StablePtr String -> Bool
+-- foreign import ccall "dynamic" call_StringIOStringIOBool :: FunPtr (FunPtr (StablePtr String -> IO CString) -> StablePtr String -> StablePtr String -> Bool) -> FunPtr (StablePtr String -> IO CString) -> StablePtr String -> StablePtr String -> Bool
 
 
