@@ -21,14 +21,15 @@ type ParserIO = ParsecT String () IO
 
 
 specialChar :: [Char]
-specialChar = "(){}, []"
+specialChar = "(){}, []\""
 
 
 pIdentifier :: ParserIO String
 pIdentifier = many1 (noneOf specialChar)
 
 pSymbol :: ParserIO Symbol
-pSymbol = (Symbol . T.pack) <$> (char ':' *> pIdentifier)
+pSymbol = (Symbol . T.pack) <$> (try (char ':' *> pIdentifier)
+                                 <|> try (string "Symbol" *> between (string "(\"") (string "\")") pIdentifier))
 
 -- TODO: Add more types.
 pJuliaType :: ParserIO JuliaType
@@ -68,6 +69,9 @@ pAsgmt f = between (char '(') (char ')') (f <$> pSymbol <*､> pJuliaType)
 pArray :: String -> ParserIO a -> ParserIO [a]
 pArray prefix p = string prefix *> between (char '[') (char ']') (p `sepBy` (string ", "))
 
+pTuple2 :: ParserIO a -> ParserIO b -> ParserIO (a,b)
+pTuple2 a b = string "Tuple" *> between (char '{') (char '}') ((,) <$> a <*､> b)
+
 pDMTypeOp :: ParserIO DMTypeOp_Some
 pDMTypeOp =
       try (string ":+" >> pure (IsBinary DMOpAdd))
@@ -93,6 +97,7 @@ pDMTerm =
   <|> try ("slet"      `with` (SLet    <$> (pAsgmt (:-)) <*､> pDMTerm <*､> pDMTerm))
   <|> try ("tup"       `with` (Tup     <$> pArray "DMTerm" pDMTerm))
   <|> try ("tlet"      `with` (TLet    <$> pArray "Tuple{Symbol, DataType}" (pAsgmt (:-)) <*､> pDMTerm <*､> pDMTerm))
+  <|> try ("loop"      `with` (Loop    <$> pDMTerm <*､> pDMTerm <*､> pTuple2 pSymbol pSymbol <*､> pDMTerm))
 
 
 -- flet(:f, DataType[Any, Any], lam(Tuple{Symbol, DataType}[(:a, Any), (:b, Any)], op(:+, DMTerm[var(:a, Any), op(:+, DMTerm[op(:*, DMTerm[var(:b, Any), var(:b, Any)]), var(:a, Any)])])), var(:f, Any))
