@@ -70,7 +70,7 @@ pArray :: String -> ParserIO a -> ParserIO [a]
 pArray prefix p = string prefix *> between (char '[') (char ']') (p `sepBy` (string ", "))
 
 pTuple2 :: ParserIO a -> ParserIO b -> ParserIO (a,b)
-pTuple2 a b = string "Tuple" *> between (char '{') (char '}') ((,) <$> a <*､> b)
+pTuple2 a b = between (char '(') (char ')') ((,) <$> a <*､> b)
 
 pDMTypeOp :: ParserIO DMTypeOp_Some
 pDMTypeOp =
