@@ -44,7 +44,7 @@ subtypingGraph =
                      r₀ <- newVar
                      r₁ <- newVar
                      r₀ ⊑! r₁
-                     return (args₀ :->: r₀, args₁ :->: r₁)
+                     return ((makeNotInt <$> args₀) :->: r₀, (makeNotInt <$> args₁) :->: r₁)
 
                  , SingleEdge $
                    do a₀ <- newVar
