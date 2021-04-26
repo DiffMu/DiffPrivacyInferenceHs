@@ -120,3 +120,13 @@ instance (CheckNeutral m a, CheckNeutral m b) => CheckNeutral m (a,b) where
     x <- checkNeutral a
     y <- checkNeutral b
     return (and [x,y])
+
+
+instance (Substitute SymVar (CPolyM SymVal Int (SymVar 'MainSensKind)) (SymVar k2)) where
+  substitute σ (HonestVar v) = pure (HonestVar v)
+  substitute σ (Ln a) = Ln <$> substitute σ a
+  substitute σ (Max as) = Max <$> mapM (substitute σ) as
+
+
+
+

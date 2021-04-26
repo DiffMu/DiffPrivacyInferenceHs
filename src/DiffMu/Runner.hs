@@ -19,6 +19,8 @@ import Algebra.PartialOrd
 
 import           Foreign.C.String
 
+import Debug.Trace
+
 run :: IO ()
 run = putStrLn "Hello?"
 
@@ -40,7 +42,18 @@ typecheckFromDMTerm term = do
         -- typecheck the term t5
         tres <- checkSens term def
         solveAllConstraints SolveExact
-        normalize tres
+        tres' <- normalize tres
+
+        a <- newVar
+        b <- newVar
+        let (ss :: Sensitivity) = injectVarId (Ln (oneId ⋆! oneId ⋆! a))
+        a ==! (b ⋆! b)
+        solveAllConstraints SolveExact
+        traceM $ "My s is   : " <> show ss
+        ss' <- normalize ss
+        traceM $ "After norm: " <> show ss'
+
+        return tres'
 
         -- an example of subtyping
         {-
