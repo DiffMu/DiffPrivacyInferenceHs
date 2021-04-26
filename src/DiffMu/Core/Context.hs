@@ -19,10 +19,10 @@ import Debug.Trace
 -- A helper function which scale any type context with a given sensitivity `η`.
 scale :: Sensitivity -> TypeCtxSP -> TypeCtxSP
 scale η (Left γ) = Left (f <$> γ)
-  where f (τ :@ s) = τ :@ (η ⋅! s)
+  where f (Single i (τ :@ s)) = Single i (τ :@ (η ⋅! s))
 scale η (Right γ) = Right (f <$> γ)
-  where f :: DMType :& Privacy -> DMType :& Privacy
-        f (τ :@ (δ,ε)) = τ :@ (η ⋅! δ, η ⋅! ε)
+  where f :: Annot Privacy -> Annot Privacy
+        f (Single i (τ :@ (δ,ε))) = Single i (τ :@ (η ⋅! δ, η ⋅! ε))
 
 -- Scales the current type context living in our typechecking-state monad by a given `η`.
 mscale :: MonadDMTC t => Sensitivity -> t ()
@@ -48,11 +48,11 @@ instance (CMonoidM t a, CMonoidM t b) => CMonoidM t (a,b)
 truncate_impl :: forall f e. (CMonoidM Identity f, CMonoidM Identity e, Eq e) => f -> TypeCtx e -> TypeCtx f
 truncate_impl η γ = truncate_annotation <$> γ
    where
-      truncate_annotation :: (DMType :& e) -> (DMType :& f)
-      truncate_annotation (τ :@ annotation) =
+      truncate_annotation :: (Annot e) -> (Annot f)
+      truncate_annotation (Single i (τ :@ annotation)) =
         (case annotation == zeroId of
-            True -> τ :@ zeroId
-            _    -> τ :@ η)
+            True -> Single i (τ :@ zeroId)
+            _    -> Single i (τ :@ η))
 
 truncateS :: Sensitivity -> TypeCtxSP -> TypeCtxSP
 truncateS η (Left γ) = Left (truncate_impl η γ)
@@ -146,26 +146,26 @@ msum3Tup (ma, mb, mc) = do
 
 
 
-setVar :: MonadDMTC t => Symbol -> DMType :& Sensitivity -> t ()
-setVar k v = types %=~ setValueM k (Left v :: Either (DMType :& Sensitivity) (DMType :& Privacy))
+setVar :: MonadDMTC t => Symbol -> Annot Sensitivity -> t ()
+setVar k v = types %=~ setValueM k (Left v :: Either (Annot Sensitivity) (Annot Privacy))
 
 
 
 -- Look up the types and sensitivities/privacies of the variables in `xτs` from the current context.
 -- If a variable is not present in Σ (this means it was not used in the lambda body),
 -- create a new type/typevar according to type hint given in `xτs` and give it zero annotation
-getArgList :: forall t e. (MonadDMTC t, DMExtra e, CMonoidM t e) => [Asgmt JuliaType] -> t [DMType :& e]
+getArgList :: forall t e. (MonadDMTC t, DMExtra e, CMonoidM t e) => [Asgmt JuliaType] -> t [Annot e]
 getArgList xτs = do
   (γ :: TypeCtxSP) <- use types
 
-  let f :: Asgmt JuliaType -> t (DMType :& e)
+  let f :: Asgmt JuliaType -> t (Annot e)
       f (x :- τ) = do
         val <- getValueM x γ
         case val of
           -- If the symbol was in the context γ, then we get its type and sensitivity
           Just τe -> cast τe
           -- if the type hint is DMDUnkown, we just add a typevar. otherwise we can be more specific
-          Nothing -> (:@) <$> createDMType τ <*> zero
+          Nothing -> Single IsInteresting <$> ((:@) <$> createDMType τ <*> zero)
   xτs' <- mapM f xτs
 
   -- We have to remove all symbols x from the context
@@ -178,20 +178,34 @@ getArgList xτs = do
 
   return xτs'
 
-removeVar :: forall e t. (MonadDMTC t, DMExtra e, CMonoidM Identity e) => Symbol -> t (DMType :& e)
+removeVar :: forall e t. (MonadDMTC t, DMExtra e, CMonoidM Identity e) => Symbol -> t (Annot e)
 removeVar x =  do
   -- (γ :: Ctx Symbol (DMType :& e)) <- use types
   γ <- use types
   v <- getValueM x γ
   vr <- case v of
      Just vv -> cast vv
-     Nothing -> (:@) <$> newVar <*> return zeroId
+     Nothing -> Single IsInteresting <$> ((:@) <$> newVar <*> return zeroId)
   γ' <- deleteValueM x γ
   types .= γ'
   return vr
 
-lookupVar :: forall e t. (MonadDMTC t, DMExtra e) => Symbol -> t (Maybe (DMType :& e))
+lookupVar :: forall e t. (MonadDMTC t, DMExtra e) => Symbol -> t (Maybe (Annot e))
 lookupVar x =  do
   γ <- use types
   v <- getValueM x γ
   cast v
+
+---------------------------------------------------------------------------
+-- Algebraic instances for annot
+
+-- TODO: If we are going to implement 'Multiple', then this instance has to change
+instance (Show e, IsT MonadDMTC t, SemigroupM t e) => SemigroupM t (Annot e) where
+  (⋆) (Single i e) (Single j f) = Single (i <> j) <$> (e ⋆ f)
+
+instance (Show e, IsT MonadDMTC t, MonoidM t e) => MonoidM t (Annot e) where
+  neutral = Single IsInteresting <$> neutral
+
+instance (Show e, IsT MonadDMTC t, CheckNeutral t e) => CheckNeutral t (Annot e) where
+  checkNeutral (Single i a) = checkNeutral a
+

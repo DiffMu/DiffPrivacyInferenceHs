@@ -111,10 +111,10 @@ data DMTypeOf (k :: DMKind) where
   TVar :: Typeable k => SymbolOf k -> DMTypeOf k
 
   -- the arrow type
-  (:->:) :: [DMType :& Sensitivity] -> DMType -> DMType
+  (:->:) :: [Annot Sensitivity] -> DMType -> DMType
 
   -- the privacy-arrow type
-  (:->*:) :: [DMType :& Privacy] -> DMType -> DMType
+  (:->*:) :: [Annot Privacy] -> DMType -> DMType
 
   -- tuples
   DMTup :: [DMType] -> DMType
@@ -184,17 +184,24 @@ instance (MonoidM t a, MonoidM t b) => MonoidM t (a :& b) where
 instance (CheckNeutral m a, CheckNeutral m b) => CheckNeutral m (a :& b) where
   checkNeutral (a :@ b) = (\a b -> and [a,b]) <$> checkNeutral a <*> checkNeutral b
 
-fstAnn :: (a :& b) -> a
-fstAnn (a :@ b) = a
-
-sndAnn :: (a :& b) -> b
-sndAnn (a :@ b) = b
-
 -- NOTE: The monoidal operation for sensitivities is addition.
 --       The operation for DMTypes is unification.
 --       That means, given `(x :@ s), (y :@ t) :: (DMType :& Sensitivity)`,
 --       computing `(x :@ s) ⋆ (y :@ t)` unifies `x` and `y`, and sums `s` and `t`.
 --       The result lives in a monad.
+
+-- fstAnn :: (a :& b) -> a
+-- fstAnn (a :@ b) = a
+
+-- sndAnn :: (a :& b) -> b
+-- sndAnn (a :@ b) = b
+
+fstAnn :: (Annot b) -> DMType
+fstAnn (Single _ (a :@ b)) = a
+
+sndAnn :: Annot b -> b
+sndAnn (Single _ (a :@ b)) = b
+
 
 ---------------------------------------------------------
 -- Sensitivity and Privacy
@@ -498,4 +505,26 @@ fstA (x :- τ) = x
 sndA :: Asgmt a -> a
 sndA (x :- τ) = τ
 
+-------------------------------------------------------------------------
+-- Annotations
+
+data Interesting = IsInteresting | NotInteresting
+  deriving (Eq)
+
+data Annot extra = Single Interesting (DMType :& extra)
+
+instance Semigroup Interesting where
+  (<>) IsInteresting b = IsInteresting
+  (<>) a IsInteresting = IsInteresting
+  (<>) _ _ = NotInteresting
+
+instance Show e => Show (Annot e) where
+  show (Single IsInteresting  x) = show x
+  show (Single NotInteresting x) = "{" <> show x <> "}"
+
+makeInt :: (DMType :& e) -> Annot e
+makeInt = Single IsInteresting
+
+makeNotInt :: (DMType :& e) -> Annot e
+makeNotInt = Single NotInteresting
 

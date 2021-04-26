@@ -62,8 +62,10 @@ checkSen' (Sng η τ) scope  = Numeric <$> (Const (constCoeff (Fin η)) <$> (cre
 
 -- a special term for function argument variables.
 -- those get sensitivity 1, all other variables are var terms
+
+-- TODO!!!! Get interestingness flag!
 checkSen' (Arg x dτ) scope = do τ <- createDMType dτ
-                                setVar x (τ :@ constCoeff (Fin 1))
+                                setVar x (Single IsInteresting (τ :@ constCoeff (Fin 1)))
                                 return τ
 
 checkSen' (Var x dτ) scope = do -- get the term that corresponds to this variable from the scope dict
@@ -172,7 +174,7 @@ checkSen' (Apply f args) scope = let
                              [] -> throwError (ImpossibleError "Sum cannot return empty list.")
 
       τ_ret <- newVar -- a type var for the function return type
-      addConstraint (Solvable (IsLessEqual (τ_lam, (argτs :->: τ_ret)))) -- f's type must be subtype of an arrow matching arg types.
+      addConstraint (Solvable (IsLessEqual (τ_lam, ((Single NotInteresting <$> argτs) :->: τ_ret)))) -- f's type must be subtype of an arrow matching arg types.
       return τ_ret
 
 
@@ -261,7 +263,7 @@ checkSen' (Loop it cs (xi, xc) b) scope = do
          mscale s
          return (τ, s, xii, xci)
 
-   ((τit, sit), (τcs, scs), (τb, sb, (τbit :@ sbit), (τbcs :@ sbcs))) <- msum3Tup (checkScale niter, checkScale cs, mbody)
+   ((τit, sit), (τcs, scs), (τb, sb, (Single _ (τbit :@ sbit)), (Single _ (τbcs :@ sbcs)))) <- msum3Tup (checkScale niter, checkScale cs, mbody)
 
    addConstraint (Solvable (IsLessEqual (τit, τbit))) -- number of iterations must match typer equested by body
    addConstraint (Solvable (IsLessEqual (τcs, τbcs))) --  capture type must match type requested by body
@@ -293,7 +295,7 @@ checkSen' (Gauss rp εp δp f) scope = let
       ε <- setParam εp
       δ <- setParam δp
 
-      return ((map (\t -> (t :@ (ε, δ))) τs) :->*: τgauss)
+      return ((Single IsInteresting <$> (map (\t -> (t :@ (ε, δ))) τs)) :->*: τgauss)
 
 
 checkSen' (MCreate n m body) scope =
@@ -315,7 +317,7 @@ checkSen' (MCreate n m body) scope =
                         _ -> throwError (ImpossibleError "MCreate term must have Arr argument.")
 
           -- body lambda input vars must be integer
-          addConstraint (Solvable (IsLessEqual (τ, [((Numeric (NonConst DMInt)) :@ inftyS), ((Numeric (NonConst DMInt)) :@ inftyS)] :->: τbody)))
+          addConstraint (Solvable (IsLessEqual (τ, (Single IsInteresting <$> [((Numeric (NonConst DMInt)) :@ inftyS), ((Numeric (NonConst DMInt)) :@ inftyS)]) :->: τbody)))
 
           return τbody
    in do
@@ -432,7 +434,7 @@ checkPri' (Apply f args) scope = let
                              [] -> throwError (ImpossibleError "Sum cannot return empty list.")
 
       τ_ret <- newVar -- a type var for the function return type
-      addConstraint (Solvable (IsLessEqual (τ_lam, (argτs :->*: τ_ret)))) -- f's type must be subtype of an arrow* matching arg types.
+      addConstraint (Solvable (IsLessEqual (τ_lam, ((Single NotInteresting <$> argτs) :->*: τ_ret)))) -- f's type must be subtype of an arrow* matching arg types.
       return τ_ret
 
 checkPri' t scope = checkPriv (Ret t) scope -- secretly return if the term has the wrong color.
