@@ -78,6 +78,7 @@ instance Solve MonadDMTC (IsTypeOpResult) DMTypeOp where
 
 opAdd x y = Op (IsBinary DMOpAdd) [x,y]
 opSub x y = Op (IsBinary DMOpSub) [x,y]
+opMul x y = Op (IsBinary DMOpMul) [x,y]
 opCeil x = Op (IsUnary DMOpCeil) [x]
 opDiv x y = Op (IsBinary DMOpDiv) [x,y]
 

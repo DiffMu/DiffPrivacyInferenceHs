@@ -63,7 +63,7 @@ checkSen' (Sng η τ) scope  = Numeric <$> (Const (constCoeff (Fin η)) <$> (cre
 -- a special term for function argument variables.
 -- those get sensitivity 1, all other variables are var terms
 checkSen' (Arg x dτ) scope = do τ <- createDMType dτ
-                                setVar x (τ :@ constCoeff (Fin 1))
+                                setVarS x (τ :@ constCoeff (Fin 1))
                                 return τ
 
 checkSen' (Var x dτ) scope = do -- get the term that corresponds to this variable from the scope dict
@@ -208,7 +208,7 @@ checkSen' (Choice d) scope = let
 
 
 checkSen' (Tup ts) scope = do
-   τs <- msumS (DiffMu.Prelude.map (\t -> (checkSens t scope)) ts)
+   τs <- msumS (map (\t -> (checkSens t scope)) ts)
    return (DMTup τs)
 
 checkSen' (TLet xs tu body) scope = do
@@ -434,6 +434,55 @@ checkPri' (Apply f args) scope = let
       τ_ret <- newVar -- a type var for the function return type
       addConstraint (Solvable (IsLessEqual (τ_lam, (argτs :->*: τ_ret)))) -- f's type must be subtype of an arrow* matching arg types.
       return τ_ret
+
+checkPri' (Loop it cs (xi, xc) b) scope = do
+   niter <- case it of
+                  Iter fs stp ls -> return (opCeil ((ls `opSub` (fs `opSub` (Sng 1 JTNumInt))) `opDiv` stp))
+                  _ -> throwError (ImpossibleError "Loop iterator must be an Iter term.")
+
+   let miter = do
+          τ <- checkSens niter scope
+          mtruncateP zeroId
+          return τ
+   let mcaps = do
+          τ <- checkSens cs scope
+          mtruncateP inftyP
+          return τ
+
+   let setInteresting :: ([Symbol],[Privacy],[DMType]) -> Sensitivity -> TC ()
+       setInteresting (xs, ps, τs) n = do
+          let ε = Max (map fst ps)
+          let δ = Max (map snd ps)
+
+          --δn :: Privacy <- newVar -- we can choose this freely!
+
+          -- compute the new privacy for the xs according to the advanced composition theorem
+          --let newp = (2 `opMul` (ε `opMul` (Sqrt (2 `opMul` (n `opMul` (Ln (1 `opDiv` δn)))))), δn `opAdd` (n `opMul` δ))
+          let newp = inftyP -- (2 ⋅! ε ⋅! (Sqrt (2 ⋅! n ⋅! (Ln (1 ÷! δn)))), δn ⋆! (n ⋅! δ)) -- TODO
+
+          mapM (\(x, τ) -> setVarP x (τ :@ newp)) (zip xs τs)
+          return ()
+
+   let mbody = do
+         scope' <- pushDefinition scope xi (Arg xi JTNumInt)
+         scope'' <- pushDefinition scope' xc (Arg xc JTAny)
+         τ <- checkSens b scope
+         _ <- removeVar @Sensitivity xi
+         _ <- removeVar @Sensitivity xc
+         interesting <- return ([],[],[]) -- getInteresting --TODO
+         mtruncateP inftyP
+         n <- newVar
+         setInteresting interesting n
+         return (τ, n)
+
+   (τit, τcs, (τb, n)) <- msum3Tup (miter, mcaps, mbody)
+
+   unify τit (Numeric (Const n DMInt)) -- number of iterations must be constant integer
+
+   addConstraint (Solvable (IsLessEqual (τb, τcs))) -- body output type must match body capture input type
+
+   return τb
+
 
 checkPri' t scope = checkPriv (Ret t) scope -- secretly return if the term has the wrong color.
 

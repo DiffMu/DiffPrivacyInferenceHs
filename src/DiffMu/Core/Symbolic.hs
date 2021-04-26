@@ -28,13 +28,12 @@ instance Monad t => CheckNeutral t SymVal where
 
 -- data SymTerm = SymTerm SymVal
 --   deriving (Generic, Show)
-
+-- addition
 instance Monad t => SemigroupM t (SymVal) where
   (⋆) Infty Infty        = pure Infty
   (⋆) Infty (Fin _)      = pure Infty
   (⋆) (Fin _) Infty      = pure Infty
   (⋆) (Fin a) (Fin b)    = pure $ Fin (a P.+ b)
-
 
 instance Monad t => MonoidM t (SymVal) where
   neutral = pure $ Fin 0
@@ -44,6 +43,7 @@ instance Monad t => CMonoidM t (SymVal)
 -- instance Group SymVal where
 --   neg Infty = MinusInfty
 
+-- multiplication
 -- TODO: Check correctness: is zero handled differently?
 instance Monad t => SemiringM t (SymVal) where
   one = pure $ Fin 1
@@ -61,12 +61,14 @@ genSingletons [''SensKind]
 data SymVar (k :: SensKind) =
   HonestVar (SymbolOf k)
   | Ln (SymTerm MainSensKind)
+  | Sqrt (SymTerm MainSensKind)
   | Max [SymTerm MainSensKind]
   deriving (Generic, Eq)
 
 instance Show (SymVar k) where
   show (HonestVar v) = show v
   show (Ln te) = "ln(" <> show te <> ")"
+  show (Sqrt te) = "sqrt(" <> show te <> ")"
   show (Max te) = "max(" <> show te <> ")"
 
 instance Hashable (SymVar k)
@@ -92,6 +94,7 @@ type SymTerm = CPolyM SymVal Int (SymVar MainSensKind)
 
 instance CheckContains (SymVar MainSensKind) (SymbolOf MainSensKind) where
   checkContains (Ln _) = Nothing
+  checkContains (Sqrt _) = Nothing
   checkContains (Max _) = Nothing
   checkContains (HonestVar v) = Just v
 
@@ -125,6 +128,7 @@ instance (CheckNeutral m a, CheckNeutral m b) => CheckNeutral m (a,b) where
 instance (Substitute SymVar (CPolyM SymVal Int (SymVar 'MainSensKind)) (SymVar k2)) where
   substitute σ (HonestVar v) = pure (HonestVar v)
   substitute σ (Ln a) = Ln <$> substitute σ a
+  substitute σ (Sqrt a) = Sqrt <$> substitute σ a
   substitute σ (Max as) = Max <$> mapM (substitute σ) as
 
 

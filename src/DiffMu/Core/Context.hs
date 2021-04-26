@@ -146,8 +146,11 @@ msum3Tup (ma, mb, mc) = do
 
 
 
-setVar :: MonadDMTC t => Symbol -> DMType :& Sensitivity -> t ()
-setVar k v = types %=~ setValueM k (Left v :: Either (DMType :& Sensitivity) (DMType :& Privacy))
+setVarS :: MonadDMTC t => Symbol -> DMType :& Sensitivity -> t ()
+setVarS k v = types %=~ setValueM k (Left v :: Either (DMType :& Sensitivity) (DMType :& Privacy))
+
+setVarP :: MonadDMTC t => Symbol -> DMType :& Privacy -> t ()
+setVarP k v = types %=~ setValueM k (Right v :: Either (DMType :& Sensitivity) (DMType :& Privacy))
 
 
 

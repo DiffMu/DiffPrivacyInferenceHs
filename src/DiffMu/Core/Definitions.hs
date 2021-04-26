@@ -408,6 +408,15 @@ instance TCConstraint IsTypeOpResult where
 
 type Clip = DMTypeOf ClipKind
 
+data Asgmt a = (:-) Symbol a
+  deriving (Generic, Show)
+
+fstA :: Asgmt a -> Symbol
+fstA (x :- τ) = x
+
+sndA :: Asgmt a -> a
+sndA (x :- τ) = τ
+
 -- data Lam_ = Lam_ [Asgmt JuliaType] DMTerm
 --   deriving (Generic, Show)
 
@@ -484,18 +493,5 @@ makeEmptyDMEnv = DMEnv
   { askJuliaSubtypeOf = Nothing
   }
 
-
-
---------------------------------------------------------------------------
--- Other ...
-
-data Asgmt a = (:-) Symbol a
-  deriving (Generic, Show)
-
-fstA :: Asgmt a -> Symbol
-fstA (x :- τ) = x
-
-sndA :: Asgmt a -> a
-sndA (x :- τ) = τ
 
 
