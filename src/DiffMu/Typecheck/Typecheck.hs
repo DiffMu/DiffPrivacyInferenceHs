@@ -64,8 +64,8 @@ checkSen' (Sng η τ) scope  = Numeric <$> (Const (constCoeff (Fin η)) <$> (cre
 -- those get sensitivity 1, all other variables are var terms
 
 -- TODO!!!! Get interestingness flag!
-checkSen' (Arg x dτ) scope = do τ <- createDMType dτ
-                                setVarS x (Single IsInteresting (τ :@ constCoeff (Fin 1)))
+checkSen' (Arg x dτ i) scope = do τ <- createDMType dτ
+                                setVarS x (Single i (τ :@ constCoeff (Fin 1)))
                                 return τ
 
 checkSen' (Var x dτ) scope = do -- get the term that corresponds to this variable from the scope dict
@@ -121,7 +121,7 @@ checkSen' (Lam xτs body) scope = do
 
   -- put a special term to mark x as a function argument. those get special tratment
   -- because we're interested in their sensitivity
-  let scope' = mconcat ((\(x :- τ) -> setValue x (Arg x τ)) <$> xτs) scope
+  let scope' = mconcat ((\(x :- τ) -> setValue x (Arg x τ IsInteresting)) <$> xτs) scope
 
   τr <- checkSens body scope'
   xrτs <- getArgList xτs
@@ -132,7 +132,7 @@ checkSen' (LamStar xτs body) scope = do
 
   -- put a special term to mark x as a function argument. those get special tratment
   -- because we're interested in their sensitivity
-  let scope' = mconcat ((\(x :- τ) -> setValue x (Arg x τ)) <$> xτs) scope
+  let scope' = mconcat ((\(x :- (τ, i)) -> setValue x (Arg x τ i)) <$> xτs) scope
 
   τr <- checkPriv body scope'
   xrτs <- getArgList xτs
@@ -223,7 +223,7 @@ checkSen' (TLet xs tu body) scope = do
           return τ
 
    let mbody = do
-          let scope' = mconcat ((\(x :- dτ) -> setValue x (Arg x dτ)) <$> xs) scope -- TODO unique names
+          let scope' = mconcat ((\(x :- dτ) -> setValue x (Arg x dτ IsInteresting)) <$> xs) scope -- TODO unique names
           let xnames = map fstA xs
 
           τb <- checkSens body scope'
@@ -254,8 +254,8 @@ checkSen' (Loop it cs (xi, xc) b) scope = do
           return (τ, s)
 
    let mbody = do
-         scope' <- pushDefinition scope xi (Arg xi JTNumInt)
-         scope'' <- pushDefinition scope' xc (Arg xc JTAny)
+         scope' <- pushDefinition scope xi (Arg xi JTNumInt NotInteresting)
+         scope'' <- pushDefinition scope' xc (Arg xc JTAny IsInteresting)
          τ <- checkSens b scope
          xii <- removeVar @Sensitivity xi
          xci <- removeVar @Sensitivity xc
@@ -367,7 +367,7 @@ checkPri' (SLet (x :- dτ) term body) scope =
   -- push x to scope, check body, and discard x from the result context.
   -- this is the bind rule; as we expect the body to be a privacy term we don't need to worry about x's sensitivity
   let mbody = do
-         scope' <- pushDefinition scope x (Arg x dτ)
+         scope' <- pushDefinition scope x (Arg x dτ IsInteresting)
          τ <- checkPriv body scope'
          _ <- removeVar @Privacy x
          return τ
@@ -466,8 +466,8 @@ checkPri' (Loop it cs (xi, xc) b) scope = do
           return ()
 
    let mbody = do
-         scope' <- pushDefinition scope xi (Arg xi JTNumInt)
-         scope'' <- pushDefinition scope' xc (Arg xc JTAny)
+         scope' <- pushDefinition scope xi (Arg xi JTNumInt NotInteresting)
+         scope'' <- pushDefinition scope' xc (Arg xc JTAny IsInteresting)
          τ <- checkSens b scope
          _ <- removeVar @Sensitivity xi
          _ <- removeVar @Sensitivity xc

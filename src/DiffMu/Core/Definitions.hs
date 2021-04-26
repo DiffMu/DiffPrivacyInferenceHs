@@ -431,11 +431,11 @@ data DMTerm =
   Ret DMTerm
   | Sng Float JuliaType
   | Var Symbol JuliaType
-  | Arg Symbol JuliaType
+  | Arg Symbol JuliaType Interesting
   | Op DMTypeOp_Some [DMTerm]
   | Phi DMTerm DMTerm DMTerm
   | Lam     [Asgmt JuliaType] DMTerm
-  | LamStar [Asgmt JuliaType] DMTerm
+  | LamStar [Asgmt (JuliaType, Interesting)] DMTerm
   | Apply DMTerm [DMTerm]
   | FLet Symbol [JuliaType] DMTerm DMTerm
   | Choice (HashMap [JuliaType] DMTerm)
@@ -506,6 +506,10 @@ makeEmptyDMEnv = DMEnv
 
 data Interesting = IsInteresting | NotInteresting
   deriving (Eq)
+
+instance Show Interesting where
+   show IsInteresting = "interesting"
+   show NotInteresting = "uninteresting"
 
 data Annot extra = Single Interesting (DMType :& extra)
 
