@@ -57,7 +57,7 @@ substituteScope scope term = let
          LamStar _ _ -> return term
          Choice _ -> return term
          Sng _ _ -> return term
-         Arg _ _ -> return term
+         Arg _ _ _ -> return term
 
          Var vs τ -> case H.lookup vs scope of
                            Just t -> return t --TODO what about vt
@@ -114,7 +114,7 @@ rename olds news term =
    let re = rename olds news in
       case term of
          Sng _ _ -> term
-         Arg _ _ -> term
+         Arg _ _ _ -> term
 
          Var s τ -> if s == olds
             then Var news τ -- variable sold gets renamed.
@@ -138,7 +138,7 @@ rename olds news term =
          Lam xτs body -> case olds `elem` (map fstA xτs) of
                                      True -> term -- we don't rename the function argument variable.
                                      False -> Lam xτs (re body)
-         LamStar xτs body -> case olds `elem` (map fstA xτs) of
+         LamStar xτs body -> case olds `elem` (map (\x -> fstA (fst x)) xτs) of
                                      True -> term -- we don't rename the function argument variable.
                                      False -> LamStar xτs (re body)
 

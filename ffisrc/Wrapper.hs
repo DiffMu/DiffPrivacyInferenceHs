@@ -113,9 +113,9 @@ typecheckFromCString_DMTerm fun str = do
 
 
 
-  writeIORef global_callback_issubtype (makeDMEnv (fun))
-  str' <- peekCString str
-  typecheckFromString_DMTerm str'
+--  writeIORef global_callback_issubtype (makeDMEnv (fun))
+--  str' <- peekCString str
+--  typecheckFromString_DMTerm str'
 
   -- putStrLn $ "I got the string: {" <> str' <> "}"
 

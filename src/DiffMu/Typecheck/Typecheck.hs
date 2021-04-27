@@ -65,8 +65,8 @@ checkSen' (Sng η τ) scope  = Numeric <$> (Const (constCoeff (Fin η)) <$> (cre
 
 -- TODO!!!! Get interestingness flag!
 checkSen' (Arg x dτ i) scope = do τ <- createDMType dτ
-                                setVarS x (Single i (τ :@ constCoeff (Fin 1)))
-                                return τ
+                                  setVarS x (Single i (τ :@ constCoeff (Fin 1)))
+                                  return τ
 
 checkSen' (Var x dτ) scope = do -- get the term that corresponds to this variable from the scope dict
                                 (vt, scope') <- popDefinition scope x
@@ -132,10 +132,10 @@ checkSen' (LamStar xτs body) scope = do
 
   -- put a special term to mark x as a function argument. those get special tratment
   -- because we're interested in their sensitivity
-  let scope' = mconcat ((\(x :- (τ, i)) -> setValue x (Arg x τ i)) <$> xτs) scope
+  let scope' = mconcat ((\((x :- τ), i) -> setValue x (Arg x τ i)) <$> xτs) scope
 
   τr <- checkPriv body scope'
-  xrτs <- getArgList xτs
+  xrτs <- getArgList (map fst xτs)
   mtruncateS inftyS
   return (xrτs :->*: τr)
 
@@ -174,7 +174,7 @@ checkSen' (Apply f args) scope = let
                              [] -> throwError (ImpossibleError "Sum cannot return empty list.")
 
       τ_ret <- newVar -- a type var for the function return type
-      addConstraint (Solvable (IsLessEqual (τ_lam, ((Single NotInteresting <$> argτs) :->: τ_ret)))) -- f's type must be subtype of an arrow matching arg types.
+      addConstraint (Solvable (IsLessEqual (τ_lam, (argτs :->: τ_ret)))) -- f's type must be subtype of an arrow matching arg types.
       return τ_ret
 
 
@@ -230,10 +230,10 @@ checkSen' (TLet xs tu body) scope = do
 
           sτs <- mapM (removeVar @Sensitivity) xnames -- get inference result for xs
 
-          let s = Max (map sndAnn sτs) -- set maxs to maximum of inferred sensitivites
+          let s = Max (map sndAnnI sτs) -- set maxs to maximum of inferred sensitivites
           injectVarId s ==! maxs
 
-          return (τb, (map fstAnn sτs))
+          return (τb, (map fstAnnI sτs))
 
    ((τb, τs), τt) <- msumTup (mbody, mtup)
 
@@ -295,7 +295,7 @@ checkSen' (Gauss rp εp δp f) scope = let
       ε <- setParam εp
       δ <- setParam δp
 
-      return ((Single IsInteresting <$> (map (\t -> (t :@ (ε, δ))) τs)) :->*: τgauss)
+      return ((map (\t -> (t :@ (ε, δ))) τs) :->*: τgauss)
 
 
 checkSen' (MCreate n m body) scope =
@@ -317,7 +317,7 @@ checkSen' (MCreate n m body) scope =
                         _ -> throwError (ImpossibleError "MCreate term must have Arr argument.")
 
           -- body lambda input vars must be integer
-          addConstraint (Solvable (IsLessEqual (τ, (Single IsInteresting <$> [((Numeric (NonConst DMInt)) :@ inftyS), ((Numeric (NonConst DMInt)) :@ inftyS)]) :->: τbody)))
+          addConstraint (Solvable (IsLessEqual (τ, [((Numeric (NonConst DMInt)) :@ inftyS), ((Numeric (NonConst DMInt)) :@ inftyS)] :->: τbody)))
 
           return τbody
    in do
@@ -434,7 +434,7 @@ checkPri' (Apply f args) scope = let
                              [] -> throwError (ImpossibleError "Sum cannot return empty list.")
 
       τ_ret <- newVar -- a type var for the function return type
-      addConstraint (Solvable (IsLessEqual (τ_lam, ((Single NotInteresting <$> argτs) :->*: τ_ret)))) -- f's type must be subtype of an arrow* matching arg types.
+      addConstraint (Solvable (IsLessEqual (τ_lam, (argτs :->*: τ_ret)))) -- f's type must be subtype of an arrow* matching arg types.
       return τ_ret
 
 checkPri' (Loop it cs (xi, xc) b) scope = do

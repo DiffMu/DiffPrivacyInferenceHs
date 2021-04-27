@@ -111,10 +111,10 @@ data DMTypeOf (k :: DMKind) where
   TVar :: Typeable k => SymbolOf k -> DMTypeOf k
 
   -- the arrow type
-  (:->:) :: [Annot Sensitivity] -> DMType -> DMType
+  (:->:) :: [DMType :& Sensitivity] -> DMType -> DMType
 
   -- the privacy-arrow type
-  (:->*:) :: [Annot Privacy] -> DMType -> DMType
+  (:->*:) :: [DMType :& Privacy] -> DMType -> DMType
 
   -- tuples
   DMTup :: [DMType] -> DMType
@@ -190,17 +190,17 @@ instance (CheckNeutral m a, CheckNeutral m b) => CheckNeutral m (a :& b) where
 --       computing `(x :@ s) ⋆ (y :@ t)` unifies `x` and `y`, and sums `s` and `t`.
 --       The result lives in a monad.
 
--- fstAnn :: (a :& b) -> a
--- fstAnn (a :@ b) = a
+fstAnn :: (a :& b) -> a
+fstAnn (a :@ b) = a
 
--- sndAnn :: (a :& b) -> b
--- sndAnn (a :@ b) = b
+sndAnn :: (a :& b) -> b
+sndAnn (a :@ b) = b
 
-fstAnn :: (Annot b) -> DMType
-fstAnn (Single _ (a :@ b)) = a
+fstAnnI :: (Annot b) -> DMType
+fstAnnI (Single _ (a :@ b)) = a
 
-sndAnn :: Annot b -> b
-sndAnn (Single _ (a :@ b)) = b
+sndAnnI :: Annot b -> b
+sndAnnI (Single _ (a :@ b)) = b
 
 
 ---------------------------------------------------------
@@ -435,7 +435,7 @@ data DMTerm =
   | Op DMTypeOp_Some [DMTerm]
   | Phi DMTerm DMTerm DMTerm
   | Lam     [Asgmt JuliaType] DMTerm
-  | LamStar [Asgmt (JuliaType, Interesting)] DMTerm
+  | LamStar [(Asgmt JuliaType, Interesting)] DMTerm
   | Apply DMTerm [DMTerm]
   | FLet Symbol [JuliaType] DMTerm DMTerm
   | Choice (HashMap [JuliaType] DMTerm)
