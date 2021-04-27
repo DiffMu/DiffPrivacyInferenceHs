@@ -64,7 +64,7 @@ checkSen' (Sng η τ) scope  = Numeric <$> (Const (constCoeff (Fin η)) <$> (cre
 -- those get sensitivity 1, all other variables are var terms
 
 -- TODO!!!! Get interestingness flag!
-checkSen' (Arg x dτ i) scope = do τ <- createDMType dτ
+checkSen' (Arg x dτ i) scope = do τ <- createDMType dτ -- TODO subtype!
                                   setVarS x (Single i (τ :@ constCoeff (Fin 1)))
                                   return τ
 
@@ -230,8 +230,8 @@ checkSen' (TLet xs tu body) scope = do
 
           sτs <- mapM (removeVar @Sensitivity) xnames -- get inference result for xs
 
-          let s = Max (map sndAnnI sτs) -- set maxs to maximum of inferred sensitivites
-          injectVarId s ==! maxs
+          let s = maxS (map sndAnnI sτs) -- set maxs to maximum of inferred sensitivites
+          s ==! maxs
 
           return (τb, (map fstAnnI sτs))
 
@@ -451,16 +451,17 @@ checkPri' (Loop it cs (xi, xc) b) scope = do
           mtruncateP inftyP
           return τ
 
-   let setInteresting :: ([Symbol],[Privacy],[DMType]) -> Sensitivity -> TC ()
-       setInteresting (xs, ps, τs) n = do
-          let ε = Max (map fst ps)
-          let δ = Max (map snd ps)
+   let setInteresting :: ([Symbol],[DMType],[Privacy]) -> Sensitivity -> TC ()
+       setInteresting (xs, τs, ps) n = do
+          let ε = maxS (map fst ps)
+          let δ = maxS (map snd ps)
 
-          --δn :: Privacy <- newVar -- we can choose this freely!
+          δn :: Sensitivity <- newVar -- we can choose this freely!
+          addConstraint (Solvable (IsLessEqual (δn, oneId :: Sensitivity))) -- otherwise we get a negative ε...
 
           -- compute the new privacy for the xs according to the advanced composition theorem
-          --let newp = (2 `opMul` (ε `opMul` (Sqrt (2 `opMul` (n `opMul` (Ln (1 `opDiv` δn)))))), δn `opAdd` (n `opMul` δ))
-          let newp = inftyP -- (2 ⋅! ε ⋅! (Sqrt (2 ⋅! n ⋅! (Ln (1 ÷! δn)))), δn ⋆! (n ⋅! δ)) -- TODO
+          let two = oneId ⋆! oneId
+          let newp = (two ⋅! (ε ⋅! (sqrt (two ⋅! (n ⋅! (minus (ln oneId) (ln δn)))))), δn ⋆! (n ⋅! δ)) -- TODO
 
           mapM (\(x, τ) -> setVarP x (Single IsInteresting (τ :@ newp))) (zip xs τs)
           return ()
@@ -469,10 +470,12 @@ checkPri' (Loop it cs (xi, xc) b) scope = do
          scope' <- pushDefinition scope xi (Arg xi JTNumInt NotInteresting)
          scope'' <- pushDefinition scope' xc (Arg xc JTAny IsInteresting)
          τ <- checkSens b scope
-         _ <- removeVar @Sensitivity xi
+         _ <- removeVar @Sensitivity xi -- TODO do something?
          _ <- removeVar @Sensitivity xc
-         interesting <- return ([],[],[]) -- getInteresting --TODO
+
+         interesting <- getInteresting
          mtruncateP inftyP
+
          n <- newVar
          setInteresting interesting n
          return (τ, n)

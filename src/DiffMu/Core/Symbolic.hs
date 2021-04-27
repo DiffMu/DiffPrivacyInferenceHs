@@ -63,13 +63,20 @@ data SymVar (k :: SensKind) =
   | Ln (SymTerm MainSensKind)
   | Sqrt (SymTerm MainSensKind)
   | Max [SymTerm MainSensKind]
+  | Minus (SymTerm MainSensKind, SymTerm MainSensKind)
   deriving (Generic, Eq)
+
+ln s = injectVarId (Ln s)
+sqrt s = injectVarId (Sqrt s)
+maxS s = injectVarId (Max s)
+minus s t = injectVarId (Minus (s, t))
 
 instance Show (SymVar k) where
   show (HonestVar v) = show v
   show (Ln te) = "ln(" <> show te <> ")"
   show (Sqrt te) = "sqrt(" <> show te <> ")"
   show (Max te) = "max(" <> show te <> ")"
+  show (Minus (t1, t2)) = "(" <> show t1 <> " - " <> show t2
 
 instance Hashable (SymVar k)
 
@@ -96,6 +103,7 @@ instance CheckContains (SymVar MainSensKind) (SymbolOf MainSensKind) where
   checkContains (Ln _) = Nothing
   checkContains (Sqrt _) = Nothing
   checkContains (Max _) = Nothing
+  checkContains (Minus _) = Nothing
   checkContains (HonestVar v) = Just v
 
 

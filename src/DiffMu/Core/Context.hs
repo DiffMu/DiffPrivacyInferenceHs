@@ -200,6 +200,22 @@ lookupVar x =  do
   v <- getValueM x γ
   cast v
 
+getInteresting :: MonadDMTC t => t ([Symbol],[DMType],[Privacy])
+getInteresting = do
+   γ <- use types
+   h <- case γ of
+           Left _ -> throwError (ImpossibleError "getInteresting called on sensitivity context.")
+           Right (Ctx (MonCom h')) -> return (H.toList h')
+   let f :: MonadDMTC t => [(Symbol, Annot Privacy)] -> t ([Symbol],[DMType],[Privacy])
+       f lst = case lst of
+                  ((x, (Single i (τ :@ p))) : xτs) -> case i of
+                        IsInteresting -> do
+                           (xs, τs, ps) <- f xτs
+                           return ((x:xs),(τ:τs),(p:ps))
+                        NotInteresting -> f xτs
+                  [] -> return ([],[],[])
+   f h
+
 ---------------------------------------------------------------------------
 -- Algebraic instances for annot
 
