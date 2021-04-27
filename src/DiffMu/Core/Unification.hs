@@ -27,8 +27,8 @@ instance Unify MonadDMTC Privacy where
   unify_ (a1,b1) (a2,b2) = (,) <$> (unify_ a1 a2) <*> (unify_ b1 b2)
 
 -- TODO: Check, is i <> j what we want to do here?
-instance Unify MonadDMTC e => Unify MonadDMTC (Annot e) where
-  unify_ (Single i e) (Single j f)  = Single (i <> j) <$> unify_ e f
+instance Unify MonadDMTC e => Unify MonadDMTC (WithRelev e) where
+  unify_ (WithRelev i e) (WithRelev j f)  = WithRelev (i <> j) <$> unify_ e f
 
 -- Unification of DMTypes (of any kind k) is given by:
 instance Unify MonadDMTC (DMTypeOf k) where

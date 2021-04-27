@@ -40,8 +40,8 @@ instance Substitute v x a => Substitute v x [a] where
 instance Substitute TVarOf DMTypeOf Sensitivity where
   substitute σs η = pure η
 
-instance (Substitute v a x, Substitute v a DMType) => Substitute v a (Annot x) where
-  substitute σs (Single i x) = Single i <$> substitute σs x
+instance (Substitute v a x, Substitute v a DMType) => Substitute v a (WithRelev x) where
+  substitute σs (WithRelev i x) = WithRelev i <$> substitute σs x
 
 --instance Substitute TVarOf DMTypeOf Privacy where
 --  substitute σs η = pure η
@@ -259,9 +259,9 @@ instance Cast (Either Sensitivity Privacy) Privacy where
   cast (Left e) = error $ "Expected a privacy but got a sensitivity (" <> show e <> ")."
   cast (Right e) = return e
 
-instance (Cast (Either a b) x) => Cast (Either (Annot a) (Annot b)) (Annot x) where
-  cast (Left (Single i (x :@ e))) = Single i <$> (x :@) <$> cast @(Either a b) (Left e)
-  cast (Right (Single i (x :@ e))) = Single i <$> (x :@) <$> cast @(Either a b) (Right e)
+instance (Cast (Either a b) x) => Cast (Either (WithRelev a) (WithRelev b)) (WithRelev x) where
+  cast (Left (WithRelev i (x :@ e))) = WithRelev i <$> (x :@) <$> cast @(Either a b) (Left e)
+  cast (Right (WithRelev i (x :@ e))) = WithRelev i <$> (x :@) <$> cast @(Either a b) (Right e)
 
 instance (Cast (Either a b) x) => Cast (Either (z :& a) (z :& b)) (z :& x) where
   cast (Left (x :@ e)) = (x :@) <$> cast @(Either a b) (Left e)
@@ -285,11 +285,11 @@ instance (Cast a b) => Cast (Maybe a) (Maybe b) where
 -- instance Cast DMType DMType where
 --   cast t = pure t
 
-instance (MonadDMTC t, Normalize t e) => Normalize t (Annot e) where
-  normalize (Single i x) = Single i <$> normalize x
+instance (MonadDMTC t, Normalize t e) => Normalize t (WithRelev e) where
+  normalize (WithRelev i x) = WithRelev i <$> normalize x
 
 
-type TypeCtx extra = Ctx Symbol (Annot extra)
+type TypeCtx extra = Ctx Symbol (WithRelev extra)
 type TypeCtxSP = Either (TypeCtx Sensitivity) (TypeCtx Privacy)
 
 data Watcher = Watcher Changed

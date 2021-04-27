@@ -11,7 +11,7 @@ t1 s = Var (Symbol s) (JTAny)
 t2 :: DMTerm
 t2 = Sng 2 JTNumInt
 
-t3 a = Arg (Symbol a) (JTAny) IsInteresting
+t3 a = Arg (Symbol a) (JTAny) IsRelevant
 
 t₄ = Op (IsBinary DMOpAdd) [t3 "x", t3 "x"]
 
@@ -30,7 +30,7 @@ t10 = Lam [Symbol "x" :- (JTNumInt), Symbol "y" :- (JTAny)] (Phi (t3 "x") t2 (t3
 vz = Var (Symbol "z") (JTAny)
 t11 = SLet (Symbol "z" :- (JTAny)) (Sng 1 JTNumInt) (SLet (Symbol "z" :- (JTAny)) (t5 (Sng 1 JTNumInt) vz) (SLet (Symbol "z" :- (JTAny)) (t5 (Sng 2 JTNumInt) vz) vz))
 
-t12 = LamStar [((Symbol "x" :- (JTNumInt)), IsInteresting), ((Symbol "y" :- (JTAny)), IsInteresting)] (Ret (Phi (t3 "x") t2 (t3 "y")))
+t12 = LamStar [((Symbol "x" :- (JTNumInt)), IsRelevant), ((Symbol "y" :- (JTAny)), IsRelevant)] (Ret (Phi (t3 "x") t2 (t3 "y")))
 
 t13 = Ret (Phi (t3 "x") t2 (t3 "y"))
 

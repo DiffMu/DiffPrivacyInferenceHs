@@ -19,17 +19,17 @@ import Debug.Trace
 -- A helper function which scale any type context with a given sensitivity `η`.
 scale :: Sensitivity -> TypeCtxSP -> TypeCtxSP
 scale η (Left γ) = Left (f <$> γ)
-  where f (Single i (τ :@ s)) = Single i (τ :@ (η ⋅! s))
+  where f (WithRelev i (τ :@ s)) = WithRelev i (τ :@ (η ⋅! s))
 scale η (Right γ) = Right (f <$> γ)
-  where f :: Annot Privacy -> Annot Privacy
-        f (Single i (τ :@ (δ,ε))) = Single i (τ :@ (η ⋅! δ, η ⋅! ε))
+  where f :: WithRelev Privacy -> WithRelev Privacy
+        f (WithRelev i (τ :@ (δ,ε))) = WithRelev i (τ :@ (η ⋅! δ, η ⋅! ε))
 
 -- Scales the current type context living in our typechecking-state monad by a given `η`.
 mscale :: MonadDMTC t => Sensitivity -> t ()
 mscale η = types %= scale η
 
-zeroAnnotation :: (MonadDMTC t, Default e) => t e
-zeroAnnotation = return def
+zeroWithRelevation :: (MonadDMTC t, Default e) => t e
+zeroWithRelevation = return def
 
 instance Default Sensitivity where
   def = constCoeff (Fin 0)
@@ -48,11 +48,11 @@ instance (CMonoidM t a, CMonoidM t b) => CMonoidM t (a,b)
 truncate_impl :: forall f e. (CMonoidM Identity f, CMonoidM Identity e, Eq e) => f -> TypeCtx e -> TypeCtx f
 truncate_impl η γ = truncate_annotation <$> γ
    where
-      truncate_annotation :: (Annot e) -> (Annot f)
-      truncate_annotation (Single i (τ :@ annotation)) =
+      truncate_annotation :: (WithRelev e) -> (WithRelev f)
+      truncate_annotation (WithRelev i (τ :@ annotation)) =
         (case annotation == zeroId of
-            True -> Single i (τ :@ zeroId)
-            _    -> Single i (τ :@ η))
+            True -> WithRelev i (τ :@ zeroId)
+            _    -> WithRelev i (τ :@ η))
 
 truncateS :: Sensitivity -> TypeCtxSP -> TypeCtxSP
 truncateS η (Left γ) = Left (truncate_impl η γ)
@@ -146,11 +146,11 @@ msum3Tup (ma, mb, mc) = do
 
 
 
-setVarS :: MonadDMTC t => Symbol -> Annot Sensitivity -> t ()
-setVarS k v = types %=~ setValueM k (Left v :: Either (Annot Sensitivity) (Annot Privacy))
+setVarS :: MonadDMTC t => Symbol -> WithRelev Sensitivity -> t ()
+setVarS k v = types %=~ setValueM k (Left v :: Either (WithRelev Sensitivity) (WithRelev Privacy))
 
-setVarP :: MonadDMTC t => Symbol -> Annot Privacy -> t ()
-setVarP k v = types %=~ setValueM k (Right v :: Either (Annot Sensitivity) (Annot Privacy))
+setVarP :: MonadDMTC t => Symbol -> WithRelev Privacy -> t ()
+setVarP k v = types %=~ setValueM k (Right v :: Either (WithRelev Sensitivity) (WithRelev Privacy))
 
 
 
@@ -173,28 +173,28 @@ getArgList xτs = do
   xτs' <- mapM f xτs
 
   -- We have to remove all symbols x from the context
-  let deleteSingle :: [TypeCtxSP -> t (TypeCtxSP)]
-      deleteSingle = ((\(x :- _) -> deleteValueM x) <$> xτs)
+  let deleteWithRelev :: [TypeCtxSP -> t (TypeCtxSP)]
+      deleteWithRelev = ((\(x :- _) -> deleteValueM x) <$> xτs)
       -- temp = mapM (\(x :- _) -> deleteValueM x) xτs
-  γ' <- composeFunM deleteSingle γ
+  γ' <- composeFunM deleteWithRelev γ
 
   types .= γ'
 
   return xτs'
 
-removeVar :: forall e t. (MonadDMTC t, DMExtra e, CMonoidM Identity e) => Symbol -> t (Annot e)
+removeVar :: forall e t. (MonadDMTC t, DMExtra e, CMonoidM Identity e) => Symbol -> t (WithRelev e)
 removeVar x =  do
   -- (γ :: Ctx Symbol (DMType :& e)) <- use types
   γ <- use types
   v <- getValueM x γ
   vr <- case v of
      Just vv -> cast vv
-     Nothing -> Single IsInteresting <$> ((:@) <$> newVar <*> return zeroId)
+     Nothing -> WithRelev IsRelevant <$> ((:@) <$> newVar <*> return zeroId)
   γ' <- deleteValueM x γ
   types .= γ'
   return vr
 
-lookupVar :: forall e t. (MonadDMTC t, DMExtra e) => Symbol -> t (Maybe (Annot e))
+lookupVar :: forall e t. (MonadDMTC t, DMExtra e) => Symbol -> t (Maybe (WithRelev e))
 lookupVar x =  do
   γ <- use types
   v <- getValueM x γ
@@ -220,12 +220,12 @@ getInteresting = do
 -- Algebraic instances for annot
 
 -- TODO: If we are going to implement 'Multiple', then this instance has to change
-instance (Show e, IsT MonadDMTC t, SemigroupM t e) => SemigroupM t (Annot e) where
-  (⋆) (Single i e) (Single j f) = Single (i <> j) <$> (e ⋆ f)
+instance (Show e, IsT MonadDMTC t, SemigroupM t e) => SemigroupM t (WithRelev e) where
+  (⋆) (WithRelev i e) (WithRelev j f) = WithRelev (i <> j) <$> (e ⋆ f)
 
-instance (Show e, IsT MonadDMTC t, MonoidM t e) => MonoidM t (Annot e) where
-  neutral = Single IsInteresting <$> neutral
+instance (Show e, IsT MonadDMTC t, MonoidM t e) => MonoidM t (WithRelev e) where
+  neutral = WithRelev IsRelevant <$> neutral
 
-instance (Show e, IsT MonadDMTC t, CheckNeutral t e) => CheckNeutral t (Annot e) where
-  checkNeutral (Single i a) = checkNeutral a
+instance (Show e, IsT MonadDMTC t, CheckNeutral t e) => CheckNeutral t (WithRelev e) where
+  checkNeutral (WithRelev i a) = checkNeutral a
 

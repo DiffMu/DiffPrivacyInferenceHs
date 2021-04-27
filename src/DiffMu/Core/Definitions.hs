@@ -196,11 +196,11 @@ fstAnn (a :@ b) = a
 sndAnn :: (a :& b) -> b
 sndAnn (a :@ b) = b
 
-fstAnnI :: (Annot b) -> DMType
-fstAnnI (Single _ (a :@ b)) = a
+fstAnnI :: (WithRelev b) -> DMType
+fstAnnI (WithRelev _ (a :@ b)) = a
 
-sndAnnI :: Annot b -> b
-sndAnnI (Single _ (a :@ b)) = b
+sndAnnI :: WithRelev b -> b
+sndAnnI (WithRelev _ (a :@ b)) = b
 
 
 ---------------------------------------------------------
@@ -431,11 +431,11 @@ data DMTerm =
   Ret DMTerm
   | Sng Float JuliaType
   | Var Symbol JuliaType
-  | Arg Symbol JuliaType Interesting
+  | Arg Symbol JuliaType Relevance
   | Op DMTypeOp_Some [DMTerm]
   | Phi DMTerm DMTerm DMTerm
   | Lam     [Asgmt JuliaType] DMTerm
-  | LamStar [(Asgmt JuliaType, Interesting)] DMTerm
+  | LamStar [(Asgmt JuliaType, Relevance)] DMTerm
   | Apply DMTerm [DMTerm]
   | FLet Symbol [JuliaType] DMTerm DMTerm
   | Choice (HashMap [JuliaType] DMTerm)
@@ -502,29 +502,29 @@ makeEmptyDMEnv = DMEnv
 
 
 -------------------------------------------------------------------------
--- Annotations
+-- Relevance Annotations
 
-data Interesting = IsInteresting | NotInteresting
+data Relevance = IsRelevant | NotRelevant
   deriving (Eq)
 
-instance Show Interesting where
-   show IsInteresting = "interesting"
-   show NotInteresting = "uninteresting"
+instance Show Relevance where
+   show IsRelevant = "interesting"
+   show NotRelevant = "uninteresting"
 
-data Annot extra = Single Interesting (DMType :& extra)
+data WithRelev extra = WithRelev Relevance (DMType :& extra)
 
-instance Semigroup Interesting where
-  (<>) IsInteresting b = IsInteresting
-  (<>) a IsInteresting = IsInteresting
-  (<>) _ _ = NotInteresting
+instance Semigroup Relevance where
+  (<>) IsRelevant b = IsRelevant
+  (<>) a IsRelevant = IsRelevant
+  (<>) _ _ = NotRelevant
 
-instance Show e => Show (Annot e) where
-  show (Single IsInteresting  x) = show x
-  show (Single NotInteresting x) = "{" <> show x <> "}"
+instance Show e => Show (WithRelev e) where
+  show (WithRelev IsRelevant  x) = show x
+  show (WithRelev NotRelevant x) = "{" <> show x <> "}"
 
-makeInt :: (DMType :& e) -> Annot e
-makeInt = Single IsInteresting
+makeRelev :: (DMType :& e) -> WithRelev e
+makeRelev = WithRelev IsRelevant
 
-makeNotInt :: (DMType :& e) -> Annot e
-makeNotInt = Single NotInteresting
+makeNotRelev :: (DMType :& e) -> WithRelev e
+makeNotRelev = WithRelev NotRelevant
 

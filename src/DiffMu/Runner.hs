@@ -11,7 +11,7 @@ import DiffMu.Core.Context
 import DiffMu.Typecheck.Operations
 import DiffMu.Typecheck.Subtyping
 import DiffMu.Typecheck.Typecheck
---import DiffMu.Parser.DMTerm.FromString
+import DiffMu.Parser.DMTerm.FromString
 
 import DiffMu.Typecheck.JuliaType
 
@@ -24,12 +24,12 @@ import Debug.Trace
 run :: IO ()
 run = putStrLn "Hello?"
 
---typecheckFromString_DMTerm :: String -> IO ()
---typecheckFromString_DMTerm term = do
---  res <- pDMTermFromString term
---  case res of
---    Left err -> putStrLn $ "Error while parsing DMTerm from string: " <> show err
---    Right term -> typecheckFromDMTerm term
+typecheckFromString_DMTerm :: String -> IO ()
+typecheckFromString_DMTerm term = do
+ res <- pDMTermFromString term
+ case res of
+   Left err -> putStrLn $ "Error while parsing DMTerm from string: " <> show err
+   Right term -> typecheckFromDMTerm term
 
 
 typecheckFromDMTerm :: DMTerm -> IO ()
