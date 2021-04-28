@@ -206,13 +206,13 @@ getInteresting = do
    h <- case γ of
            Left _ -> throwError (ImpossibleError "getInteresting called on sensitivity context.")
            Right (Ctx (MonCom h')) -> return (H.toList h')
-   let f :: MonadDMTC t => [(Symbol, Annot Privacy)] -> t ([Symbol],[DMType],[Privacy])
+   let f :: MonadDMTC t => [(Symbol, WithRelev Privacy)] -> t ([Symbol],[DMType],[Privacy])
        f lst = case lst of
-                  ((x, (Single i (τ :@ p))) : xτs) -> case i of
-                        IsInteresting -> do
+                  ((x, (WithRelev i (τ :@ p))) : xτs) -> case i of
+                        IsRelevant -> do
                            (xs, τs, ps) <- f xτs
                            return ((x:xs),(τ:τs),(p:ps))
-                        NotInteresting -> f xτs
+                        NotRelevant -> f xτs
                   [] -> return ([],[],[])
    f h
 
