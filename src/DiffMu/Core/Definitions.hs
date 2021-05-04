@@ -150,6 +150,20 @@ instance Show (DMTypeOf k) where
   show (Clip n) = "Clip(" <> show n <> ")"
   show (DMMat nrm clp n m τ) = "Matrix<n: "<> show nrm <> ", c: " <> show clp <> ">[" <> show n <> " × " <> show m <> "](" <> show τ <> ")"
 
+instance Eq (DMTypeOf NormKind) where
+  L1 == L1 = True
+  L2 == L2 = True
+  LInf == LInf = True
+  TVar a == TVar b = a == b
+  _ == _ = False
+
+instance Eq (DMTypeOf ClipKind) where
+  U == U = True
+  Clip c == Clip d = c == d
+  TVar a == TVar b = a == b
+  _ == _ = False
+
+-- instance Ord (DMTypeOf ClipKind) where
 
 
 --------------------
@@ -239,7 +253,7 @@ type Privacy = PrivacyOf MainSensKind
 --   deriving (Generic, Show, Eq)
 
 newtype JuliaType = JuliaType String
-  deriving (Generic, Eq)
+  deriving (Generic, Eq, Ord)
 
 instance Hashable JuliaType where
 
@@ -290,6 +304,7 @@ pattern JTNumReal = JuliaType "Real"
 -- The type of all possible unary type operations.
 data DMTypeOps_Unary =
    DMOpCeil
+  deriving (Generic, Eq, Ord)
 
 -- The type of all possible binary type operations.
 data DMTypeOps_Binary =
@@ -299,10 +314,11 @@ data DMTypeOps_Binary =
    | DMOpDiv
    | DMOpMod
    | DMOpEq
+  deriving (Generic, Eq, Ord)
 
 
 data DMTypeOp_Some = IsUnary DMTypeOps_Unary | IsBinary DMTypeOps_Binary
-  deriving (Show, Generic)
+  deriving (Show, Generic, Eq, Ord)
 
 instance Show DMTypeOps_Unary where
   show DMOpCeil = "ceil"
@@ -416,7 +432,7 @@ instance TCConstraint IsTypeOpResult where
 type Clip = DMTypeOf ClipKind
 
 data Asgmt a = (:-) Symbol a
-  deriving (Generic, Show)
+  deriving (Generic, Show, Eq, Ord)
 
 fstA :: Asgmt a -> Symbol
 fstA (x :- τ) = x
@@ -448,7 +464,7 @@ data DMTerm =
   | Iter DMTerm DMTerm DMTerm
   | Loop DMTerm DMTerm (Symbol, Symbol) DMTerm
 -- ....
-  deriving (Generic, Show)
+  deriving (Generic, Show, Eq)
 
 
 --------------------------------------------------------------------------
@@ -505,7 +521,7 @@ makeEmptyDMEnv = DMEnv
 -- Relevance Annotations
 
 data Relevance = IsRelevant | NotRelevant
-  deriving (Eq)
+  deriving (Eq, Ord)
 
 instance Show Relevance where
    show IsRelevant = "interesting"

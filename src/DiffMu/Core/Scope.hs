@@ -19,7 +19,6 @@ type Scope v a = H.HashMap v a
 -- Our scopes have symbols as variables, and contain DMTerms and the scope in which the variable
 -- ought to be checked, i.e. the scope that was current during 
 newtype DMScope = DMScope (Scope Symbol (DMTerm, DMScope))
-   deriving (Show)
 
 -- typechecking actually carries two scopes, where the first one is the toplevel scope where nothing
 -- is ever popped, and the second that get's replaced by the one stored inside a Var terms entry
@@ -35,6 +34,30 @@ instance Default (Scope v a) where
 instance Default DMScope where
   def = DMScope def
 
+mergeScopes :: DMScope -> Scope Symbol [DMTerm]
+mergeScopes a = f a emptyDict
+  where f :: DMScope -> Scope Symbol [DMTerm] -> Scope Symbol [DMTerm]
+        f (DMScope scope) acc =
+          let cur = (\(term,scope) -> [term]) <$> scope
+              others = [mergeScopes other | (_ , (_ , other)) <- H.toList scope]
+              all = cur:others
+              merged = foldl (H.unionWith (<>)) emptyDict all
+              unique = nub <$> merged
+          in unique
+
+
+instance Show DMScope where
+  show scope = showWith "\n" f (mergeScopes scope)
+    where f name termlist =
+            let name' = show name <> " := "
+                n = length name'
+                terms' = intercalate (",\n" <> take n (repeat ' ')) (show <$> termlist)
+            in name' <> terms'
+
+instance ShowDict v k (Scope v k) where
+  showWith comma merge (d) =
+    let d' = H.toList d
+    in intercalate comma ((\(k,v) -> merge k v) <$> d')
 
 
 -- Given a scope and a variable name v, we pop the topmost element from the list for v.
@@ -68,6 +91,7 @@ instance (DictKey k) => DictLike k v (H.HashMap k v) where
   setValue v m (h) = (H.insert v m h)
   deleteValue v (h) = (H.delete v h)
   getValue k (h) = h H.!? k
+  emptyDict = H.empty
 
 -- whenever we encounter an assignment, we replace every occurance of the assignee variable with
 -- the term it is assigned to, except inside lambdas, where variables are only resolved once the
