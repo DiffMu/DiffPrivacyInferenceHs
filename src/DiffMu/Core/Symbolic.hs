@@ -138,6 +138,7 @@ instance (Substitute SymVar (CPolyM SymVal Int (SymVar 'MainSensKind)) (SymVar k
   substitute σ (Ln a) = Ln <$> substitute σ a
   substitute σ (Sqrt a) = Sqrt <$> substitute σ a
   substitute σ (Max as) = Max <$> mapM (substitute σ) as
+  substitute σ (Minus (a, b)) = Minus <$> mapM (substitute σ) (a, b)
 
 
 
