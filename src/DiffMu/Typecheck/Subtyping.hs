@@ -197,6 +197,10 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsSupremum (DMTypeOf k, DMType
   solve_ Dict _ name (IsSupremum a) = solveSupremum name a
 
 
+-- TODO: Check whether this does the correct thing.
+instance (SingI k, Typeable k) => Solve MonadDMTC IsInfimum (DMTypeOf k, DMTypeOf k, DMTypeOf k) where
+  solve_ Dict _ name (IsInfimum a) = pure ()
+
 ------------------------------------------------------------
 -- Solve supremum (TODO this should live somewhere else.)
 

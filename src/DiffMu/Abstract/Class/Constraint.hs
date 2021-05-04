@@ -92,6 +92,13 @@ instance TCConstraint IsSupremum where
   constr = IsSupremum
   runConstr (IsSupremum c) = c
 
+---- Infimum
+newtype IsInfimum a = IsInfimum a deriving Show
+
+instance TCConstraint IsInfimum where
+  constr = IsInfimum
+  runConstr (IsInfimum c) = c
+
 ---- Choices
 newtype IsChoice a = IsChoice a deriving Show
 
@@ -99,7 +106,7 @@ instance TCConstraint IsChoice where
   constr = IsChoice
   runConstr (IsChoice c) = c
 
----- Gauss or Mgauss? 
+---- Gauss or Mgauss?
 newtype IsGaussResult a = IsGaussResult a deriving Show
 
 instance TCConstraint IsGaussResult where

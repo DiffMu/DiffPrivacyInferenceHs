@@ -37,6 +37,16 @@ instance (Substitute v x a, Substitute v x b) => Substitute v x (a :& b) where
 instance Substitute v x a => Substitute v x [a] where
   substitute σs xs = mapM (substitute σs) xs
 
+instance Substitute v x a => Substitute v x (Maybe a) where
+  substitute σs (Just a) = Just <$> substitute σs a
+  substitute σs (Nothing) = pure Nothing
+
+instance Substitute TVarOf DMTypeOf JuliaType where
+  substitute σs jt = pure jt
+
+instance Substitute SVarOf SensitivityOf JuliaType where
+  substitute σs jt = pure jt
+
 instance Substitute TVarOf DMTypeOf Sensitivity where
   substitute σs η = pure η
 
@@ -63,6 +73,7 @@ instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs (τ1 :->*: τ2) = (:->*:) <$> substitute σs τ1 <*> substitute σs τ2
   substitute σs (DMTup τs) = DMTup <$> substitute σs τs
   substitute σs (DMMat nrm clp n m τ) = DMMat nrm clp <$> substitute σs n <*> substitute σs m <*> substitute σs τ
+  substitute σs (DMChoice xs) = DMChoice <$> substitute σs xs
 
 instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
   substitute σs L1 = pure L1
@@ -81,6 +92,7 @@ instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
   substitute σs (τ1 :->*: τ2) = (:->*:) <$> substitute σs τ1 <*> substitute σs τ2
   substitute σs (DMTup τs) = DMTup <$> substitute σs τs
   substitute σs (DMMat nrm clp n m τ) = DMMat nrm clp <$> substitute σs n <*> substitute σs m <*> substitute σs τ
+  substitute σs (DMChoice xs) = DMChoice <$> substitute σs xs
 
 
 instance Term TVarOf DMTypeOf where
@@ -91,6 +103,22 @@ instance Term TVarOf DMTypeOf where
 instance FreeVars v a => FreeVars v [a] where
   freeVars [] = []
   freeVars (τ:τs) = freeVars τ <> freeVars τs
+
+instance (FreeVars v a, FreeVars v b) => FreeVars v (a :& b) where
+  freeVars (a :@ b) = freeVars a <> freeVars b
+
+instance (FreeVars v a, FreeVars v b) => FreeVars v (a , b) where
+  freeVars (a, b) = freeVars a <> freeVars b
+
+instance (FreeVars v a) => FreeVars v (Maybe a) where
+  freeVars (Just a) = freeVars a
+  freeVars (Nothing) = mempty
+
+instance FreeVars TVarOf Sensitivity where
+  freeVars _ = mempty
+
+instance FreeVars TVarOf JuliaType where
+  freeVars _ = mempty
 
 instance Typeable k => FreeVars TVarOf (DMTypeOf k) where
   freeVars DMInt = []
@@ -109,6 +137,7 @@ instance Typeable k => FreeVars TVarOf (DMTypeOf k) where
   freeVars (τ1 :->*: τ2) = freeVars (fstAnn <$> τ1) <> freeVars τ2
   freeVars (DMTup τs) = freeVars τs
   freeVars (DMMat nrm clp n m τ) = freeVars nrm <> freeVars clp <> freeVars τ
+  freeVars (DMChoice choices) = freeVars choices
 
 
 
