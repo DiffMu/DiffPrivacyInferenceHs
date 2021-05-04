@@ -123,9 +123,11 @@ checkSen' (Lam xτs body) scope = do
   -- because we're interested in their sensitivity
   scope' <- foldM (\sc -> (\(x :- τ) -> pushDefinition sc x (Arg x τ IsRelevant))) scope xτs
 
-  traceM "checking lam"
-  traceM (show scope')
-  τr <- checkSens body scope'
+  -- the body is checked in the toplevel scope, not the current variable scope.
+  -- this reflects the julia behaviour
+  let (topscope, _) = scope'
+  τr <- checkSens body (topscope, topscope)
+
   xrτs <- getArgList xτs
   return (xrτs :->: τr)
 
@@ -136,7 +138,11 @@ checkSen' (LamStar xτs body) scope = do
   -- because we're interested in their sensitivity
   scope' <- foldM (\sc -> (\((x :- τ), i) -> pushDefinition sc x (Arg x τ i))) scope xτs
 
-  τr <- checkPriv body scope'
+  -- the body is checked in the toplevel scope, not the current variable scope.
+  -- this reflects the julia behaviour
+  let (topscope, _) = scope'
+  τr <- checkPriv body (topscope, topscope)
+
   xrτs <- getArgList (map fst xτs)
   mtruncateS inftyS
   return (xrτs :->*: τr)

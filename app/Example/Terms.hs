@@ -10,6 +10,7 @@ var s = Var (Symbol s) (JTAny)
 arg a = (Symbol a :- (JTAny))
 sng n = Sng n JTNumInt
 plus a b = Op (IsBinary DMOpAdd) [a, b]
+times a b = Op (IsBinary DMOpMul) [a, b]
 
 
 t2 :: DMTerm
@@ -55,5 +56,7 @@ t20 = (Tup [t5 t2 t2, (var "x"), t5 (var "x") (var "x")])
 
 t21 = Lam [Symbol "x" :- (JTNumInt)] (TLet [arg "x", arg "y", arg "z"] t20 (Op (IsBinary DMOpAdd) [t3 "y", t5 (t3 "y") (t3 "z")]))
 
-t22 = Lam [] (FLet (Symbol "app") [(JTAny)] (Lam [arg "f"] (Lam [arg "x"] (Apply (var "f") [var "x"]))) (SLet (arg "a") (sng 3) (SLet (arg "g") (Apply (var "app") [Lam [arg "x"] (plus (var "x") (var "c"))]) (SLet (arg "c") (plus (var "a") (sng 1)) (SLet (arg "a") (sng 100) (Apply (var "g") [sng 1]))))))
+t22 = Lam [] (FLet (Symbol "app") [(JTAny)] (Lam [arg "f"] (Lam [arg "x"] (Apply (var "f") [var "x"]))) (SLet (arg "a") (sng 3) (SLet (arg "g") (Apply (var "app") [Lam [arg "x"] (times (var "x") (var "c"))]) (SLet (arg "c") (plus (var "a") (sng 1)) (SLet (arg "a") (sng 100) (Apply (var "g") [sng 1]))))))
+
+t23 = Lam [] (FLet (Symbol "app") [(JTAny)] (Lam [arg "f"] (Lam [arg "x"] (Apply (var "f") [Apply (var "f") [var "x"]]))) (SLet (arg "c") (sng 10) (SLet (arg "g") (Apply (var "app") [Lam [arg "x"] (times (var "x") (var "c"))]) (SLet (arg "c") (sng 5) (Apply (var "g") [sng 1])))))
 

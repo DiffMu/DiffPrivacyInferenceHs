@@ -64,9 +64,11 @@ instance PartialOrd JuliaType where
 foreign import ccall "dynamic" call_StringStringBool :: FunPtr (CString -> CString -> Bool) -> CString -> CString -> Bool
 
 
-instance Solve MonadDMTC IsChoice (DMType, (HashMap [JuliaType] (DMType , Sensitivity))) where
-  solve_ Dict _ name (IsChoice arg) = solveIsChoice name arg
+--instance Solve MonadDMTC IsChoice (DMType, (HashMap [JuliaType] (DMType , Sensitivity))) where
+--  solve_ Dict _ name (IsChoice arg) = solveIsChoice name arg
 
+instance Solve MonadDMTC IsChoice (DMType, (HashMap [JuliaType] (DMType , Sensitivity))) where
+  solve_ Dict _ name (IsChoice arg) = pure ()
 
 solveIsChoice :: forall t. IsT MonadDMTC t => Symbol -> (DMType, (HashMap [JuliaType] (DMType , Sensitivity))) -> t ()
 solveIsChoice =

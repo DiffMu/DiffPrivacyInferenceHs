@@ -16,10 +16,16 @@ import Debug.Trace
 -- A scope with variables of type `v`, and contents of type `a` is simply a hashmap.
 type Scope v a = H.HashMap v a
 
--- Our scopes have symbols as variables, and contain DMTerms.
-newtype DMScope = DMScope (Scope Symbol (DMTerm, Maybe DMScope))
+-- Our scopes have symbols as variables, and contain DMTerms and the scope in which the variable
+-- ought to be checked, i.e. the scope that was current during 
+newtype DMScope = DMScope (Scope Symbol (DMTerm, DMScope))
    deriving (Show)
 
+-- typechecking actually carries two scopes, where the first one is the toplevel scope where nothing
+-- is ever popped, and the second that get's replaced by the one stored inside a Var terms entry
+-- upon encountering the Var term. the only time where the toplevel scope is used for checking is in
+-- Lam and LamStar terms, which are checked in the scope current during application, not during devlaration.
+-- this reflects julia runtime behaviour.
 type DMScopes = (DMScope, DMScope)
 
 -- The default scope is an empty scope.
@@ -34,17 +40,16 @@ instance Default DMScope where
 -- Given a scope and a variable name v, we pop the topmost element from the list for v.
 popDefinition :: MonadDMTC t => DMScopes -> Symbol -> t (DMTerm, DMScopes)
 popDefinition (DMScope topscope, DMScope varscope) v = do
+   traceM "popping"
+   traceM (show v)
    case H.lookup v varscope of
-      Just (x, Nothing)  -> return (x, (DMScope (H.delete v topscope), DMScope (H.delete v topscope)))
-      Just (x, Just (DMScope vvarscope))  -> return (x, (DMScope topscope, DMScope (H.delete v vvarscope)))
+      Just (x, (DMScope vvarscope))  -> return (x, (DMScope topscope, DMScope (H.delete v vvarscope)))
       Nothing -> throwError (VariableNotInScope v)
 
 -- Given a scope, a variable name v , and a DMTerm t, we push t to the list for v.
 pushDefinition :: (MonadDMTC t) => DMScopes -> Symbol -> DMTerm -> t DMScopes
 pushDefinition (DMScope topscope, DMScope varscope) v term = do
-   let entry = case term of
-                 Lam _ _ -> (term, Nothing)
-                 _ -> (term, Just (DMScope topscope))
+   let entry = (term, (DMScope topscope))
    return (DMScope (H.insert v entry topscope), DMScope (H.insert v entry varscope))
 
 pushChoice :: (MonadDMTC t) => DMScopes -> Symbol -> [JuliaType] -> DMTerm -> t DMScopes
