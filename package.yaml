@@ -36,6 +36,7 @@ library:
     - data-default
     - hashable
     - unordered-containers
+    - containers
     - singletons
     - newtype
     - constraints
