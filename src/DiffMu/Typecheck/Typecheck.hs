@@ -23,9 +23,9 @@ import Debug.Trace
 --------------------
 -- Sensitivity terms
 
-checkSen' :: DMTerm -> DMScope -> TC DMType
+checkSen' :: DMTerm -> DMScopes -> TC DMType
 
-checkPriv :: DMTerm -> DMScope -> TC DMType
+checkPriv :: DMTerm -> DMScopes -> TC DMType
 checkPriv t scope = do
    γ <- use types
    case γ of -- TODO prettify.
@@ -41,7 +41,7 @@ checkPriv t scope = do
       Right γ -> return res
       Left γ -> error $ "checkPriv returned a sensitivity context!\n" <> "It is:\n" <> show γ <> "\nThe input term was:\n" <> show t
 
-checkSens :: DMTerm -> DMScope -> TC DMType
+checkSens :: DMTerm -> DMScopes -> TC DMType
 checkSens t scope = do
    γ <- use types
    case γ of -- TODO prettify.
@@ -121,8 +121,10 @@ checkSen' (Lam xτs body) scope = do
 
   -- put a special term to mark x as a function argument. those get special tratment
   -- because we're interested in their sensitivity
-  let scope' = mconcat ((\(x :- τ) -> setValue x (Arg x τ IsRelevant)) <$> xτs) scope
+  scope' <- foldM (\sc -> (\(x :- τ) -> pushDefinition sc x (Arg x τ IsRelevant))) scope xτs
 
+  traceM "checking lam"
+  traceM (show scope')
   τr <- checkSens body scope'
   xrτs <- getArgList xτs
   return (xrτs :->: τr)
@@ -132,7 +134,7 @@ checkSen' (LamStar xτs body) scope = do
 
   -- put a special term to mark x as a function argument. those get special tratment
   -- because we're interested in their sensitivity
-  let scope' = mconcat ((\((x :- τ), i) -> setValue x (Arg x τ i)) <$> xτs) scope
+  scope' <- foldM (\sc -> (\((x :- τ), i) -> pushDefinition sc x (Arg x τ i))) scope xτs
 
   τr <- checkPriv body scope'
   xrτs <- getArgList (map fst xτs)
@@ -181,12 +183,7 @@ checkSen' (Apply f args) scope = let
 checkSen' (FLet fname sign term body) scope = do
 
   -- make a Choice term to put in the scope
-   scope' <- case (H.lookup fname scope) of
-                  Nothing -> pushDefinition scope fname (Choice (H.singleton sign term))
-                  Just (Choice d) -> do
-                                        (_, scope'') <- popDefinition scope fname
-                                        pushDefinition scope'' fname (Choice (H.insert sign term d))
-                  _ -> throwError (ImpossibleError "Invalid scope entry.")
+   scope' <- pushChoice scope fname sign term
 
    -- check body with that new scope. Choice terms will result in IsChoice constraints upon ivocation of fname
    result <- checkSens body scope'
@@ -223,7 +220,7 @@ checkSen' (TLet xs tu body) scope = do
           return τ
 
    let mbody = do
-          let scope' = mconcat ((\(x :- dτ) -> setValue x (Arg x dτ IsRelevant)) <$> xs) scope -- TODO unique names
+          scope' <- foldM (\sc -> (\(x :- τ) -> pushDefinition sc x (Arg x τ IsRelevant))) scope xs
           let xnames = map fstA xs
 
           τb <- checkSens body scope'
@@ -356,7 +353,7 @@ checkSen' t scope = throwError (UnsupportedTermError t)
 --------------------------------------------------------------------------------
 -- Privacy terms
 
-checkPri' :: DMTerm -> DMScope -> TC DMType
+checkPri' :: DMTerm -> DMScopes -> TC DMType
 
 checkPri' (Ret t) scope = do
    τ <- checkSens t scope
@@ -387,12 +384,7 @@ checkPri' (SLet (x :- dτ) term body) scope =
 checkPri' (FLet fname sign term body) scope = do -- this is the same as with checkSens
 
   -- make a Choice term to put in the scope
-   scope' <- case (H.lookup fname scope) of
-                  Nothing -> pushDefinition scope fname (Choice (H.singleton sign term))
-                  Just (Choice d) -> do
-                                        (_, scope'') <- popDefinition scope fname
-                                        pushDefinition scope'' fname (Choice (H.insert sign term d))
-                  _ -> throwError (ImpossibleError "Invalid scope entry.")
+   scope' <- pushChoice scope fname sign term
 
    -- check body with that new scope. Choice terms will result in IsChoice constraints upon ivocation of fname
    result <- checkPriv body scope'

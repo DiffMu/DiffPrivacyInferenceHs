@@ -16,28 +16,47 @@ import Debug.Trace
 -- A scope with variables of type `v`, and contents of type `a` is simply a hashmap.
 type Scope v a = H.HashMap v a
 
+-- Our scopes have symbols as variables, and contain DMTerms.
+newtype DMScope = DMScope (Scope Symbol (DMTerm, Maybe DMScope))
+   deriving (Show)
+
+type DMScopes = (DMScope, DMScope)
+
 -- The default scope is an empty scope.
 instance Default (Scope v a) where
   def = H.empty
 
--- Given a scope and a variable name v, we pop the topmost element from the list for v.
-popDefinition :: (MonadDMTC t, DictKey v, Show v) => Scope v a -> v -> t (a, Scope v a)
-popDefinition scope v =
-  do d <- case H.lookup v scope of
-                 Just x  -> return x
-                 Nothing -> throwError (VariableNotInScope v)
+instance Default DMScope where
+  def = DMScope def
 
-     return (d, H.delete v scope) -- TODO
+
+
+-- Given a scope and a variable name v, we pop the topmost element from the list for v.
+popDefinition :: MonadDMTC t => DMScopes -> Symbol -> t (DMTerm, DMScopes)
+popDefinition (DMScope topscope, DMScope varscope) v = do
+   case H.lookup v varscope of
+      Just (x, Nothing)  -> return (x, (DMScope (H.delete v topscope), DMScope (H.delete v topscope)))
+      Just (x, Just (DMScope vvarscope))  -> return (x, (DMScope topscope, DMScope (H.delete v vvarscope)))
+      Nothing -> throwError (VariableNotInScope v)
 
 -- Given a scope, a variable name v , and a DMTerm t, we push t to the list for v.
-pushDefinition :: (MonadDMTC t) => DMScope -> Symbol -> DMTerm -> t DMScope
-pushDefinition scope v term = do
-   tt <- substituteScope scope term
-   return (H.insert v tt scope)
+pushDefinition :: (MonadDMTC t) => DMScopes -> Symbol -> DMTerm -> t DMScopes
+pushDefinition (DMScope topscope, DMScope varscope) v term = do
+   let entry = case term of
+                 Lam _ _ -> (term, Nothing)
+                 _ -> (term, Just (DMScope topscope))
+   return (DMScope (H.insert v entry topscope), DMScope (H.insert v entry varscope))
 
-
--- Our scopes have symbols as variables, and contain DMTerms.
-type DMScope = Scope Symbol DMTerm
+pushChoice :: (MonadDMTC t) => DMScopes -> Symbol -> [JuliaType] -> DMTerm -> t DMScopes
+pushChoice scope fname sign term = do
+   let (DMScope topscope, DMScope varscope) = scope
+   scope' <- case (H.lookup fname varscope) of
+                  Nothing -> pushDefinition scope fname (Choice (H.singleton sign term)) -- if there are no other methods just push
+                  Just (Choice d, _) -> do -- else append the method to the Choice term
+                                        (_, scope'') <- popDefinition scope fname
+                                        pushDefinition scope'' fname (Choice (H.insert sign term d))
+                  _ -> throwError (ImpossibleError "Invalid scope entry.")
+   return scope'
 
 -- All hashmaps are `DictLike`
 instance (DictKey k) => DictLike k v (H.HashMap k v) where
@@ -48,62 +67,6 @@ instance (DictKey k) => DictLike k v (H.HashMap k v) where
 -- whenever we encounter an assignment, we replace every occurance of the assignee variable with
 -- the term it is assigned to, except inside lambdas, where variables are only resolved once the
 -- lam is applied to simething.
-substituteScope :: (MonadDMTC t) => DMScope -> DMTerm -> t DMTerm
-substituteScope scope term = let
-      sub = substituteScope scope
-   in do
-      case term of
-         Lam _ _ -> return term
-         LamStar _ _ -> return term
-         Choice _ -> return term
-         Sng _ _ -> return term
-         Arg _ _ _ -> return term
-
-         Var vs τ -> case H.lookup vs scope of
-                           Just t -> return t --TODO what about vt
-                           _ -> throwError (VariableNotInScope vs)
-
-         Ret t -> Ret <$> sub t
-         Op op ts -> Op op <$> (mapM (sub) ts)
-         Phi tc ti te -> Phi <$> (sub tc) <*> (sub ti) <*> (sub te)
-         Apply tf ts -> Apply <$> (sub tf) <*> (mapM (sub) ts)
-         FLet fname jτs ft body -> FLet fname jτs <$> (sub ft) <*> (sub body)
-         Tup ts -> Tup <$> (mapM (sub) ts)
-         Gauss r e d f -> Gauss <$> (sub r) <*> (sub e) <*> (sub d) <*> (sub f)
-         MCreate n m bf -> MCreate <$> (sub n) <*> (sub m) <*> (sub bf)
-         ClipM c m -> ClipM c <$> (sub m)
-         Iter t1 t2 t3 -> Iter <$> (sub t1) <*> (sub t2) <*> (sub t3)
-         Loop it cs (x1, x2) body -> do
-            (x11, body1) <- case H.member x1 scope of
-               True -> do
-                  newname <- uniqueName x1 -- create a new name for x1
-                  return (newname, (rename x1 newname body))
-               False -> return (x1, body)
-
-            (x22, body2) <- case H.member x2 scope of
-               True -> do
-                  newname <- uniqueName x2 -- create a new name for x2
-                  return (newname, (rename x2 newname body1))
-               False -> return (x2, body1)
-
-            Loop <$> (sub it) <*> (sub cs) <*> (return (x11,x22)) <*> (sub body2)
-
-         SLet v t body -> let vname = fstA v in
-                              case H.member vname scope of -- does v exist in scope already?
-                                 True -> do -- if so:
-                                    newname <- uniqueName vname -- create a new name for v
-                                    -- rename all occurances of v in the body with newname before substituting.
-                                    SLet (newname :- (sndA v)) <$> (sub t) <*> (sub (rename vname newname body))
-                                 False -> SLet v <$> (sub t) <*> (sub body) -- else just substitute ahead.
-         TLet vs t body ->  case any (\v -> H.member (fstA v) scope) vs of -- is one of the assignees in scope?
-                                 True -> do -- if so:
-                                            let k = intersect (map fstA vs) (H.keys scope) -- get the names of all of them
-                                            newvs <- mapM uniqueName k -- create a new name for each
-                                            -- rename all occurances of all names in k in the body into their respective new names.
-                                            let newbody = foldl (\b -> \(v, newv) -> rename v newv b) body (zip k newvs)
-                                            TLet vs <$> (sub t) <*> (sub newbody) -- then substitute.
-                                 False -> TLet vs <$> (sub t) <*> (sub body)
-
 
 uniqueName :: (MonadDMTC t) => Symbol -> t Symbol
 uniqueName s = return (s <> (Symbol "_unique")) -- TODO do this properly
