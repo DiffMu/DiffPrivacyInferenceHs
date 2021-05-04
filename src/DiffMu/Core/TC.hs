@@ -113,8 +113,10 @@ instance (FreeVars v a, FreeVars v b) => FreeVars v (a , b) where
 instance (FreeVars v a) => FreeVars v (Maybe a) where
   freeVars (Just a) = freeVars a
   freeVars (Nothing) = mempty
+
 instance FreeVars TVarOf Sensitivity where
   freeVars _ = mempty
+
 instance FreeVars TVarOf JuliaType where
   freeVars _ = mempty
 
