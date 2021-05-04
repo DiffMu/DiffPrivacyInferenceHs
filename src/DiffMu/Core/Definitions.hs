@@ -131,6 +131,9 @@ data DMTypeOf (k :: DMKind) where
   -- matrices
   DMMat :: (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> Sensitivity -> DMType -> DMType
 
+  -- choices
+  DMChoice :: [DMType :& (Maybe [JuliaType], Sensitivity)] -> DMType
+
 -- Types are pretty printed as follows.
 instance Show (DMTypeOf k) where
   show DMInt = "Int"
@@ -149,6 +152,8 @@ instance Show (DMTypeOf k) where
   show U = "U"
   show (Clip n) = "Clip(" <> show n <> ")"
   show (DMMat nrm clp n m τ) = "Matrix<n: "<> show nrm <> ", c: " <> show clp <> ">[" <> show n <> " × " <> show m <> "](" <> show τ <> ")"
+  show (DMChoice cs) = "Choice{" <> show cs <> "}"
+
 
 instance Eq (DMTypeOf NormKind) where
   L1 == L1 = True

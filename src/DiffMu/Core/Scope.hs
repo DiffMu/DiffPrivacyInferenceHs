@@ -63,8 +63,6 @@ instance ShowDict v k (Scope v k) where
 -- Given a scope and a variable name v, we pop the topmost element from the list for v.
 popDefinition :: MonadDMTC t => DMScopes -> Symbol -> t (DMTerm, DMScopes)
 popDefinition (DMScope topscope, DMScope varscope) v = do
-   traceM "popping"
-   traceM (show v)
    case H.lookup v varscope of
       Just (x, (DMScope vvarscope))  -> return (x, (DMScope topscope, DMScope (H.delete v vvarscope)))
       Nothing -> throwError (VariableNotInScope v)
@@ -93,9 +91,6 @@ instance (DictKey k) => DictLike k v (H.HashMap k v) where
   getValue k (h) = h H.!? k
   emptyDict = H.empty
 
--- whenever we encounter an assignment, we replace every occurance of the assignee variable with
--- the term it is assigned to, except inside lambdas, where variables are only resolved once the
--- lam is applied to simething.
 
 uniqueName :: (MonadDMTC t) => Symbol -> t Symbol
 uniqueName s = return (s <> (Symbol "_unique")) -- TODO do this properly
