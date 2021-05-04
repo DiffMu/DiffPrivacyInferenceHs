@@ -182,7 +182,9 @@ checkSen' (Apply f args) scope = let
                              [] -> throwError (ImpossibleError "Sum cannot return empty list.")
 
       τ_ret <- newVar -- a type var for the function return type
-      addConstraint (Solvable (IsLessEqual (τ_lam, (argτs :->: τ_ret)))) -- f's type must be subtype of an arrow matching arg types.
+
+      -- f's type must be subtype of a choice arrow with matching arg types.
+      addConstraint (Solvable (IsLessEqual (τ_lam, DMChoice [(argτs :->: τ_ret) :@ (Nothing, oneId)])))
       return τ_ret
 
 
@@ -198,18 +200,16 @@ checkSen' (FLet fname sign term body) scope = do
 
 
 checkSen' (Choice d) scope = let
-      checkChoice :: DMTerm -> TC (DMType, Sensitivity)
-      checkChoice t = do
+      checkChoice :: ([JuliaType], DMTerm) -> TC (DMType :& (Maybe [JuliaType], Sensitivity))
+      checkChoice (sign, t) = do
          τ <- checkSens t scope
          flag <- newSVar "chflag"
          _ <- mscale (svar flag)
-         return (τ, svar flag)
+         return (τ :@ (Just sign, svar flag))
       in do
 
-         dd <- mapM checkChoice d
-         τ <- newVar
-         addConstraint (Solvable (IsChoice (τ, dd)))
-         return τ
+         dd <- mapM checkChoice (H.toList d)
+         return (DMChoice dd)
 
 
 checkSen' (Tup ts) scope = do
@@ -432,7 +432,8 @@ checkPri' (Apply f args) scope = let
                              [] -> throwError (ImpossibleError "Sum cannot return empty list.")
 
       τ_ret <- newVar -- a type var for the function return type
-      addConstraint (Solvable (IsLessEqual (τ_lam, (argτs :->*: τ_ret)))) -- f's type must be subtype of an arrow* matching arg types.
+
+      addConstraint (Solvable (IsLessEqual (τ_lam, DMChoice [(argτs :->*: τ_ret) :@ (Nothing, oneId)])))
       return τ_ret
 
 checkPri' (Loop it cs (xi, xc) b) scope = do
