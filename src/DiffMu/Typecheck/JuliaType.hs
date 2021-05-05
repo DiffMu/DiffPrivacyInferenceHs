@@ -6,6 +6,7 @@ import DiffMu.Prelude
 import DiffMu.Abstract
 import DiffMu.Core.Definitions
 import DiffMu.Core.TC
+import DiffMu.Core.Symbolic
 import DiffMu.Typecheck.Subtyping
 
 import qualified Data.HashSet as HS
@@ -66,74 +67,103 @@ foreign import ccall "dynamic" call_StringStringBool :: FunPtr (CString -> CStri
 
 --instance Solve MonadDMTC IsChoice (DMType, (HashMap [JuliaType] (DMType , Sensitivity))) where
 --  solve_ Dict _ name (IsChoice arg) = solveIsChoice name arg
+type ChoiceHash = HashMap [JuliaType] ((DMType :& Sensitivity), Sensitivity)
 
-instance Solve MonadDMTC IsChoice (DMType, (HashMap [JuliaType] (DMType , Sensitivity))) where
+instance Solve MonadDMTC IsChoice ([DMType :& Sensitivity], ChoiceHash) where
   solve_ Dict _ name (IsChoice arg) = pure ()
 
-solveIsChoice :: forall t. IsT MonadDMTC t => Symbol -> (DMType, (HashMap [JuliaType] (DMType , Sensitivity))) -> t ()
-solveIsChoice =
-  let matchArgs :: Symbol -> DMType -> HashMap [JuliaType] (DMType , Sensitivity) -> [DMType] -> t ()
-      matchArgs name τ choices args = do
-        let newchoices = H.filterWithKey (\s c -> choiceCouldMatch args s) choices
-        if H.null newchoices
-          then throwError (NoChoiceFoundError $ "No matching choice for " <> show τ <> " found in " <> show choices)
-          else pure ()
+solveIsChoice :: forall t. IsT MonadDMTC t => Symbol -> ([DMType :& Sensitivity], ChoiceHash) -> t ()
+solveIsChoice name (required, provided) = do
+   let matchArgs ::  [DMType :& Sensitivity] -> ChoiceHash -> t ([DMType :& Sensitivity], ChoiceHash)
+       matchArgs curReq curProv = do
+          case curReq of
+             [] -> return ([], curProv)
+             (τs : restReq) -> do
+                   argsm <- case fstAnn τs of
+                              args' :->: _  -> return (Just (fstAnn <$> args'))
+                              args' :->*: _ -> return (Just (fstAnn <$> args'))
+                              TVar _ -> return Nothing
+                              _ -> throwError (NoChoiceFoundError $ "Invalid type for Choice: " <> show τs)
 
-        -- if there is no free tyepevars in τs arguments, throw out methods that are more general than others
-        -- if we don't know all types we cannot do this, as eg for two methods
-        -- (Int, Int) => T
-        -- (Real, Number) => T
-        -- and arg types (TVar, DMInt), both methods are in newchoices, but if we later realize the TVar
-        -- is a DMReal, the first one does not match even though it's less general.
-        let newchoices' = case and (null . freeVars @_ @TVarOf <$> args) of
-              -- if no tvars are in the args
-              True  -> keepLeastGeneral newchoices
-              -- else we do not change them
-              False -> newchoices
-
-        case length newchoices' == length choices of
-          -- no choices were discarded, the constraint could not be simplified.
-          True -> return ()
-
-          -- some choices were discarded, so we can continue
-          False -> do
-
-            -- null all flags of choices that were discarded, so their inferred sensitivities get nulled
-            let discardedKeys = choices `H.difference` newchoices'
-            mapM (\(_,(_, s)) -> s ==! zeroId) (H.toList discardedKeys)
-
-            case H.toList newchoices' of
-              -- only one left, we can pick that one
-              -- even if there is free TVars, we don't have to add subtype constraints for the user-given signature,
-              -- as it was encoded in the Arr type of the choice, so its arg types can only be refinements.
-              -- set this ones flag to 1
-              [(_, (cτ, s))] -> s ==! oneId >> cτ ⊑! τ >> dischargeConstraint name
-
-              -- multiple are still left, we update the constraint
-              _              -> updateConstraint name (Solvable (IsChoice (τ, newchoices')))
-
-  in \name (τ,choices) -> case τ of
-    args :->: _  -> matchArgs name τ choices (fstAnn <$> args)
-    args :->*: _ -> matchArgs name τ choices (fstAnn <$> args)
-    TVar _       -> case H.toList choices of
-                      [(_,(cτ, s))] -> s ==! oneId >> cτ ⊑! τ >> dischargeConstraint name
-                      _               -> pure ()
-    t            -> internalError $ "The term " <> show t <> " is not supported in a choice."
+                   case argsm of
+                      Nothing -> do
+                                   (resR, resP) <- (matchArgs restReq curProv) -- can't resolve TVar choice, keep it and recurse.
+                                   return ((τs : resR), resP)
+                      Just args -> do
+                              -- get methods that could be a match
+                              let candidates = H.filterWithKey (\s c -> choiceCouldMatch args s) provided
+                              if H.null candidates
+                                 then throwError (NoChoiceFoundError $ "No matching choice for " <> show τs <> " found in " <> show provided)
+                                 else pure Nothing
 
 
-keepLeastGeneral :: HashMap [JuliaType] (DMType , Sensitivity) -> HashMap [JuliaType] (DMType , Sensitivity)
+                              -- if there is no free tyepevars in τs arguments, throw out methods that are more general than others
+                              -- if we don't know all types we cannot do this, as eg for two methods
+                              -- (Int, Int) => T
+                              -- (Real, Number) => T
+                              -- and arg types (TVar, DMInt), both methods are in newchoices, but if we later realize the TVar
+                              -- is a DMReal, the first one does not match even though it's less general.
+                              let candidates' = case and (null . freeVars @_ @TVarOf <$> args) of
+                                    -- if no tvars are in the args
+                                    True  -> keepLeastGeneral candidates
+                                    -- else we do not change them
+                                    False -> candidates
+
+                              case length candidates' == length provided of
+                                 -- no choices were discarded, the constraint could not be simplified.
+                                 True -> do
+                                            (resR, resP) <- (matchArgs restReq curProv) -- can't resolve choice, keep it and recurse.
+                                            return ((τs : resR), resP)
+
+                                 -- some choices were discarded, so we can continue
+                                 False -> do
+                                    case H.toList candidates' of
+                                        -- only one left, we can pick that one yay
+                                        -- even if there is free TVars, we don't have to add subtype constraints for the user-given signature,
+                                        -- as it was encoded in the Arr type of the choice, so its arg types can only be refinements.
+                                       [(sign, ((cτ :@ cs), count))] -> do
+                                                                let (τ :@ s) = τs
+                                                                cτ ⊑! τ -- set type to chosen method
+                                                                let resP = H.insert sign ((cτ :@ cs), count +! s) curProv -- count up
+                                                                matchArgs restReq resP -- discard entry by recursing without τs
+
+                                       _ -> do -- more than one left, need to wait.
+                                               (resR, resP) <- (matchArgs restReq curProv) -- can't resolve choice, keep it and recurse.
+                                               return ((τs : resR), resP)
+
+
+   (newcs, newdict) <- matchArgs required provided -- get new dict and list of yet unresolved choices.
+
+   -- discard or update constraint.
+   case newcs of
+        [] -> do -- complete resolution! set counters, discard.
+                mapM (\((_ :@ flag), count) -> flag ==! count) newdict
+                dischargeConstraint name
+        cs -> do -- still not all choices resolved, just kick the resolved ones out of the constraint.
+                 -- their sensitivity is already included in their method's count.
+                updateConstraint name (Solvable (IsChoice (newcs, newdict)))
+
+   return ()
+
+-- remove dict entries whose signature is supertype of some other signature.
+-- this is only reasonable if the dmtype signature we're trying to match has no free variables,
+-- bc then the minimal matching method is picked.
+keepLeastGeneral :: ChoiceHash -> ChoiceHash
 keepLeastGeneral cs =
+  -- make a poset from the (julia-)subtype relations of the given signatures
   let pos :: POSet [JuliaType]
       pos = PO.fromList (HS.toList (H.keysSet cs))
+      -- pick the ones that are not supertypes of any of the others
       mins = PO.lookupMin pos
       mins' = [(k, cs H.! k) | k <- mins]
   in H.fromList mins'
 
+-- determine whether a function with the given dmtype signature could match a method with the given juliatype signature.
 choiceCouldMatch :: [DMType] -> [JuliaType] -> Bool
 choiceCouldMatch args cs =
-  case length args == length cs of
-    False -> False
-    True -> let couldMatch t c = or ((`leq` c) <$> juliatypes t)
-            in and (zipWith couldMatch args cs)
+   case length args == length cs of
+        False -> False
+        True -> let couldMatch t c = or ((`leq` c) <$> juliatypes t)
+                in (and (zipWith couldMatch args cs))
 
 
