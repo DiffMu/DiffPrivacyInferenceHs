@@ -160,36 +160,38 @@ setVarP k v = types %=~ setValueM k (Right v :: Either (WithRelev AnnS) (WithRel
 
 -- Look up the types and sensitivities/privacies of the variables in `xτs` from the current context.
 -- If a variable is not present in Σ (this means it was not used in the lambda body),
--- create a new type/typevar according to type hint given in `xτs` and give it zero annotation
+-- create a new type/typevar according to type hint given in `xτs` and give it zero annotation.
+-- The result is the signature of the lambda the checking of whose body returned the current context.
 getArgList :: forall t e. (MonadDMTC t, DMExtra e) => [Asgmt JuliaType] -> t [DMTypeOf (AnnKind e)]
-getArgList = undefined
-
-{-
-getArgList :: forall t e. (MonadDMTC t, DMExtra e, CMonoidM t e) => [Asgmt JuliaType] -> t [DMType :& e]
 getArgList xτs = do
   (γ :: TypeCtxSP) <- use types
 
-  let f :: Asgmt JuliaType -> t (DMType :& e)
+  let f :: Asgmt JuliaType -> t (DMTypeOf (AnnKind e))
       f (x :- τ) = do
         val <- getValueM x γ
         case val of
           -- If the symbol was in the context γ, then we get its type and sensitivity
-          Just τe -> ((:@) <$> createDMType τ <*> zero)
---sndAnnI τe
-          -- if the type hint is DMDUnkown, we just add a typevar. otherwise we can be more specific
-          Nothing -> ((:@) <$> createDMType τ <*> zero)
+          Just τr -> do
+             (WithRelev _ τx) <- cast τr
+             return τx
+          -- else just return a variable with 0 annotation, as this means it was not used in the body.
+          Nothing -> do
+             τv <- newVar
+             return (zeroId :↷: τv) -- scale with 0
+
   xτs' <- mapM f xτs
 
   -- We have to remove all symbols x from the context
   let deleteWithRelev :: [TypeCtxSP -> t (TypeCtxSP)]
       deleteWithRelev = ((\(x :- _) -> deleteValueM x) <$> xτs)
-      -- temp = mapM (\(x :- _) -> deleteValueM x) xτs
   γ' <- composeFunM deleteWithRelev γ
 
   types .= γ'
 
   return xτs'
--}
+
+
+
 removeVar :: forall e t. (DMExtra e, MonadDMTC t) => Symbol -> t (WithRelev e)
 removeVar x =  do
   -- (γ :: Ctx Symbol (DMType :& e)) <- use types
