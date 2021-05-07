@@ -57,6 +57,14 @@ type SVar   = SVarOf MainSensKind
 --------------------
 -- 1. DMKinds
 
+data Annotation = AnnS | AnnP
+
+type family RealizeAnn (a :: Annotation) :: * where
+  RealizeAnn AnnS = SymTerm MainSensKind
+  RealizeAnn AnnP = (SymTerm MainSensKind, SymTerm MainSensKind)
+
+-- type family RealizeAnn AnnS = Sensitivity
+
 -- A `DMKind` is one of the following constructors:
 data DMKind =
     MainKind
@@ -64,10 +72,14 @@ data DMKind =
   | BaseNumKind
   | ClipKind
   | NormKind
+  | FunKind
+  | NoFunKind
+  | AnnKind Annotation
   deriving (Typeable)
 
 -- Using the "TemplateHaskell" ghc-extension, and the following function from the singletons library,
 -- we generate the `SingI` instances (and related stuff) needed to work with `DMKind` expressions on the type level.
+genSingletons [''Annotation]
 genSingletons [''DMKind]
 
 -- DMKinds are pretty printed as follows. For this we implement the `Show` typeclass for `DMKind`.
@@ -77,6 +89,9 @@ instance Show DMKind where
   show BaseNumKind = "BaseNum"
   show ClipKind = "Clip"
   show NormKind = "Norm"
+  show FunKind = "Fun"
+  show NoFunKind = "NoFun"
+  show (AnnKind a) = "Ann"
 
 --------------------
 -- 2. DMTypes
@@ -133,6 +148,13 @@ data DMTypeOf (k :: DMKind) where
 
   -- choices
   DMChoice :: [DMType :& (Maybe [JuliaType], Sensitivity)] -> DMType
+
+  -- annotations
+  NoFun :: (DMTypeOf NoFunKind :& RealizeAnn a) -> DMTypeOf (AnnKind a)
+  Fun :: [DMTypeOf FunKind :& RealizeAnn a] -> DMTypeOf (AnnKind a)
+  (:∧:) :: DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a)
+  (:↷:) :: Sensitivity -> DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a)
+  Trunc :: RealizeAnn a -> DMTypeOf (AnnKind b) -> DMTypeOf (AnnKind a)
 
 -- Types are pretty printed as follows.
 instance Show (DMTypeOf k) where
@@ -215,11 +237,12 @@ fstAnn (a :@ b) = a
 sndAnn :: (a :& b) -> b
 sndAnn (a :@ b) = b
 
-fstAnnI :: (WithRelev b) -> DMType
-fstAnnI (WithRelev _ (a :@ b)) = a
 
-sndAnnI :: WithRelev b -> b
-sndAnnI (WithRelev _ (a :@ b)) = b
+-- fstAnnI :: (WithRelev b) -> DMType
+-- fstAnnI (WithRelev _ (a :@ b)) = a
+
+-- sndAnnI :: WithRelev b -> (RealizeAnn b)
+-- sndAnnI (WithRelev _ (a :@ b)) = b
 
 
 ---------------------------------------------------------
@@ -532,20 +555,20 @@ instance Show Relevance where
    show IsRelevant = "interesting"
    show NotRelevant = "uninteresting"
 
-data WithRelev extra = WithRelev Relevance (DMType :& extra)
+data WithRelev extra = WithRelev Relevance (DMTypeOf (AnnKind extra))
 
 instance Semigroup Relevance where
   (<>) IsRelevant b = IsRelevant
   (<>) a IsRelevant = IsRelevant
   (<>) _ _ = NotRelevant
 
-instance Show e => Show (WithRelev e) where
+instance Show (WithRelev e) where
   show (WithRelev IsRelevant  x) = show x
   show (WithRelev NotRelevant x) = "{" <> show x <> "}"
 
-makeRelev :: (DMType :& e) -> WithRelev e
+makeRelev :: (DMTypeOf (AnnKind e)) -> WithRelev e
 makeRelev = WithRelev IsRelevant
 
-makeNotRelev :: (DMType :& e) -> WithRelev e
+makeNotRelev :: (DMTypeOf (AnnKind e)) -> WithRelev e
 makeNotRelev = WithRelev NotRelevant
 

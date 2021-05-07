@@ -23,9 +23,9 @@ import Debug.Trace
 --------------------
 -- Sensitivity terms
 
-checkSen' :: DMTerm -> DMScopes -> TC DMType
+checkSen' :: DMTerm -> DMScopes -> TC (DMTypeOf (AnnKind AnnS))
 
-checkPriv :: DMTerm -> DMScopes -> TC DMType
+checkPriv :: DMTerm -> DMScopes -> TC (DMTypeOf (AnnKind AnnP))
 checkPriv t scope = do
    γ <- use types
    case γ of -- TODO prettify.
@@ -41,7 +41,7 @@ checkPriv t scope = do
       Right γ -> return res
       Left γ -> error $ "checkPriv returned a sensitivity context!\n" <> "It is:\n" <> show γ <> "\nThe input term was:\n" <> show t
 
-checkSens :: DMTerm -> DMScopes -> TC DMType
+checkSens :: DMTerm -> DMScopes -> TC (DMTypeOf (AnnKind AnnS))
 checkSens t scope = do
    γ <- use types
    case γ of -- TODO prettify.
@@ -65,7 +65,7 @@ checkSen' (Sng η τ) scope  = Numeric <$> (Const (constCoeff (Fin η)) <$> (cre
 
 -- TODO!!!! Get interestingness flag!
 checkSen' (Arg x dτ i) scope = do τ <- createDMType dτ -- TODO subtype!
-                                  setVarS x (WithRelev i (τ :@ constCoeff (Fin 1)))
+                                  setVarS x (WithRelev i (NoFun (undefined :@ constCoeff (Fin 1)))) --(τ :@ constCoeff (Fin 1)))
                                   return τ
 
 checkSen' (Var x dτ) scope = do -- get the term that corresponds to this variable from the scope dict
@@ -195,7 +195,7 @@ checkSen' (FLet fname sign term body) scope = do
 
    -- check body with that new scope. Choice terms will result in IsChoice constraints upon ivocation of fname
    result <- checkSens body scope'
-   _ <- removeVar @Sensitivity fname
+   _ <- removeVar @AnnS fname
    return result
 
 
@@ -231,8 +231,11 @@ checkSen' (TLet xs tu body) scope = do
 
           τb <- checkSens body scope'
 
-          sτs <- mapM (removeVar @Sensitivity) xnames -- get inference result for xs
+          sτs <- mapM (removeVar @AnnS) xnames -- get inference result for xs
 
+          undefined
+          -- TODO: NEWANNOT
+         {-
           let s = maxS (map sndAnnI sτs) -- set maxs to maximum of inferred sensitivites
           s ==! maxs
 
@@ -243,8 +246,12 @@ checkSen' (TLet xs tu body) scope = do
    unify τt (DMTup τs) -- set correct tuple type
 
    return τb
+          -}
 
 checkSen' (Loop it cs (xi, xc) b) scope = do
+   undefined
+   -- TODO: NEWANNOT
+   {-
    niter <- case it of
                   Iter fs stp ls -> return (opCeil ((ls `opSub` (fs `opSub` (Sng 1 JTNumInt))) `opDiv` stp))
                   _ -> throwError (ImpossibleError "Loop iterator must be an Iter term.")
@@ -259,9 +266,9 @@ checkSen' (Loop it cs (xi, xc) b) scope = do
    let mbody = do
          scope' <- pushDefinition scope xi (Arg xi JTNumInt NotRelevant)
          scope'' <- pushDefinition scope' xc (Arg xc JTAny IsRelevant)
-         τ <- checkSens b scope''
-         xii <- removeVar @Sensitivity xi
-         xci <- removeVar @Sensitivity xc
+         τ <- checkSens b scope
+         xii <- removeVar @AnnS xi
+         xci <- removeVar @AnnS xc
          s <- newVar
          mscale s
          return (τ, s, xii, xci)
@@ -274,6 +281,7 @@ checkSen' (Loop it cs (xi, xc) b) scope = do
    addConstraint (Solvable (IsLoopResult ((sit, scs, sb), sbcs, τit))) -- compute the right scalars once we know if τ_iter is const or not.
 
    return τb
+   -}
 
 
 checkSen' (Gauss rp εp δp f) scope = let
@@ -359,7 +367,7 @@ checkSen' t scope = throwError (UnsupportedTermError t)
 --------------------------------------------------------------------------------
 -- Privacy terms
 
-checkPri' :: DMTerm -> DMScopes -> TC DMType
+checkPri' :: DMTerm -> DMScopes -> TC (DMTypeOf (AnnKind AnnP))
 
 checkPri' (Ret t) scope = do
    τ <- checkSens t scope
@@ -372,7 +380,7 @@ checkPri' (SLet (x :- dτ) term body) scope =
   let mbody = do
          scope' <- pushDefinition scope x (Arg x dτ IsRelevant)
          τ <- checkPriv body scope'
-         _ <- removeVar @Privacy x
+         _ <- removeVar @AnnP x
          return τ
   in do
      -- TODO this requires saving the annotation in the dict.
@@ -394,7 +402,7 @@ checkPri' (FLet fname sign term body) scope = do -- this is the same as with che
 
    -- check body with that new scope. Choice terms will result in IsChoice constraints upon ivocation of fname
    result <- checkPriv body scope'
-   _ <- removeVar @Privacy fname
+   _ <- removeVar @AnnP fname
    return result
 
 
@@ -437,6 +445,9 @@ checkPri' (Apply f args) scope = let
       return τ_ret
 
 checkPri' (Loop it cs (xi, xc) b) scope = do
+  undefined
+  -- TODO: NEWANNOT
+  {-
    niter <- case it of
                   Iter fs stp ls -> return (opCeil ((ls `opSub` (fs `opSub` (Sng 1 JTNumInt))) `opDiv` stp))
                   _ -> throwError (ImpossibleError "Loop iterator must be an Iter term.")
@@ -469,8 +480,8 @@ checkPri' (Loop it cs (xi, xc) b) scope = do
          scope' <- pushDefinition scope xi (Arg xi JTNumInt NotRelevant)
          scope'' <- pushDefinition scope' xc (Arg xc JTAny IsRelevant)
          τ <- checkPriv b scope''
-         _ <- removeVar @Privacy xi -- TODO do something?
-         _ <- removeVar @Privacy xc -- TODO unify with caps type?
+         _ <- removeVar @AnnP xi -- TODO do something?
+         _ <- removeVar @AnnP xc -- TODO unify with caps type?
 
          interesting <- getInteresting
          mtruncateP inftyP
@@ -486,6 +497,7 @@ checkPri' (Loop it cs (xi, xc) b) scope = do
    addConstraint (Solvable (IsLessEqual (τb, τcs))) -- body output type must match body capture input type
 
    return τb
+   -}
 
 
 checkPri' t scope = checkPriv (Ret t) scope -- secretly return if the term has the wrong color.

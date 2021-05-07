@@ -19,10 +19,12 @@ import Debug.Trace
 -- A helper function which scale any type context with a given sensitivity `η`.
 scale :: Sensitivity -> TypeCtxSP -> TypeCtxSP
 scale η (Left γ) = Left (f <$> γ)
-  where f (WithRelev i (τ :@ s)) = WithRelev i (τ :@ (η ⋅! s))
+  where f (WithRelev i x) = WithRelev i (η :↷: x)
+  -- where f (WithRelev i (τ :@ s)) = WithRelev i (τ :@ (η ⋅! s))
 scale η (Right γ) = Right (f <$> γ)
-  where f :: WithRelev Privacy -> WithRelev Privacy
-        f (WithRelev i (τ :@ (δ,ε))) = WithRelev i (τ :@ (η ⋅! δ, η ⋅! ε))
+  where f (WithRelev i x) = WithRelev i (η :↷: x)
+  -- where f :: WithRelev AnnP -> WithRelev AnnP
+  --       f (WithRelev i (τ :@ (δ,ε))) = WithRelev i (τ :@ (η ⋅! δ, η ⋅! ε))
 
 -- Scales the current type context living in our typechecking-state monad by a given `η`.
 mscale :: MonadDMTC t => Sensitivity -> t ()
@@ -45,14 +47,16 @@ inftyP = (constCoeff Infty, constCoeff Infty)
 
 instance (CMonoidM t a, CMonoidM t b) => CMonoidM t (a,b)
 
-truncate_impl :: forall f e. (CMonoidM Identity f, CMonoidM Identity e, Eq e) => f -> TypeCtx e -> TypeCtx f
+-- truncate_impl :: forall f e. (CMonoidM Identity f, CMonoidM Identity e, Eq e) => f -> TypeCtx e -> TypeCtx f
+truncate_impl :: forall f e. RealizeAnn f -> TypeCtx e -> TypeCtx f
 truncate_impl η γ = truncate_annotation <$> γ
    where
       truncate_annotation :: (WithRelev e) -> (WithRelev f)
-      truncate_annotation (WithRelev i (τ :@ annotation)) =
-        (case annotation == zeroId of
-            True -> WithRelev i (τ :@ zeroId)
-            _    -> WithRelev i (τ :@ η))
+      truncate_annotation (WithRelev i x) = WithRelev i (Trunc η x)
+      -- truncate_annotation (WithRelev i (τ :@ annotation)) =
+      --   (case annotation == zeroId of
+      --       True -> WithRelev i (τ :@ zeroId)
+      --       _    -> WithRelev i (τ :@ η))
 
 truncateS :: Sensitivity -> TypeCtxSP -> TypeCtxSP
 truncateS η (Left γ) = Left (truncate_impl η γ)
@@ -146,11 +150,11 @@ msum3Tup (ma, mb, mc) = do
 
 
 
-setVarS :: MonadDMTC t => Symbol -> WithRelev Sensitivity -> t ()
-setVarS k v = types %=~ setValueM k (Left v :: Either (WithRelev Sensitivity) (WithRelev Privacy))
+setVarS :: MonadDMTC t => Symbol -> WithRelev AnnS -> t ()
+setVarS k v = types %=~ setValueM k (Left v :: Either (WithRelev AnnS) (WithRelev AnnP))
 
-setVarP :: MonadDMTC t => Symbol -> WithRelev Privacy -> t ()
-setVarP k v = types %=~ setValueM k (Right v :: Either (WithRelev Sensitivity) (WithRelev Privacy))
+setVarP :: MonadDMTC t => Symbol -> WithRelev AnnP -> t ()
+setVarP k v = types %=~ setValueM k (Right v :: Either (WithRelev AnnS) (WithRelev AnnP))
 
 
 
@@ -182,50 +186,51 @@ getArgList xτs = do
 
   return xτs'
 
-removeVar :: forall e t. (MonadDMTC t, DMExtra e, CMonoidM Identity e) => Symbol -> t (WithRelev e)
+removeVar :: forall e t. (DMExtra e, MonadDMTC t) => Symbol -> t (WithRelev e)
 removeVar x =  do
   -- (γ :: Ctx Symbol (DMType :& e)) <- use types
   γ <- use types
   v <- getValueM x γ
   vr <- case v of
      Just vv -> cast vv
-     Nothing -> WithRelev IsRelevant <$> ((:@) <$> newVar <*> return zeroId)
+     Nothing -> WithRelev IsRelevant <$> ((zeroId :↷:) <$> newVar) -- ((:@) <$> newVar <*> return zeroId)
   γ' <- deleteValueM x γ
   types .= γ'
   return vr
 
-lookupVar :: forall e t. (MonadDMTC t, DMExtra e) => Symbol -> t (Maybe (WithRelev e))
+lookupVar :: forall e t. (DMExtra e, MonadDMTC t) => Symbol -> t (Maybe (WithRelev e))
 lookupVar x =  do
   γ <- use types
   v <- getValueM x γ
   cast v
 
 getInteresting :: MonadDMTC t => t ([Symbol],[DMType],[Privacy])
-getInteresting = do
-   γ <- use types
-   h <- case γ of
-           Left _ -> throwError (ImpossibleError "getInteresting called on sensitivity context.")
-           Right (Ctx (MonCom h')) -> return (H.toList h')
-   let f :: MonadDMTC t => [(Symbol, WithRelev Privacy)] -> t ([Symbol],[DMType],[Privacy])
-       f lst = case lst of
-                  ((x, (WithRelev i (τ :@ p))) : xτs) -> case i of
-                        IsRelevant -> do
-                           (xs, τs, ps) <- f xτs
-                           return ((x:xs),(τ:τs),(p:ps))
-                        NotRelevant -> f xτs
-                  [] -> return ([],[],[])
-   f h
+getInteresting = return ([],[],[]) --do
+   -- γ <- use types
+   -- h <- case γ of
+   --         Left _ -> throwError (ImpossibleError "getInteresting called on sensitivity context.")
+   --         Right (Ctx (MonCom h')) -> return (H.toList h')
+   -- let f :: MonadDMTC t => [(Symbol, WithRelev AnnP)] -> t ([Symbol],[DMType],[Privacy])
+   --     f lst = case lst of
+   --                ((x, (WithRelev i (τ :@ p))) : xτs) -> case i of
+   --                      IsRelevant -> do
+   --                         (xs, τs, ps) <- f xτs
+   --                         return ((x:xs),(τ:τs),(p:ps))
+   --                      NotRelevant -> f xτs
+   --                [] -> return ([],[],[])
+   -- f h
 
 ---------------------------------------------------------------------------
 -- Algebraic instances for annot
 
 -- TODO: If we are going to implement 'Multiple', then this instance has to change
-instance (Show e, IsT MonadDMTC t, SemigroupM t e) => SemigroupM t (WithRelev e) where
+-- instance (Show e, IsT MonadDMTC t, SemigroupM t e) => SemigroupM t (WithRelev e) where
+instance (IsT MonadDMTC t) => SemigroupM t (WithRelev e) where
   (⋆) (WithRelev i e) (WithRelev j f) = WithRelev (i <> j) <$> (e ⋆ f)
 
-instance (Show e, IsT MonadDMTC t, MonoidM t e) => MonoidM t (WithRelev e) where
+instance (IsT MonadDMTC t, DMExtra e) => MonoidM t (WithRelev e) where
   neutral = WithRelev IsRelevant <$> neutral
 
-instance (Show e, IsT MonadDMTC t, CheckNeutral t e) => CheckNeutral t (WithRelev e) where
+instance (IsT MonadDMTC t, DMExtra e) => CheckNeutral t (WithRelev e) where
   checkNeutral (WithRelev i a) = checkNeutral a
 
