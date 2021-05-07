@@ -17,36 +17,42 @@ import Debug.Trace
 
 
 -- A helper function used below in defining the subtyping graph.
-getArrowLength :: DMType -> Maybe Int
+getArrowLength :: DMFun -> Maybe Int
 getArrowLength (a :->: _) = Just (length a)
 getArrowLength _         = Nothing
 
 -- The subtyping graph for our type system.
 subtypingGraph :: forall e t k. (SingI k, Typeable k, MonadDMTC t) => EdgeType -> [Edge t (DMTypeOf k)]
 subtypingGraph =
-  let case1 = testEquality (typeRep @k) (typeRep @MainKind)
-      case2 = testEquality (typeRep @k) (typeRep @NumKind)
-      case3 = testEquality (typeRep @k) (typeRep @BaseNumKind)
-  in case (case1,case2,case3) of
+  let case1 = testEquality (typeRep @k) (typeRep @FunKind)
+      case2 = testEquality (typeRep @k) (typeRep @NoFunKind)
+      case3 = testEquality (typeRep @k) (typeRep @NumKind)
+      case4 = testEquality (typeRep @k) (typeRep @BaseNumKind)
+  in case (case1,case2,case3,case4) of
     -- Main Kind
-    (Just Refl, _, _) ->
+    (Just Refl, _, _, _) ->
+      \case { IsReflexive IsStructural -> []
+            ; _ -> []}
+              -- -> [ MultiEdge getArrowLength $
+              --      \n -> do
+              --        let f () = do a <- newVar
+              --                      b <- newVar
+              --                      b ⊑! a
+              --                      s <- newVar
+              --                      return (a :@ s, b :@ s)
+
+              --        args <- mapM f (take n $ repeat ())
+              --        let (args₀, args₁) = unzip args
+              --        r₀ <- newVar
+              --        r₁ <- newVar
+              --        r₀ ⊑! r₁
+              --        return (args₀ :->: r₀,  args₁ :->: r₁)
+              --    ]}
+
+    (_, Just Refl, _, _) ->
       \case { IsReflexive IsStructural
-              -> [ MultiEdge getArrowLength $
-                   \n -> do
-                     let f () = do a <- newVar
-                                   b <- newVar
-                                   b ⊑! a
-                                   s <- newVar
-                                   return (a :@ s, b :@ s)
-
-                     args <- mapM f (take n $ repeat ())
-                     let (args₀, args₁) = unzip args
-                     r₀ <- newVar
-                     r₁ <- newVar
-                     r₀ ⊑! r₁
-                     return (args₀ :->: r₀,  args₁ :->: r₁)
-
-                 , SingleEdge $
+            -> [
+                 SingleEdge $
                    do a₀ <- newVar
                       a₁ <- newVar
                       a₀ ⊑! a₁
@@ -72,7 +78,7 @@ subtypingGraph =
             }
 
     -- Num Kind
-    (_, Just Refl, _) ->
+    (_, _, Just Refl, _) ->
       \case { IsReflexive IsStructural
               -> []
             ; IsReflexive NotStructural
@@ -99,7 +105,7 @@ subtypingGraph =
             }
 
     -- BaseNum Kind
-    (_, _, Just Refl) ->
+    (_, _, _, Just Refl) ->
       \case { IsReflexive NotStructural
               -> [ SingleEdge $ return (DMInt, DMInt)
                  , SingleEdge $ return (DMReal, DMReal)
@@ -110,7 +116,7 @@ subtypingGraph =
               -> [ SingleEdge $ return (DMInt, DMReal)
                  ]
             }
-    (_, _, _) -> \_ -> []
+    (_, _, _, _) -> \_ -> []
 
 
 convertSubtypingToSupremum :: forall k t. (SingI k, Typeable k, IsT MonadDMTC t) => Symbol -> (DMTypeOf k, DMTypeOf k) -> t ()

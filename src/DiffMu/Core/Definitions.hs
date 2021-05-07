@@ -195,6 +195,8 @@ instance Eq (DMTypeOf ClipKind) where
 
 -- instance Ord (DMTypeOf ClipKind) where
 
+normalizeAnn :: DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a)
+normalizeAnn = undefined
 
 --------------------
 -- 3. Additional Notation

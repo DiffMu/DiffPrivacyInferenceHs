@@ -135,8 +135,8 @@ instance Typeable k => FreeVars TVarOf (DMTypeOf k) where
   freeVars (NonConst τ) = freeVars τ
   freeVars (Const _ τ) = freeVars τ
   freeVars (TVar x) = [SomeK x]
-  freeVars (τ1 :->: τ2) = freeVars (fstAnn <$> τ1) <> freeVars τ2
-  freeVars (τ1 :->*: τ2) = freeVars (fstAnn <$> τ1) <> freeVars τ2
+  freeVars (τ1 :->: τ2) = freeVars (τ1) <> freeVars τ2
+  freeVars (τ1 :->*: τ2) = freeVars (τ1) <> freeVars τ2
   freeVars (DMTup τs) = freeVars τs
   freeVars (DMMat nrm clp n m τ) = freeVars nrm <> freeVars clp <> freeVars τ
   freeVars (DMChoice choices) = freeVars choices
@@ -754,10 +754,21 @@ createDMTypeNum (JuliaType str)  = throwError (TypeMismatchError $ "expected " <
 
 -- Maps julia types to DMTypes (of main kind)
 -- (`JTAny` is turned into a new type variable.)
-createDMType :: MonadDMTC t => JuliaType -> t (DMTypeOf NoFunKind)
+-- createDMType :: MonadDMTC t => JuliaType -> t (DMTypeOf NoFunKind)
+--  -- NOTE: defaulting to non-const might or might not be what we want to do here.
+-- createDMType (JuliaType "Integer") = pure $ Numeric (NonConst DMInt)
+-- createDMType (JuliaType "Real") = pure $ Numeric (NonConst DMReal)
+-- -- TODO: is it correct to create tvars for anything else?
+-- createDMType _ = TVar <$> newTVar "any"
+
+createDMType :: MonadDMTC t => JuliaType -> t (DMTypeOf (AnnKind AnnS))
  -- NOTE: defaulting to non-const might or might not be what we want to do here.
-createDMType (JuliaType "Integer") = pure $ Numeric (NonConst DMInt)
-createDMType (JuliaType "Real") = pure $ Numeric (NonConst DMReal)
+createDMType (JuliaType "Integer") = do
+  s <- newVar
+  return (NoFun (Numeric (NonConst DMInt) :@ s))
+createDMType (JuliaType "Real") = do
+  s <- newVar
+  return (NoFun (Numeric (NonConst DMReal) :@ s))
 -- TODO: is it correct to create tvars for anything else?
 createDMType _ = TVar <$> newTVar "any"
 

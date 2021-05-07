@@ -77,8 +77,10 @@ checkSen' (Sng η τ) scope  = do
 
 -- TODO!!!! Get interestingness flag!
 checkSen' (Arg x dτ i) scope = do τ <- createDMType dτ -- TODO subtype!
-                                  setVarS x (WithRelev i (NoFun (undefined :@ constCoeff (Fin 1)))) --(τ :@ constCoeff (Fin 1)))
-                                  returnNoFun τ
+                                  setVarS x (WithRelev i τ)
+                                  return τ
+                                  -- setVarS x (WithRelev i (NoFun (undefined :@ constCoeff (Fin 1)))) --(τ :@ constCoeff (Fin 1)))
+                                  -- returnNoFun τ
 
 checkSen' (Var x dτ) scope = do -- get the term that corresponds to this variable from the scope dict
                                 (vt, scope') <- popDefinition scope x
@@ -141,7 +143,10 @@ checkSen' (Lam xτs body) scope = do
   τr <- checkSens body (topscope, topscope)
 
   xrτs <- getArgList xτs
-  returnFun (xrτs :->: τr)
+
+  -- get the julia signature from xτs
+  let sign = (sndA <$> xτs)
+  returnFun (Just sign) (xrτs :->: τr)
 
 
 checkSen' (LamStar xτs body) scope = do
@@ -159,7 +164,10 @@ checkSen' (LamStar xτs body) scope = do
 
   -- TODO: As it currently stands the context which is returned here is something like 's ↷ | Γ |_∞', not wrong, but unnecessary?
   mtruncateS inftyS
-  returnFun (Just (sndA <$> xτs)) (xrτs :->*: τr)
+
+  -- get the julia signature from xτs
+  let sign = ((sndA . fst) <$> xτs)
+  returnFun (Just sign) (xrτs :->*: τr)
 
 
 checkSen' (SLet (x :- dτ) term body) scope = do
@@ -190,7 +198,7 @@ checkSen' (Apply f args) scope = do
                           [] -> throwError (ImpossibleError "Sum cannot return empty list.")
   τ_ret <- newVar -- a type var for the function return type
 
-  addConstraint (Solvable (IsLessEqual (τ_lam, Fun [(argτs :->: τ_ret) :@ (oneId)])))
+  addConstraint (Solvable (IsLessEqual (τ_lam, Fun [(argτs :->: τ_ret) :@ (Nothing, oneId)])))
   return τ_ret
 
   {-
@@ -230,22 +238,31 @@ checkSen' (FLet fname sign term body) scope = do
    return result
 
 
-checkSen' (Choice d) scope = let
-      checkChoice :: ([JuliaType], DMTerm) -> TC (DMType :& (Maybe [JuliaType], Sensitivity))
-      checkChoice (sign, t) = do
-         τ <- checkSens t scope
-         flag <- newSVar "chflag"
-         _ <- mscale (svar flag)
-         return (τ :@ (Just sign, svar flag))
-      in do
+checkSen' (Choice d) scope = do
+  -- check the terms of the choices. We ignore here the key (julia signature), since it is also given in the lambda term
+  choices <- mapM (\t -> checkSens t scope) (snd <$> H.toList d)
 
-         dd <- mapM checkChoice (H.toList d)
-         return (DMChoice dd)
+  -- combine the choices using (:∧:)
+  let combined = foldl (:∧:) (Fun []) choices
+  return combined
+
+  -- let
+      -- checkChoice :: ([JuliaType], DMTerm) -> TC (DMType :& (Maybe [JuliaType], Sensitivity))
+      -- checkChoice (sign, t) = do
+      --    τ <- checkSens t scope
+      --    flag <- newSVar "chflag"
+      --    _ <- mscale (svar flag)
+      --    return (τ :@ (Just sign, svar flag))
+      -- in do
+
+      --    dd <- mapM checkChoice (H.toList d)
+      --    return (DMChoice dd)
 
 
 checkSen' (Tup ts) scope = do
-   τs <- msumS (map (\t -> (checkSens t scope)) ts)
-   return (DMTup τs)
+  undefined
+   -- τs <- msumS (map (\t -> (checkSens t scope)) ts)
+   -- return (DMTup τs)
 
 checkSen' (TLet xs tu body) scope = do
           undefined
@@ -315,7 +332,10 @@ checkSen' (Loop it cs (xi, xc) b) scope = do
    -}
 
 
-checkSen' (Gauss rp εp δp f) scope = let
+checkSen' (Gauss rp εp δp f) scope =
+  undefined
+  {-
+  let
    setParam :: DMTerm -> TC Sensitivity
    setParam t = do -- parameters must be const numbers.
       τ <- checkSens t scope
@@ -338,40 +358,46 @@ checkSen' (Gauss rp εp δp f) scope = let
       δ <- setParam δp
 
       returnFun ((map (\t -> (t :@ (ε, δ))) τs) :->*: τgauss)
-
+-}
 
 checkSen' (MCreate n m body) scope =
-   let setDim :: DMTerm -> Sensitivity -> TC DMType
+   let setDim :: DMTerm -> Sensitivity -> TC (DMTypeOf (AnnKind AnnS))
        setDim t s = do
           τ <- checkSens t scope -- check dimension term
-          unify τ (Numeric (Const s DMInt)) -- dimension must be integral
-          mscale zeroId
+          unify τ (NoFun (Numeric (Const s DMInt) :@ zeroId)) -- dimension must be integral
+          -- mscale zeroId
           return τ
 
-       checkBody :: Sensitivity -> Sensitivity -> TC DMType
+       checkBody :: Sensitivity -> Sensitivity -> TC (DMType)
        checkBody nv mv = do
           τ <- checkSens body scope -- check body lambda
 
-          mscale (nv ⋅! mv) -- scale with dimension penalty
-
-          τbody <- case τ of -- extract body lambda return type
-                        xss :->: τret -> return τret
-                        _ -> throwError (ImpossibleError "MCreate term must have Arr argument.")
-
-          -- body lambda input vars must be integer
-          addConstraint (Solvable (IsLessEqual (τ, [((Numeric (NonConst DMInt)) :@ inftyS), ((Numeric (NonConst DMInt)) :@ inftyS)] :->: τbody)))
-
+          -- unify with expected type to set sensitivity (dimension penalty) and extract return type
+          τbody <- newVar
+          let τ_expected = Fun [([NoFun (Numeric (NonConst DMInt) :@ inftyS) , NoFun (Numeric (NonConst DMInt) :@ inftyS)] :->: (NoFun (τbody :@ oneId)) :@ (Nothing , nv ⋅! mv))]
+          τ_expected ==! τ
           return τbody
+
+          -- mscale (nv ⋅! mv) -- scale with dimension penalty
+
+          -- τbody <- case τ of -- extract body lambda return type
+          --               (Fun [xss :->: τret]) -> return τret
+          --               _ -> throwError (ImpossibleError "MCreate term must have Arr argument.")
+
+          -- -- body lambda input vars must be integer
+          -- addConstraint (Solvable (IsLessEqual (τ, [((Numeric (NonConst DMInt)) :@ inftyS), ((Numeric (NonConst DMInt)) :@ inftyS)] :->: τbody)))
+
+          -- return τbody
    in do
        -- variables for matrix dimension
        nv <- newVar
        mv <- newVar
 
-       sum <- msumS [checkBody nv mv, setDim n nv, setDim m mv]
+       (τbody, _, _) <- msum3Tup (checkBody nv mv, setDim n nv, setDim m mv)
 
-       τbody <- case sum of -- extract element type from constructing lambda
-                  (τ : _) -> return τ
-                  _ -> throwError (ImpossibleError "?!")
+       -- τbody <- case sum of -- extract element type from constructing lambda
+       --            (τ : _) -> return τ
+       --            _ -> throwError (ImpossibleError "?!")
 
        nrm <- newVar -- variable for norm
        returnNoFun (DMMat nrm U nv mv τbody)
@@ -386,10 +412,11 @@ checkSen' (ClipM c m) scope = do
    m <- newVar
 
    -- set correct matrix type
-   unify τb (DMMat nrm clp n m (Numeric DMData))
+   η <- newVar
+   unify τb (NoFun (DMMat nrm clp n m (Numeric DMData) :@ η))
 
    -- change clip parameter to input
-   returnNoFun (DMMat nrm c n m (Numeric DMData))
+   return (NoFun (DMMat nrm c n m (Numeric DMData) :@ η))
 
 -- Everything else is currently not supported.
 checkSen' t scope = throwError (UnsupportedTermError t)
