@@ -51,7 +51,7 @@ juliatypes (DMTup xs) =
 juliatypes (Fun _) = [JuliaType "Function"]
 juliatypes (NoFun τ) = juliatypes (fstAnn τ)
 juliatypes (Trunc _ τ) = juliatypes τ
-juliatypes (TruncFunc _ τ) = juliatypes τ
+juliatypes (TruncFunc _ τ) = [JuliaType "Function"]
 juliatypes (_ :↷: τ) = juliatypes τ
 juliatypes τ = error $ "juliatypes(" <> show τ <> ") not implemented."
 

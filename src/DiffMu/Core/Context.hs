@@ -1,4 +1,6 @@
 
+{-# LANGUAGE UndecidableInstances #-}
+
 module DiffMu.Core.Context where
 
 import DiffMu.Prelude
@@ -48,7 +50,7 @@ inftyP = (constCoeff Infty, constCoeff Infty)
 instance (CMonoidM t a, CMonoidM t b) => CMonoidM t (a,b)
 
 -- truncate_impl :: forall f e. (CMonoidM Identity f, CMonoidM Identity e, Eq e) => f -> TypeCtx e -> TypeCtx f
-truncate_impl :: forall f e. RealizeAnn f -> TypeCtx e -> TypeCtx f
+truncate_impl :: forall f e. (DMExtra e, DMExtra f) => RealizeAnn f -> TypeCtx e -> TypeCtx f
 truncate_impl η γ = truncate_annotation <$> γ
    where
       truncate_annotation :: (WithRelev e) -> (WithRelev f)
