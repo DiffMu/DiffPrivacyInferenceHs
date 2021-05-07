@@ -36,8 +36,7 @@ typecheckFromDMTerm :: DMTerm -> IO ()
 typecheckFromDMTerm term = do
   putStrLn "Starting DiffMu!"
 
-  let r :: TC DMType
-      r = do
+  let r = do
 
         traceM $ "Checking term   : " <> show term
         -- typecheck the term t5

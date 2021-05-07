@@ -48,6 +48,11 @@ juliatypes (DMTup xs) =
       jss' = fmap (\(JuliaType j) -> j) <$> jss
       f js = JuliaType $ "Tuple{" <> intercalate ", " js <> "}"
   in f <$> jss'
+juliatypes (Fun _) = [JuliaType "Function"]
+juliatypes (NoFun τ) = juliatypes (fstAnn τ)
+juliatypes (Trunc _ τ) = juliatypes τ
+juliatypes (TruncFunc _ τ) = juliatypes τ
+juliatypes (_ :↷: τ) = juliatypes τ
 juliatypes τ = error $ "juliatypes(" <> show τ <> ") not implemented."
 
 global_callback_issubtype :: IORef (DMEnv)
@@ -67,35 +72,45 @@ foreign import ccall "dynamic" call_StringStringBool :: FunPtr (CString -> CStri
 
 --instance Solve MonadDMTC IsChoice (DMType, (HashMap [JuliaType] (DMType , Sensitivity))) where
 --  solve_ Dict _ name (IsChoice arg) = solveIsChoice name arg
-type ChoiceHash = HashMap [JuliaType] ((DMType :& Sensitivity), Sensitivity)
+type ChoiceHash = HashMap [JuliaType] ((DMFun :& Sensitivity), Sensitivity)
 
-instance Solve MonadDMTC IsChoice ([DMType :& Sensitivity], ChoiceHash) where
+instance Solve MonadDMTC IsChoice ([DMFun :& Sensitivity], ChoiceHash) where
   solve_ Dict _ name (IsChoice arg) = pure ()
 
-solveIsChoice :: forall t. IsT MonadDMTC t => Symbol -> ([DMType :& Sensitivity], ChoiceHash) -> t ()
+solveIsChoice :: forall t. IsT MonadDMTC t => Symbol -> ([DMFun :& Sensitivity], ChoiceHash) -> t ()
 solveIsChoice name (required, provided) = do
-   let matchArgs ::  [DMType :& Sensitivity] -> ChoiceHash -> t ([DMType :& Sensitivity], ChoiceHash)
+   -- remove all choices from the "required" list that have a unique match in the "provided" hashmap.
+   -- when a choice is resolved, the corresponding counter in the hashmap is incremented by one.
+   let matchArgs ::  [DMFun :& Sensitivity] -> ChoiceHash -> t ([DMFun :& Sensitivity], ChoiceHash)
        matchArgs curReq curProv = do
           case curReq of
              [] -> return ([], curProv)
-             (τs : restReq) -> do
-                   argsm <- case fstAnn τs of
-                              args' :->: _  -> return (Just (fstAnn <$> args'))
-                              args' :->*: _ -> return (Just (fstAnn <$> args'))
-                              TVar _ -> return Nothing
-                              _ -> throwError (NoChoiceFoundError $ "Invalid type for Choice: " <> show τs)
-
-                   case argsm of
-                      Nothing -> do
+             (τs : restReq) -> do -- go through all required methods
+                 case fstAnn τs of
+                      TVar _ -> do -- it was a tvar
                                    (resR, resP) <- (matchArgs restReq curProv) -- can't resolve TVar choice, keep it and recurse.
                                    return ((τs : resR), resP)
-                      Just args -> do
-                              -- get methods that could be a match
-                              let candidates = H.filterWithKey (\s c -> choiceCouldMatch args s) provided
+                      τsτ -> do
+                              -- get methods that could be a match, and free TVars in the args while we're at it
+                              (candidates, hasFreeVars) <- case τsτ of
+                                  args :->: _  -> do
+                                                    -- remove all methods that definitely don't match this signature
+                                                    let cand = (H.filterWithKey (\s c -> choiceCouldMatch args s) provided)
+                                                    -- filter all argument types that would be "Function" in julia...
+                                                    let argsNoFun = filter (\τa -> case τa of {Fun _ -> False; _ -> True}) args
+                                                    -- ... and get the free typevars of the rest.
+                                                    let free = and (null . freeVars @_ @TVarOf <$> argsNoFun)
+                                                    return (cand, free)
+                                  args :->*: _ -> do -- same as for the above case.
+                                                    let cand = (H.filterWithKey (\s c -> choiceCouldMatch args s) provided)
+                                                    let argsNoJFun = filter noJuliaFunction args
+                                                    let free = and (null . freeVars @_ @TVarOf <$> argsNoJFun)
+                                                    return (cand, free)
+                                  _ -> throwError (ImpossibleError ("Invalid type for Choice: " <> show τsτ))
+
                               if H.null candidates
                                  then throwError (NoChoiceFoundError $ "No matching choice for " <> show τs <> " found in " <> show provided)
                                  else pure Nothing
-
 
                               -- if there is no free tyepevars in τs arguments, throw out methods that are more general than others
                               -- if we don't know all types we cannot do this, as eg for two methods
@@ -103,7 +118,8 @@ solveIsChoice name (required, provided) = do
                               -- (Real, Number) => T
                               -- and arg types (TVar, DMInt), both methods are in newchoices, but if we later realize the TVar
                               -- is a DMReal, the first one does not match even though it's less general.
-                              let candidates' = case and (null . freeVars @_ @TVarOf <$> args) of
+                              -- filter Fun arguments, as the all have the same type "Function" in julia/
+                              let candidates' = case hasFreeVars of
                                     -- if no tvars are in the args
                                     True  -> keepLeastGeneral candidates
                                     -- else we do not change them
@@ -159,11 +175,15 @@ keepLeastGeneral cs =
   in H.fromList mins'
 
 -- determine whether a function with the given dmtype signature could match a method with the given juliatype signature.
-choiceCouldMatch :: [DMType] -> [JuliaType] -> Bool
+choiceCouldMatch :: forall e. (DMExtra e) => [DMTypeOf (AnnKind e)] -> [JuliaType] -> Bool
 choiceCouldMatch args cs =
    case length args == length cs of
         False -> False
         True -> let couldMatch t c = or ((`leq` c) <$> juliatypes t)
                 in (and (zipWith couldMatch args cs))
 
+
+-- return False if this type would become a "Function" if converted to a julia type
+noJuliaFunction :: forall e. (DMExtra e) => DMTypeOf (AnnKind e) -> Bool
+noJuliaFunction τ = (juliatypes τ == [JuliaType "Function"])
 

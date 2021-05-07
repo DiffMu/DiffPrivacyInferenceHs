@@ -158,6 +158,7 @@ data DMTypeOf (k :: DMKind) where
   (:∧:) :: DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a)
   (:↷:) :: Sensitivity -> DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a)
   Trunc :: RealizeAnn a -> DMTypeOf (AnnKind b) -> DMTypeOf (AnnKind a)
+  TruncFunc :: RealizeAnn AnnP -> DMTypeOf (AnnKind AnnS) -> DMTypeOf (AnnKind AnnP)
 
 -- Types are pretty printed as follows.
 instance Show (DMTypeOf k) where
