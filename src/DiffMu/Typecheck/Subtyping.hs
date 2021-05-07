@@ -11,6 +11,13 @@ import DiffMu.Core.Unification
 
 import Debug.Trace
 
+
+
+
+
+---------------------------------------------------------------------
+-- "Non strict subtyping"
+
 -- An abbreviation for adding a subtyping constraint.
 (⊑!) :: (SingI k, Typeable k, MonadDMTC t) => DMTypeOf k -> DMTypeOf k -> t ()
 (⊑!) a b = addConstraint (Solvable (IsLessEqual (a,b))) >> pure ()

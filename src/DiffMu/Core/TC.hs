@@ -172,13 +172,18 @@ instance Term SVarOf SensitivityOf where
 type TSubs = Subs DMTypeOf
 type SSubs = Subs SensitivityOf
 
--- data Meta1Ctx = Meta1Ctx
---   {
---     _sensVars :: NameCtx,
---     _typeVars :: NameCtx,
---     _constraintVars :: NameCtx
---   }
---   deriving (Generic)
+
+
+
+
+
+
+
+
+
+
+
+
 
 class (MonadImpossible (t), MonadWatch (t),
        MonadTerm DMTypeOf (t), MonadTerm SensitivityOf (t),
@@ -278,7 +283,6 @@ class Cast a b where
   cast :: MonadDMTC t => a -> t b
 
 -- type DMExtra = Cast (Either Sensitivity Privacy)
-type DMExtra e = (Typeable e, SingI e)
 
 -- class DMExtra e where
 --   castExtra :: MonadDMTC t => Either Sensitivity Privacy -> t e
@@ -632,6 +636,15 @@ supremum x y = do
   (z :: a k) <- newVar
   addConstraint (Solvable (IsSupremum (x, y, z)))
   return z
+
+infimum :: (IsT isT t, HasNormalize isT (a k, a k, a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsInfimum (a k, a k, a k), SingI k, Typeable k) => (a k) -> (a k) -> t (a k)
+infimum x y = do
+  (z :: a k) <- newVar
+  addConstraint (Solvable (IsInfimum (x, y, z)))
+  return z
+
+
+
 instance Monad m => MonadInternalError (TCT m) where
   internalError = throwError . InternalError
 
@@ -665,7 +678,7 @@ instance Monad m => LiftTC (TCT m) where
 instance Monad m => MonadImpossible (TCT m) where
   impossible err = throwError (ImpossibleError err)
 
-instance MonadDMTC t => Normalize (t) (DMTypeOf k) where
+instance MonadDMTC t => Normalize t (DMTypeOf k) where
   normalize n =
     do σ <- getSubs @_ @DMTypeOf
        n₂ <- σ ↷ n
@@ -775,6 +788,57 @@ createDMType _ = TVar <$> newTVar "any"
 
 
 
+----------------------------------------------------------
+-- normalization for annotated dmtypes
+
+-- This is for evaluating the ∧, Trunc, ↷ constructors when it is known whether
+-- we have a function or non function type.
+-- We do not need a monad here.
+truncateExtra :: (Eq e, CMonoidM Identity e, CMonoidM Identity f) => f -> e -> f
+truncateExtra η η_old =
+  (case η_old == zeroId of
+      True -> zeroId
+      _    -> η)
+
+scaleExtra :: forall (a :: Annotation). Sensitivity -> RealizeAnn a -> RealizeAnn a
+scaleExtra η a = undefined
+
+normalizeAnn :: (IsT MonadDMTC t, (Solve MonadDMTC IsInfimum (DMType, DMType, DMType))) => DMTypeOf k -> t (DMTypeOf k)
+normalizeAnn (TVar a) = pure $ TVar a
+normalizeAnn (Fun a) = pure $ Fun a
+normalizeAnn (NoFun fs) = pure $ NoFun fs
+normalizeAnn (Trunc η a) = do
+  a' <- normalizeAnn a
+  case a' of
+    NoFun (x :@ η_old) -> pure $ NoFun (x :@ truncateExtra η η_old)
+    Fun xs             -> pure $ Trunc η (Fun xs)
+    other              -> pure $ Trunc η other
+normalizeAnn (η :↷: a) = do
+  a' <- normalizeAnn a
+  case a' of
+    NoFun (x :@ η_old) -> pure $ NoFun (x :@ scaleExtra η η_old)
+    Fun xs             -> pure $ Fun ((\(x :@ (jt , a)) -> (x :@ (jt , scaleExtra η a))) <$> xs)
+    other              -> pure $ (η :↷: other)
+normalizeAnn (a :∧: b) = do
+  a' <- normalizeAnn a
+  b' <- normalizeAnn b
+  case (a', b') of
+    (Fun xs, Fun ys) -> pure $ Fun (xs <> ys)
+    (NoFun (x :@ ηx), NoFun (y :@ ηy)) -> do z <- infimum x y
+                                             return (NoFun (z :@ (ηx ⋆! ηy)))
+    (_ , _) -> return (a' :∧: b')
+normalizeAnn x = pure x
+
+-- normalizeInsideAnn :: MonadDMTC t => DMTypeOf (AnnKind a) -> t (DMTypeOf (AnnKind a))
+-- normalizeInsideAnn (TVar a) = undefined
+
+-- normalizeRewritingDMType :: MonadDMTC t -> 
+-- normalizeRewritingDMType :: (IsT MonadDMTC t, (Solve MonadDMTC IsInfimum (DMType, DMType, DMType))) => DMTypeOf k -> t (DMTypeOf k)
+-- normalizeRewritingDMType (TVar a) = pure $ TVar a
+-- normalizeRewritingDMType (TVar a) = pure $ TVar a
+-- normalizeRewritingDMType (TVar a) = pure $ TVar a
+-- normalizeRewritingDMType (TVar a) = pure $ TVar a
+-- normalizeRewritingDMType (TVar a) = pure $ TVar a
 
 
 

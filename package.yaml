@@ -91,6 +91,7 @@ library:
     - DuplicateRecordFields
     - PatternSynonyms
     - ImplicitParams
+    - TypeFamilyDependencies
 
 verbatim: |
   foreign-library diffmu-wrapper

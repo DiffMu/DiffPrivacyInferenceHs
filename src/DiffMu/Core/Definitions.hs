@@ -59,7 +59,7 @@ type SVar   = SVarOf MainSensKind
 
 data Annotation = AnnS | AnnP
 
-type family RealizeAnn (a :: Annotation) :: * where
+type family RealizeAnn (a :: Annotation) = (result :: *) | result -> a where
   RealizeAnn AnnS = SymTerm MainSensKind
   RealizeAnn AnnP = (SymTerm MainSensKind, SymTerm MainSensKind)
 
@@ -153,12 +153,14 @@ data DMTypeOf (k :: DMKind) where
   DMChoice :: [DMType :& (Maybe [JuliaType], Sensitivity)] -> DMType
 
   -- annotations
-  NoFun :: (DMTypeOf NoFunKind :& RealizeAnn a) -> DMTypeOf (AnnKind a)
+  NoFun :: DMExtra a => (DMTypeOf NoFunKind :& RealizeAnn a) -> DMTypeOf (AnnKind a)
   Fun :: [DMTypeOf FunKind :& (Maybe [JuliaType], Sensitivity)] -> DMTypeOf (AnnKind AnnS)
   (:∧:) :: DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a)
   (:↷:) :: Sensitivity -> DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a)
-  Trunc :: RealizeAnn a -> DMTypeOf (AnnKind b) -> DMTypeOf (AnnKind a)
-  TruncFunc :: RealizeAnn AnnP -> DMTypeOf (AnnKind AnnS) -> DMTypeOf (AnnKind AnnP)
+  Trunc :: (DMExtra a, DMExtra b) => RealizeAnn a -> DMTypeOf (AnnKind b) -> DMTypeOf (AnnKind a)
+  TruncFunc :: RealizeAnn AnnP -> [DMTypeOf FunKind :& (Maybe [JuliaType], Sensitivity)] -> DMTypeOf (AnnKind AnnP)
+
+type DMExtra e = (Typeable e, SingI e, Eq (RealizeAnn e), CMonoidM Identity (RealizeAnn e))
 
 -- Types are pretty printed as follows.
 instance Show (DMTypeOf k) where
@@ -195,9 +197,6 @@ instance Eq (DMTypeOf ClipKind) where
   _ == _ = False
 
 -- instance Ord (DMTypeOf ClipKind) where
-
-normalizeAnn :: DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a)
-normalizeAnn = undefined
 
 --------------------
 -- 3. Additional Notation

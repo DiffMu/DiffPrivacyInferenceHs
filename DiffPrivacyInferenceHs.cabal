@@ -69,6 +69,7 @@ library
       DiffMu.Prelude.MonadicAlgebra
       DiffMu.Prelude.Polynomial
       DiffMu.Runner
+      DiffMu.Typecheck.Constraint.IsFunctionArgument
       DiffMu.Typecheck.JuliaType
       DiffMu.Typecheck.Operations
       DiffMu.Typecheck.Subtyping
@@ -112,6 +113,7 @@ library
       DuplicateRecordFields
       PatternSynonyms
       ImplicitParams
+      TypeFamilyDependencies
   build-depends:
       base >=4.7 && <5
     , bifunctors

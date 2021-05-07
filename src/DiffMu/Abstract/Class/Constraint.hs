@@ -119,6 +119,14 @@ newtype IsLoopResult a = IsLoopResult a deriving Show
 instance TCConstraint IsLoopResult where
   constr = IsLoopResult
   runConstr (IsLoopResult c) = c
+
+-- "strict subtyping for function calls"
+newtype IsFunctionArgument a = IsFunctionArgument a deriving Show
+
+instance TCConstraint IsFunctionArgument where
+  constr = IsFunctionArgument
+  runConstr (IsFunctionArgument c) = c
+
 ----------------------------------------------------------
 -- functions for Constraint
 
