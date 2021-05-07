@@ -39,6 +39,7 @@ typecheckFromDMTerm term = do
   let r :: TC DMType
       r = do
 
+        traceM $ "Checking term   : " <> show term
         -- typecheck the term t5
         tres <- checkSens term def
         solveAllConstraints SolveExact

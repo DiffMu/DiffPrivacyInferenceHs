@@ -259,7 +259,7 @@ checkSen' (Loop it cs (xi, xc) b) scope = do
    let mbody = do
          scope' <- pushDefinition scope xi (Arg xi JTNumInt NotRelevant)
          scope'' <- pushDefinition scope' xc (Arg xc JTAny IsRelevant)
-         τ <- checkSens b scope
+         τ <- checkSens b scope''
          xii <- removeVar @Sensitivity xi
          xci <- removeVar @Sensitivity xc
          s <- newVar
@@ -468,9 +468,9 @@ checkPri' (Loop it cs (xi, xc) b) scope = do
    let mbody = do
          scope' <- pushDefinition scope xi (Arg xi JTNumInt NotRelevant)
          scope'' <- pushDefinition scope' xc (Arg xc JTAny IsRelevant)
-         τ <- checkSens b scope
-         _ <- removeVar @Sensitivity xi -- TODO do something?
-         _ <- removeVar @Sensitivity xc
+         τ <- checkPriv b scope''
+         _ <- removeVar @Privacy xi -- TODO do something?
+         _ <- removeVar @Privacy xc -- TODO unify with caps type?
 
          interesting <- getInteresting
          mtruncateP inftyP

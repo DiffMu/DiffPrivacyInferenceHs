@@ -61,22 +61,28 @@ genSingletons [''SensKind]
 data SymVar (k :: SensKind) =
   HonestVar (SymbolOf k)
   | Ln (SymTerm MainSensKind)
+  | Ceil (SymTerm MainSensKind)
   | Sqrt (SymTerm MainSensKind)
   | Max [SymTerm MainSensKind]
   | Minus (SymTerm MainSensKind, SymTerm MainSensKind)
+  | Div (SymTerm MainSensKind, SymTerm MainSensKind)
   deriving (Generic, Eq)
 
 ln s = injectVarId (Ln s)
+ceil s = injectVarId (Ceil s)
 sqrt s = injectVarId (Sqrt s)
 maxS s = injectVarId (Max s)
 minus s t = injectVarId (Minus (s, t))
+divide s t = injectVarId (Div (s, t))
 
 instance Show (SymVar k) where
   show (HonestVar v) = show v
   show (Ln te) = "ln(" <> show te <> ")"
+  show (Ceil te) = "ceil(" <> show te <> ")"
   show (Sqrt te) = "sqrt(" <> show te <> ")"
   show (Max te) = "max(" <> show te <> ")"
   show (Minus (t1, t2)) = "(" <> show t1 <> " - " <> show t2
+  show (Div (t1, t2)) = "(" <> show t1 <> " / " <> show t2
 
 instance Hashable (SymVar k)
 
@@ -101,9 +107,11 @@ type SymTerm = CPolyM SymVal Int (SymVar MainSensKind)
 
 instance CheckContains (SymVar MainSensKind) (SymbolOf MainSensKind) where
   checkContains (Ln _) = Nothing
+  checkContains (Ceil _) = Nothing
   checkContains (Sqrt _) = Nothing
   checkContains (Max _) = Nothing
   checkContains (Minus _) = Nothing
+  checkContains (Div _) = Nothing
   checkContains (HonestVar v) = Just v
 
 
@@ -136,9 +144,11 @@ instance (CheckNeutral m a, CheckNeutral m b) => CheckNeutral m (a,b) where
 instance (Substitute SymVar (CPolyM SymVal Int (SymVar 'MainSensKind)) (SymVar k2)) where
   substitute σ (HonestVar v) = pure (HonestVar v)
   substitute σ (Ln a) = Ln <$> substitute σ a
+  substitute σ (Ceil a) = Ceil <$> substitute σ a
   substitute σ (Sqrt a) = Sqrt <$> substitute σ a
   substitute σ (Max as) = Max <$> mapM (substitute σ) as
   substitute σ (Minus (a,b)) = (\a b -> Minus (a,b)) <$> substitute σ a <*> substitute σ b
+  substitute σ (Div (a,b)) = (\a b -> Div (a,b)) <$> substitute σ a <*> substitute σ b
 
 
 

@@ -62,9 +62,9 @@ instance ShowDict v k (Scope v k) where
 
 -- Given a scope and a variable name v, we pop the topmost element from the list for v.
 popDefinition :: MonadDMTC t => DMScopes -> Symbol -> t (DMTerm, DMScopes)
-popDefinition (DMScope topscope, DMScope varscope) v = do
+popDefinition (topscope, DMScope varscope) v = do
    case H.lookup v varscope of
-      Just (x, (DMScope vvarscope))  -> return (x, (DMScope topscope, DMScope (H.delete v vvarscope)))
+      Just (x, vvarscope)  -> return (x, (topscope, vvarscope))
       Nothing -> throwError (VariableNotInScope v)
 
 -- Given a scope, a variable name v , and a DMTerm t, we push t to the list for v.
@@ -75,7 +75,7 @@ pushDefinition (DMScope topscope, DMScope varscope) v term = do
 
 pushChoice :: (MonadDMTC t) => DMScopes -> Symbol -> [JuliaType] -> DMTerm -> t DMScopes
 pushChoice scope fname sign term = do
-   let (DMScope topscope, DMScope varscope) = scope
+   let (_, DMScope varscope) = scope
    scope' <- case (H.lookup fname varscope) of
                   Nothing -> pushDefinition scope fname (Choice (H.singleton sign term)) -- if there are no other methods just push
                   Just (Choice d, _) -> do -- else append the method to the Choice term
