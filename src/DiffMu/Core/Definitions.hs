@@ -99,7 +99,8 @@ instance Show DMKind where
 -- Now we can define our actual DMTypes.
 -- We call the general case of a type of some kind k, `DMTypeOf k`.
 -- The specific case of a type of "main" kind, we simply call `DMType`, i.e.:
-type DMType = DMTypeOf MainKind
+type DMType = DMTypeOf NoFunKind
+type DMFun = DMTypeOf FunKind
 
 -- And we give a similar abbreviation for numeric dmtypes:
 type DMNumType = DMTypeOf NumKind
@@ -126,10 +127,12 @@ data DMTypeOf (k :: DMKind) where
   TVar :: Typeable k => SymbolOf k -> DMTypeOf k
 
   -- the arrow type
-  (:->:) :: [DMType :& Sensitivity] -> DMType -> DMType
+  (:->:) :: [DMTypeOf (AnnKind AnnS)] -> DMTypeOf (AnnKind AnnS) -> DMFun
+  -- (:->:) :: [DMType :& Sensitivity] -> DMTypeOf (AnnKind AnnS) -> DMFun
 
   -- the privacy-arrow type
-  (:->*:) :: [DMType :& Privacy] -> DMType -> DMType
+  (:->*:) :: [DMTypeOf (AnnKind AnnP)] -> DMTypeOf (AnnKind AnnP) -> DMFun
+  -- (:->*:) :: [DMType :& Privacy] -> DMTypeOf (AnnKind AnnP) -> DMFun
 
   -- tuples
   DMTup :: [DMType] -> DMType
@@ -151,7 +154,7 @@ data DMTypeOf (k :: DMKind) where
 
   -- annotations
   NoFun :: (DMTypeOf NoFunKind :& RealizeAnn a) -> DMTypeOf (AnnKind a)
-  Fun :: [DMTypeOf FunKind :& RealizeAnn a] -> DMTypeOf (AnnKind a)
+  Fun :: [DMTypeOf FunKind :& (Maybe [JuliaType], Sensitivity)] -> DMTypeOf (AnnKind AnnS)
   (:∧:) :: DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a)
   (:↷:) :: Sensitivity -> DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a)
   Trunc :: RealizeAnn a -> DMTypeOf (AnnKind b) -> DMTypeOf (AnnKind a)

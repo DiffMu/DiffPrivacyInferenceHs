@@ -161,6 +161,10 @@ setVarP k v = types %=~ setValueM k (Right v :: Either (WithRelev AnnS) (WithRel
 -- Look up the types and sensitivities/privacies of the variables in `xτs` from the current context.
 -- If a variable is not present in Σ (this means it was not used in the lambda body),
 -- create a new type/typevar according to type hint given in `xτs` and give it zero annotation
+getArgList :: forall t e. (MonadDMTC t, DMExtra e) => [Asgmt JuliaType] -> t [DMTypeOf (AnnKind e)]
+getArgList = undefined
+
+{-
 getArgList :: forall t e. (MonadDMTC t, DMExtra e, CMonoidM t e) => [Asgmt JuliaType] -> t [DMType :& e]
 getArgList xτs = do
   (γ :: TypeCtxSP) <- use types
@@ -185,7 +189,7 @@ getArgList xτs = do
   types .= γ'
 
   return xτs'
-
+-}
 removeVar :: forall e t. (DMExtra e, MonadDMTC t) => Symbol -> t (WithRelev e)
 removeVar x =  do
   -- (γ :: Ctx Symbol (DMType :& e)) <- use types

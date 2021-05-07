@@ -754,7 +754,7 @@ createDMTypeNum (JuliaType str)  = throwError (TypeMismatchError $ "expected " <
 
 -- Maps julia types to DMTypes (of main kind)
 -- (`JTAny` is turned into a new type variable.)
-createDMType :: MonadDMTC t => JuliaType -> t (DMTypeOf MainKind)
+createDMType :: MonadDMTC t => JuliaType -> t (DMTypeOf NoFunKind)
  -- NOTE: defaulting to non-const might or might not be what we want to do here.
 createDMType (JuliaType "Integer") = pure $ Numeric (NonConst DMInt)
 createDMType (JuliaType "Real") = pure $ Numeric (NonConst DMReal)

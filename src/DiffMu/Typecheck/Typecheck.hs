@@ -14,7 +14,17 @@ import qualified Data.HashMap.Strict as H
 
 import Debug.Trace
 
+returnNoFun :: DMType -> TC (DMTypeOf (AnnKind AnnS))
+returnNoFun τ = do
+  a <- newVar
+  mscale a
+  return (NoFun (τ :@ a))
 
+returnFun :: Maybe [JuliaType] -> DMFun -> TC (DMTypeOf (AnnKind AnnS))
+returnFun sign τ = do
+  a <- newVar
+  mscale a
+  return (Fun [(τ :@ (sign , a))])
 
 
 ------------------------------------------------------------------------
@@ -58,7 +68,9 @@ checkSens t scope = do
       Right γ -> error $ "checkSens returned a privacy context!\n" <> "It is:\n" <> show γ <> "\nThe input term was:\n" <> show t
 
 -- TODO: Here we assume that η really has type τ, and do not check it. Should maybe do that.
-checkSen' (Sng η τ) scope  = Numeric <$> (Const (constCoeff (Fin η)) <$> (createDMTypeNum τ))
+checkSen' (Sng η τ) scope  = do
+  res <- Numeric <$> (Const (constCoeff (Fin η)) <$> (createDMTypeNum τ))
+  returnNoFun res
 
 -- a special term for function argument variables.
 -- those get sensitivity 1, all other variables are var terms
@@ -66,7 +78,7 @@ checkSen' (Sng η τ) scope  = Numeric <$> (Const (constCoeff (Fin η)) <$> (cre
 -- TODO!!!! Get interestingness flag!
 checkSen' (Arg x dτ i) scope = do τ <- createDMType dτ -- TODO subtype!
                                   setVarS x (WithRelev i (NoFun (undefined :@ constCoeff (Fin 1)))) --(τ :@ constCoeff (Fin 1)))
-                                  return τ
+                                  returnNoFun τ
 
 checkSen' (Var x dτ) scope = do -- get the term that corresponds to this variable from the scope dict
                                 (vt, scope') <- popDefinition scope x
@@ -89,8 +101,8 @@ checkSen' (Op op args) scope =
   -- and scales the current context by s.
   let checkOpArg (arg,(τ,s)) = do
         τ_arg <- checkSens arg scope
-        unify (Numeric τ) τ_arg
-        mscale (svar s)
+        unify (NoFun (Numeric τ :@ svar s)) τ_arg
+        -- mscale (svar s)
   in do
     -- We get create a new typeop constraint for op
     (res,arg_sens) <- makeTypeOp op (length args)
@@ -100,7 +112,7 @@ checkSen' (Op op args) scope =
     _ <- msumS ((checkOpArg <$> (zip args arg_sens)))
 
     -- We return the `res` type given by `makeTypeOp`
-    return (Numeric res)
+    returnNoFun (Numeric res)
 
 
 checkSen' (Phi cond ifbr elsebr) scope =
@@ -129,7 +141,7 @@ checkSen' (Lam xτs body) scope = do
   τr <- checkSens body (topscope, topscope)
 
   xrτs <- getArgList xτs
-  return (xrτs :->: τr)
+  returnFun (xrτs :->: τr)
 
 
 checkSen' (LamStar xτs body) scope = do
@@ -144,8 +156,10 @@ checkSen' (LamStar xτs body) scope = do
   τr <- checkPriv body (topscope, topscope)
 
   xrτs <- getArgList (map fst xτs)
+
+  -- TODO: As it currently stands the context which is returned here is something like 's ↷ | Γ |_∞', not wrong, but unnecessary?
   mtruncateS inftyS
-  return (xrτs :->*: τr)
+  returnFun (Just (sndA <$> xτs)) (xrτs :->*: τr)
 
 
 checkSen' (SLet (x :- dτ) term body) scope = do
@@ -163,7 +177,24 @@ checkSen' (SLet (x :- dτ) term body) scope = do
   return τ
 
 
-checkSen' (Apply f args) scope = let
+checkSen' (Apply f args) scope = do
+  let checkFArg :: DMTerm -> TC (DMTypeOf (AnnKind AnnS))
+      checkFArg arg = do
+          τ <- checkSens arg scope
+          return τ
+  let margs = checkFArg <$> args
+  let mf = checkSens f scope
+  τ_sum <- msumS (mf : margs) -- sum args and f's context
+  (τ_lam, argτs) <- case τ_sum of
+                          (τ : τs) -> return (τ, τs)
+                          [] -> throwError (ImpossibleError "Sum cannot return empty list.")
+  τ_ret <- newVar -- a type var for the function return type
+
+  addConstraint (Solvable (IsLessEqual (τ_lam, Fun [(argτs :->: τ_ret) :@ (oneId)])))
+  return τ_ret
+
+  {-
+  let
    -- check a single argument, scale its context with the corresponding sensitivity variable
    checkFArg :: DMTerm -> Sensitivity -> TC DMType
    checkFArg arg s = do
@@ -186,7 +217,7 @@ checkSen' (Apply f args) scope = let
       -- f's type must be subtype of a choice arrow with matching arg types.
       addConstraint (Solvable (IsLessEqual (τ_lam, DMChoice [(argτs :->: τ_ret) :@ (Nothing, oneId)])))
       return τ_ret
-
+-}
 
 checkSen' (FLet fname sign term body) scope = do
 
@@ -217,6 +248,9 @@ checkSen' (Tup ts) scope = do
    return (DMTup τs)
 
 checkSen' (TLet xs tu body) scope = do
+          undefined
+          -- TODO: NEWANNOT
+         {-
    --TODO chekc uniqueness
    maxs <- newVar
 
@@ -233,9 +267,6 @@ checkSen' (TLet xs tu body) scope = do
 
           sτs <- mapM (removeVar @AnnS) xnames -- get inference result for xs
 
-          undefined
-          -- TODO: NEWANNOT
-         {-
           let s = maxS (map sndAnnI sτs) -- set maxs to maximum of inferred sensitivites
           s ==! maxs
 
@@ -306,7 +337,7 @@ checkSen' (Gauss rp εp δp f) scope = let
       ε <- setParam εp
       δ <- setParam δp
 
-      return ((map (\t -> (t :@ (ε, δ))) τs) :->*: τgauss)
+      returnFun ((map (\t -> (t :@ (ε, δ))) τs) :->*: τgauss)
 
 
 checkSen' (MCreate n m body) scope =
@@ -343,7 +374,7 @@ checkSen' (MCreate n m body) scope =
                   _ -> throwError (ImpossibleError "?!")
 
        nrm <- newVar -- variable for norm
-       return (DMMat nrm U nv mv τbody)
+       returnNoFun (DMMat nrm U nv mv τbody)
 
 checkSen' (ClipM c m) scope = do
    τb <- checkSens m scope -- check the matrix
@@ -358,7 +389,7 @@ checkSen' (ClipM c m) scope = do
    unify τb (DMMat nrm clp n m (Numeric DMData))
 
    -- change clip parameter to input
-   return (DMMat nrm c n m (Numeric DMData))
+   returnNoFun (DMMat nrm c n m (Numeric DMData))
 
 -- Everything else is currently not supported.
 checkSen' t scope = throwError (UnsupportedTermError t)
@@ -368,7 +399,9 @@ checkSen' t scope = throwError (UnsupportedTermError t)
 -- Privacy terms
 
 checkPri' :: DMTerm -> DMScopes -> TC (DMTypeOf (AnnKind AnnP))
+checkPri'  = undefined
 
+  {-
 checkPri' (Ret t) scope = do
    τ <- checkSens t scope
    mtruncateP inftyP
@@ -502,4 +535,4 @@ checkPri' (Loop it cs (xi, xc) b) scope = do
 
 checkPri' t scope = checkPriv (Ret t) scope -- secretly return if the term has the wrong color.
 
-
+-}
