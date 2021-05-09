@@ -9,6 +9,7 @@ import DiffMu.Prelude
 import DiffMu.Abstract
 import DiffMu.Core.Definitions
 import DiffMu.Core.Symbolic
+import {-# SOURCE #-} DiffMu.Typecheck.Subtyping
 
 import qualified Data.HashMap.Strict as H
 
@@ -678,13 +679,19 @@ instance Monad m => LiftTC (TCT m) where
 instance Monad m => MonadImpossible (TCT m) where
   impossible err = throwError (ImpossibleError err)
 
-instance MonadDMTC t => Normalize t (DMTypeOf k) where
+instance (MonadDMTC t) => Normalize t (DMTypeOf k) where
   normalize n =
-    do σ <- getSubs @_ @DMTypeOf
+    do -- we apply all type variable substitutions
+       σ <- getSubs @_ @DMTypeOf
        n₂ <- σ ↷ n
+
+       -- and all sensitivity variables substitutions
        σ <- getSubs @_ @SensitivityOf
        n₃ <- σ ↷ n₂
-       return n₃
+
+       -- finally we normalize the uppermost "annotation" layer (if there is one)
+       -- , i.e., compute {↷,∧,Trunc}-terms
+       normalizeAnn n₃
 
 instance (Normalize t a, Normalize t b) => Normalize t (a :& b) where
   normalize (a :@ b) = (:@) <$> normalize a <*> normalize b
@@ -706,9 +713,11 @@ instance Monad t => Normalize t (SymbolOf k) where
   normalize = pure
 
 
-instance MonadDMTC t => Normalize (t) DMTypeOp where
+-- instance (Solve MonadDMTC IsInfimum (DMType,DMType,DMType), IsT MonadDMTC t, Monad t) => Normalize (t) DMTypeOp where
+instance (MonadDMTC t) => Normalize (t) DMTypeOp where
   normalize (UnaryNum op τ res) = UnaryNum op <$> normalize τ <*> normalize res
   normalize (BinaryNum op τ res) = BinaryNum op <$> normalize τ <*> normalize res
+
   -- normalize (Ternary op τ res) = Ternary op <$> normalize τ <*> normalize res
 
 -- instance MonadDMTC t :=> Normalize (t) DMTypeOp where
@@ -803,7 +812,7 @@ truncateExtra η η_old =
 scaleExtra :: forall (a :: Annotation). Sensitivity -> RealizeAnn a -> RealizeAnn a
 scaleExtra η a = undefined
 
-normalizeAnn :: (IsT MonadDMTC t, (Solve MonadDMTC IsInfimum (DMType, DMType, DMType))) => DMTypeOf k -> t (DMTypeOf k)
+normalizeAnn :: forall t k. (MonadDMTC t) => DMTypeOf k -> t (DMTypeOf k)
 normalizeAnn (TVar a) = pure $ TVar a
 normalizeAnn (Fun a) = pure $ Fun a
 normalizeAnn (NoFun fs) = pure $ NoFun fs
@@ -824,7 +833,9 @@ normalizeAnn (a :∧: b) = do
   b' <- normalizeAnn b
   case (a', b') of
     (Fun xs, Fun ys) -> pure $ Fun (xs <> ys)
-    (NoFun (x :@ ηx), NoFun (y :@ ηy)) -> do z <- infimum x y
+    (NoFun (x :@ ηx), NoFun (y :@ ηy)) -> do -- z <- infimum @MonadDMTC @t x y
+                                             z <- newVar
+                                             addConstraint (Solvable (IsInfimum (x, y, z)))
                                              return (NoFun (z :@ (ηx ⋆! ηy)))
     (_ , _) -> return (a' :∧: b')
 normalizeAnn x = pure x

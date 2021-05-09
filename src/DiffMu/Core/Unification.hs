@@ -88,6 +88,23 @@ instance Solve MonadDMTC IsLoopResult ((Sensitivity, Sensitivity, Sensitivity), 
 -- Monadic monoid structure on dmtypes
 --
 
+-- new monoid structure using infimum
+
+instance (IsT MonadDMTC t) => SemigroupM (t) (DMTypeOf (AnnKind a)) where
+  (⋆) x y = return (x :∧: y)
+
+instance (Typeable a, SingI a, IsT MonadDMTC t) => MonoidM (t) (DMTypeOf (AnnKind a)) where
+  neutral = newVar
+
+
+-- An optimized check for whether a given DMType is a neutral does not create new typevariables,
+-- but simply checks if the given DMType is one.
+instance (SingI k, Typeable k, IsT MonadDMTC t) => (CheckNeutral (t) (DMTypeOf k)) where
+  checkNeutral (TVar x) = return True
+  checkNeutral (_) = return False
+
+-- Old semigroup structure by unification
+{-
 -- We define a monadic semigroup structure on `DMTypeOf k`,
 -- which is simply unification.
 instance (IsT MonadDMTC t) => SemigroupM (t) (DMTypeOf k) where
@@ -102,6 +119,6 @@ instance (SingI k, Typeable k, IsT MonadDMTC t) => MonoidM (t) (DMTypeOf k) wher
 instance (SingI k, Typeable k, IsT MonadDMTC t) => (CheckNeutral (t) (DMTypeOf k)) where
   checkNeutral (TVar x) = return True
   checkNeutral (_) = return False
-
+-}
 
 

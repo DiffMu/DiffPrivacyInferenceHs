@@ -5,6 +5,7 @@ import DiffMu.Prelude
 import DiffMu.Abstract.Computation.INC
 import DiffMu.Abstract.Class.Constraint
 import DiffMu.Abstract.Class.IsT
+import DiffMu.Abstract.Class.Unify
 
 import Debug.Trace
 
@@ -34,7 +35,7 @@ newtype GraphM m a = GraphM (EdgeType -> [Edge m a])
 data ErrorRelevance = IsGraphRelevant | NotGraphRelevant
 
 -- findPathM :: forall s m e a. (Show e, Show a, MonadError e m, MonadState s m, MonoidM m a, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> (a,a) -> m (INCRes e (a,a))
-findPathM :: forall s m isT e a. (Show e, Show a, MonadConstraint isT m, IsT isT m, MonadNormalize m, MonadError e m, MonadState s m, MonoidM m a, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> (a,a) -> m (INCRes e (a,a))
+findPathM :: forall s m isT e a. (Show e, Show a, MonadConstraint isT m, IsT isT m, Normalize m a, MonadNormalize m, MonadError e m, MonadState s m, Unify isT a, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> (a,a) -> m (INCRes e (a,a))
 findPathM relevance (GraphM g) path =
   let both (Just a) (Just b) | a == b = Just a
       both _ _                          = Nothing
@@ -69,22 +70,22 @@ findPathM relevance (GraphM g) path =
       f_refl s (EdgeFamily (getIdx,edge)) (start,goal) =
         checkByStructurality s getIdx start goal $ \idx -> do
           (n₀, n₁) <- edge idx
-          n₀'' <- start ⋆ n₀
-          n₁'' <- n₁ ⋆ goal
+          n₀'' <- unify start n₀
+          n₁'' <- unify n₁ goal
           return (Finished (n₀'', n₁''))
 
       fromLeft :: EdgeFamily m a b -> (a,a) -> m (INCRes e (a,a))
       fromLeft (EdgeFamily (getIdx,edge)) (start,goal) =
         checkSingle getIdx start $ \idx -> do
           (n₀,n₁) <- edge idx
-          n₀'' <- start ⋆ n₀
+          n₀'' <- unify start n₀
           return (Partial (n₁, goal))
 
       fromRight :: EdgeFamily m a b -> (a,a) -> m (INCRes e (a,a))
       fromRight (EdgeFamily (getIdx,edge)) (start,goal) =
         checkSingle getIdx goal $ \idx -> do
           (n₀,n₁) <- edge idx
-          n₁'' <- n₁ ⋆ goal
+          n₁'' <- unify n₁ goal
           return (Partial (start, n₀))
 
       catchRelevant :: forall a b. (a -> m (INCRes e a)) -> (a -> m (INCRes e a))
@@ -118,7 +119,7 @@ findPathM relevance (GraphM g) path =
   in evalINC (INC computations) path
 
 
-findSupremumM :: forall s m isT e a. (Show e, Show a, MonadError e m, MonadConstraint isT m, IsT isT m, MonadNormalize m, MonadState s m, MonoidM m a, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> (a,a,a) -> m (INCRes e (a,a,a))
+findSupremumM :: forall s m isT e a. (Show e, Show a, MonadError e m, MonadConstraint isT m, IsT isT m, Unify isT (a), Normalize m a, MonadNormalize m, MonadState s m, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> (a,a,a) -> m (INCRes e (a,a,a))
 findSupremumM relevance (GraphM graph) (a,b,x) =
   let
     -------------
@@ -172,7 +173,7 @@ findSupremumM relevance (GraphM graph) (a,b,x) =
         checkPair both getIdx start₀ start₁ $ \idx -> do
           openNewConstraintSet
           ((n₀, n₁)) <- edge idx
-          n₀'' <- start₀ ⋆ n₀
+          n₀'' <- unify start₀ n₀
           (rpath) <- findPathM relevance (GraphM graph) (start₁,n₁)
           solveAllConstraints SolveExact
           traceM "============ AFTER solving all new constraints >>>>>>>>>>>>>>>>"
@@ -188,7 +189,7 @@ findSupremumM relevance (GraphM graph) (a,b,x) =
                           -- If we mereley had a non-reflexive edge, we try again with the target of that edge
                           False -> traceShow ("=> [Left] Finding path " <> show (start₁,n₁) <> " failed. Now computing sup " <> show (n₁, start₁, goal)) (findSupremumM relevance (GraphM graph) (n₁, start₁, goal))
               Partial x -> return Wait
-              Finished (a₀,a₁) -> do goal' <- goal ⋆ a₁
+              Finished (a₀,a₁) -> do goal' <- unify goal a₁
                                      return $ Finished (n₀'' , a₀ , goal')
 
       fromRight :: Eq b => Bool -> EdgeFamily m a b -> (a,a,a) -> m (INCRes e (a,a,a))
@@ -196,7 +197,7 @@ findSupremumM relevance (GraphM graph) (a,b,x) =
         checkPair both getIdx start₀ start₁ $ \idx -> do
           openNewConstraintSet
           (n₀, n₁) <- edge idx
-          n₀'' <- start₁ ⋆ n₀
+          n₀'' <- unify start₁ n₀
           (rpath) <- findPathM relevance (GraphM graph) (start₀,n₁)
           solveAllConstraints SolveExact
           traceM "============ AFTER solving all new constraints >>>>>>>>>>>>>>>>"
@@ -212,7 +213,7 @@ findSupremumM relevance (GraphM graph) (a,b,x) =
                           -- If we mereley had a non-reflexive edge, we try again with the target of that edge
                           False -> traceShow ("=> [Right] Finding path " <> show (start₀,n₁) <> " failed. Now computing sup " <> show (start₀, n₁, goal)) (findSupremumM relevance (GraphM graph) (start₀, n₁, goal))
               Partial x -> return Wait
-              Finished (a₀,a₁) -> do goal' <- goal ⋆ a₁
+              Finished (a₀,a₁) -> do goal' <- unify goal a₁
                                      return $ Finished (a₀ , n₀'' , goal')
 
 
