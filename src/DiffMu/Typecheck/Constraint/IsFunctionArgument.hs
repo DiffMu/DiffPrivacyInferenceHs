@@ -19,7 +19,7 @@ import qualified Data.HashMap.Strict as H
 solveIsFunctionArgument :: IsT MonadDMTC t => Symbol -> (DMTypeOf (AnnKind AnnS), DMTypeOf (AnnKind AnnS)) -> t ()
 
 -- if the given argument is a non-function, and we also expect a non-function, we unify their types and sensitities
-solveIsFunctionArgument name (NoFun (a1 :@ η1), NoFun (a2 :@ η2)) = do
+solveIsFunctionArgument name (NoFun (a1 :@ RealS η1), NoFun (a2 :@ RealS η2)) = do
   a1 ==! a2
   η1 ==! η2
   dischargeConstraint name
@@ -48,7 +48,7 @@ solveIsFunctionArgument name (Fun xs, Fun ys) = do
     -- if there were functions without annotation, error out
     xs -> internalError $ "Encountered functions without a required julia type annotation as the argument to a function:\n" <> show xs
 
-
+solveIsFunctionArgument name (TVar a, Fun xs) = addSub (a := Fun xs) >> dischargeConstraint name >> pure ()
 
 -- TODO: Check whether in the case where at least one argument is known to be no fun, we can make the other one as well
 --       or rather: would this be neccessary to get good results?

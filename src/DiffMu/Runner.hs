@@ -44,14 +44,14 @@ typecheckFromDMTerm term = do
         solveAllConstraints SolveExact
         tres' <- normalize tres
 
-        a <- newVar
-        b <- newVar
-        let (ss :: Sensitivity) = injectVarId (Ln (oneId ⋆! oneId ⋆! a))
-        a ==! (b ⋆! b)
-        solveAllConstraints SolveExact
-        traceM $ "My s is   : " <> show ss
-        ss' <- normalize ss
-        traceM $ "After norm: " <> show ss'
+        -- a <- newVar
+        -- b <- newVar
+        -- let (ss :: Sensitivity) = injectVarId (Ln (oneId ⋆! oneId ⋆! a))
+        -- a ==! (b ⋆! b)
+        -- solveAllConstraints SolveExact
+        -- traceM $ "My s is   : " <> show ss
+        -- ss' <- normalize ss
+        -- traceM $ "After norm: " <> show ss'
 
         return tres'
 

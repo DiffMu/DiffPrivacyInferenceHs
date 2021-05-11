@@ -7,6 +7,7 @@ import DiffMu.Prelude
 
 import DiffMu.Core.Symbolic
 import DiffMu.Abstract
+import {-# SOURCE #-} DiffMu.Core.TC
 
 import Data.Singletons.TH
 
@@ -59,10 +60,32 @@ type SVar   = SVarOf MainSensKind
 
 data Annotation = AnnS | AnnP
 
-type family RealizeAnn (a :: Annotation) = (result :: *) | result -> a where
-  RealizeAnn AnnS = SymTerm MainSensKind
-  RealizeAnn AnnP = (SymTerm MainSensKind, SymTerm MainSensKind)
+-- type family RealizeAnn (a :: Annotation) = (result :: *) | result -> a where
+-- data family RealizeAnn (a :: Annotation) :: *
+-- data instance RealizeAnn AnnS = SymTerm MainSensKind
+-- data instance RealizeAnn AnnP = (SymTerm MainSensKind, SymTerm MainSensKind)
 
+data RealizeAnn (a :: Annotation) where
+  RealS :: SymTerm MainSensKind -> RealizeAnn AnnS
+  RealP :: (SymTerm MainSensKind, SymTerm MainSensKind) -> RealizeAnn AnnP
+
+instance Eq (RealizeAnn a) where
+  (RealS a) == RealS b = a == b
+  (RealP a) == RealP b = a == b
+
+instance Monad t => SemigroupM t (RealizeAnn a) where
+  (RealS a) ⋆ (RealS b) = RealS <$> (a ⋆ b)
+  (RealP a) ⋆ (RealP b) = RealP <$> (a ⋆ b)
+
+instance Typeable a => MonoidM Identity (RealizeAnn a) where
+  neutral = let case1 = testEquality (typeRep @a) (typeRep @AnnS)
+                case2 = testEquality (typeRep @a) (typeRep @AnnP)
+            in case (case1, case2) of
+                (Just Refl , _) -> pure $ RealS zeroId
+                (_ , Just Refl) -> pure $ RealP (zeroId, zeroId)
+                _ -> undefined
+
+instance Typeable a => CMonoidM Identity (RealizeAnn a) where
 -- type family RealizeAnn AnnS = Sensitivity
 
 -- A `DMKind` is one of the following constructors:
@@ -155,12 +178,21 @@ data DMTypeOf (k :: DMKind) where
   -- annotations
   NoFun :: DMExtra a => (DMTypeOf NoFunKind :& RealizeAnn a) -> DMTypeOf (AnnKind a)
   Fun :: [DMTypeOf FunKind :& (Maybe [JuliaType], Sensitivity)] -> DMTypeOf (AnnKind AnnS)
-  (:∧:) :: DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a)
+  (:∧:) :: (DMExtra a) => DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a)
   (:↷:) :: Sensitivity -> DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a)
   Trunc :: (DMExtra a, DMExtra b) => RealizeAnn a -> DMTypeOf (AnnKind b) -> DMTypeOf (AnnKind a)
   TruncFunc :: RealizeAnn AnnP -> [DMTypeOf FunKind :& (Maybe [JuliaType], Sensitivity)] -> DMTypeOf (AnnKind AnnP)
 
-type DMExtra e = (Typeable e, SingI e, Eq (RealizeAnn e), CMonoidM Identity (RealizeAnn e))
+type DMExtra e = (Typeable e, SingI e)
+--                   Eq (RealizeAnn e), Show (RealizeAnn e),
+--                   CMonoidM Identity (RealizeAnn e),
+--                   -- Substitute SVarOf SensitivityOf (RealizeAnn e), FreeVars TVarOf (RealizeAnn e),
+--                   -- Unify MonadDMTC (RealizeAnn e) --, (HasNormalize MonadDMTC (RealizeAnn e))
+--                  )
+
+instance Show (RealizeAnn a) where
+  show (RealP p) = show p
+  show (RealS s) = show s
 
 -- Types are pretty printed as follows.
 instance Show (DMTypeOf k) where
@@ -181,6 +213,12 @@ instance Show (DMTypeOf k) where
   show (Clip n) = "Clip(" <> show n <> ")"
   show (DMMat nrm clp n m τ) = "Matrix<n: "<> show nrm <> ", c: " <> show clp <> ">[" <> show n <> " × " <> show m <> "](" <> show τ <> ")"
   show (DMChoice cs) = "Choice{" <> show cs <> "}"
+  show (NoFun x) = "NoFun(" <> show x <> ")"
+  show (Fun xs) = "Fun(" <> show xs <> ")"
+  show (a :↷: x) = show a <> " ↷ " <> show x
+  show (x :∧: y) = show x <> "∧" <> show y
+  show (Trunc a x) = "|" <> show x <> "|_" <> show a
+  show (TruncFunc a x) = "|" <> show x <> "|_" <> show a
 
 
 instance Eq (DMTypeOf NormKind) where

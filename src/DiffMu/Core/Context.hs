@@ -61,12 +61,12 @@ truncate_impl η γ = truncate_annotation <$> γ
       --       _    -> WithRelev i (τ :@ η))
 
 truncateS :: Sensitivity -> TypeCtxSP -> TypeCtxSP
-truncateS η (Left γ) = Left (truncate_impl η γ)
-truncateS η (Right γ) = Left (truncate_impl η γ)
+truncateS η (Left γ) = Left (truncate_impl (RealS η) γ)
+truncateS η (Right γ) = Left (truncate_impl (RealS η) γ)
 
 truncateP :: Privacy -> TypeCtxSP -> TypeCtxSP
-truncateP η (Left γ) = Right (truncate_impl η γ)
-truncateP η (Right γ) = Right (truncate_impl η γ)
+truncateP η (Left γ) = Right (truncate_impl (RealP η) γ)
+truncateP η (Right γ) = Right (truncate_impl (RealP η) γ)
 
 -- Truncates the current type context living in our typechecking-state monad by a given Sensitivity `η`.
 mtruncateS :: MonadDMTC t => Sensitivity -> t ()
@@ -233,7 +233,7 @@ getInteresting = return ([],[],[]) --do
 
 -- TODO: If we are going to implement 'Multiple', then this instance has to change
 -- instance (Show e, IsT MonadDMTC t, SemigroupM t e) => SemigroupM t (WithRelev e) where
-instance (IsT MonadDMTC t) => SemigroupM t (WithRelev e) where
+instance (Typeable e, SingI e, IsT MonadDMTC t) => SemigroupM t (WithRelev e) where
   (⋆) (WithRelev i e) (WithRelev j f) = WithRelev (i <> j) <$> (e ⋆ f)
 
 instance (IsT MonadDMTC t, DMExtra e) => MonoidM t (WithRelev e) where

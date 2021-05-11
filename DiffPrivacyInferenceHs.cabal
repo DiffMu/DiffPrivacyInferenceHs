@@ -114,6 +114,7 @@ library
       PatternSynonyms
       ImplicitParams
       TypeFamilyDependencies
+      RoleAnnotations
   build-depends:
       base >=4.7 && <5
     , bifunctors

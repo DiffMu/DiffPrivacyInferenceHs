@@ -11,20 +11,21 @@ import Data.HashMap.Strict
 -- Unification of dmtypes
 --
 
+instance Monad t => Normalize t JuliaType where
+  normalize = pure
 
--- Before we can unify dmtypes, we have to proof that we can unify
--- sensitivities.
--- We unify them simply by adding an equality constraint. That this
--- constraint is solvable in any class of monads, in particular in MonadDMTC,
--- is shown in Abstract.Data.MonadicPolynomial.
---
-instance Unify MonadDMTC Sensitivity where
-  unify_ s1 s2 = do
-    c <- addConstraint @MonadDMTC (Solvable (IsEqual (s1, s2)))
-    return s1
 
-instance Unify MonadDMTC Privacy where
-  unify_ (a1,b1) (a2,b2) = (,) <$> (unify_ a1 a2) <*> (unify_ b1 b2)
+
+instance Unify MonadDMTC JuliaType where
+  unify_ (JuliaType a) (JuliaType b) | a == b = pure (JuliaType a)
+  unify_ t s = throwError (UnificationError t s)
+
+
+instance Unify MonadDMTC (RealizeAnn e) where
+  -- NOTE: we can use the unify_ (with underscore) function here,
+  -- because we do not have to normalize the just normalized arguments
+  unify_ (RealS s) (RealS t) = RealS <$> unify_ s t
+  unify_ (RealP s) (RealP t) = RealP <$> unify_ s t
 
 -- TODO: Check, is i <> j what we want to do here?
 -- instance Unify MonadDMTC e => Unify MonadDMTC (WithRelev e) where
@@ -54,7 +55,13 @@ instance Unify MonadDMTC (DMTypeOf k) where
   unify_ (Clip k) (Clip s)             = Clip <$> unify k s
   unify_ (DMMat nrm1 clp1 n1 m1 τ1) (DMMat nrm2 clp2 n2 m2 τ2) =
      DMMat <$> unify nrm1 nrm2 <*> unify clp1 clp2 <*> unify n1 n2 <*> unify m1 m2 <*> unify τ1 τ2
-  unify_ t s                           = throwError (UnificationError t s)
+  unify_ (NoFun x) (NoFun y)              = NoFun <$> unify x y
+  unify_ (Fun xs) (Fun ys)                = Fun <$> unify xs ys
+  unify_ (a :↷: x) (b :↷: y)              = undefined
+  unify_ (x :∧: y) (v :∧: w)              = undefined
+  unify_ (Trunc a x) (Trunc b y)          = undefined
+  unify_ (TruncFunc a x) (TruncFunc b y)  = undefined
+  unify_ t s                              = throwError (UnificationError t s)
 
 -- Above we implictly use unification of terms of the type (a :& b).
 -- These are unified entry-wise:
@@ -90,7 +97,7 @@ instance Solve MonadDMTC IsLoopResult ((Sensitivity, Sensitivity, Sensitivity), 
 
 -- new monoid structure using infimum
 
-instance (IsT MonadDMTC t) => SemigroupM (t) (DMTypeOf (AnnKind a)) where
+instance (DMExtra a, IsT MonadDMTC t) => SemigroupM (t) (DMTypeOf (AnnKind a)) where
   (⋆) x y = return (x :∧: y)
 
 instance (Typeable a, SingI a, IsT MonadDMTC t) => MonoidM (t) (DMTypeOf (AnnKind a)) where

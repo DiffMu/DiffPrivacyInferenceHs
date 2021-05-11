@@ -59,6 +59,10 @@ instance (Typeable a, Typeable v, Substitute v a DMType) => Substitute v a (With
 --instance Substitute TVarOf DMTypeOf Privacy where
 --  substitute σs η = pure η
 
+instance Substitute TVarOf DMTypeOf (RealizeAnn a) where
+  substitute σs (RealS s) = RealS <$> (substitute σs s)
+  substitute σs (RealP s) = RealP <$> (substitute σs s)
+
 instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs L1 = pure L1
   substitute σs L2 = pure L2
@@ -77,6 +81,17 @@ instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs (DMTup τs) = DMTup <$> substitute σs τs
   substitute σs (DMMat nrm clp n m τ) = DMMat nrm clp <$> substitute σs n <*> substitute σs m <*> substitute σs τ
   substitute σs (DMChoice xs) = DMChoice <$> substitute σs xs
+  substitute σs (NoFun (x :@ a)) = (\x -> NoFun (x :@ a)) <$> substitute σs x
+  substitute σs (Fun xs) = Fun <$> substitute σs xs
+  substitute σs (a :↷: x) = (a :↷:) <$> substitute σs x
+  substitute σs (x :∧: y) = (:∧:) <$> substitute σs x <*> substitute σs y
+  substitute σs (Trunc a x) = Trunc a <$> substitute σs x
+  substitute σs (TruncFunc a x) = TruncFunc a <$> substitute σs x
+
+
+instance Substitute SVarOf SensitivityOf (RealizeAnn a) where
+  substitute σs (RealS s) = RealS <$> (substitute σs s)
+  substitute σs (RealP s) = RealP <$> (substitute σs s)
 
 instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
   substitute σs L1 = pure L1
@@ -96,6 +111,12 @@ instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
   substitute σs (DMTup τs) = DMTup <$> substitute σs τs
   substitute σs (DMMat nrm clp n m τ) = DMMat nrm clp <$> substitute σs n <*> substitute σs m <*> substitute σs τ
   substitute σs (DMChoice xs) = DMChoice <$> substitute σs xs
+  substitute σs (NoFun x) = NoFun <$> substitute σs x
+  substitute σs (Fun xs) = Fun <$> substitute σs xs
+  substitute σs (a :↷: x) = (:↷:) <$> substitute σs a <*> substitute σs x
+  substitute σs (x :∧: y) = (:∧:) <$> substitute σs x <*> substitute σs y
+  substitute σs (Trunc a x) = Trunc <$> substitute σs a <*> substitute σs x
+  substitute σs (TruncFunc a x) = TruncFunc <$> substitute σs a <*> substitute σs x
 
 
 instance Term TVarOf DMTypeOf where
@@ -123,6 +144,10 @@ instance FreeVars TVarOf Sensitivity where
 instance FreeVars TVarOf JuliaType where
   freeVars _ = mempty
 
+instance Typeable a => FreeVars TVarOf (RealizeAnn a) where
+  freeVars (RealS s) = freeVars s
+  freeVars (RealP s) = freeVars s
+
 instance Typeable k => FreeVars TVarOf (DMTypeOf k) where
   freeVars DMInt = []
   freeVars DMReal = []
@@ -141,6 +166,13 @@ instance Typeable k => FreeVars TVarOf (DMTypeOf k) where
   freeVars (DMTup τs) = freeVars τs
   freeVars (DMMat nrm clp n m τ) = freeVars nrm <> freeVars clp <> freeVars τ
   freeVars (DMChoice choices) = freeVars choices
+  freeVars (NoFun x) = freeVars x
+  freeVars (Fun xs) = freeVars xs
+  freeVars (a :↷: x) = freeVars x
+  freeVars (x :∧: y) = freeVars x <> freeVars y
+  freeVars (Trunc a x) = freeVars x
+  freeVars (TruncFunc a x) = freeVars x
+
 
 
 
@@ -712,6 +744,14 @@ instance MonadDMTC t => Normalize (t) Sensitivity where
 instance Monad t => Normalize t (SymbolOf k) where
   normalize = pure
 
+instance MonadDMTC t => Normalize t (RealizeAnn a) where
+  normalize (RealS s) = RealS <$> normalize s
+  normalize (RealP s) = RealP <$> normalize s
+
+instance (Monad t, Normalize t a) => Normalize t (Maybe a) where
+  normalize Nothing = pure Nothing
+  normalize (Just a) = Just <$> normalize a
+
 
 -- instance (Solve MonadDMTC IsInfimum (DMType,DMType,DMType), IsT MonadDMTC t, Monad t) => Normalize (t) DMTypeOp where
 instance (MonadDMTC t) => Normalize (t) DMTypeOp where
@@ -761,6 +801,31 @@ newSVar hint = meta.sensVars %%= (newKindedName hint)
   --         in (TVar τ , Meta1Ctx s t c)
 
 
+------------------------------------------------------------------------
+-- unification of sensitivities
+
+-- Before we can unify dmtypes, we have to proof that we can unify
+-- sensitivities.
+-- We unify them simply by adding an equality constraint. That this
+-- constraint is solvable in any class of monads, in particular in MonadDMTC,
+-- is shown in Abstract.Data.MonadicPolynomial.
+--
+instance Unify MonadDMTC Sensitivity where
+  unify_ s1 s2 = do
+    c <- addConstraint @MonadDMTC (Solvable (IsEqual (s1, s2)))
+    return s1
+
+instance (Unify t a, Unify t b) => Unify t (a,b) where
+  unify_ (a1,b1) (a2,b2) = (,) <$> (unify_ a1 a2) <*> (unify_ b1 b2)
+
+instance (Show a, Unify MonadDMTC a) => Unify MonadDMTC (Maybe a) where
+  unify_ Nothing Nothing = pure Nothing
+  unify_ (Just a) (Just b) = Just <$> unify_ a b
+  unify_ t s = throwError (UnificationError t s)
+
+-- instance Unify MonadDMTC Privacy where
+--   unify_ (a1,b1) (a2,b2) = (,) <$> (unify_ a1 a2) <*> (unify_ b1 b2)
+
 
 
 
@@ -787,12 +852,13 @@ createDMType :: MonadDMTC t => JuliaType -> t (DMTypeOf (AnnKind AnnS))
  -- NOTE: defaulting to non-const might or might not be what we want to do here.
 createDMType (JuliaType "Integer") = do
   s <- newVar
-  return (NoFun (Numeric (NonConst DMInt) :@ s))
+  return (NoFun (Numeric (NonConst DMInt) :@ RealS s))
 createDMType (JuliaType "Real") = do
   s <- newVar
-  return (NoFun (Numeric (NonConst DMReal) :@ s))
+  return (NoFun (Numeric (NonConst DMReal) :@ RealS s))
 -- TODO: is it correct to create tvars for anything else?
 createDMType _ = TVar <$> newTVar "any"
+
 
 
 
@@ -808,9 +874,19 @@ truncateExtra η η_old =
   (case η_old == zeroId of
       True -> zeroId
       _    -> η)
+-- truncateExtra :: RealizeAnn f -> RealizeAnn e -> RealizeAnn f
+-- truncateExtra η (RealS η_old) = 
+--   (case η_old == zeroId of
+--       True -> zeroId
+--       _    -> η)
+-- truncateExtra η η_old =
 
 scaleExtra :: forall (a :: Annotation). Sensitivity -> RealizeAnn a -> RealizeAnn a
-scaleExtra η a = undefined
+scaleExtra η (RealS s) = RealS (η ⋅! s)
+scaleExtra η (RealP (ε, δ)) = RealP (η ⋅! ε , η ⋅! δ)
+
+-- scaleSens :: forall (a :: Annotation). Sensitivity -> Sensitivi -> RealizeAnn a
+-- scaleSens = undefined
 
 normalizeAnn :: forall t k. (MonadDMTC t) => DMTypeOf k -> t (DMTypeOf k)
 normalizeAnn (TVar a) = pure $ TVar a
@@ -826,7 +902,7 @@ normalizeAnn (η :↷: a) = do
   a' <- normalizeAnn a
   case a' of
     NoFun (x :@ η_old) -> pure $ NoFun (x :@ scaleExtra η η_old)
-    Fun xs             -> pure $ Fun ((\(x :@ (jt , a)) -> (x :@ (jt , scaleExtra η a))) <$> xs)
+    Fun xs             -> pure $ Fun ((\(x :@ (jt , a)) -> (x :@ (jt , η ⋅! a))) <$> xs)
     other              -> pure $ (η :↷: other)
 normalizeAnn (a :∧: b) = do
   a' <- normalizeAnn a

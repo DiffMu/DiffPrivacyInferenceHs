@@ -9,6 +9,7 @@ import DiffMu.Core.TC
 import DiffMu.Typecheck.Operations
 import DiffMu.Core.Scope
 import DiffMu.Typecheck.JuliaType
+import DiffMu.Typecheck.Constraint.IsFunctionArgument
 
 import qualified Data.HashMap.Strict as H
 
@@ -18,7 +19,7 @@ returnNoFun :: DMType -> TC (DMTypeOf (AnnKind AnnS))
 returnNoFun τ = do
   a <- newVar
   mscale a
-  return (NoFun (τ :@ a))
+  return (NoFun (τ :@ RealS a))
 
 returnFun :: Maybe [JuliaType] -> DMFun -> TC (DMTypeOf (AnnKind AnnS))
 returnFun sign τ = do
@@ -103,7 +104,7 @@ checkSen' (Op op args) scope =
   -- and scales the current context by s.
   let checkOpArg (arg,(τ,s)) = do
         τ_arg <- checkSens arg scope
-        unify (NoFun (Numeric τ :@ svar s)) τ_arg
+        unify (NoFun (Numeric τ :@ RealS (svar s))) τ_arg
         -- mscale (svar s)
   in do
     -- We get create a new typeop constraint for op
@@ -198,7 +199,8 @@ checkSen' (Apply f args) scope = do
                           [] -> throwError (ImpossibleError "Sum cannot return empty list.")
   τ_ret <- newVar -- a type var for the function return type
 
-  addConstraint (Solvable (IsLessEqual (τ_lam, Fun [(argτs :->: τ_ret) :@ (Nothing, oneId)])))
+  -- addConstraint (Solvable (IsLessEqual (τ_lam, Fun [(argτs :->: τ_ret) :@ (Nothing, oneId)])))
+  addConstraint (Solvable (IsFunctionArgument (τ_lam, Fun [(argτs :->: τ_ret) :@ (Nothing, oneId)])))
   return τ_ret
 
   {-
@@ -374,7 +376,7 @@ checkSen' (MCreate n m body) scope =
 
           -- unify with expected type to set sensitivity (dimension penalty) and extract return type
           τbody <- newVar
-          let τ_expected = Fun [([NoFun (Numeric (NonConst DMInt) :@ inftyS) , NoFun (Numeric (NonConst DMInt) :@ inftyS)] :->: (NoFun (τbody :@ oneId)) :@ (Nothing , nv ⋅! mv))]
+          let τ_expected = Fun [([NoFun (Numeric (NonConst DMInt) :@ RealS inftyS) , NoFun (Numeric (NonConst DMInt) :@ RealS inftyS)] :->: (NoFun (τbody :@ RealS oneId)) :@ (Nothing , (nv ⋅! mv)))]
           τ_expected ==! τ
           return τbody
 
@@ -413,10 +415,10 @@ checkSen' (ClipM c m) scope = do
 
    -- set correct matrix type
    η <- newVar
-   unify τb (NoFun (DMMat nrm clp n m (Numeric DMData) :@ η))
+   unify τb (NoFun (DMMat nrm clp n m (Numeric DMData) :@ RealS η))
 
    -- change clip parameter to input
-   return (NoFun (DMMat nrm c n m (Numeric DMData) :@ η))
+   return (NoFun (DMMat nrm c n m (Numeric DMData) :@ RealS η))
 
 -- Everything else is currently not supported.
 checkSen' t scope = throwError (UnsupportedTermError t)

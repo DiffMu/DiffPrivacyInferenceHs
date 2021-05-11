@@ -3,12 +3,13 @@ module DiffMu.Core.TC where
 
 import DiffMu.Prelude
 import DiffMu.Abstract
-import DiffMu.Core.Definitions
+import DiffMu.Core.Symbolic
+import {-# SOURCE #-} DiffMu.Core.Definitions
 
 data Full
 
 class (MonadImpossible (t), MonadWatch (t),
-       MonadTerm DMTypeOf (t), MonadTerm SensitivityOf (t),
+       MonadTerm DMTypeOf (t), MonadTerm SymTerm (t),
        MonadState (Full) (t),
        MonadError DMException (t),
        MonadInternalError t,
