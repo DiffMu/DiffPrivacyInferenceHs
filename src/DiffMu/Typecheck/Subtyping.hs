@@ -181,19 +181,19 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsLessEqual (DMTypeOf k, DMTyp
 
 -- The actual solving is done here.
 -- this simply uses the `findSupremumM` function from Abstract.Computation.MonadicGraph
-solveSupremum :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => Symbol -> (DMTypeOf k, DMTypeOf k, DMTypeOf k) -> t ()
-solveSupremum name (a,b,x) = do
+solveSupremum :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> Symbol -> (DMTypeOf k, DMTypeOf k, DMTypeOf k) -> t ()
+solveSupremum graph name (a,b,x) = do
   -- Here we define which errors should be caught while doing our hypothetical computation.
   let relevance (UnificationError _ _)      = IsGraphRelevant
       relevance (UnsatisfiableConstraint _) = IsGraphRelevant
       relevance _                           = NotGraphRelevant
 
   -- traceM $ "Starting subtyping solving of " <> show path
-  let graph = subtypingGraph @t
+  -- let graph = subtypingGraph @t
   -- traceM $ "I have " <> show (length (graph (IsReflexive NotStructural))) <> " candidates."
 
   -- Executing the computation
-  res <- findSupremumM @(Full) relevance (GraphM graph) (a,b,x)
+  res <- findSupremumM @(Full) relevance (graph) (a,b,x)
 
   -- We look at the result and if necessary throw errors.
   case res of
@@ -207,12 +207,12 @@ solveSupremum name (a,b,x) = do
 
 -- TODO: Check whether this does the correct thing.
 instance (SingI k, Typeable k) => Solve MonadDMTC IsSupremum (DMTypeOf k, DMTypeOf k, DMTypeOf k) where
-  solve_ Dict _ name (IsSupremum a) = solveSupremum name a
+  solve_ Dict _ name (IsSupremum a) = solveSupremum (GraphM subtypingGraph) name a
 
 
 -- TODO: Check whether this does the correct thing.
 instance (SingI k, Typeable k) => Solve MonadDMTC IsInfimum (DMTypeOf k, DMTypeOf k, DMTypeOf k) where
-  solve_ Dict _ name (IsInfimum a) = pure ()
+  solve_ Dict _ name (IsInfimum a) = solveSupremum (oppositeGraph (GraphM subtypingGraph)) name a
 
 ------------------------------------------------------------
 -- Solve supremum (TODO this should live somewhere else.)

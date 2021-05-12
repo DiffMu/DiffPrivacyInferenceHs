@@ -34,6 +34,17 @@ newtype GraphM m a = GraphM (EdgeType -> [Edge m a])
 
 data ErrorRelevance = IsGraphRelevant | NotGraphRelevant
 
+
+
+oppositeGraph :: forall m a. Monad m => GraphM m a -> GraphM m a
+oppositeGraph (GraphM graph) = GraphM (opp graph)
+  where oppositeEdge :: Edge m a -> Edge m a
+        oppositeEdge (SingleEdge x) = SingleEdge ((\(a,b) -> (b,a)) <$> x)
+        oppositeEdge (MultiEdge pre fam) = MultiEdge pre ((\x -> (\(a,b) -> (b,a)) <$> x) . fam)
+
+        opp :: (EdgeType -> [Edge m a]) -> (EdgeType -> [Edge m a])
+        opp f ty = oppositeEdge <$> f ty
+
 -- findPathM :: forall s m e a. (Show e, Show a, MonadError e m, MonadState s m, MonoidM m a, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> (a,a) -> m (INCRes e (a,a))
 findPathM :: forall s m isT e a. (Show e, Show a, MonadConstraint isT m, IsT isT m, Normalize m a, MonadNormalize m, MonadError e m, MonadState s m, Unify isT a, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> (a,a) -> m (INCRes e (a,a))
 findPathM relevance (GraphM g) path =
@@ -228,4 +239,6 @@ findSupremumM relevance (GraphM graph) (a,b,x) =
 
   in evalINC (INC computations) (a,b,x)
 
+findInfimumM :: forall s m isT e a. (Show e, Show a, MonadError e m, MonadConstraint isT m, IsT isT m, Unify isT (a), Normalize m a, MonadNormalize m, MonadState s m, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> (a,a,a) -> m (INCRes e (a,a,a))
+findInfimumM relevance graph z = findSupremumM relevance (oppositeGraph graph) z
 
