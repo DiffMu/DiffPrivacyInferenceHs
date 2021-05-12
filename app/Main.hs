@@ -9,5 +9,5 @@ import Example.Terms
 import Debug.Trace
 
 main :: IO ()
-main = typecheckFromDMTerm t₄ --t23
+main = typecheckFromDMTerm t₇ --t23
 

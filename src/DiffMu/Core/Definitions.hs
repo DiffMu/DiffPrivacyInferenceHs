@@ -176,6 +176,7 @@ data DMTypeOf (k :: DMKind) where
   DMChoice :: [DMType :& (Maybe [JuliaType], Sensitivity)] -> DMType
 
   -- annotations
+  Return :: DMTypeOf (AnnKind AnnS) -> DMTypeOf (AnnKind AnnP)
   NoFun :: DMExtra a => (DMTypeOf NoFunKind :& RealizeAnn a) -> DMTypeOf (AnnKind a)
   Fun :: [DMTypeOf FunKind :& (Maybe [JuliaType], Sensitivity)] -> DMTypeOf (AnnKind AnnS)
   (:∧:) :: (DMExtra a) => DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a)
@@ -213,10 +214,10 @@ instance Show (DMTypeOf k) where
   show (Clip n) = "Clip(" <> show n <> ")"
   show (DMMat nrm clp n m τ) = "Matrix<n: "<> show nrm <> ", c: " <> show clp <> ">[" <> show n <> " × " <> show m <> "](" <> show τ <> ")"
   show (DMChoice cs) = "Choice{" <> show cs <> "}"
-  show (NoFun x) = "NoFun(" <> show x <> ")"
+  show (NoFun x) = show x --"NoFun(" <> show x <> ")"
   show (Fun xs) = "Fun(" <> show xs <> ")"
   show (a :↷: x) = show a <> " ↷ " <> show x
-  show (x :∧: y) = show x <> "∧" <> show y
+  show (x :∧: y) = "(" <> show x <> "∧" <> show y <> ")"
   show (Trunc a x) = "|" <> show x <> "|_" <> show a
   show (TruncFunc a x) = "|" <> show x <> "|_" <> show a
 
