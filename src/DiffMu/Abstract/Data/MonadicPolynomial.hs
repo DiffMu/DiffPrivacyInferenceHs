@@ -240,10 +240,17 @@ instance (Typeable j, Typeable r, Typeable v, Typeable (k :: j), KEq v, Eq r, KH
 
 -- type CPolyM r e v = SingleKinded (LinCom r (MonCom e v))
 
-instance (Show r , Show v) => Show (LinCom r (MonCom Int v)) where
-  show (poly) = showWith " + " (\vars r -> show r <> "" <> showWith "*" f vars) poly
+instance (Show r , Show v, Eq r, SemiringM Identity r) => Show (LinCom r (MonCom Int v)) where
+  show (poly) = showWith " + " (\vars r -> factor r vars <> showWith "⋅" f vars) poly
     where f v 1 = show v
           f v e = show v <> "^" <> show e
+          factor r (MonCom vars) = case (H.null vars, (r == oneId)) of
+                                            (True,True) -> "1"
+                                            (True,False) -> show r
+                                            (False,True) -> ""
+                                            (False,False) -> show r <> "⋅"
+          -- factor r [] = _ -- case r == oneId of
+          -- factor r = 
 
 -- instance (Show r , KShow v) => Show (CPolyM r Int (v k) j) where
 
