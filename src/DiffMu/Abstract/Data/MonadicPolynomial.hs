@@ -67,7 +67,7 @@ class DictKey k => DictLike k v d | d -> k v where
   isEmptyDict :: d -> Bool
 
 class ShowDict k v d | d -> k v where
-  showWith :: String -> (k -> v -> String) -> d -> String
+  showWith :: String -> (k -> v -> String) -> d -> String -> String
 
 instance (DictKey k) => DictLike k v (MonCom v k) where
   setValue v m (MonCom h) = MonCom (H.insert v m h)
@@ -77,9 +77,11 @@ instance (DictKey k) => DictLike k v (MonCom v k) where
   isEmptyDict (MonCom h) = H.null h
 
 instance ShowDict k v (MonCom v k) where
-  showWith comma merge (MonCom d) =
+  showWith comma merge (MonCom d) emptycase =
     let d' = H.toList d
-    in intercalate comma ((\(k,v) -> merge k v) <$> d')
+    in case d' of
+      [] -> emptycase
+      _  -> intercalate comma ((\(k,v) -> merge k v) <$> d')
 
 
 
@@ -241,7 +243,7 @@ instance (Typeable j, Typeable r, Typeable v, Typeable (k :: j), KEq v, Eq r, KH
 -- type CPolyM r e v = SingleKinded (LinCom r (MonCom e v))
 
 instance (Show r , Show v, Eq r, SemiringM Identity r) => Show (LinCom r (MonCom Int v)) where
-  show (poly) = showWith " + " (\vars r -> factor r vars <> showWith "⋅" f vars) poly
+  show (poly) = showWith " + " (\vars r -> factor r vars <> showWith "⋅" f vars "") poly "0"
     where f v 1 = show v
           f v e = show v <> "^" <> show e
           factor r (MonCom vars) = case (H.null vars, (r == oneId)) of

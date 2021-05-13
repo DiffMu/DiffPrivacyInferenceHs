@@ -47,7 +47,7 @@ mergeScopes a = f a emptyDict
 
 
 instance Show DMScope where
-  show scope = showWith "\n" f (mergeScopes scope)
+  show scope = showWith "\n" f (mergeScopes scope) ""
     where f name termlist =
             let name' = show name <> " := "
                 n = length name'
@@ -55,9 +55,11 @@ instance Show DMScope where
             in name' <> terms'
 
 instance ShowDict v k (Scope v k) where
-  showWith comma merge (d) =
+  showWith comma merge (d) emptycase =
     let d' = H.toList d
-    in intercalate comma ((\(k,v) -> merge k v) <$> d')
+    in case d' of
+      [] -> emptycase
+      _  -> intercalate comma ((\(k,v) -> merge k v) <$> d')
 
 
 -- Given a scope and a variable name v, we pop the topmost element from the list for v.
