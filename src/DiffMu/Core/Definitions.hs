@@ -204,8 +204,8 @@ instance Show (DMTypeOf k) where
   show (NonConst t) = show t <> "[--]"
   show (Numeric t) = "Num(" <> show t <> ")"
   show (TVar t) = show t
-  show (a :->: b) = show a <> " -> " <> show b
-  show (a :->*: b) = show a <> " ->* " <> show b
+  show (a :->: b) = "(" <> show a <> " -> " <> show b <> ")"
+  show (a :->*: b) = "(" <> show a <> " ->* " <> show b <> ")"
   show (DMTup ts) = "Tupl(" <> show ts <> ")"
   show L1 = "L1"
   show L2 = "L2"
@@ -250,7 +250,7 @@ data (:&) a b = (:@) a b
   deriving (Generic)
 
 instance (Show a, Show b) => Show (a :& b) where
-  show (a :@ b) = "(" <> show a <> " @ " <> show b <> ")"
+  show (a :@ b) = show a <> " @ " <> show b
 
 -- Since we want to use (monadic-)algebraic operations on terms of type `(a :& b)`,
 -- we declare these instances here. That is, if `a` and `b` have such instances,
