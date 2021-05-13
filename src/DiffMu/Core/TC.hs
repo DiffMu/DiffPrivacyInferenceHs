@@ -890,7 +890,9 @@ scaleExtra η (RealP (ε, δ)) = RealP (η ⋅! ε , η ⋅! δ)
 
 normalizeAnn :: forall t k. (MonadDMTC t) => DMTypeOf k -> t (DMTypeOf k)
 normalizeAnn (TVar a) = pure $ TVar a
-normalizeAnn (Fun a) = pure $ Fun a
+normalizeAnn (Fun as) = do
+  let normalizeInside (f :@ annot) = (:@ annot) <$> normalizeAnn f
+  Fun <$> mapM normalizeInside as
 normalizeAnn (NoFun fs) = pure $ NoFun fs
 normalizeAnn (Trunc η a) = do
   a' <- normalizeAnn a
@@ -914,6 +916,8 @@ normalizeAnn (a :∧: b) = do
                                              addConstraint (Solvable (IsInfimum (x, y, z)))
                                              return (NoFun (z :@ (ηx ⋆! ηy)))
     (_ , _) -> return (a' :∧: b')
+normalizeAnn (xs :->: y) = (:->:) <$> mapM normalizeAnn xs <*> normalizeAnn y
+normalizeAnn (xs :->*: y) = (:->*:) <$> mapM normalizeAnn xs <*> normalizeAnn y
 normalizeAnn x = pure x
 
 -- normalizeInsideAnn :: MonadDMTC t => DMTypeOf (AnnKind a) -> t (DMTypeOf (AnnKind a))
