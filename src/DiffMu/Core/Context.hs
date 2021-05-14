@@ -212,21 +212,16 @@ lookupVar x =  do
   v <- getValueM x γ
   cast v
 
-getInteresting :: MonadDMTC t => t ([Symbol],[DMType],[Privacy])
-getInteresting = return ([],[],[]) --do
-   -- γ <- use types
-   -- h <- case γ of
-   --         Left _ -> throwError (ImpossibleError "getInteresting called on sensitivity context.")
-   --         Right (Ctx (MonCom h')) -> return (H.toList h')
-   -- let f :: MonadDMTC t => [(Symbol, WithRelev AnnP)] -> t ([Symbol],[DMType],[Privacy])
-   --     f lst = case lst of
-   --                ((x, (WithRelev i (τ :@ p))) : xτs) -> case i of
-   --                      IsRelevant -> do
-   --                         (xs, τs, ps) <- f xτs
-   --                         return ((x:xs),(τ:τs),(p:ps))
-   --                      NotRelevant -> f xτs
-   --                [] -> return ([],[],[])
-   -- f h
+getInteresting :: MonadDMTC t => t ([Symbol],[DMTypeOf (AnnKind AnnP)])
+getInteresting = do
+   γ <- use types
+   h <- case γ of
+           Left _ -> throwError (ImpossibleError "getInteresting called on sensitivity context.")
+           Right (Ctx (MonCom h')) -> return (H.toList h')
+   let f :: [(Symbol, WithRelev AnnP)] -> ([(Symbol, DMTypeOf (AnnKind AnnP))])
+       f xs = [ (x , τ) | (x , WithRelev IsRelevant τ) <- xs ]
+   return (unzip (f h))
+
 
 ---------------------------------------------------------------------------
 -- Algebraic instances for annot
