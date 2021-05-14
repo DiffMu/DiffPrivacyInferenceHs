@@ -57,5 +57,14 @@ instance PartialOrd JuliaType where
       Just fun  -> unsafeLocalState (withCString a (\ca -> withCString b (\cb -> return $ call_StringStringBool fun ca cb)))
       -- Just f  -> call_StringStringBool f t s
 
+-- `leq` on lists is defined weirdly, so we make our own for signatures.
+newtype JuliaSignature = JuliaSignature [JuliaType]
+  deriving (Generic, Eq, Ord, Show)
+
+instance PartialOrd JuliaSignature where
+  leq (JuliaSignature a) (JuliaSignature b) = and (zipWith leq a b)
+
+
+
 
 foreign import ccall "dynamic" call_StringStringBool :: FunPtr (CString -> CString -> Bool) -> CString -> CString -> Bool

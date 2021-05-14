@@ -12,6 +12,8 @@ import DiffMu.Typecheck.JuliaType
 --import DiffMu.Typecheck.Subtyping
 import Algebra.PartialOrd
 
+import Debug.Trace
+
 import qualified Data.HashSet as HS
 import qualified Data.HashMap.Strict as H
 import Data.HashMap.Strict (HashMap)
@@ -24,7 +26,7 @@ import qualified Data.HashMap.Strict as H
 ---------------------------------------------------------------------
 -- "Strict subtyping" of function calls
 
-solveIsFunctionArgument :: IsT MonadDMTC t => Symbol -> (DMTypeOf (AnnKind AnnS), DMTypeOf (AnnKind AnnS)) -> t ()
+solveIsFunctionArgument :: IsT MonadDMTC t => Symbol -> (DMTypeOf (AnnKind a), DMTypeOf (AnnKind a)) -> t ()
 
 -- if the given argument is a non-function, and we also expect a non-function, we unify their types and sensitities
 solveIsFunctionArgument name (NoFun (a1 :@ RealS η1), NoFun (a2 :@ RealS η2)) = do
@@ -56,20 +58,25 @@ solveIsFunctionArgument name (Fun xs, Fun ys) = do
 
 solveIsFunctionArgument name (TVar a, Fun xs) = addSub (a := Fun xs) >> dischargeConstraint name >> pure ()
 
--- TODO: Check whether in the case where at least one argument is known to be no fun, we can make the other one as well
---       or rather: would this be neccessary to get good results?
-solveIsFunctionArgument name (NoFun (a :@ η), _) = return ()-- addSub (b := NoFun (a :@ η))
-solveIsFunctionArgument name (_, NoFun (a :@ η)) = return ()-- addSub (b := NoFun (a :@ η))
+-- in the case where at least one argument is known to be no fun, we can make the other one as well
+solveIsFunctionArgument name (NoFun (a :@ η), b) = do
+   unify (NoFun (a :@ η)) b
+   dischargeConstraint name
+
+solveIsFunctionArgument name (b, NoFun (a :@ η)) = do
+   unify b (NoFun (a :@ η))
+   dischargeConstraint name
+
 
 -- if both sides are variables, or are {trunc,↷,∧} terms of variables
 -- then we cannot do anything yet, since we do not know whether we have function terms inside, or not.
 solveIsFunctionArgument name (_, _) = return ()
 
-instance Solve MonadDMTC IsFunctionArgument (DMTypeOf (AnnKind AnnS), DMTypeOf (AnnKind AnnS)) where
+instance Solve MonadDMTC IsFunctionArgument (DMTypeOf (AnnKind a), DMTypeOf (AnnKind a)) where
   solve_ Dict _ name (IsFunctionArgument (a,b)) = solveIsFunctionArgument name (a,b)
 
-instance Solve MonadDMTC IsFunctionArgument (DMTypeOf (AnnKind AnnP), DMTypeOf (AnnKind AnnP)) where
-  solve_ Dict _ name (IsFunctionArgument (a,b)) = undefined -- TODO
+--instance Solve MonadDMTC IsFunctionArgument (DMTypeOf (AnnKind AnnP), DMTypeOf (AnnKind AnnP)) where
+ -- solve_ Dict _ name (IsFunctionArgument (a,b)) = undefined -- TODO
 
 ------------------------------------------------------------------------------------------------------
 -- IsChoice constraints
@@ -81,6 +88,8 @@ type ChoiceHash = HashMap [JuliaType] ((DMFun :& Sensitivity), Sensitivity)
 instance Solve MonadDMTC IsChoice (ChoiceHash, [DMFun :& Sensitivity]) where
   solve_ Dict _ name (IsChoice arg) = solveIsChoice name arg
 
+-- see if the constraint can be resolved. might update the IsCHoice constraint, do nothing, or discharge.
+-- might produce new IsFunctionArgument constraints for the arguments.
 solveIsChoice :: forall t. IsT MonadDMTC t => Symbol -> (ChoiceHash, [DMFun :& Sensitivity]) -> t ()
 solveIsChoice name (provided, required) = do
    -- remove all choices from the "required" list that have a unique match in the "provided" hashmap.
@@ -101,9 +110,9 @@ solveIsChoice name (provided, required) = do
                                                     -- remove all methods that definitely don't match this signature
                                                     let cand = (H.filterWithKey (\s c -> choiceCouldMatch args s) provided)
                                                     -- filter all argument types that would be "Function" in julia...
-                                                    let argsNoFun = filter (\τa -> case τa of {Fun _ -> False; _ -> True}) args
+                                                    let argsNoJFun = filter noJuliaFunction args
                                                     -- ... and get the free typevars of the rest.
-                                                    let free = and (null . freeVars @_ @TVarOf <$> argsNoFun)
+                                                    let free = and (null . freeVars @_ @TVarOf <$> argsNoJFun)
                                                     return (cand, free)
                                   args :->*: _ -> do -- same as for the above case.
                                                     let cand = (H.filterWithKey (\s c -> choiceCouldMatch args s) provided)
@@ -160,11 +169,12 @@ solveIsChoice name (provided, required) = do
                 mapM (\((_ :@ flag), count) -> flag ==! count) newdict
                 dischargeConstraint name
         cs | (length required > length newcs) -> do
-                traceM $ "got rid of some choices:" <> show required <> " became " <> show newcs
                 -- still not all choices resolved, just kick the resolved ones out of the constraint.
                 -- the sensitivity of the kicked out ones is already included in their method's count in newdict.
                 updateConstraint name (Solvable (IsChoice (newdict, newcs)))
-        _ -> return ()
+        _ -> do
+                return ()
+
 
    return ()
 
@@ -174,12 +184,14 @@ solveIsChoice name (provided, required) = do
 keepLeastGeneral :: ChoiceHash -> ChoiceHash
 keepLeastGeneral cs =
   -- make a poset from the (julia-)subtype relations of the given signatures
-  let pos :: POSet [JuliaType]
-      pos = PO.fromList (HS.toList (H.keysSet cs))
+  -- convert to JuliaSignature so we use our custom `leq`
+  let pos :: POSet JuliaSignature
+      pos = PO.fromList (map JuliaSignature (HS.toList (H.keysSet cs)))
       -- pick the ones that are not supertypes of any of the others
       mins = PO.lookupMin pos
-      mins' = [(k, cs H.! k) | k <- mins]
-  in H.fromList mins'
+      mins' = [(k, cs H.! k) | JuliaSignature k <- mins]
+  in
+      H.fromList mins'
 
 -- determine whether a function with the given dmtype signature could match a method with the given juliatype signature.
 choiceCouldMatch :: forall e. (DMExtra e) => [DMTypeOf (AnnKind e)] -> [JuliaType] -> Bool
@@ -200,7 +212,7 @@ generateApplyConstraints method applicand = do
    -- 'method' is the function that is called in the julia runtime where 'applicand' came out of typechecking Apply term.
    -- they hence have to be the same type, except when one of their arguments is itself a function, in which case we need to
    -- get a new IsChoice constraint. we hence add IsFunctionArgument constraints, which will be resolved just like so.
-   let addC :: (DMTypeOf (AnnKind AnnS), DMTypeOf (AnnKind AnnS)) -> t Symbol
+   let addC :: Typeable a => (DMTypeOf (AnnKind a), DMTypeOf (AnnKind a)) -> t Symbol
        addC (a, b) = addConstraint (Solvable (IsFunctionArgument (a,b)))
    case (applicand, method) of
       (aargs :->: aret, margs :->: mret)   -> do
@@ -214,8 +226,8 @@ generateApplyConstraints method applicand = do
          -- so it encodes all method that returned function has. aret is actually just a tvar created when checking Apply
          addC (mret, aret)
          return ()
---      (aargs :->*: aret, margs :->*: mret)   -> do -- TODO IsFunctionArgument does not work for privacies
---         mapM addC (zip margs aargs)
---         addC (mret, aret)
---         return ()
+      (aargs :->*: aret, margs :->*: mret)   -> do -- TODO IsFunctionArgument does not work for privacies
+         mapM addC (zip margs aargs)
+         addC (mret, aret)
+         return ()
       _ -> throwError (ImpossibleError ("Invalid type for Choice: " <> show (applicand, method)))
