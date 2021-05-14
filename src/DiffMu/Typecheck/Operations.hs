@@ -98,10 +98,14 @@ solveop mode name (IsTypeOpResult (BinaryNum op (τa1 :@ s1 , τa2 :@ s2) τr)) 
   case solveres of
     Nothing -> return ()
     Just (val_s1, val_s2, val_τr) -> do
-      addSub (s1 := val_s1)
-      addSub (s2 := val_s2)
-      -- unify (svar s1) val_s1
-      -- unify (svar s2) val_s2
+      -- NOTE: We do have to do unification here, instead of creating substitutions
+      --       (which we theoretically could, since the LHS is a svar), because
+      --       it might be that the variables on the LHS already have been substituted
+      --       with something elsewhere. Thus we would have two subs for the same var
+      --       in the sub context.
+      unify (svar s1) val_s1
+      unify (svar s2) val_s2
+
       unify τr val_τr
       dischargeConstraint @MonadDMTC name
 
