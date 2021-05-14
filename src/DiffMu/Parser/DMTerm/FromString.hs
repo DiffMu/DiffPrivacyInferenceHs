@@ -24,15 +24,15 @@ specialChar :: [Char]
 specialChar = "(){}, []\""
 
 
-pIdentifier :: ParserIO String
+pIdentifier :: Parser String
 pIdentifier = many1 (noneOf specialChar)
 
-pSymbol :: ParserIO Symbol
+pSymbol :: Parser Symbol
 pSymbol = (Symbol . T.pack) <$> (try (char ':' *> pIdentifier)
                                  <|> try (string "Symbol" *> between (string "(\"") (string "\")") pIdentifier))
 
 -- TODO: Add more types.
-pJuliaType :: ParserIO JuliaType
+pJuliaType :: Parser JuliaType
 pJuliaType = do
   ident <- pIdentifier
   -- cident <- liftIO (newCString ident)
@@ -42,10 +42,10 @@ pJuliaType = do
   -- <|> try (string "Real" *> pure (JTNum JTNumReal))
 
 
--- pJuliaNumType :: ParserIO JuliaNumType
+-- pJuliaNumType :: Parser JuliaNumType
 -- pJuliaNumType = undefined
 
-pSng :: ParserIO DMTerm
+pSng :: Parser DMTerm
 pSng = do
   n <- decFloat False
   case n of
@@ -60,34 +60,42 @@ pSng = do
 
 
 infixl 2 <*､>
-(<*､>) :: ParserIO (a -> b) -> ParserIO a -> ParserIO b
+(<*､>) :: Parser (a -> b) -> Parser a -> Parser b
 (<*､>) f a = (f <* string ", ") <*> a
 
-pAsgmt :: (Symbol -> JuliaType -> c) -> ParserIO c
+pAsgmt :: (Symbol -> JuliaType -> c) -> Parser c
 pAsgmt f = between (char '(') (char ')') (f <$> pSymbol <*､> pJuliaType)
 
-pRelevance :: ParserIO Relevance
+pRelevance :: Parser Relevance
 pRelevance = (try (string "1" *> pure IsRelevant))
              <|> (try (string "0" *> pure NotRelevant))
 
-pAsgmtWithRel :: ParserIO (Asgmt JuliaType, Relevance)
+pAsgmtWithRel :: Parser (Asgmt JuliaType, Relevance)
 pAsgmtWithRel = between (char '(') (char ')') ((,) <$> pAsgmt (:-) <*､> pRelevance)
 
-pArray :: String -> ParserIO a -> ParserIO [a]
+pArray :: String -> Parser a -> Parser [a]
 pArray prefix p = string prefix *> between (char '[') (char ']') (p `sepBy` (string ", "))
 
-pTuple2 :: ParserIO a -> ParserIO b -> ParserIO (a,b)
+pTuple2 :: Parser a -> Parser b -> Parser (a,b)
 pTuple2 a b = between (char '(') (char ')') ((,) <$> a <*､> b)
 
-pDMTypeOp :: ParserIO DMTypeOp_Some
+pTuple3 :: Parser a -> Parser b -> Parser c -> Parser (a,b,c)
+pTuple3 a b c = between (char '(') (char ')') ((,,) <$> a <*､> b <*､> c)
+
+
+pDMTypeOp :: Parser DMTypeOp_Some
 pDMTypeOp =
       try (string ":+" >> pure (IsBinary DMOpAdd))
   <|> try (string ":*" >> pure (IsBinary DMOpAdd))
+  <|> try (string ":-" >> pure (IsBinary DMOpSub))
 
-with :: String -> ParserIO a -> ParserIO a
+with :: String -> Parser a -> Parser a
 with name content = string name >> between (char '(') (char ')') content
 
-pDMTerm :: ParserIO DMTerm
+pGauss = f <$> pTuple3 pDMTerm pDMTerm pDMTerm <*､> pDMTerm
+  where f (a,b,c) d = Gauss a b c d
+
+pDMTerm :: Parser DMTerm
 pDMTerm =
       try ("ret"       `with` (Ret     <$> pDMTerm))
   <|> try ("sng"       `with` (pSng))
@@ -105,16 +113,17 @@ pDMTerm =
   <|> try ("tup"       `with` (Tup     <$> pArray "DMTerm" pDMTerm))
   <|> try ("tlet"      `with` (TLet    <$> pArray "Tuple{Symbol, DataType}" (pAsgmt (:-)) <*､> pDMTerm <*､> pDMTerm))
   <|> try ("loop"      `with` (Loop    <$> pDMTerm <*､> pDMTerm <*､> pTuple2 pSymbol pSymbol <*､> pDMTerm))
+  <|> try ("gauss"     `with` (pGauss))
 
 
 -- flet(:f, DataType[Any, Any], lam(Tuple{Symbol, DataType}[(:a, Any), (:b, Any)], op(:+, DMTerm[var(:a, Any), op(:+, DMTerm[op(:*, DMTerm[var(:b, Any), var(:b, Any)]), var(:a, Any)])])), var(:f, Any))
 
-pDMTermFromString :: String -> IO (Either DMException DMTerm)
-pDMTermFromString s = do
-  res <- runParserT pDMTerm () "jl-hs-communication" s
-  case res of
-    Left e  -> return $ Left (InternalError $ "Communication Error: Could not parse DMTerm from string:\n" <> show e)
-    Right a -> return $ Right a
+pDMTermFromString :: String -> (Either DMException DMTerm)
+pDMTermFromString s =
+  let res = runParser pDMTerm () "jl-hs-communication" s
+  in case res of
+    Left e  -> Left (InternalError $ "Communication Error: Could not parse DMTerm from string:\n" <> show e)
+    Right a -> Right a
 
 
 

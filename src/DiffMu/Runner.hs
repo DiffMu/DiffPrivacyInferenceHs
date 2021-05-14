@@ -26,7 +26,7 @@ run = putStrLn "Hello?"
 
 typecheckFromString_DMTerm :: String -> IO ()
 typecheckFromString_DMTerm term = do
- res <- pDMTermFromString term
+ let res = pDMTermFromString term
  case res of
    Left err -> putStrLn $ "Error while parsing DMTerm from string: " <> show err
    Right term -> typecheckFromDMTerm term
