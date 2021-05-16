@@ -161,6 +161,7 @@ checkSen' (LamStar xτs body) scope = do
   let (topscope, _) = scope'
   τr <- checkPriv body (topscope, topscope)
 
+
   xrτs <- getArgList (map fst xτs)
 
   -- TODO: As it currently stands the context which is returned here is something like 's ↷ | Γ |_∞', not wrong, but unnecessary?
@@ -296,17 +297,13 @@ checkSen' (TLet xs tu body) scope = do
    unify τt (DMTup τs) -- set correct tuple type
 
    return τb
-          -}
 
 checkSen' (Loop it cs (xi, xc) b) scope = do
-   undefined
-   -- TODO: NEWANNOT
-   {-
    niter <- case it of
                   Iter fs stp ls -> return (opCeil ((ls `opSub` (fs `opSub` (Sng 1 JTNumInt))) `opDiv` stp))
                   _ -> throwError (ImpossibleError "Loop iterator must be an Iter term.")
 
-   let checkScale :: DMTerm -> TC (DMType, Sensitivity)
+   let checkScale :: DMTerm -> TC (DMTypeOf (AnnKind AnnS), Sensitivity)
        checkScale term = do
           τ <- checkSens term scope
           s <- newVar
@@ -331,8 +328,8 @@ checkSen' (Loop it cs (xi, xc) b) scope = do
    addConstraint (Solvable (IsLoopResult ((sit, scs, sb), sbcs, τit))) -- compute the right scalars once we know if τ_iter is const or not.
 
    return τb
-   -}
 
+          -}
 
 checkSen' (Gauss rp εp δp f) scope =
   undefined
@@ -428,14 +425,13 @@ checkSen' t scope = throwError (UnsupportedTermError t)
 -- Privacy terms
 
 checkPri' :: DMTerm -> DMScopes -> TC (DMTypeOf (AnnKind AnnP))
-checkPri'  = undefined
 
-  {-
 checkPri' (Ret t) scope = do
    τ <- checkSens t scope
    mtruncateP inftyP
-   return τ
+   return (Return τ)
 
+  {-
 checkPri' (SLet (x :- dτ) term body) scope =
   -- push x to scope, check body, and discard x from the result context.
   -- this is the bind rule; as we expect the body to be a privacy term we don't need to worry about x's sensitivity
@@ -456,9 +452,9 @@ checkPri' (SLet (x :- dτ) term body) scope =
                     _ -> throwError (ImpossibleError "?!")
 
      return res
+-}
 
 checkPri' (FLet fname sign term body) scope = do -- this is the same as with checkSens
-
   -- make a Choice term to put in the scope
    scope' <- pushChoice scope fname sign term
 
@@ -467,6 +463,10 @@ checkPri' (FLet fname sign term body) scope = do -- this is the same as with che
    _ <- removeVar @AnnP fname
    return result
 
+
+
+
+{-
 
 checkPri' (Phi cond ifbr elsebr) scope = -- this is the same as with checkSens
    let mcond = do
@@ -482,30 +482,35 @@ checkPri' (Phi cond ifbr elsebr) scope = -- this is the same as with checkSens
       addConstraint (Solvable (IsSupremum (τ, τif, τelse)))
       return τ
 
+-}
 
 checkPri' (Apply f args) scope = let
    -- check a single argument, scale its context with the corresponding sensitivity variable
-   checkFArg :: DMTerm -> Privacy -> TC DMType
+   checkFArg :: DMTerm -> Privacy -> TC (DMTypeOf (AnnKind AnnP))
    checkFArg arg p = do
       τ <- checkSens arg scope
-      mtruncateP p
+      restrictAll oneId -- sensitivity of everything in context must be <= 1
+      mtruncateP p -- truncate it's context to p
+      return (Trunc (RealP p) τ) -- also set it's type's annotation to p for putting it into the signature below
+
+   checkF :: TC (DMTypeOf (AnnKind AnnS))
+   checkF = do
+      τ <- checkSens f scope
+      mtruncateP inftyP
       return τ
+
    in do
       εvars :: [Sensitivity] <- mapM (\x -> newVar) args -- create privacy variables for all arguments
       δvars :: [Sensitivity] <- mapM (\x -> newVar) args
-      let pvars = (inftyP :  (zip εvars δvars)) -- constext of f gets truncated to ∞
-      let margs = zipWith checkFArg (f : args) pvars -- check f and args and scale with their respective pvar
+      let margs = zipWith checkFArg args (zip εvars δvars) -- check f and args and truncate with their respective pvar
 
-      τ_sum <- msumP margs -- sum args and f's context
-      (τ_lam, argτs) <- case τ_sum of
-                             (τ : τs) -> return (τ, (zipWith (:@) τs pvars))
-                             [] -> throwError (ImpossibleError "Sum cannot return empty list.")
+      (τ_lam, argτs) <- msumTup (checkF, (msumP margs)) -- sum args and f's context
 
       τ_ret <- newVar -- a type var for the function return type
 
-      addConstraint (Solvable (IsLessEqual (τ_lam, DMChoice [(argτs :->*: τ_ret) :@ (Nothing, oneId)])))
+      addConstraint (Solvable (IsFunctionArgument (τ_lam, Fun [(argτs :->*: τ_ret) :@ (Nothing, oneId)])))
       return τ_ret
-
+{-
 checkPri' (Loop it cs (xi, xc) b) scope = do
   undefined
   -- TODO: NEWANNOT
@@ -561,7 +566,7 @@ checkPri' (Loop it cs (xi, xc) b) scope = do
    return τb
    -}
 
+-}
 
 checkPri' t scope = checkPriv (Ret t) scope -- secretly return if the term has the wrong color.
 
--}

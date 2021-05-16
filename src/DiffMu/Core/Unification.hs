@@ -6,7 +6,6 @@ import DiffMu.Abstract
 import DiffMu.Core.Definitions
 import DiffMu.Core.TC
 
-import Data.HashMap.Strict
 -------------------------------------------------------------------
 -- Unification of dmtypes
 --
@@ -90,6 +89,22 @@ instance Solve MonadDMTC IsLoopResult ((Sensitivity, Sensitivity, Sensitivity), 
   solve_ Dict _ _ (IsLoopResult ((s1, s2, s3), s, τ_iter)) = pure ()
 
 
+instance Solve MonadDMTC HasSensitivity (DMTypeOf (AnnKind AnnS), Sensitivity) where
+  solve_ Dict _ name (HasSensitivity a) = solveHasSensitivity name a
+
+solveHasSensitivity :: forall t. IsT MonadDMTC t => Symbol -> (DMTypeOf (AnnKind AnnS), Sensitivity) -> t ()
+solveHasSensitivity name (τ, s) = do
+  case τ of
+      NoFun (τ' :@ (RealS s')) -> do
+         unify s s'
+         dischargeConstraint name
+         return ()
+      Fun τs -> do
+         let sums = foldl (\a -> \b -> a⋅!b) oneId [s' | (_ :@ (_, s')) <- τs]
+         unify s sums
+         dischargeConstraint name
+         return ()
+      _ -> return () -- TODO can we do more?
 
 -------------------------------------------------------------------
 -- Monadic monoid structure on dmtypes

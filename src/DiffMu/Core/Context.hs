@@ -76,10 +76,10 @@ mtruncateS η = types %= truncateS η
 mtruncateP :: MonadDMTC t => Privacy -> t ()
 mtruncateP η = types %= truncateP η
 
-instance (MonadInternalError t, SemigroupM t a, SemigroupM t b) => SemigroupM t (Either a b) where
+instance (MonadInternalError t, SemigroupM t a, SemigroupM t b, Show a, Show b) => SemigroupM t (Either a b) where
   (⋆) (Left a) (Left b) = Left <$> (a ⋆ b)
   (⋆) (Right a) (Right b) = Right <$> (a ⋆ b)
-  (⋆) _ _ = error "Could not match left and right. (Probably a sensitivity / privacy context mismatch.)"
+  (⋆) ea eb = error $ "Could not match left and right. (Probably a sensitivity / privacy context mismatch between " <> show ea <> " and " <> show eb
 --  (⋆) _ _ = internalError "Could not match left and right. (Probably a sensitivity / privacy context mismatch.)"
 -- instance (MonoidM t a, MonoidM t b) => MonoidM t (Either a b) where
 
@@ -157,6 +157,24 @@ setVarS k v = types %=~ setValueM k (Left v :: Either (WithRelev AnnS) (WithRele
 
 setVarP :: MonadDMTC t => Symbol -> WithRelev AnnP -> t ()
 setVarP k v = types %=~ setValueM k (Right v :: Either (WithRelev AnnS) (WithRelev AnnP))
+
+
+-- add constraints that make sure all current context entries have sensitivity <= s.
+restrictAll :: Sensitivity -> TC ()
+restrictAll s = let
+   addC :: DMTypeOf (AnnKind AnnS) -> TC ()
+   addC τ = do
+      -- make constraints that say sv <= s and sv is the sensitivity of τ
+      sv :: Sensitivity <- newVar
+      addConstraint (Solvable (IsLessEqual (sv, s)))
+      addConstraint (Solvable (HasSensitivity (τ, sv)))
+      return ()
+   in do
+      γ <- use types
+      case γ of
+         Right _ -> throwError (ImpossibleError "restrictAll called on privacy context.")
+         Left (Ctx (MonCom h)) -> mapM (\(WithRelev _ τ) -> addC τ) h -- restrict sensitivities of all γ entries
+      return ()
 
 
 

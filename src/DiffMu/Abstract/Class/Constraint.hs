@@ -127,6 +127,13 @@ instance TCConstraint IsFunctionArgument where
   constr = IsFunctionArgument
   runConstr (IsFunctionArgument c) = c
 
+-- bounds on sensitivity annotations
+newtype HasSensitivity a = HasSensitivity a deriving Show
+
+instance TCConstraint HasSensitivity where
+  constr = HasSensitivity
+  runConstr (HasSensitivity c) = c
+
 ----------------------------------------------------------
 -- functions for Constraint
 

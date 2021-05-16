@@ -138,7 +138,7 @@ solveIsChoice name (provided, required) = do
                                     -- else we do not change them
                                     False -> candidates
 
-                              case length candidates' == length provided of
+                              case and ((length candidates' == length provided),(length candidates' > 1)) of
                                  -- no choices were discarded, the constraint could not be simplified.
                                  True -> do
                                             (resP, resR) <- (matchArgs curProv restReq) -- can't resolve choice, keep it and recurse.
@@ -230,4 +230,4 @@ generateApplyConstraints method applicand = do
          mapM addC (zip margs aargs)
          addC (mret, aret)
          return ()
-      _ -> throwError (ImpossibleError ("Invalid type for Choice: " <> show (applicand, method)))
+      _ -> throwError (ImpossibleError ("Invalid type for Choice: " <> show (method, applicand)))

@@ -87,6 +87,7 @@ instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs (x :∧: y) = (:∧:) <$> substitute σs x <*> substitute σs y
   substitute σs (Trunc a x) = Trunc a <$> substitute σs x
   substitute σs (TruncFunc a x) = TruncFunc a <$> substitute σs x
+  substitute σs (Return τ) = Return <$> substitute σs τ
 
 
 instance Substitute SVarOf SensitivityOf (RealizeAnn a) where
@@ -117,6 +118,7 @@ instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
   substitute σs (x :∧: y) = (:∧:) <$> substitute σs x <*> substitute σs y
   substitute σs (Trunc a x) = Trunc <$> substitute σs a <*> substitute σs x
   substitute σs (TruncFunc a x) = TruncFunc <$> substitute σs a <*> substitute σs x
+  substitute σs (Return τ) = Return <$> substitute σs τ
 
 
 instance Term TVarOf DMTypeOf where
@@ -172,6 +174,7 @@ instance Typeable k => FreeVars TVarOf (DMTypeOf k) where
   freeVars (x :∧: y) = freeVars x <> freeVars y
   freeVars (Trunc a x) = freeVars x
   freeVars (TruncFunc a x) = freeVars x
+  freeVars (Return x) = freeVars x
 
 
 
