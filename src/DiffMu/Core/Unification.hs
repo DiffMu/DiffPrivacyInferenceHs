@@ -100,7 +100,7 @@ solveHasSensitivity name (τ, s) = do
          dischargeConstraint name
          return ()
       Fun τs -> do
-         let sums = foldl (\a -> \b -> a⋅!b) oneId [s' | (_ :@ (_, s')) <- τs]
+         let sums = foldl (\a -> \b -> a ⋆! b) oneId [s' | (_ :@ (_, s')) <- τs]
          unify s sums
          dischargeConstraint name
          return ()
