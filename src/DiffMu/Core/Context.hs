@@ -41,11 +41,6 @@ instance Default Sensitivity where
 instance Default Privacy where
   def = (def,def)
 
-inftyS :: Sensitivity
-inftyS = constCoeff Infty
-
-inftyP :: Privacy
-inftyP = (constCoeff Infty, constCoeff Infty)
 
 instance (CMonoidM t a, CMonoidM t b) => CMonoidM t (a,b)
 

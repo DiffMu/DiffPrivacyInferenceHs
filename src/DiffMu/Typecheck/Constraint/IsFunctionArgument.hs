@@ -66,6 +66,13 @@ solveIsFunctionArgument name (NoFun (a1 :@ RealS η1), NoFun (a2 :@ RealS η2)) 
   η1 ==! η2
   dischargeConstraint name
 
+-- same with privacies.
+solveIsFunctionArgument name (NoFun (a1 :@ RealP (ε1,δ1)), NoFun (a2 :@ RealP (ε2,δ2))) = do
+  a1 ==! a2
+  ε1 ==! ε2
+  δ1 ==! δ2
+  dischargeConstraint name
+
 -- if we expect a non-function, the given argument must be a non-function.
 solveIsFunctionArgument name (NoFun a1, b) = do
   nfb <- forceNoFun b
@@ -254,11 +261,11 @@ generateApplyConstraints method applicand = do
          -- so aargs goes first in the constraint.
          mapM addC (zip aargs margs)
          -- with return types it's the other way around: mret is the inferred return type of the method,
-         -- so it encodes all method that returned function has. aret is actually just a tvar created when checking Apply
+         -- so it encodes all methods that returned function has. aret is actually just a tvar created when checking Apply
          addC (mret, aret)
          return ()
-      (aargs :->*: aret, margs :->*: mret)   -> do -- TODO IsFunctionArgument does not work for privacies
-         mapM addC (zip margs aargs)
+      (aargs :->*: aret, margs :->*: mret) -> do
+         mapM addC (zip aargs margs)
          addC (mret, aret)
          return ()
       _ -> throwError (ImpossibleError ("Invalid type for Choice: " <> show (method, applicand)))

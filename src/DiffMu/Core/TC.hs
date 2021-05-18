@@ -30,6 +30,11 @@ import Debug.Trace
 
 infixr 4 %=~
 
+inftyS :: Sensitivity
+inftyS = constCoeff Infty
+
+inftyP :: Privacy
+inftyP = (constCoeff Infty, constCoeff Infty)
 
 
 instance (Substitute v x a, Substitute v x b) => Substitute v x (a :& b) where
@@ -919,6 +924,13 @@ normalizeAnn (a :∧: b) = do
                                              addConstraint (Solvable (IsInfimum (x, y, z)))
                                              return (NoFun (z :@ (ηx ⋆! ηy)))
     (_ , _) -> return (a' :∧: b')
+normalizeAnn (Return x) = do
+   x' <- normalizeAnn x
+   case x' of
+      NoFun (xτ :@ xs) -> do
+         xτ' <- normalizeAnn xτ
+         return (NoFun (xτ' :@ RealP inftyP))
+      _ -> pure $ Return x' -- TODO maybe we can do something for Fun?
 normalizeAnn (xs :->: y) = (:->:) <$> mapM normalizeAnn xs <*> normalizeAnn y
 normalizeAnn (xs :->*: y) = (:->*:) <$> mapM normalizeAnn xs <*> normalizeAnn y
 normalizeAnn x = pure x
