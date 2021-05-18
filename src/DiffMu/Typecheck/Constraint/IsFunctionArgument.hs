@@ -26,6 +26,38 @@ import qualified Data.HashMap.Strict as H
 ---------------------------------------------------------------------
 -- "Strict subtyping" of function calls
 
+-- if one side of the IsFunctionArgument constraint is NoFun, the other has to be NoFun as well.
+-- this can be carried on into operations on annotated types.
+-- this function creates all the constraints/substitutions to enforce the input type is NoFun
+forceNoFun :: forall t a.(IsT MonadDMTC t, DMExtra a) => DMTypeOf (AnnKind a) -> t (DMTypeOf (AnnKind a))
+forceNoFun (TVar x) = do
+  -- a lot of code for saying that we want a RealS variable if a is AnnS and a RealP variable otherwise.
+  let case1 = testEquality (typeRep @a) (typeRep @AnnS)
+      case2 = testEquality (typeRep @a) (typeRep @AnnP)
+  s <- case (case1, case2) of
+     (Just Refl, Nothing) -> RealS <$> newVar
+     (Nothing, Just Refl) -> do
+        ε <- newVar
+        δ <- newVar
+        return (RealP (ε, δ))
+     _ -> error "Mismatch!"
+  v <- newVar
+  unify (TVar x) (NoFun (v :@ s)) -- the tvar is NoFun with some annotation s of correct type
+-- these cases just recurse
+forceNoFun (Trunc s x) = Trunc s <$> forceNoFun x
+forceNoFun (NoFun x) = pure $ NoFun x
+forceNoFun (Return x) = Return <$> forceNoFun x
+forceNoFun (x :∧: y) = do
+  xx <- forceNoFun x
+  yy <- forceNoFun y
+  return (xx :∧: yy)
+forceNoFun (x :↷: y) = do
+   yy <- forceNoFun y
+   return (x :↷: yy)
+-- these cases are forbidden, they cannot be NoFun
+forceNoFun (Fun _) = error "Mismatch!"
+forceNoFun (TruncFunc _ _) = error "Mismatch!"
+
 solveIsFunctionArgument :: IsT MonadDMTC t => Symbol -> (DMTypeOf (AnnKind a), DMTypeOf (AnnKind a)) -> t ()
 
 -- if the given argument is a non-function, and we also expect a non-function, we unify their types and sensitities
@@ -33,6 +65,17 @@ solveIsFunctionArgument name (NoFun (a1 :@ RealS η1), NoFun (a2 :@ RealS η2)) 
   a1 ==! a2
   η1 ==! η2
   dischargeConstraint name
+
+-- if we expect a non-function, the given argument must be a non-function.
+solveIsFunctionArgument name (NoFun a1, b) = do
+  nfb <- forceNoFun b
+  return ()
+
+-- if the given argument is a non-function, we must expect some non-function type.
+solveIsFunctionArgument name (b, NoFun a1) = do
+  nfb <- forceNoFun b
+  return ()
+
 
 -- if the given argument and expected argument are both functions / collections of functions
 solveIsFunctionArgument name (Fun xs, Fun ys) = do
@@ -58,15 +101,6 @@ solveIsFunctionArgument name (Fun xs, Fun ys) = do
 
 solveIsFunctionArgument name (TVar a, Fun xs) = addSub (a := Fun xs) >> dischargeConstraint name >> pure ()
 
--- in the case where at least one argument is known to be no fun, we can make the other one as well
-solveIsFunctionArgument name (NoFun (a :@ η), b) = do
-   unify (NoFun (a :@ η)) b
-   dischargeConstraint name
-
-solveIsFunctionArgument name (b, NoFun (a :@ η)) = do
-   unify b (NoFun (a :@ η))
-   dischargeConstraint name
-
 
 -- if both sides are variables, or are {trunc,↷,∧} terms of variables
 -- then we cannot do anything yet, since we do not know whether we have function terms inside, or not.
@@ -74,9 +108,6 @@ solveIsFunctionArgument name (_, _) = return ()
 
 instance Solve MonadDMTC IsFunctionArgument (DMTypeOf (AnnKind a), DMTypeOf (AnnKind a)) where
   solve_ Dict _ name (IsFunctionArgument (a,b)) = solveIsFunctionArgument name (a,b)
-
---instance Solve MonadDMTC IsFunctionArgument (DMTypeOf (AnnKind AnnP), DMTypeOf (AnnKind AnnP)) where
- -- solve_ Dict _ name (IsFunctionArgument (a,b)) = undefined -- TODO
 
 ------------------------------------------------------------------------------------------------------
 -- IsChoice constraints
