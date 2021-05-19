@@ -242,8 +242,9 @@ checkSen' (FLet fname sign term body) scope = do
 
 
 checkSen' (Choice d) scope = do
-  -- check the terms of the choices. We ignore here the key (julia signature), since it is also given in the lambda term
-  choices <- mapM (\t -> checkSens t scope) (snd <$> H.toList d)
+  -- check the terms of the choices and sum their context.
+  -- We ignore here the key (julia signature), since it is also given in the lambda term
+  choices <- msumS (map (\t -> checkSens t scope) (snd <$> H.toList d))
 
   -- combine the choices using (:∧:)
   let combined = foldl (:∧:) (Fun []) choices
