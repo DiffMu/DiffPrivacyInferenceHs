@@ -127,13 +127,19 @@ instance TCConstraint IsFunctionArgument where
   constr = IsFunctionArgument
   runConstr (IsFunctionArgument c) = c
 
--- bounds on sensitivity annotations
+-- set sensitivity annotations in a context
 newtype HasSensitivity a = HasSensitivity a deriving Show
 
 instance TCConstraint HasSensitivity where
   constr = HasSensitivity
   runConstr (HasSensitivity c) = c
 
+-- set sensitivity annotations on types
+newtype SetMultiplier a = SetMultiplier a deriving Show
+
+instance TCConstraint SetMultiplier where
+  constr = SetMultiplier
+  runConstr (SetMultiplier c) = c
 ----------------------------------------------------------
 -- functions for Constraint
 

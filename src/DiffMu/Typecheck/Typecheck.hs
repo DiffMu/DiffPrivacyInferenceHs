@@ -490,7 +490,7 @@ checkPri' (Apply f args) scope = let
    checkFArg :: DMTerm -> Privacy -> TC (DMTypeOf (AnnKind AnnP))
    checkFArg arg p = do
       τ <- checkSens arg scope
-      addConstraint (Solvable (HasSensitivity (τ, oneId::Sensitivity)))
+      addConstraint (Solvable (SetMultiplier (τ, oneId::Sensitivity)))
       restrictAll oneId -- sensitivity of everything in context must be <= 1
       mtruncateP p -- truncate it's context to p
       return (Trunc (RealP p) τ) -- also set it's type's annotation to p for putting it into the signature below

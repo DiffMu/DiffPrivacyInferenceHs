@@ -106,6 +106,24 @@ solveHasSensitivity name (τ, s) = do
          return ()
       _ -> return () -- TODO can we do more?
 
+
+instance Solve MonadDMTC SetMultiplier (DMTypeOf (AnnKind AnnS), Sensitivity) where
+  solve_ Dict _ name (SetMultiplier a) = solveSetMultiplier name a
+
+solveSetMultiplier :: forall t. IsT MonadDMTC t => Symbol -> (DMTypeOf (AnnKind AnnS), Sensitivity) -> t ()
+solveSetMultiplier name (τ, s) = do
+  case τ of
+      NoFun (τ' :@ (RealS s')) -> do
+         unify s s'
+         dischargeConstraint name
+         return ()
+      Fun τs -> do
+         mapM (\s' -> unify s s') [s'' | (_ :@ (_, s'')) <- τs]
+         dischargeConstraint name
+         return ()
+      _ -> return () -- TODO can we do more?
+
+
 -------------------------------------------------------------------
 -- Monadic monoid structure on dmtypes
 --
