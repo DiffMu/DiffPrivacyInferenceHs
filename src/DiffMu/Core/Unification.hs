@@ -75,7 +75,7 @@ instance (Show a, Unify MonadDMTC a) => Unify MonadDMTC [a] where
 
 -- Using the unification instance, we implement solving of the `IsEqual` constraint for DMTypes.
 instance Solve MonadDMTC IsEqual (DMTypeOf k, DMTypeOf k) where
-  solve_ Dict _ _ (IsEqual (a,b)) = unify_ a b >> pure ()
+  solve_ Dict _ name (IsEqual (a,b)) = unify_ a b >> dischargeConstraint name
 
 
 
