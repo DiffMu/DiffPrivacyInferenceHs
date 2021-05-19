@@ -86,7 +86,7 @@ pTuple3 a b c = between (char '(') (char ')') ((,,) <$> a <*､> b <*､> c)
 pDMTypeOp :: Parser DMTypeOp_Some
 pDMTypeOp =
       try (string ":+" >> pure (IsBinary DMOpAdd))
-  <|> try (string ":*" >> pure (IsBinary DMOpAdd))
+  <|> try (string ":*" >> pure (IsBinary DMOpMul))
   <|> try (string ":-" >> pure (IsBinary DMOpSub))
 
 with :: String -> Parser a -> Parser a
