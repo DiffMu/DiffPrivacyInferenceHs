@@ -132,6 +132,7 @@ type DMNumType = DMTypeOf NumKind
 -- NOTE: We can write `(k :: DMKind)` here, because we use the `DataKinds` ghc-extension, which allows us to use
 -- the terms in `DMKind` in a place where normally haskell types would be expected.
 data DMTypeOf (k :: DMKind) where
+  Deleted :: DMTypeOf k
 
   -- the base numeric constructors
   DMInt    :: DMTypeOf BaseNumKind
@@ -197,6 +198,7 @@ instance Show (RealizeAnn a) where
 
 -- Types are pretty printed as follows.
 instance Show (DMTypeOf k) where
+  show Deleted = "Deleted"
   show DMInt = "Int"
   show DMReal = "Real"
   show DMData = "Data"

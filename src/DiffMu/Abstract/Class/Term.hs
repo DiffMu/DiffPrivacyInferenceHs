@@ -17,6 +17,10 @@ instance (KShow x, KShow a) => Show (Sub x a k) where
 instance (KShow x, KShow a) => Show (Sub' x a k j) where
   show (x :=~ a) = show x <> " := " <> show a
 
+newtype ListK a k = ListK [a k]
+  deriving Show
+
+
 
 data Changed = IsChanged | NotChanged
   deriving (Generic, Show, Eq)
@@ -194,6 +198,13 @@ class (Monad t, Term (VarFam a) a) => MonadTerm (a :: j -> *) t where
   newVar :: (Typeable k, SingI k) => t (a k)
   addSub :: (Typeable k) => Sub (VarFam a) a k -> t ()
   getSubs :: t (Subs (VarFam a) a)
+
+class (Monad t, Term (VarFam a) a, MonadTerm a t) => MonadTermDuplication a t where
+  duplicateAllConstraints :: [SomeK (Sub (VarFam a) (ListK a))] -> t ()
+
+
+  -- addMultiSub :: (Typeable k) => Sub (VarFam a) [a] k
+
 
 
 
