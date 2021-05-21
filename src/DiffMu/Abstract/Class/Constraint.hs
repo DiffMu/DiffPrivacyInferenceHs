@@ -26,32 +26,33 @@ class TCConstraint c => Solve (isT :: (* -> *) -> Constraint) c a where
 class MonadNormalize t where
   normalizeState :: t ()
 
-data Solvable isT where
-  Solvable :: (Solve isT c a, (HasNormalize isT a), Show (c a), Typeable c, Typeable a) => c a -> Solvable isT
+data Solvable (extraConstr :: * -> Constraint) isT where
+  Solvable :: (Solve isT c a, (HasNormalize isT a), Show (c a), Typeable c, Typeable a, extraConstr a) => c a -> Solvable extraConstr isT
 
 -- solve' :: (Solve isT c a, IsT isT t, Normalize (t) a) => c a -> t ()
-solve :: (Monad (t), IsT isT t) => SolvingMode -> Symbol -> (Solvable isT) -> t ()
-solve mode name (Solvable (c :: c a) :: Solvable isT) = f Proxy
+solve :: (Monad (t), IsT isT t) => SolvingMode -> Symbol -> (Solvable eC isT) -> t ()
+solve mode name (Solvable (c :: c a) :: Solvable eC isT) = f Proxy
   where f :: (Monad (t), IsT isT t) => Proxy (t) -> t ()
         f (_ :: Proxy (t)) = (insideConstr normalize c >>= solve_ @isT Dict mode name)
 
 
-instance (isT t, Monad (t)) => Normalize (t) (Solvable isT) where
+instance (isT t, Monad (t)) => Normalize (t) (Solvable eC isT) where
   normalize (Solvable (c :: c a)) = (Solvable @isT <$> insideConstr (normalize @(t)) c)
 
-instance Show (Solvable isT) where
+instance Show (Solvable eC isT) where
   show (Solvable c) = show c
 
 data CloseConstraintSetResult = ConstraintSet_WasEmpty | ConstraintSet_WasNotEmpty
 
 class (Monad t) => MonadConstraint isT t | t -> isT where
 -- class (IsT isT t) => MonadConstraint v isT t e | t -> isT where
+  type ConstraintOnSolvable t :: * -> Constraint
   type ConstraintBackup t
-  addConstraint :: Solvable isT -> t Symbol
-  getUnsolvedConstraintMarkNormal :: t (Maybe (Symbol , Solvable isT))
+  addConstraint :: Solvable (ConstraintOnSolvable t) isT -> t Symbol
+  getUnsolvedConstraintMarkNormal :: t (Maybe (Symbol , Solvable (ConstraintOnSolvable t) isT))
   dischargeConstraint :: Symbol -> t ()
   failConstraint :: Symbol -> t ()
-  updateConstraint :: Symbol -> Solvable isT -> t ()
+  updateConstraint :: Symbol -> Solvable (ConstraintOnSolvable t) isT -> t ()
   openNewConstraintSet :: t ()
   mergeTopConstraintSet :: t CloseConstraintSetResult
   tracePrintConstraints :: t ()
@@ -60,11 +61,11 @@ class (Monad t) => MonadConstraint isT t | t -> isT where
   -- restoreConstraints :: ConstraintBackup t -> t ()
 
 
-(==!) :: (MonadConstraint isT t, Solve isT IsEqual (a,a), (HasNormalize isT a), Show (a), Typeable a, IsT isT t) => a -> a -> t ()
+(==!) :: (MonadConstraint isT t, Solve isT IsEqual (a,a), (HasNormalize isT a), Show (a), Typeable a, IsT isT t, ConstraintOnSolvable t (a,a)) => a -> a -> t ()
 (==!) a b = addConstraint (Solvable (IsEqual (a,b))) >> pure ()
 
 -- An abbreviation for adding a less equal constraint.
-(≤!) :: (MonadConstraint isT t, Solve isT IsLessEqual (a,a), (HasNormalize isT a), Show (a), Typeable a, IsT isT t) => a -> a -> t ()
+(≤!) :: (MonadConstraint isT t, Solve isT IsLessEqual (a,a), (HasNormalize isT a), Show (a), Typeable a, IsT isT t, ConstraintOnSolvable t (a,a)) => a -> a -> t ()
 (≤!) a b = addConstraint (Solvable (IsLessEqual (a,b))) >> pure ()
 
 
@@ -148,7 +149,7 @@ instance TCConstraint SetMultiplier where
 -- Returns if no "changed" constraints remains.
 -- An unchanged constraint is marked "changed", if it is affected by a new substitution.
 -- A changed constraint is marked "unchanged" if it is read by a call to `getUnsolvedConstraintMarkNormal`.
-solveAllConstraints :: forall isT t. (MonadConstraint isT t, MonadNormalize t, IsT isT t) => SolvingMode -> t ()
+solveAllConstraints :: forall isT t eC. (MonadConstraint isT t, MonadNormalize t, IsT isT t) => SolvingMode -> t ()
 solveAllConstraints mode = do
   normalizeState
   openConstr <- getUnsolvedConstraintMarkNormal

@@ -1,4 +1,6 @@
 
+{-# LANGUAGE UndecidableInstances #-}
+
 module DiffMu.Core.TC where
 
 import DiffMu.Prelude
@@ -8,6 +10,10 @@ import {-# SOURCE #-} DiffMu.Core.Definitions
 
 data Full
 
+
+class (FreeVars TVarOf x, Substitute TVarOf DMTypeOf x) => GoodConstraintContent (x :: *) where
+instance (FreeVars TVarOf x, Substitute TVarOf DMTypeOf x) => GoodConstraintContent x where
+
 class (MonadImpossible (t), MonadWatch (t),
        MonadTerm DMTypeOf (t), MonadTerm SymTerm (t),
        MonadState (Full) (t),
@@ -16,6 +22,7 @@ class (MonadImpossible (t), MonadWatch (t),
        -- MonadConstraint' Symbol (TC) (t),
        -- MonadConstraint Symbol (MonadDMTC) (t),
        MonadConstraint (MonadDMTC) (t),
-       MonadNormalize t
+       MonadNormalize t,
+       ConstraintOnSolvable t ~ GoodConstraintContent
        -- LiftTC t
-      ) => MonadDMTC t where
+      ) => MonadDMTC (t :: * -> *) where

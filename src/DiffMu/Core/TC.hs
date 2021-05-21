@@ -36,6 +36,8 @@ inftyS = constCoeff Infty
 inftyP :: Privacy
 inftyP = (constCoeff Infty, constCoeff Infty)
 
+instance (Substitute v x a, Substitute v x b, Substitute v x c) => Substitute v x (a, b, c) where
+  substitute σs (a, b, c) = (,,) <$> substitute σs a <*> substitute σs b <*> substitute σs c
 
 instance (Substitute v x a, Substitute v x b) => Substitute v x (a :& b) where
   substitute σs (a :@ b) = (:@) <$> substitute σs a <*> substitute σs b
@@ -64,11 +66,22 @@ instance (Typeable a, Typeable v, Substitute v a DMType) => Substitute v a (With
 --instance Substitute TVarOf DMTypeOf Privacy where
 --  substitute σs η = pure η
 
+instance Substitute v a x => Substitute v a (H.HashMap k x) where
+  substitute σs h = mapM (substitute σs) h
+
+instance Substitute TVarOf DMTypeOf (SVarOf k) where
+  substitute σs = pure
+
+instance Substitute TVarOf DMTypeOf DMTypeOp where
+  substitute σs (UnaryNum op arg res) = (UnaryNum op <$> substitute σs arg <*> substitute σs res)
+  substitute σs (BinaryNum op args res) = (BinaryNum op <$> substitute σs args <*> substitute σs res)
+
 instance Substitute TVarOf DMTypeOf (RealizeAnn a) where
   substitute σs (RealS s) = RealS <$> (substitute σs s)
   substitute σs (RealP s) = RealP <$> (substitute σs s)
 
 instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
+  substitute σs Deleted = pure Deleted
   substitute σs L1 = pure L1
   substitute σs L2 = pure L2
   substitute σs LInf = pure LInf
@@ -100,6 +113,7 @@ instance Substitute SVarOf SensitivityOf (RealizeAnn a) where
   substitute σs (RealP s) = RealP <$> (substitute σs s)
 
 instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
+  substitute σs Deleted = pure Deleted
   substitute σs L1 = pure L1
   substitute σs L2 = pure L2
   substitute σs LInf = pure LInf
@@ -135,11 +149,17 @@ instance FreeVars v a => FreeVars v [a] where
   freeVars [] = []
   freeVars (τ:τs) = freeVars τ <> freeVars τs
 
+instance (Typeable x, FreeVars v a, FreeVars v x) => FreeVars v (H.HashMap x a) where
+  freeVars h = freeVars (H.toList h)
+
 instance (FreeVars v a, FreeVars v b) => FreeVars v (a :& b) where
   freeVars (a :@ b) = freeVars a <> freeVars b
 
 instance (FreeVars v a, FreeVars v b) => FreeVars v (a , b) where
   freeVars (a, b) = freeVars a <> freeVars b
+
+instance (FreeVars v a, FreeVars v b, FreeVars v c) => FreeVars v (a , b, c) where
+  freeVars (a, b, c) = freeVars a <> freeVars b <> freeVars c
 
 instance (FreeVars v a) => FreeVars v (Maybe a) where
   freeVars (Just a) = freeVars a
@@ -151,11 +171,19 @@ instance FreeVars TVarOf Sensitivity where
 instance FreeVars TVarOf JuliaType where
   freeVars _ = mempty
 
+instance Typeable k => FreeVars TVarOf (SVarOf k) where
+  freeVars = mempty
+
+instance FreeVars TVarOf DMTypeOp where
+  freeVars (UnaryNum op arg res) = freeVars arg <> freeVars res
+  freeVars (BinaryNum op arg res) = freeVars arg <> freeVars res
+
 instance Typeable a => FreeVars TVarOf (RealizeAnn a) where
   freeVars (RealS s) = freeVars s
   freeVars (RealP s) = freeVars s
 
 instance Typeable k => FreeVars TVarOf (DMTypeOf k) where
+  freeVars Deleted = []
   freeVars DMInt = []
   freeVars DMReal = []
   freeVars DMData = []
@@ -183,16 +211,53 @@ instance Typeable k => FreeVars TVarOf (DMTypeOf k) where
 
 
 
+-- substituteMultipleType :: TVarOf k -> [DMTypeOf k] -> DMTypeOf j -> [DMTypeOf j]
+-- substituteMultipleType :: [Sub TVarOf DMTypeOf k] -> DMTypeOf j -> [DMTypeOf j]
+-- substituteMultipleType [] τ = []
+-- substituteMultipleType _ τ = []
 
+compareVar :: KEq a => SomeK a -> SomeK a -> Bool
+compareVar (SomeK (x :: a k)) (SomeK (y :: a k2)) =
+    case testEquality (typeRep @k) (typeRep @k2) of
+      Just Refl -> x == y
+      Nothing -> False
 
+-- duplicateTerm :: forall a v x t k. (MonadImpossible t, MonadWatch t, MonadTerm a t,  Substitute v a x, (v ~ VarFam a), FreeVars v x, Typeable k, SingI k, KHashable v) => Proxy a -> [SomeK (Sub v a)] -> Int -> x -> t (Maybe [x])
+duplicateTerm :: forall a v x t. (MonadInternalError t, MonadImpossible t, MonadWatch t, MonadTerm a t,  Substitute v a x, (v ~ VarFam a), FreeVars v x, KHashable v, KShow a, KShow v) => [SomeK (Sub v (ListK a))] -> x -> t (Maybe [x])
+duplicateTerm subs τ = do
+  let vars = [SomeK v | (SomeK (v := _)) <- subs]
+  -- first we check if the term we want to duplicate actually contains any
+  -- of the variables which we duplicate
+  let (free :: [SomeK (VarFam a)]) = freeVars τ
+  let someVarInFree = and [compareVar v w | v <- vars, w <- free]
 
+  case someVarInFree of
+    -- if it does not contain variables to duplicate we simply return it
+    False -> return Nothing
 
-  -- substituteAll σ (VarNum t) = pure $ VarNum t
-  -- substituteAll σ (ConstNum t s) = pure $ ConstNum t s
-  -- substituteAll σ (TVar a) = σ a
-  -- substituteAll σ (t :->: s) = (:->:) <$> (σ ↷ t) <*> substituteAll σ s
+    -- else we replace the given variables by new ones
+    True -> do
+      -- `f` takes a term x and replaces all occurences of `vars` by the i'th substitutions
+      let f :: x -> Int -> t x
+          f t i = do
+            -- we extract the i'th substitutions from subs
+            let varSubs = [(SomeK v , SomeK (xs !! i)) | SomeK (v := ListK xs) <- subs]
+            -- we have to wrap this list of substitutions into a `Subs` container, since this is
+            -- the format which is expected by the `↷` function which executes the actual substitution
+            let varSubs' = Subs (H.fromList varSubs)
+            varSubs' ↷ t
 
--- instance (ModuleM t m a, ModuleM t m b) => ModuleM t m (a :& b) where
+      -- we get the length of the substitions
+      let sub_lengths = [length xs | SomeK (_ := ListK xs) <- subs]
+      case sub_lengths of
+        [] -> return Nothing
+        (n:ns) -> case and ((== n) <$> ns) of
+          False -> internalError $ "Encountered a 'duplication substitution' whose entries had different lengths:\n" <> show subs
+          True -> do
+            -- we execute the function f on τ, while taking the subs number {0, ..., n-1}
+            τs <- mapM (f τ) [0..n-1]
+            return (Just τs)
+
 
 instance Substitute SVarOf SensitivityOf (SensitivityOf k) where
   substitute (σs :: forall k. (Typeable k) => SVarOf k -> t (SensitivityOf k)) s = substitute f s
@@ -223,7 +288,8 @@ type SSubs = Subs SensitivityOf
 
 
 
-
+class (FreeVars TVarOf x, Substitute TVarOf DMTypeOf x) => GoodConstraintContent (x :: *) where
+instance (FreeVars TVarOf x, Substitute TVarOf DMTypeOf x) => GoodConstraintContent x where
 
 
 class (MonadImpossible (t), MonadWatch (t),
@@ -234,9 +300,10 @@ class (MonadImpossible (t), MonadWatch (t),
        -- MonadConstraint' Symbol (TC) (t),
        -- MonadConstraint Symbol (MonadDMTC) (t),
        MonadConstraint (MonadDMTC) (t),
-       MonadNormalize t
+       MonadNormalize t,
+       ConstraintOnSolvable t ~ GoodConstraintContent
        -- LiftTC t
-      ) => MonadDMTC t where
+      ) => MonadDMTC (t :: * -> *) where
 
 data Tag = DM
 
@@ -273,10 +340,11 @@ data CtxStack v a = CtxStack
     _topctx :: Ctx v a,
     _otherctxs :: [Ctx v a]
   }
-type ConstraintCtx = AnnNameCtx (CtxStack Symbol (Watched (Solvable MonadDMTC)))
+type ConstraintCtx = AnnNameCtx (CtxStack Symbol (Watched (Solvable GoodConstraintContent MonadDMTC)))
 instance DictKey v => DictLike v x (CtxStack v x) where
   setValue k v (CtxStack d other) = CtxStack (setValue k v d) other
   getValue k (CtxStack d _) = getValue k d
+  getAllKeys (CtxStack d _) = getAllKeys d
   deleteValue k (CtxStack d other) = CtxStack (deleteValue k d) other
   emptyDict = CtxStack emptyDict []
   isEmptyDict (CtxStack top others) = isEmptyDict top
@@ -400,10 +468,9 @@ data MetaCtx = MetaCtx
   {
     _sensVars :: KindedNameCtx SVarOf,
     _typeVars :: KindedNameCtx TVarOf,
-    -- _constraintVars :: NameCtx,
     _sensSubs :: Subs SVarOf SensitivityOf,
     _typeSubs :: Subs TVarOf DMTypeOf,
-    _constraints :: ConstraintCtx -- MonCom (Solvable'' TCT) Symbol,
+    _constraints :: ConstraintCtx
   }
   deriving (Generic)
 
@@ -415,8 +482,6 @@ data TCState = TCState
 
 data Full = Full
   {
-    -- _meta1 :: Meta1Ctx,
-    -- _meta0 :: Meta0Ctx extra
     _tcstate :: TCState,
     _meta :: MetaCtx,
     _types :: TypeCtxSP
@@ -431,11 +496,7 @@ class LiftTC t where
 
 type TC = TCT Identity
 
--- type STC a = TC Sensitivity a
--- type PTC a = TC Privacy a
 
--- $(makeLenses ''Meta1Ctx)
--- $(makeLenses ''Meta0Ctx)
 $(makeLenses ''AnnNameCtx)
 $(makeLenses ''CtxStack)
 $(makeLenses ''MetaCtx)
@@ -474,25 +535,7 @@ instance Show (Full) where
   show (Full tcs m γ) = "\nState:\n" <> show tcs <> "\nMeta:\n" <> show m <> "\nTypes:\n" <> show γ <> "\n"
 
 
--- modify02 :: MonadDMTC t => (Meta0Ctx e -> Meta0Ctx e) -> t e
--- modify02 f = modify (\s -> s {meta0 = f (meta0 s)})
 
--- modify0 :: MonadDMTC t => (Meta0Ctx e -> Meta0Ctx e) -> t ()
--- modify0 f = modify (\s -> s {meta0 = f (meta0 s)})
-
--- modify1 :: MonadDMTC t => (Meta1Ctx -> Meta1Ctx) -> t ()
--- modify1 f = modify (\s -> s {meta1 = f (meta1 s)})
-
--- state0 :: MonadDMTC t => (Meta0Ctx e -> (a, Meta0Ctx e)) -> t a
--- state0 f = state (\s -> let (a,b) = f (meta0 s)
---                         in (a, s {meta0 = b}))
-
--- state1 :: MonadDMTC t => (Meta1Ctx -> (a, Meta1Ctx)) -> t a
--- state1 f = state (\s -> let (a,b) = f (meta1 s)
---                         in (a, s {meta1 = b}))
-
--- instance Default (Meta1Ctx) where
--- instance Default (Meta0Ctx e) where
 instance Default (CtxStack v a) where
   def = CtxStack def []
 instance Default (Watcher) where
@@ -501,12 +544,7 @@ instance Default (MetaCtx) where
 instance Default (Full) where
   def = Full def def (Left def)
 
-  -- Full ::  NameCtx -> NameCtx -> NameCtx -> Subs DMType -> ConstraintOlds -> Ctx extra -> Full extra
-  -- deriving (Generic, Show)
 
--- type TC extra = StateT (Full extra) (Except DMException)
--- newtype TC extra a = TC {runTC :: (StateT (Full extra) (Except DMException) a)}
---   deriving (Functor, Applicative, Monad, MonadState (Full extra), MonadError DMException)
 instance (SemigroupM t a) => SemigroupM t (Watched a) where
   (⋆) (Watched x a) (Watched y b) = Watched (x <> y) <$> a ⋆ b
 
@@ -517,11 +555,11 @@ instance (MonoidM t a) => MonoidM t (Watched a) where
 instance (CheckNeutral t a) => CheckNeutral t (Watched a) where
   checkNeutral a = pure False
 
-instance Monad t => (SemigroupM t (Solvable a)) where
+instance Monad t => (SemigroupM t (Solvable eC a)) where
   (⋆) (Solvable a) (Solvable b) = error "Trying to combine two constraints with the same name."
-instance Monad t => (MonoidM t (Solvable a)) where
+instance Monad t => (MonoidM t (Solvable eC a)) where
   neutral = error "Trying to get neutral of solvable"
-instance Monad t => (CheckNeutral t (Solvable a)) where
+instance Monad t => (CheckNeutral t (Solvable eC a)) where
   checkNeutral a = pure False
 
 
@@ -546,11 +584,62 @@ instance Monad m => MonadTerm SensitivityOf (TCT m) where
     meta.sensVars %= (removeNameBySubstitution σ)
   newVar = coerce <$> svar <$> newSVar "s"
 
--- getUnsolved :: MonCom (Solvable' TC) Symbol -> Maybe (Symbol, Solvable' TC)
--- getUnsolved = undefined
+instance Monad m => MonadTermDuplication DMTypeOf (TCT m) where
+  duplicateAllConstraints subs = do
+
+    ------------------------------------
+    -- duplicating all constraints which contain the given vars
+    --
+    -- NOTE: We only duplicate in the top ConstraintCtx in the CtxStack.
+    --       We might want to check that the vars actually do
+    --       not appear in the lower ConstraintCtx's.
+    --       (Or duplicate them there too?)
+    --
+    -- 1. get all the constraint (names) from the ctx stack
+    (AnnNameCtx _ ctrs) <- use (meta.constraints)
+    let ctr_names = getAllKeys ctrs
+
+    -- 2. Build a function which takes a constraint name,
+    --    and duplicates the corresponding constraint if necessary
+    let f :: Symbol -> TCT m ()
+        f name = do
+          case getValue name ctrs of
+            Nothing -> return ()
+            Just (Watched _ (Solvable (ctr :: c a))) -> do
+              duplicated <- duplicateTerm subs (runConstr ctr)
+              case duplicated of
+                -- if the constraint was not actually duplicated,
+                -- this means that the variables did not occur inside
+                -- and we do not have to change this constraint
+                Nothing -> return ()
+
+                -- if we do get duplicated constraints, we discharge the
+                -- actual constraint, and add a new constraint for every copy
+                Just duplicated -> do dischargeConstraint name
+                                      mapM_ (\newctr -> addConstraint (Solvable (constr @c newctr))) duplicated
+
+    --
+    -- 3. Apply the function to all constraint names
+    mapM f ctr_names
+
+
+    ------------------------------------
+    -- set all variables to `Deleted`:
+    --
+    -- 1. build subs which set them to deleted, and put the actions of doing so into a list
+    let σ = [addSub (x := Deleted) | SomeK (x := _) <- subs]
+
+    -- 2. execute all these (monadic) actions
+    sequence σ
+
+    -- And we are done.
+    return ()
+
+
 
 instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
-  type ConstraintBackup (TCT m) = (Ctx Symbol (Watched (Solvable MonadDMTC)))
+  type ConstraintBackup (TCT m) = (Ctx Symbol (Watched (Solvable GoodConstraintContent MonadDMTC)))
+  type ConstraintOnSolvable (TCT m) = GoodConstraintContent
   addConstraint c = meta.constraints %%= (newAnnName "constr" (Watched IsChanged c))
   getUnsolvedConstraintMarkNormal = do
     (Ctx (MonCom constrs)) <- use (meta.constraints.anncontent.topctx)
@@ -591,7 +680,7 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
 
   getConstraintsByType (Proxy :: Proxy (c a)) = do
     (Ctx (MonCom cs)) <- use (meta.constraints.anncontent.topctx)
-    let f :: (Watched (Solvable MonadDMTC)) -> Maybe (c a)
+    let f :: (Watched (Solvable GoodConstraintContent MonadDMTC)) -> Maybe (c a)
         f (Watched _ (Solvable (c :: c' a'))) = case testEquality (typeRep @(c a)) (typeRep @(c' a')) of
           Just Refl -> Just c
           Nothing -> Nothing
@@ -672,13 +761,13 @@ instance Monad m => MonadWatch (TCT m) where
 
 
 
-supremum :: (IsT isT t, HasNormalize isT (a k, a k, a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsSupremum (a k, a k, a k), SingI k, Typeable k) => (a k) -> (a k) -> t (a k)
+supremum :: (IsT isT t, HasNormalize isT (a k, a k, a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsSupremum (a k, a k, a k), SingI k, Typeable k, ConstraintOnSolvable t (a k, a k, a k)) => (a k) -> (a k) -> t (a k)
 supremum x y = do
   (z :: a k) <- newVar
   addConstraint (Solvable (IsSupremum (x, y, z)))
   return z
 
-infimum :: (IsT isT t, HasNormalize isT (a k, a k, a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsInfimum (a k, a k, a k), SingI k, Typeable k) => (a k) -> (a k) -> t (a k)
+infimum :: (IsT isT t, HasNormalize isT (a k, a k, a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsInfimum (a k, a k, a k), SingI k, Typeable k, ConstraintOnSolvable t (a k, a k, a k)) => (a k) -> (a k) -> t (a k)
 infimum x y = do
   (z :: a k) <- newVar
   addConstraint (Solvable (IsInfimum (x, y, z)))
@@ -808,6 +897,7 @@ newSVar hint = meta.sensVars %%= (newKindedName hint)
   --         let (τ , s') = newName hint s
   --         in (TVar τ , Meta1Ctx s t c)
 
+-- instance (MonadDMTC t, GoodConstraintContent a) => ConstraintOnSolvable t a where
 
 ------------------------------------------------------------------------
 -- unification of sensitivities

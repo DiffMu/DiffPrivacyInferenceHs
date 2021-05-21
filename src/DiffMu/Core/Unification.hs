@@ -35,6 +35,8 @@ instance Unify MonadDMTC (WithRelev e) where
 
 -- Unification of DMTypes (of any kind k) is given by:
 instance Unify MonadDMTC (DMTypeOf k) where
+  unify_ Deleted a                     = internalError "A deleted variable reappeared and tried to escape via unification."
+  unify_ a Deleted                     = internalError "A deleted variable reappeared and tried to escape via unification."
   unify_ DMReal DMReal                 = pure DMReal
   unify_ DMInt DMInt                   = pure DMInt
   unify_ DMData DMData                 = pure DMData
