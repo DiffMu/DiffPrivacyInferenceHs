@@ -25,7 +25,7 @@ returnFun :: Maybe [JuliaType] -> DMFun -> TC (DMTypeOf (AnnKind AnnS))
 returnFun sign τ = do
   a <- newVar
   mscale a
-  return (Fun [(τ :@ (sign , a))])
+  return (Fun [(ForAll [] τ :@ (sign , a))])
 
 
 ------------------------------------------------------------------------
@@ -201,7 +201,7 @@ checkSen' (Apply f args) scope = do
   τ_ret <- newVar -- a type var for the function return type
 
   -- addConstraint (Solvable (IsLessEqual (τ_lam, Fun [(argτs :->: τ_ret) :@ (Nothing, oneId)])))
-  addConstraint (Solvable (IsFunctionArgument (τ_lam, Fun [(argτs :->: τ_ret) :@ (Nothing, oneId)])))
+  addConstraint (Solvable (IsFunctionArgument (τ_lam, Fun [(ForAll [] (argτs :->: τ_ret)) :@ (Nothing, oneId)])))
   return τ_ret
 
   {-
@@ -374,7 +374,7 @@ checkSen' (MCreate n m body) scope =
 
           -- unify with expected type to set sensitivity (dimension penalty) and extract return type
           τbody <- newVar
-          let τ_expected = Fun [([NoFun (Numeric (NonConst DMInt) :@ RealS inftyS) , NoFun (Numeric (NonConst DMInt) :@ RealS inftyS)] :->: (NoFun (τbody :@ RealS oneId)) :@ (Nothing , (nv ⋅! mv)))]
+          let τ_expected = Fun [(ForAll [] ([NoFun (Numeric (NonConst DMInt) :@ RealS inftyS) , NoFun (Numeric (NonConst DMInt) :@ RealS inftyS)] :->: (NoFun (τbody :@ RealS oneId))) :@ (Nothing , (nv ⋅! mv)))]
           τ_expected ==! τ
           return τbody
 
@@ -510,7 +510,7 @@ checkPri' (Apply f args) scope = let
 
       τ_ret <- newVar -- a type var for the function return type
 
-      addConstraint (Solvable (IsFunctionArgument (τ_lam, Fun [(argτs :->*: τ_ret) :@ (Nothing, oneId)])))
+      addConstraint (Solvable (IsFunctionArgument (τ_lam, Fun [(ForAll [] (argτs :->*: τ_ret)) :@ (Nothing, oneId)])))
       return τ_ret
 {-
 checkPri' (Loop it cs (xi, xc) b) scope = do

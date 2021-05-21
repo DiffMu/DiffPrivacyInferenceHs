@@ -86,14 +86,14 @@ solveIsFunctionArgument name (b, NoFun a1) = do
 
 -- if the given argument and expected argument are both functions / collections of functions
 solveIsFunctionArgument name (Fun xs, Fun ys) = do
-  let wantedFunctions :: [DMFun :& Sensitivity]
+  let wantedFunctions :: [DMTypeOf ForAllKind :& Sensitivity]
       wantedFunctions = [f :@ a | (f :@ (_ , a)) <- ys]
-  let existingFunctions :: [([JuliaType], (DMFun :& Sensitivity, Sensitivity))]
+  let existingFunctions :: [([JuliaType], (DMTypeOf ForAllKind :& Sensitivity, Sensitivity))]
       existingFunctions = [(jts , ((f :@ a), zeroId)) | (f :@ (Just jts , a)) <- xs]
 
   -- We check if there were any functions in xs (those which are given by a dict), which did not have a
   -- julia type annotation
-  let existingFunctionsWithoutJuliaType :: [DMFun]
+  let existingFunctionsWithoutJuliaType :: [DMTypeOf ForAllKind]
       existingFunctionsWithoutJuliaType = [f | (f :@ (Nothing , _)) <- xs]
 
   case existingFunctionsWithoutJuliaType of
@@ -120,19 +120,19 @@ instance Solve MonadDMTC IsFunctionArgument (DMTypeOf (AnnKind a), DMTypeOf (Ann
 -- IsChoice constraints
 -- these are created from IsFunctionArgument constraints if both sides are actually functions.
 
-type ChoiceHash = HashMap [JuliaType] ((DMFun :& Sensitivity), Sensitivity)
+type ChoiceHash = HashMap [JuliaType] ((DMTypeOf ForAllKind :& Sensitivity), Sensitivity)
 
 -- hash has the existing methods, list has the required methods.
-instance Solve MonadDMTC IsChoice (ChoiceHash, [DMFun :& Sensitivity]) where
+instance Solve MonadDMTC IsChoice (ChoiceHash, [DMTypeOf ForAllKind :& Sensitivity]) where
   solve_ Dict _ name (IsChoice arg) = solveIsChoice name arg
 
 -- see if the constraint can be resolved. might update the IsCHoice constraint, do nothing, or discharge.
 -- might produce new IsFunctionArgument constraints for the arguments.
-solveIsChoice :: forall t. IsT MonadDMTC t => Symbol -> (ChoiceHash, [DMFun :& Sensitivity]) -> t ()
+solveIsChoice :: forall t. IsT MonadDMTC t => Symbol -> (ChoiceHash, [DMTypeOf ForAllKind :& Sensitivity]) -> t ()
 solveIsChoice name (provided, required) = do
    -- remove all choices from the "required" list that have a unique match in the "provided" hashmap.
    -- when a choice is resolved, the corresponding counter in the hashmap is incremented by one.
-   let matchArgs ::  ChoiceHash -> [DMFun :& Sensitivity] -> t (ChoiceHash, [DMFun :& Sensitivity])
+   let matchArgs ::  ChoiceHash -> [DMTypeOf ForAllKind :& Sensitivity] -> t (ChoiceHash, [DMTypeOf ForAllKind :& Sensitivity])
        matchArgs curProv curReq = do
           case curReq of
              [] -> return (curProv, [])
@@ -245,7 +245,7 @@ noJuliaFunction :: forall e. (DMExtra e) => DMTypeOf (AnnKind e) -> Bool
 noJuliaFunction τ = (juliatypes τ == [JuliaType "Function"])
 
 -- when a method is matched to it's call, we need to generate new IsFunctionArgument constraints for args and ret type.
-generateApplyConstraints :: forall t. IsT MonadDMTC t => DMFun -> DMFun -> t ()
+generateApplyConstraints :: forall t. IsT MonadDMTC t => DMTypeOf ForAllKind -> DMTypeOf ForAllKind -> t ()
 generateApplyConstraints method applicand = do
    -- 'method' is the function that is called in the julia runtime where 'applicand' came out of typechecking Apply term.
    -- they hence have to be the same type, except when one of their arguments is itself a function, in which case we need to

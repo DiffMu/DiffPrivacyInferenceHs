@@ -98,6 +98,7 @@ data DMKind =
   | FunKind
   | NoFunKind
   | AnnKind Annotation
+  | ForAllKind
   deriving (Typeable)
 
 -- Using the "TemplateHaskell" ghc-extension, and the following function from the singletons library,
@@ -115,6 +116,7 @@ instance Show DMKind where
   show FunKind = "Fun"
   show NoFunKind = "NoFun"
   show (AnnKind a) = "Ann"
+  show ForAllKind = "ForAll"
 
 --------------------
 -- 2. DMTypes
@@ -175,14 +177,17 @@ data DMTypeOf (k :: DMKind) where
   -- choices
   DMChoice :: [DMType :& (Maybe [JuliaType], Sensitivity)] -> DMType
 
+  -- foralls
+  ForAll :: [SomeK TVarOf] -> DMTypeOf FunKind -> DMTypeOf ForAllKind
+
   -- annotations
   Return :: DMTypeOf (AnnKind AnnS) -> DMTypeOf (AnnKind AnnP) -- we need this so we can remember what the annotation was befor return
   NoFun :: DMExtra a => (DMTypeOf NoFunKind :& RealizeAnn a) -> DMTypeOf (AnnKind a)
-  Fun :: [DMTypeOf FunKind :& (Maybe [JuliaType], Sensitivity)] -> DMTypeOf (AnnKind AnnS)
+  Fun :: [DMTypeOf ForAllKind :& (Maybe [JuliaType], Sensitivity)] -> DMTypeOf (AnnKind AnnS)
   (:∧:) :: (DMExtra a) => DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a) -- infimum
   (:↷:) :: Sensitivity -> DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a) -- scale
   Trunc :: (DMExtra a, DMExtra b) => RealizeAnn a -> DMTypeOf (AnnKind b) -> DMTypeOf (AnnKind a)
-  TruncFunc :: DMExtra a => RealizeAnn a -> [DMTypeOf FunKind :& (Maybe [JuliaType], Sensitivity)] -> DMTypeOf (AnnKind a)
+  TruncFunc :: DMExtra a => RealizeAnn a -> [DMTypeOf ForAllKind :& (Maybe [JuliaType], Sensitivity)] -> DMTypeOf (AnnKind a)
 
 type DMExtra e = (Typeable e, SingI e)
 --                   Eq (RealizeAnn e), Show (RealizeAnn e),
@@ -214,6 +219,7 @@ instance Show (DMTypeOf k) where
   show (Clip n) = "Clip(" <> show n <> ")"
   show (DMMat nrm clp n m τ) = "Matrix<n: "<> show nrm <> ", c: " <> show clp <> ">[" <> show n <> " × " <> show m <> "](" <> show τ <> ")"
   show (DMChoice cs) = "Choice{" <> show cs <> "}"
+  show (ForAll vs f) = "ForAll {" <> show vs <> "}. " <> show f
   show (NoFun x) = show x --"NoFun(" <> show x <> ")"
   show (Fun xs) = "Fun(" <> show xs <> ")"
   show (a :↷: x) = show a <> " ↷ " <> show x
