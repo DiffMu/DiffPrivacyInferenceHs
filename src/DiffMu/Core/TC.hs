@@ -906,7 +906,7 @@ normalizeAnn (Trunc η a) = do
   a' <- normalizeAnn a
   case a' of
     NoFun (x :@ η_old) -> pure $ NoFun (x :@ truncateExtra η η_old)
-    Fun xs             -> pure $ Trunc η (Fun xs)
+    Fun xs             -> pure $ TruncFunc η xs
     other              -> pure $ Trunc η other
 normalizeAnn (η :↷: a) = do
   a' <- normalizeAnn a

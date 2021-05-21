@@ -182,7 +182,7 @@ data DMTypeOf (k :: DMKind) where
   (:∧:) :: (DMExtra a) => DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a) -- infimum
   (:↷:) :: Sensitivity -> DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a) -- scale
   Trunc :: (DMExtra a, DMExtra b) => RealizeAnn a -> DMTypeOf (AnnKind b) -> DMTypeOf (AnnKind a)
-  TruncFunc :: RealizeAnn AnnP -> [DMTypeOf FunKind :& (Maybe [JuliaType], Sensitivity)] -> DMTypeOf (AnnKind AnnP)
+  TruncFunc :: DMExtra a => RealizeAnn a -> [DMTypeOf FunKind :& (Maybe [JuliaType], Sensitivity)] -> DMTypeOf (AnnKind a)
 
 type DMExtra e = (Typeable e, SingI e)
 --                   Eq (RealizeAnn e), Show (RealizeAnn e),

@@ -62,12 +62,29 @@ instance ShowDict v k (Scope v k) where
       _  -> intercalate comma ((\(k,v) -> merge k v) <$> d')
 
 
--- Given a scope and a variable name v, we pop the topmost element from the list for v.
+-- this is called when checking Var. it looks for the given symbol in the varscope.
+-- if it does not exist, we get an error.
+-- else, we also look for the symbol in the topscope. if it exists there, we need to overwrite
+-- it with the value it has in its assigned scope. an example to clarify:
+-- function scope(z)
+--   y = 100
+--   g(x) = x+y
+--   y = g(z)    # -> we have to check g(x) with the topscope where y's entry is replaced by 100
+--   g(z)
+-- end
 popDefinition :: MonadDMTC t => DMScopes -> Symbol -> t (DMTerm, DMScopes)
-popDefinition (topscope, DMScope varscope) v = do
+popDefinition (DMScope topscope, DMScope varscope) v = do
    case H.lookup v varscope of
-      Just (x, vvarscope)  -> return (x, (topscope, vvarscope))
-      Nothing -> throwError (VariableNotInScope v)
+      Just (x, vvarscope) -> do -- vvarscope becomes the new varscope.
+         case x of
+            Choice _ -> return (x, (DMScope topscope, vvarscope))
+            _ -> case H.lookup v topscope of
+                  Just (topv, DMScope topvscope) -> do -- v is in the topscope too
+                     case H.lookup v topvscope of -- v was overwritten some time so it is in the scope it is assigned by topscope
+                        Just entry -> return (x, (DMScope (H.insert v entry topscope), vvarscope))
+                        Nothing -> return (x, (DMScope (H.delete v topscope), vvarscope))
+                  Nothing -> return (x, (DMScope topscope, vvarscope))
+      Nothing -> throwError (VariableNotInScope v) -- v was not in the varscope.
 
 -- Given a scope, a variable name v , and a DMTerm t, we push t to the list for v.
 pushDefinition :: (MonadDMTC t) => DMScopes -> Symbol -> DMTerm -> t DMScopes
