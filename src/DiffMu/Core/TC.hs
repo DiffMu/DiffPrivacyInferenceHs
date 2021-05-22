@@ -96,6 +96,7 @@ instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs (TVar x) = σs x
   substitute σs (τ1 :->: τ2) = (:->:) <$> substitute σs τ1 <*> substitute σs τ2
   substitute σs (τ1 :->*: τ2) = (:->*:) <$> substitute σs τ1 <*> substitute σs τ2
+  substitute σs (ForAll vs τ) = ForAll vs <$> undefined
   substitute σs (DMTup τs) = DMTup <$> substitute σs τs
   substitute σs (DMMat nrm clp n m τ) = DMMat nrm clp <$> substitute σs n <*> substitute σs m <*> substitute σs τ
   substitute σs (DMChoice xs) = DMChoice <$> substitute σs xs
@@ -145,25 +146,9 @@ instance Term TVarOf DMTypeOf where
   isVar (TVar x) = Just x
   isVar _        = Nothing
 
-instance FreeVars v a => FreeVars v [a] where
-  freeVars [] = []
-  freeVars (τ:τs) = freeVars τ <> freeVars τs
-
-instance (Typeable x, FreeVars v a, FreeVars v x) => FreeVars v (H.HashMap x a) where
-  freeVars h = freeVars (H.toList h)
-
 instance (FreeVars v a, FreeVars v b) => FreeVars v (a :& b) where
   freeVars (a :@ b) = freeVars a <> freeVars b
 
-instance (FreeVars v a, FreeVars v b) => FreeVars v (a , b) where
-  freeVars (a, b) = freeVars a <> freeVars b
-
-instance (FreeVars v a, FreeVars v b, FreeVars v c) => FreeVars v (a , b, c) where
-  freeVars (a, b, c) = freeVars a <> freeVars b <> freeVars c
-
-instance (FreeVars v a) => FreeVars v (Maybe a) where
-  freeVars (Just a) = freeVars a
-  freeVars (Nothing) = mempty
 
 instance FreeVars TVarOf Sensitivity where
   freeVars _ = mempty
@@ -216,11 +201,7 @@ instance Typeable k => FreeVars TVarOf (DMTypeOf k) where
 -- substituteMultipleType [] τ = []
 -- substituteMultipleType _ τ = []
 
-compareVar :: KEq a => SomeK a -> SomeK a -> Bool
-compareVar (SomeK (x :: a k)) (SomeK (y :: a k2)) =
-    case testEquality (typeRep @k) (typeRep @k2) of
-      Just Refl -> x == y
-      Nothing -> False
+
 
 -- duplicateTerm :: forall a v x t k. (MonadImpossible t, MonadWatch t, MonadTerm a t,  Substitute v a x, (v ~ VarFam a), FreeVars v x, Typeable k, SingI k, KHashable v) => Proxy a -> [SomeK (Sub v a)] -> Int -> x -> t (Maybe [x])
 duplicateTerm :: forall a v x t. (MonadInternalError t, MonadImpossible t, MonadWatch t, MonadTerm a t,  Substitute v a x, (v ~ VarFam a), FreeVars v x, KHashable v, KShow a, KShow v) => [SomeK (Sub v (ListK a))] -> x -> t (Maybe [x])
@@ -229,7 +210,7 @@ duplicateTerm subs τ = do
   -- first we check if the term we want to duplicate actually contains any
   -- of the variables which we duplicate
   let (free :: [SomeK (VarFam a)]) = freeVars τ
-  let someVarInFree = and [compareVar v w | v <- vars, w <- free]
+  let someVarInFree = or [compareVar v w | v <- vars, w <- free]
 
   case someVarInFree of
     -- if it does not contain variables to duplicate we simply return it

@@ -5,6 +5,7 @@ module DiffMu.Abstract.Data.MonComCtx where
 
 import DiffMu.Prelude
 import DiffMu.Abstract.Data.MonadicPolynomial
+import DiffMu.Abstract.Class.Term
 
 import Data.HashMap.Strict as H
 
@@ -12,6 +13,8 @@ newtype Ctx v x = Ctx (MonCom x v)
   deriving (Generic, DictLike v x)
 instance (Normalize t x) => Normalize t (Ctx v x) where
   normalize (Ctx m) = Ctx <$> normalize m
+
+deriving instance (Typeable a, Typeable v, Typeable b, KEq v, FreeVars v a, FreeVars v b) => FreeVars v (Ctx a b)
 
 instance Functor (Ctx v) where
   fmap f (Ctx (MonCom m)) = Ctx (MonCom (H.map f m))

@@ -16,6 +16,7 @@ newtype MonCom m v = MonCom (HashMap v m)
   deriving (Generic, Show, Hashable, Eq)
 instance Default (MonCom m v) where
   def = MonCom H.empty
+deriving instance (Typeable a, Typeable v, Typeable b, KEq v, FreeVars v a, FreeVars v b) => FreeVars v (MonCom a b)
 
 class (MonoidM t m, CheckNeutral t m, Eq v, Hashable v)    => HasMonCom t m v
 instance (MonoidM t m, CheckNeutral t m, Eq v, Hashable v) => HasMonCom t m v

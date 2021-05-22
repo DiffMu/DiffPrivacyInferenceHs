@@ -21,6 +21,11 @@ newtype ListK a k = ListK [a k]
   deriving Show
 
 
+compareVar :: KEq a => SomeK a -> SomeK a -> Bool
+compareVar (SomeK (x :: a k)) (SomeK (y :: a k2)) =
+    case testEquality (typeRep @k) (typeRep @k2) of
+      Just Refl -> x == y
+      Nothing -> False
 
 data Changed = IsChanged | NotChanged
   deriving (Generic, Show, Eq)
@@ -67,6 +72,23 @@ class (Typeable v, Typeable a, forall k. Eq (v k)) => Substitute (v :: j -> *) (
 
 class (Typeable v, Typeable a, forall k. Eq (v k)) => FreeVars (v :: j -> *) (a :: *) where
   freeVars :: a -> [SomeK v]
+
+instance FreeVars v a => FreeVars v [a] where
+  freeVars [] = []
+  freeVars (τ:τs) = freeVars τ <> freeVars τs
+
+instance (Typeable x, FreeVars v a, FreeVars v x) => FreeVars v (H.HashMap x a) where
+  freeVars h = freeVars (H.toList h)
+
+instance (FreeVars v a, FreeVars v b) => FreeVars v (a , b) where
+  freeVars (a, b) = freeVars a <> freeVars b
+
+instance (FreeVars v a, FreeVars v b, FreeVars v c) => FreeVars v (a , b, c) where
+  freeVars (a, b, c) = freeVars a <> freeVars b <> freeVars c
+
+instance (FreeVars v a) => FreeVars v (Maybe a) where
+  freeVars (Just a) = freeVars a
+  freeVars (Nothing) = mempty
 
 
 
@@ -126,7 +148,11 @@ instance Show (Subs v a) where
 
 -- class Substitute (Var a) a x => VSubstitute a x where
 -- instance Substitute (Var a) a x => VSubstitute a x where
-
+removeFromSubstitution :: (Monad t, Term v a) => [SomeK v] -> (forall k. Typeable k => v k -> t (a k)) -> (forall k. Typeable k => v k -> t (a k))
+-- removeFromSubstitution vars σ x = case or [compareVar (SomeK x) v | v <- vars] of
+removeFromSubstitution vars σ x = case (SomeK x) `elem` vars of
+  True -> pure (var x)
+  False -> σ x
 
 
 trySubstitute :: (MonadImpossible t, MonadWatch t, Term v a, Typeable k) => Subs v a -> v k -> t (a k)
