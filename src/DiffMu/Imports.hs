@@ -26,7 +26,7 @@ import Data.Monoid as All hiding (Last, First, getLast, getFirst, WrapMonoid, Mo
 
 
 import Data.Default as All
-import Data.Constraint as All hiding (trans)
+import Data.Constraint as All hiding (trans, (\\))
 import Data.Type.Equality as All
 import Type.Reflection as All (Typeable, typeRep, someTypeRep, typeOf) -- hiding (Module)
 import Data.Coerce as All
@@ -36,7 +36,7 @@ import Data.Containers.ListUtils as All
 
 import GHC.Generics as All (Generic)
 
-import Data.List as All hiding (uncons, (\\))
+import Data.List as All hiding (uncons)
 import Data.Text as All (Text)
 
 import Data.Hashable as All

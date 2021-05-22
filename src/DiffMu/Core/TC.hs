@@ -96,7 +96,7 @@ instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs (TVar x) = σs x
   substitute σs (τ1 :->: τ2) = (:->:) <$> substitute σs τ1 <*> substitute σs τ2
   substitute σs (τ1 :->*: τ2) = (:->*:) <$> substitute σs τ1 <*> substitute σs τ2
-  substitute σs (ForAll vs τ) = ForAll vs <$> undefined
+  substitute σs (ForAll vs τ) = ForAll vs <$> substitute (removeFromSubstitution vs σs) τ
   substitute σs (DMTup τs) = DMTup <$> substitute σs τs
   substitute σs (DMMat nrm clp n m τ) = DMMat nrm clp <$> substitute σs n <*> substitute σs m <*> substitute σs τ
   substitute σs (DMChoice xs) = DMChoice <$> substitute σs xs
@@ -129,6 +129,7 @@ instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
   substitute σs (TVar x) = pure (TVar x)
   substitute σs (τ1 :->: τ2) = (:->:) <$> substitute σs τ1 <*> substitute σs τ2
   substitute σs (τ1 :->*: τ2) = (:->*:) <$> substitute σs τ1 <*> substitute σs τ2
+  substitute σs (ForAll vs τ) = ForAll vs <$> substitute σs τ
   substitute σs (DMTup τs) = DMTup <$> substitute σs τs
   substitute σs (DMMat nrm clp n m τ) = DMMat nrm clp <$> substitute σs n <*> substitute σs m <*> substitute σs τ
   substitute σs (DMChoice xs) = DMChoice <$> substitute σs xs
@@ -145,6 +146,9 @@ instance Term TVarOf DMTypeOf where
   var x = TVar x
   isVar (TVar x) = Just x
   isVar _        = Nothing
+
+instance DMExtra a => FreeVars TVarOf (WithRelev a) where
+  freeVars (WithRelev _ a) = freeVars a
 
 instance (FreeVars v a, FreeVars v b) => FreeVars v (a :& b) where
   freeVars (a :@ b) = freeVars a <> freeVars b
@@ -183,6 +187,7 @@ instance Typeable k => FreeVars TVarOf (DMTypeOf k) where
   freeVars (TVar x) = [SomeK x]
   freeVars (τ1 :->: τ2) = freeVars (τ1) <> freeVars τ2
   freeVars (τ1 :->*: τ2) = freeVars (τ1) <> freeVars τ2
+  freeVars (ForAll vs τ) = freeVars τ \\ vs
   freeVars (DMTup τs) = freeVars τs
   freeVars (DMMat nrm clp n m τ) = freeVars nrm <> freeVars clp <> freeVars τ
   freeVars (DMChoice choices) = freeVars choices
@@ -210,7 +215,7 @@ duplicateTerm subs τ = do
   -- first we check if the term we want to duplicate actually contains any
   -- of the variables which we duplicate
   let (free :: [SomeK (VarFam a)]) = freeVars τ
-  let someVarInFree = or [compareVar v w | v <- vars, w <- free]
+  let someVarInFree = length (vars `intersect` free) == 0
 
   case someVarInFree of
     -- if it does not contain variables to duplicate we simply return it
