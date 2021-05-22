@@ -215,14 +215,14 @@ duplicateTerm subs τ = do
   -- first we check if the term we want to duplicate actually contains any
   -- of the variables which we duplicate
   let (free :: [SomeK (VarFam a)]) = freeVars τ
-  let someVarInFree = length (vars `intersect` free) == 0
+  let noVarInFree = length (vars `intersect` free) == 0
 
-  case someVarInFree of
+  case noVarInFree of
     -- if it does not contain variables to duplicate we simply return it
-    False -> return Nothing
+    True -> return Nothing
 
     -- else we replace the given variables by new ones
-    True -> do
+    False -> do
       -- `f` takes a term x and replaces all occurences of `vars` by the i'th substitutions
       let f :: x -> Int -> t x
           f t i = do
