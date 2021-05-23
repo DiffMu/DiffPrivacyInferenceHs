@@ -201,14 +201,16 @@ instance Typeable k => FreeVars TVarOf (DMTypeOf k) where
 
 
 
--- substituteMultipleType :: TVarOf k -> [DMTypeOf k] -> DMTypeOf j -> [DMTypeOf j]
--- substituteMultipleType :: [Sub TVarOf DMTypeOf k] -> DMTypeOf j -> [DMTypeOf j]
--- substituteMultipleType [] τ = []
--- substituteMultipleType _ τ = []
 
-
-
--- duplicateTerm :: forall a v x t k. (MonadImpossible t, MonadWatch t, MonadTerm a t,  Substitute v a x, (v ~ VarFam a), FreeVars v x, Typeable k, SingI k, KHashable v) => Proxy a -> [SomeK (Sub v a)] -> Int -> x -> t (Maybe [x])
+-- Given a list of "multi substitutions", i.e. substitutions of the form
+-- [a := ListK [a1, a2, a3], b := ListK [b1, b2, b3], ...] and type τ,
+-- it returns (Just [τ1, τ2, τ3]) where
+--   τ1 = τ[a := a1, b := b1, ...]
+--   τ2 = τ[a := a2, b := b2, ...]
+-- And it returns Nothing if none of the substitutions could be applied.
+--
+-- NOTE: The given lists of replacements must all have the same length,
+--       otherwise an error will be thrown.
 duplicateTerm :: forall a v x t. (MonadInternalError t, MonadImpossible t, MonadWatch t, MonadTerm a t,  Substitute v a x, (v ~ VarFam a), FreeVars v x, KHashable v, KShow a, KShow v) => [SomeK (Sub v (ListK a))] -> x -> t (Maybe [x])
 duplicateTerm subs τ = do
   let vars = [SomeK v | (SomeK (v := _)) <- subs]
