@@ -86,10 +86,10 @@ solveIsFunctionArgument name (b, NoFun a1) = do
 
 -- if the given argument and expected argument are both functions / collections of functions
 solveIsFunctionArgument name (Fun xs, Fun ys) = do
-  let wantedFunctions :: [DMTypeOf ForAllKind :& Sensitivity]
-      wantedFunctions = [f :@ a | (f :@ (_ , a)) <- ys]
-  let existingFunctions :: [([JuliaType], (DMTypeOf ForAllKind :& Sensitivity, Sensitivity))]
-      existingFunctions = [(jts , ((f :@ a), zeroId)) | (f :@ (Just jts , a)) <- xs]
+  let wantedFunctions :: [DMTypeOf FunKind :& Sensitivity]
+      wantedFunctions = [f :@ a | (ForAll _ f :@ (_ , a)) <- ys]  -- TODO check if ForAll is empty and signature is Nothing
+  let existingFunctions :: [([JuliaType], (DMTypeOf ForAllKind :& Sensitivity, [DMTypeOf FunKind :& Sensitivity]))]
+      existingFunctions = [(jts , ((f :@ a), [])) | (f :@ (Just jts , a)) <- xs]
 
   -- We check if there were any functions in xs (those which are given by a dict), which did not have a
   -- julia type annotation
@@ -120,83 +120,65 @@ instance Solve MonadDMTC IsFunctionArgument (DMTypeOf (AnnKind a), DMTypeOf (Ann
 -- IsChoice constraints
 -- these are created from IsFunctionArgument constraints if both sides are actually functions.
 
-type ChoiceHash = HashMap [JuliaType] ((DMTypeOf ForAllKind :& Sensitivity), Sensitivity)
+-- map Julia signature to method and the list of function calls that went to this method.
+type ChoiceHash = HashMap [JuliaType] ((DMTypeOf ForAllKind :& Sensitivity), [DMTypeOf FunKind :& Sensitivity])
 
 -- hash has the existing methods, list has the required methods.
-instance Solve MonadDMTC IsChoice (ChoiceHash, [DMTypeOf ForAllKind :& Sensitivity]) where
+instance Solve MonadDMTC IsChoice (ChoiceHash, [DMTypeOf FunKind :& Sensitivity]) where
   solve_ Dict _ name (IsChoice arg) = solveIsChoice name arg
 
 -- see if the constraint can be resolved. might update the IsCHoice constraint, do nothing, or discharge.
 -- might produce new IsFunctionArgument constraints for the arguments.
-solveIsChoice :: forall t. IsT MonadDMTC t => Symbol -> (ChoiceHash, [DMTypeOf ForAllKind :& Sensitivity]) -> t ()
+solveIsChoice :: forall t. IsT MonadDMTC t => Symbol -> (ChoiceHash, [DMTypeOf FunKind :& Sensitivity]) -> t ()
 solveIsChoice name (provided, required) = do
    -- remove all choices from the "required" list that have a unique match in the "provided" hashmap.
    -- when a choice is resolved, the corresponding counter in the hashmap is incremented by one.
-   let matchArgs ::  ChoiceHash -> [DMTypeOf ForAllKind :& Sensitivity] -> t (ChoiceHash, [DMTypeOf ForAllKind :& Sensitivity])
+   let matchArgs ::  ChoiceHash -> [DMTypeOf FunKind :& Sensitivity] -> t (ChoiceHash, [DMTypeOf FunKind :& Sensitivity])
        matchArgs curProv curReq = do
           case curReq of
              [] -> return (curProv, [])
              (τs : restReq) -> do -- go through all required methods
                  case fstAnn τs of
                       TVar _ -> do -- it was a tvar
-                                   (resP, resR) <- (matchArgs curProv restReq) -- can't resolve TVar choice, keep it and recurse.
-                                   return (resP, (τs : resR))
+                              (resP, resR) <- (matchArgs curProv restReq) -- can't resolve TVar choice, keep it and recurse.
+                              return (resP, (τs : resR))
                       τsτ -> do
-                              -- get methods that could be a match, and free TVars in the args while we're at it
-                              (candidates, hasFreeVars) <- case τsτ of
-                                  args :->: _  -> do
-                                                    -- remove all methods that definitely don't match this signature
-                                                    let cand = (H.filterWithKey (\s c -> choiceCouldMatch args s) provided)
-                                                    -- filter all argument types that would be "Function" in julia...
-                                                    let argsNoJFun = filter noJuliaFunction args
-                                                    -- ... and get the free typevars of the rest.
-                                                    let free = and (null . freeVars @_ @TVarOf <$> argsNoJFun)
-                                                    return (cand, free)
-                                  args :->*: _ -> do -- same as for the above case.
-                                                    let cand = (H.filterWithKey (\s c -> choiceCouldMatch args s) provided)
-                                                    let argsNoJFun = filter noJuliaFunction args
-                                                    let free = and (null . freeVars @_ @TVarOf <$> argsNoJFun)
-                                                    return (cand, free)
-                                  _ -> throwError (ImpossibleError ("Invalid type for Choice: " <> show τsτ))
+                         -- get methods that could be a match, and free TVars in the args while we're at it
+                         (candidates, hasFreeVars) <- getMatchCandidates τsτ provided
 
-                              if H.null candidates
-                                 then throwError (NoChoiceFoundError $ "No matching choice for " <> show τs <> " found in " <> show provided)
-                                 else pure Nothing
+                         -- if there is no free tyepevars in τs arguments, throw out methods that are more general than others
+                         -- if we don't know all types we cannot do this, as eg for two methods
+                         -- (Int, Int) => T
+                         -- (Real, Number) => T
+                         -- and arg types (TVar, DMInt), both methods are in newchoices, but if we later realize the TVar
+                         -- is a DMReal, the first one does not match even though it's less general.
+                         -- filter Fun arguments, as the all have the same type "Function" in julia/
+                         let candidates' = case hasFreeVars of
+                               -- if no tvars are in the args
+                               True  -> keepLeastGeneral candidates
+                               -- else we do not change them
+                               False -> candidates
 
-                              -- if there is no free tyepevars in τs arguments, throw out methods that are more general than others
-                              -- if we don't know all types we cannot do this, as eg for two methods
-                              -- (Int, Int) => T
-                              -- (Real, Number) => T
-                              -- and arg types (TVar, DMInt), both methods are in newchoices, but if we later realize the TVar
-                              -- is a DMReal, the first one does not match even though it's less general.
-                              -- filter Fun arguments, as the all have the same type "Function" in julia/
-                              let candidates' = case hasFreeVars of
-                                    -- if no tvars are in the args
-                                    True  -> keepLeastGeneral candidates
-                                    -- else we do not change them
-                                    False -> candidates
+                         case and ((length candidates' == length provided),(length candidates' > 1)) of
+                            -- no choices were discarded, the constraint could not be simplified.
+                            True -> do
+                                       (resP, resR) <- (matchArgs curProv restReq) -- can't resolve choice, keep it and recurse.
+                                       return (resP, (τs : resR))
 
-                              case and ((length candidates' == length provided),(length candidates' > 1)) of
-                                 -- no choices were discarded, the constraint could not be simplified.
-                                 True -> do
-                                            (resP, resR) <- (matchArgs curProv restReq) -- can't resolve choice, keep it and recurse.
-                                            return (resP, (τs : resR))
+                            -- some choices were discarded, so we can continue
+                            False -> do
+                               case H.toList candidates' of
+                                   -- only one left, we can pick that one yay
+                                   -- even if there is free TVars, we don't have to add subtype constraints for the user-given signature,
+                                   -- as it was encoded in the Arr type of the choice, so its arg types can only be refinements.
+                                  [(sign, ((cτ :@ cs), matches))] -> do
+                                     -- append the match to the list of calls that matched this method.
+                                     let resP = H.insert sign ((cτ :@ cs), (τs : matches)) curProv -- append match to match list
+                                     matchArgs resP restReq -- discard entry by recursing without τs
 
-                                 -- some choices were discarded, so we can continue
-                                 False -> do
-                                    case H.toList candidates' of
-                                        -- only one left, we can pick that one yay
-                                        -- even if there is free TVars, we don't have to add subtype constraints for the user-given signature,
-                                        -- as it was encoded in the Arr type of the choice, so its arg types can only be refinements.
-                                       [(sign, ((cτ :@ cs), count))] -> do
-                                                                let (τ :@ s) = τs
-                                                                generateApplyConstraints cτ τ
-                                                                let resP = H.insert sign ((cτ :@ cs), count +! s) curProv -- count up
-                                                                matchArgs resP restReq -- discard entry by recursing without τs
-
-                                       _ -> do -- more than one left, need to wait.
-                                               (resP, resR) <- (matchArgs curProv restReq) -- can't resolve choice, keep it and recurse.
-                                               return (resP, (τs : resR))
+                                  _ -> do -- more than one left, need to wait.
+                                     (resP, resR) <- (matchArgs curProv restReq) -- can't resolve choice, keep it and recurse.
+                                     return (resP, (τs : resR))
 
 
    (newdict, newcs) <- matchArgs provided required -- get new dict and list of yet unresolved choices.
@@ -204,7 +186,8 @@ solveIsChoice name (provided, required) = do
    -- discard or update constraint.
    case newcs of
         [] -> do -- complete resolution! set counters, discard.
-                mapM (\((_ :@ flag), count) -> flag ==! count) newdict
+                --mapM (\((_ :@ flag), count) -> flag ==! count) newdict
+                mapM resolveChoiceHash newdict
                 dischargeConstraint name
         cs | (length required > length newcs) -> do
                 -- still not all choices resolved, just kick the resolved ones out of the constraint.
@@ -215,6 +198,50 @@ solveIsChoice name (provided, required) = do
 
 
    return ()
+
+resolveChoiceHash :: forall t. IsT MonadDMTC t => ((DMTypeOf ForAllKind :& Sensitivity), [DMTypeOf FunKind :& Sensitivity]) -> t ()
+resolveChoiceHash ((ForAll freevs method :@ meths), matches) = let
+
+      -- when a method is matched to it's call, we need to generate new IsFunctionArgument constraints for args and ret type.
+   generateApplyConstraints :: forall t. IsT MonadDMTC t => (DMTypeOf FunKind, DMTypeOf FunKind) -> t ()
+   generateApplyConstraints (match, method) = do
+      -- 'method' is the function that is called in the julia runtime where 'match' came out of typechecking Apply term.
+      -- they hence have to be the same type, except when one of their arguments is itself a function, in which case we need to
+      -- get a new IsChoice constraint. we hence add IsFunctionArgument constraints, which will be resolved just like so.
+      let addC :: Typeable a => (DMTypeOf (AnnKind a), DMTypeOf (AnnKind a)) -> t Symbol
+          addC (a, b) = addConstraint (Solvable (IsFunctionArgument (a,b)))
+      case (match, method) of
+         (aargs :->: aret, margs :->: mret) -> do
+            -- margs are the types inferred when checking the method (FLet).
+            -- aargs are the types of the arguments that were passed in Apply.
+            -- a Fun type in margs hence encodes the methods the input function is required to have
+            -- a Fun type in aargs encodes the methods the passed function actually has.
+            -- so aargs goes first in the constraint.
+            mapM addC (zip aargs margs)
+            -- with return types it's the other way around: mret is the inferred return type of the method,
+            -- so it encodes all methods that returned function has. aret is actually just a tvar created when checking Apply
+            addC (mret, aret)
+            return ()
+         (aargs :->*: aret, margs :->*: mret) -> do
+            mapM addC (zip aargs margs)
+            addC (mret, aret)
+            return ()
+         _ -> throwError (ImpossibleError ("Invalid type for Choice: " <> show (method, match)))
+   in do
+      let nvs = mapM (fmap TVar . newTVar) ["free" | _ <- matches]
+      let big_asub (SomeK a) = (\x -> SomeK (a := ListK x)) <$> nvs
+      subs <- mapM big_asub freevs
+       -- multi-subs for every free variable in method
+      duplicates' <- duplicateTerm subs method -- a duplicate of method for each matches, with our fresh TVars
+      case duplicates' of
+         Nothing -> error "Impossible" -- or maybe empty freevs?
+         Just duplicates -> do
+            -- generate proper constraints for all matches
+            mapM generateApplyConstraints (zip [match | (match :@ _) <- matches] duplicates)
+            -- set method sensitivity to sum of all matches' sensitivities
+            unify meths (foldl (⋆!) oneId [s | (_ :@ s) <- matches])
+            return ()
+
 
 -- remove dict entries whose signature is supertype of some other signature.
 -- this is only reasonable if the dmtype signature we're trying to match has no free variables,
@@ -231,6 +258,32 @@ keepLeastGeneral cs =
   in
       H.fromList mins'
 
+-- kick out all methods in provided that would not match τsτ.
+getMatchCandidates :: forall t. IsT MonadDMTC t => DMTypeOf FunKind -> ChoiceHash -> t (ChoiceHash, Bool)
+getMatchCandidates τsτ provided = do
+   (candidates, hasFreeVars) <- case τsτ of
+      (args :->: _)  -> do
+                        -- remove all methods that definitely don't match this signature
+                        let cand = (H.filterWithKey (\s c -> choiceCouldMatch args s) provided)
+                        -- filter all argument types that would be "Function" in julia...
+                        let argsNoJFun = filter noJuliaFunction args
+                        -- ... and get the free typevars of the rest.
+                        let free = and (null . freeVars @_ @TVarOf <$> argsNoJFun)
+                        return (cand, free)
+      (args :->*: _) -> do -- same as for the above case.
+                        let cand = (H.filterWithKey (\s c -> choiceCouldMatch args s) provided)
+                        let argsNoJFun = filter noJuliaFunction args
+                        let free = and (null . freeVars @_ @TVarOf <$> argsNoJFun)
+                        return (cand, free)
+      _ -> throwError (ImpossibleError ("Invalid type for Choice: " <> show τsτ))
+
+   if H.null candidates
+      then throwError (NoChoiceFoundError $ "No matching choice for " <> show τsτ <> " found in " <> show provided)
+      else return (candidates, hasFreeVars)
+
+
+
+
 -- determine whether a function with the given dmtype signature could match a method with the given juliatype signature.
 choiceCouldMatch :: forall e. (DMExtra e) => [DMTypeOf (AnnKind e)] -> [JuliaType] -> Bool
 choiceCouldMatch args cs =
@@ -243,29 +296,3 @@ choiceCouldMatch args cs =
 -- return False if this type would become a "Function" if converted to a julia type
 noJuliaFunction :: forall e. (DMExtra e) => DMTypeOf (AnnKind e) -> Bool
 noJuliaFunction τ = (juliatypes τ == [JuliaType "Function"])
-
--- when a method is matched to it's call, we need to generate new IsFunctionArgument constraints for args and ret type.
-generateApplyConstraints :: forall t. IsT MonadDMTC t => DMTypeOf ForAllKind -> DMTypeOf ForAllKind -> t ()
-generateApplyConstraints method applicand = do
-   -- 'method' is the function that is called in the julia runtime where 'applicand' came out of typechecking Apply term.
-   -- they hence have to be the same type, except when one of their arguments is itself a function, in which case we need to
-   -- get a new IsChoice constraint. we hence add IsFunctionArgument constraints, which will be resolved just like so.
-   let addC :: Typeable a => (DMTypeOf (AnnKind a), DMTypeOf (AnnKind a)) -> t Symbol
-       addC (a, b) = addConstraint (Solvable (IsFunctionArgument (a,b)))
-   case (applicand, method) of
-      (aargs :->: aret, margs :->: mret)   -> do
-         -- margs are the types inferred when checking the method (FLet).
-         -- aargs are the types of the arguments that were passed in Apply.
-         -- a Fun type in margs hence encodes the methods the input function is required to have
-         -- a Fun type in aargs encodes the methods the passed function actually has.
-         -- so aargs goes first in the constraint.
-         mapM addC (zip aargs margs)
-         -- with return types it's the other way around: mret is the inferred return type of the method,
-         -- so it encodes all methods that returned function has. aret is actually just a tvar created when checking Apply
-         addC (mret, aret)
-         return ()
-      (aargs :->*: aret, margs :->*: mret) -> do
-         mapM addC (zip aargs margs)
-         addC (mret, aret)
-         return ()
-      _ -> throwError (ImpossibleError ("Invalid type for Choice: " <> show (method, applicand)))

@@ -25,7 +25,8 @@ returnFun :: Maybe [JuliaType] -> DMFun -> TC (DMTypeOf (AnnKind AnnS))
 returnFun sign τ = do
   a <- newVar
   mscale a
-  return (Fun [(ForAll [] τ :@ (sign , a))])
+  frees <- getActuallyFreeVars τ
+  return (Fun [(ForAll frees τ :@ (sign , a))])
 
 
 ------------------------------------------------------------------------

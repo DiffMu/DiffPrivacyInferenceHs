@@ -235,6 +235,12 @@ getInteresting = do
        f xs = [ (x , τ) | (x , WithRelev IsRelevant τ) <- xs ]
    return (unzip (f h))
 
+getActuallyFreeVars :: DMFun -> TC [SomeK TVarOf]
+getActuallyFreeVars τ = do
+  γ <- use types
+  let τfree = freeVars @_ @TVarOf τ
+  let γfree = freeVars @_ @TVarOf γ
+  return (τfree \\ γfree)
 
 ---------------------------------------------------------------------------
 -- Algebraic instances for annot

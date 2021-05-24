@@ -150,9 +150,15 @@ instance Term TVarOf DMTypeOf where
 instance DMExtra a => FreeVars TVarOf (WithRelev a) where
   freeVars (WithRelev _ a) = freeVars a
 
+instance FreeVars TVarOf Symbol where
+   freeVars a = []
+
+instance (FreeVars v a, FreeVars v b) => FreeVars v (Either a b) where
+  freeVars (Left aa) = freeVars aa
+  freeVars (Right bb) = freeVars bb
+
 instance (FreeVars v a, FreeVars v b) => FreeVars v (a :& b) where
   freeVars (a :@ b) = freeVars a <> freeVars b
-
 
 instance FreeVars TVarOf Sensitivity where
   freeVars _ = mempty

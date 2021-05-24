@@ -108,7 +108,7 @@ class (KHashable v, KShow v, KShow a, KEq v, forall k. (Substitute v a (a k))) =
   isVar :: Typeable k => a k -> Maybe (v k)
 
 data SomeK (v :: j -> *) where
-  SomeK :: (Typeable v, Typeable k) => v k -> SomeK v
+  SomeK :: (Typeable v, Typeable k, SingI k) => v k -> SomeK v
 -- deriving instance Generic (SomeK v)
 
 
