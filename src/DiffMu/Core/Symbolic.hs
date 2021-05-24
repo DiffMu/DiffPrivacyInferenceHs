@@ -5,6 +5,7 @@ module DiffMu.Core.Symbolic where
 import DiffMu.Prelude
 -- import DiffMu.Prelude.MonadicAlgebra
 import DiffMu.Abstract
+import DiffMu.Core.PreSymbolic
 import qualified Prelude as P
 
 import Data.Singletons.TH
@@ -25,6 +26,10 @@ instance Hashable SymVal
 instance Monad t => CheckNeutral t SymVal where
   checkNeutral a = return (a == Fin 0)
 
+data SensKind = MainSensKind
+  deriving (Eq)
+
+genSingletons [''SensKind]
 
 -- data SymTerm = SymTerm SymVal
 --   deriving (Generic, Show)
@@ -52,10 +57,7 @@ instance Monad t => SemiringM t (SymVal) where
   (⋅) (Fin _) Infty      = pure $ Infty
   (⋅) (Fin a) (Fin b)    = pure $ Fin (a P.* b)
 
-data SensKind = MainSensKind
-  deriving (Eq)
-
-genSingletons [''SensKind]
+-- instance SingI SensKind where
 
 
 data SymVar (k :: SensKind) =
@@ -140,8 +142,7 @@ instance (CheckNeutral m a, CheckNeutral m b) => CheckNeutral m (a,b) where
     y <- checkNeutral b
     return (and [x,y])
 
-
-instance (Substitute SymVar (CPolyM SymVal Int (SymVar 'MainSensKind)) (SymVar k2)) where
+instance (Substitute SymVar (CPolyM SymVal Int (SymVar MainSensKind)) (SymVar k2)) where
   substitute σ (HonestVar v) = pure (HonestVar v)
   substitute σ (Ln a) = Ln <$> substitute σ a
   substitute σ (Ceil a) = Ceil <$> substitute σ a
@@ -149,6 +150,7 @@ instance (Substitute SymVar (CPolyM SymVal Int (SymVar 'MainSensKind)) (SymVar k
   substitute σ (Max as) = Max <$> mapM (substitute σ) as
   substitute σ (Minus (a,b)) = (\a b -> Minus (a,b)) <$> substitute σ a <*> substitute σ b
   substitute σ (Div (a,b)) = (\a b -> Div (a,b)) <$> substitute σ a <*> substitute σ b
+
 
 
 

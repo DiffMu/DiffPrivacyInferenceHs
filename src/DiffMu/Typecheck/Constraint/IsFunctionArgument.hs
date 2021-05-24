@@ -228,7 +228,8 @@ resolveChoiceHash ((ForAll freevs method :@ meths), matches) = let
             return ()
          _ -> throwError (ImpossibleError ("Invalid type for Choice: " <> show (method, match)))
    in do
-      let nvs = mapM (fmap TVar . newTVar) ["free" | _ <- matches]
+      let nvs :: forall k. IsKind k => t [DMTypeOf k]
+          nvs = mapM (fmap TVar . newTVar) ["free" | _ <- matches]
       let big_asub (SomeK a) = (\x -> SomeK (a := ListK x)) <$> nvs
       subs <- mapM big_asub freevs
        -- multi-subs for every free variable in method

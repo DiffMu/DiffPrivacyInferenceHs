@@ -67,7 +67,7 @@ class Monad t => MonadWatch t where
 
 
 class (Typeable v, Typeable a, forall k. Eq (v k)) => Substitute (v :: j -> *) (a :: j -> *) x where
-  substitute :: (Monad t) => (forall k. (Typeable k) => v k -> t (a k)) -> (x -> t x)
+  substitute :: (Monad t) => (forall k. (IsKind k) => v k -> t (a k)) -> (x -> t x)
 
 
 class (Typeable v, Typeable a, forall k. Eq (v k)) => FreeVars (v :: j -> *) (a :: *) where
@@ -104,8 +104,8 @@ instance (FreeVars v a) => FreeVars v (Maybe a) where
 
 
 class (KHashable v, KShow v, KShow a, KEq v, forall k. (Substitute v a (a k))) => Term v a where
-  var :: Typeable k => v k -> a k
-  isVar :: Typeable k => a k -> Maybe (v k)
+  var :: IsKind k => v k -> a k
+  isVar :: IsKind k => a k -> Maybe (v k)
 
 data SomeK (v :: j -> *) where
   SomeK :: (Typeable v, Typeable k, SingI k) => v k -> SomeK v
@@ -138,7 +138,9 @@ data Subs v a where
 instance Term v a => Default (Subs v a) where
   def = Subs empty
 
-singletonSub :: (Term x a, Typeable k) => Sub x a k -> Subs x a
+type IsKind k = (SingI k, Typeable k)
+
+singletonSub :: (Term x a, IsKind k) => Sub x a k -> Subs x a
 singletonSub ((x :: x k) := a) = Subs (singleton (SomeK @_ @k x) (SomeK a))
 
 
@@ -148,14 +150,14 @@ instance Show (Subs v a) where
 
 -- class Substitute (Var a) a x => VSubstitute a x where
 -- instance Substitute (Var a) a x => VSubstitute a x where
-removeFromSubstitution :: (Monad t, Term v a) => [SomeK v] -> (forall k. Typeable k => v k -> t (a k)) -> (forall k. Typeable k => v k -> t (a k))
+removeFromSubstitution :: (Monad t, Term v a) => [SomeK v] -> (forall k. IsKind k => v k -> t (a k)) -> (forall k. IsKind k => v k -> t (a k))
 -- removeFromSubstitution vars σ x = case or [compareVar (SomeK x) v | v <- vars] of
 removeFromSubstitution vars σ x = case (SomeK x) `elem` vars of
   True -> pure (var x)
   False -> σ x
 
 
-trySubstitute :: (MonadImpossible t, MonadWatch t, Term v a, Typeable k) => Subs v a -> v k -> t (a k)
+trySubstitute :: (MonadImpossible t, MonadWatch t, Term v a, IsKind k) => Subs v a -> v k -> t (a k)
 trySubstitute (Subs m) (x :: v k) = case H.lookup (SomeK x) m of
   Just (SomeK (a :: a k2))  -> do
     case testEquality (typeRep @k) (typeRep @k2) of
@@ -168,7 +170,7 @@ trySubstitute (Subs m) (x :: v k) = case H.lookup (SomeK x) m of
 
 substituteSingle :: (Typeable k, Term v a) => Sub v a k -> a k -> a k
 substituteSingle ((x :: v k) := (a :: a k)) b = runIdentity (substitute f b)
-  where f :: (forall k. (Typeable k) => v k -> Identity (a k))
+  where f :: (forall k. (IsKind k) => v k -> Identity (a k))
         f (v :: v k2) = case testEquality (typeRep @k) (typeRep @k2) of
           Nothing -> pure (var v)
           Just Refl -> g v
@@ -221,8 +223,8 @@ instance (MonadImpossible t, MonadWatch t, Term v a, Substitute v a x) => Module
 
 class (Monad t, Term (VarFam a) a) => MonadTerm (a :: j -> *) t where
   type VarFam (a :: j -> *) :: j -> *
-  newVar :: (Typeable k, SingI k) => t (a k)
-  addSub :: (Typeable k) => Sub (VarFam a) a k -> t ()
+  newVar :: (IsKind k) => t (a k)
+  addSub :: (IsKind k) => Sub (VarFam a) a k -> t ()
   getSubs :: t (Subs (VarFam a) a)
 
 class (Monad t, Term (VarFam a) a, MonadTerm a t) => MonadTermDuplication a t where

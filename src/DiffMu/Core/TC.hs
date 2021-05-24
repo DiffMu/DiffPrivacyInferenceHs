@@ -254,8 +254,8 @@ duplicateTerm subs τ = do
 
 
 instance Substitute SVarOf SensitivityOf (SensitivityOf k) where
-  substitute (σs :: forall k. (Typeable k) => SVarOf k -> t (SensitivityOf k)) s = substitute f s
-    where f :: (Typeable l) => SymVar l -> t (SensitivityOf l)
+  substitute (σs :: forall k. (IsKind k) => SVarOf k -> t (SensitivityOf k)) s = substitute f s
+    where f :: (IsKind l) => SymVar l -> t (SensitivityOf l)
           f (HonestVar a) = σs (a)
           f b = pure $ var (b)
 
@@ -872,6 +872,7 @@ instance Monad m => IsT MonadDMTC (TCT m) where
 
   -- solve_ (Constr (Binary op σ τ)) = undefined
   -- solve_ (Constr (Ternary op ρ σ τ)) = undefined
+
 
 
 

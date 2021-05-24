@@ -150,7 +150,7 @@ data DMTypeOf (k :: DMKind) where
 
   -- type vars can be of any kind (k :: DMKind). But we require the constraint that
   -- k be typeable, because it is needed in cases where we want to compare different k's.
-  TVar :: Typeable k => SymbolOf k -> DMTypeOf k
+  TVar :: IsKind k => SymbolOf k -> DMTypeOf k
 
   -- the arrow type
   (:->:) :: [DMTypeOf (AnnKind AnnS)] -> DMTypeOf (AnnKind AnnS) -> DMFun
