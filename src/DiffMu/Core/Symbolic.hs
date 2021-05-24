@@ -5,7 +5,6 @@ module DiffMu.Core.Symbolic where
 import DiffMu.Prelude
 -- import DiffMu.Prelude.MonadicAlgebra
 import DiffMu.Abstract
-import DiffMu.Core.PreSymbolic
 import qualified Prelude as P
 
 import Data.Singletons.TH

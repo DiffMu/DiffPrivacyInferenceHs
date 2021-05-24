@@ -58,7 +58,6 @@ library
       DiffMu.Core
       DiffMu.Core.Context
       DiffMu.Core.Definitions
-      DiffMu.Core.PreSymbolic
       DiffMu.Core.Scope
       DiffMu.Core.Symbolic
       DiffMu.Core.TC
