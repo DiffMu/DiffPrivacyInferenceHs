@@ -87,8 +87,8 @@ removeVars σs vs = do
       f (SomeK var) = do
         replacement <- σs var
         case (replacement) of
-          TVar rep | rep == var -> return Nothing
-          _ -> return (Just (SomeK var))
+          TVar rep | rep == var -> return (Just (SomeK var))
+          _ -> return Nothing
   newvs <- mapM f vs
   return [v | (Just v) <- newvs]
 

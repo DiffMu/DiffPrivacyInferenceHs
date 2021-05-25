@@ -241,7 +241,10 @@ resolveChoiceHash ((ForAll freevs method :@ meths), matches) = let
       -- a duplicate of method for each matches, with our fresh TVars
       duplicates' <- duplicateTerm subs method
       case duplicates' of
-         Nothing -> error "Impossible" -- or maybe empty freevs?
+         Nothing -> do -- there are no free type variables in method
+            mapM (\match -> generateApplyConstraints (match, method)) [match | (match :@ _) <- matches]
+            unify meths (foldl (⋆!) oneId [s | (_ :@ s) <- matches])
+            return ()
          Just duplicates -> do
             -- duplicate the constraints that have the free vars, as well
             duplicateAllConstraints subs
