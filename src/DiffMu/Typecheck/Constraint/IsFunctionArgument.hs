@@ -144,7 +144,7 @@ solveIsChoice name (provided, required) = do
                               return (resP, (τs : resR))
                       τsτ -> do
                          -- get methods that could be a match, and free TVars in the args while we're at it
-                         (candidates, hasFreeVars) <- getMatchCandidates τsτ provided
+                         (candidates, hasFreeVars) <- getMatchCandidates τsτ curProv
 
                          -- if there is no free tyepevars in τs arguments, throw out methods that are more general than others
                          -- if we don't know all types we cannot do this, as eg for two methods
@@ -159,7 +159,7 @@ solveIsChoice name (provided, required) = do
                                -- else we do not change them
                                False -> candidates
 
-                         case and ((length candidates' == length provided),(length candidates' > 1)) of
+                         case and ((length candidates' == length curProv),(length candidates' > 1)) of
                             -- no choices were discarded, the constraint could not be simplified.
                             True -> do
                                        (resP, resR) <- (matchArgs curProv restReq) -- can't resolve choice, keep it and recurse.
@@ -174,7 +174,8 @@ solveIsChoice name (provided, required) = do
                                   [(sign, ((cτ :@ cs), matches))] -> do
                                      -- append the match to the list of calls that matched this method.
                                      let resP = H.insert sign ((cτ :@ cs), (τs : matches)) curProv -- append match to match list
-                                     matchArgs resP restReq -- discard entry by recursing without τs
+                                     res <- matchArgs resP restReq -- discard entry by recursing without τs
+                                     return res
 
                                   _ -> do -- more than one left, need to wait.
                                      (resP, resR) <- (matchArgs curProv restReq) -- can't resolve choice, keep it and recurse.
@@ -228,15 +229,22 @@ resolveChoiceHash ((ForAll freevs method :@ meths), matches) = let
             return ()
          _ -> throwError (ImpossibleError ("Invalid type for Choice: " <> show (method, match)))
    in do
+      -- before resolving, we create copies of the method's type where all free type variables
+      -- are replaced by fresh type variables, so we can safely unify with the type of the matched function.
       let nvs :: forall k. IsKind k => t [DMTypeOf k]
+          -- a fresh tvar for each method
           nvs = mapM (fmap TVar . newTVar) ["free" | _ <- matches]
+      -- a multi-substitution for a variable
       let big_asub (SomeK a) = (\x -> SomeK (a := ListK x)) <$> nvs
+      -- multisubstitutions for all free variables of the method
       subs <- mapM big_asub freevs
-       -- multi-subs for every free variable in method
-      duplicates' <- duplicateTerm subs method -- a duplicate of method for each matches, with our fresh TVars
+      -- a duplicate of method for each matches, with our fresh TVars
+      duplicates' <- duplicateTerm subs method
       case duplicates' of
          Nothing -> error "Impossible" -- or maybe empty freevs?
          Just duplicates -> do
+            -- duplicate the constraints that have the free vars, as well
+            duplicateAllConstraints subs
             -- generate proper constraints for all matches
             mapM generateApplyConstraints (zip [match | (match :@ _) <- matches] duplicates)
             -- set method sensitivity to sum of all matches' sensitivities
