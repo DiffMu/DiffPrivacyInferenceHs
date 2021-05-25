@@ -7,7 +7,7 @@ import DiffMu.Core
 import DiffMu.Core.Symbolic
 import DiffMu.Core.TC
 import DiffMu.Typecheck.Operations
-import DiffMu.Core.Scope
+import DiffMu.Core.Scope1
 import DiffMu.Typecheck.JuliaType
 import DiffMu.Typecheck.Constraint.IsFunctionArgument
 
@@ -15,13 +15,16 @@ import qualified Data.HashMap.Strict as H
 
 import Debug.Trace
 
-returnNoFun :: DMType -> TC (DMTypeOf (AnnKind AnnS))
+
+
+
+returnNoFun :: DMType -> DelayedS
 returnNoFun τ = do
   a <- newVar
   mscale a
-  return (NoFun (τ :@ RealS a))
+  return (Done (NoFun (τ :@ RealS a)))
 
-returnFun :: Maybe [JuliaType] -> DMFun -> TC (DMTypeOf (AnnKind AnnS))
+returnFun :: Maybe [JuliaType] -> DMFun -> TC (DMAnnS)
 returnFun sign τ = do
   a <- newVar
   mscale a
@@ -29,15 +32,34 @@ returnFun sign τ = do
   return (Fun [(ForAll frees τ :@ (sign , a))])
 
 
+data Delayed m x a = Done a | Later (x -> m (Delayed m x a))
+type DelayedS = TC (Delayed TC DMScope DMAnnS)
+type DelayedP = TC (Delayed TC DMScope DMAnnP)
+
+type DMAnnS = DMTypeOf (AnnKind AnnS)
+type DMAnnP = DMTypeOf (AnnKind AnnP)
+
+getDelayed :: Monad m => x -> Delayed m x a -> m a
+getDelayed arg (Done a) = pure a
+getDelayed arg (Later f) = (f arg) >>= getDelayed arg
+
+insideDelayed :: Monad m => Delayed m x a -> (a -> m b) -> m (Delayed m x b)
+insideDelayed (Done a) g = Done <$> g a
+insideDelayed (Later f) g = pure $ Later (\x -> f x >>= \y -> insideDelayed y g)
+
+onlyDone :: Delayed TC x a -> TC a
+onlyDone (Done a) = pure a
+onlyDone (Later _) = error "Expected Done, but wasn't."
+
 ------------------------------------------------------------------------
 -- The typechecking function
 
 --------------------
 -- Sensitivity terms
 
-checkSen' :: DMTerm -> DMScopes -> TC (DMTypeOf (AnnKind AnnS))
+checkSen' :: DMTerm -> DMScope -> DelayedS
 
-checkPriv :: DMTerm -> DMScopes -> TC (DMTypeOf (AnnKind AnnP))
+checkPriv :: DMTerm -> DMScope -> TC (DMTypeOf (AnnKind AnnP))
 checkPriv t scope = do
    γ <- use types
    case γ of -- TODO prettify.
@@ -53,7 +75,7 @@ checkPriv t scope = do
       Right γ -> return res
       Left γ -> error $ "checkPriv returned a sensitivity context!\n" <> "It is:\n" <> show γ <> "\nThe input term was:\n" <> show t
 
-checkSens :: DMTerm -> DMScopes -> TC (DMTypeOf (AnnKind AnnS))
+checkSens :: DMTerm -> DMScope -> DelayedS
 checkSens t scope = do
    γ <- use types
    case γ of -- TODO prettify.
@@ -80,7 +102,7 @@ checkSen' (Sng η τ) scope  = do
 -- TODO!!!! Get interestingness flag!
 checkSen' (Arg x dτ i) scope = do τ <- createDMType dτ -- TODO subtype!
                                   setVarS x (WithRelev i τ)
-                                  return τ
+                                  return (Done τ)
                                   -- setVarS x (WithRelev i (NoFun (undefined :@ constCoeff (Fin 1)))) --(τ :@ constCoeff (Fin 1)))
                                   -- returnNoFun τ
 
@@ -90,21 +112,22 @@ checkSen' (Var x dτ) scope = do -- get the term that corresponds to this variab
                                 -- check the term in the new, smaller scope'
                                 τ <- checkSens vt scope'
 
-                                case dτ of
-                                  JTAny -> return τ
-                                  dτ -> do
-                                    -- if the user has given an annotation
-                                    -- inferred type must be a subtype of the user annotation
-                                    dτd <- createDMType dτ
-                                    addConstraint (Solvable (IsLessEqual (τ, dτd) ))
-                                    return τ
+                                insideDelayed τ $ \τ ->
+                                  case dτ of
+                                    JTAny -> return τ
+                                    dτ -> do
+                                      -- if the user has given an annotation
+                                      -- inferred type must be a subtype of the user annotation
+                                      dτd <- createDMType dτ
+                                      addConstraint (Solvable (IsLessEqual (τ, dτd) ))
+                                      return ( τ)
 
 -- typechecking an op
 checkSen' (Op op args) scope =
   -- We create a helper function, which infers the type of arg, unifies it with the given τ
   -- and scales the current context by s.
   let checkOpArg (arg,(τ,s)) = do
-        τ_arg <- checkSens arg scope
+        τ_arg <- checkSens arg scope >>= onlyDone
         unify (NoFun (Numeric τ :@ RealS (svar s))) τ_arg
         -- mscale (svar s)
   in do
@@ -121,36 +144,39 @@ checkSen' (Op op args) scope =
 
 checkSen' (Phi cond ifbr elsebr) scope =
    let mcond = do
-        τ_cond <- checkSens cond scope
+        τ_cond <- checkSens cond scope >>= onlyDone
         mscale inftyS
         return τ_cond
    in do
-      τ_sum <- msumS [(checkSens ifbr scope), (checkSens elsebr scope), mcond]
+      τ_sum <- msumS [(checkSens ifbr scope >>= onlyDone), (checkSens elsebr scope >>= onlyDone), mcond]
       (τif, τelse) <- case τ_sum of
                            (τ1 : τ2 : _) -> return (τ1, τ2)
                            _ -> throwError (ImpossibleError "Sum cannot return empty.")
       τ <- newVar
       addConstraint (Solvable (IsSupremum (τ, τif, τelse)))
-      return τ
+      return (Done τ)
 
 checkSen' (Lam xτs body) scope = do
 
-  -- put a special term to mark x as a function argument. those get special tratment
-  -- because we're interested in their sensitivity
-  scope' <- foldM (\sc -> (\(x :- τ) -> pushDefinition sc x (Arg x τ IsRelevant))) scope xτs
 
   -- the body is checked in the toplevel scope, not the current variable scope.
   -- this reflects the julia behaviour
-  let (topscope, _) = scope'
-  τr <- checkSens body (topscope, topscope)
+  return $ Later $ \scope -> do
+    -- put a special term to mark x as a function argument. those get special tratment
+    -- because we're interested in their sensitivity
+    scope' <- foldM (\sc -> (\(x :- τ) -> pushDefinition sc x (Arg x τ IsRelevant))) scope xτs
 
-  xrτs <- getArgList xτs
+    τr <- checkSens body scope'
 
-  -- get the julia signature from xτs
-  let sign = (sndA <$> xτs)
-  returnFun (Just sign) (xrτs :->: τr)
+    insideDelayed τr $ \τr -> do
+      xrτs <- getArgList xτs
+
+      -- get the julia signature from xτs
+      let sign = (sndA <$> xτs)
+      returnFun (Just sign) (xrτs :->: τr)
 
 
+{-
 checkSen' (LamStar xτs body) scope = do
 
   -- put a special term to mark x as a function argument. those get special tratment
@@ -171,7 +197,7 @@ checkSen' (LamStar xτs body) scope = do
   -- get the julia signature from xτs
   let sign = ((sndA . fst) <$> xτs)
   returnFun (Just sign) (xrτs :->*: τr)
-
+-}
 
 checkSen' (SLet (x :- dτ) term body) scope = do
 
@@ -187,14 +213,13 @@ checkSen' (SLet (x :- dτ) term body) scope = do
   τ <- checkSens body scope'
   return τ
 
-
 checkSen' (Apply f args) scope = do
-  let checkFArg :: DMTerm -> TC (DMTypeOf (AnnKind AnnS))
+  let checkFArg :: DMTerm -> TC (DMAnnS)
       checkFArg arg = do
-          τ <- checkSens arg scope
+          τ <- checkSens arg scope >>= getDelayed scope
           return τ
   let margs = checkFArg <$> args
-  let mf = checkSens f scope
+  let mf = checkSens f scope >>= getDelayed scope
   τ_sum <- msumS (mf : margs) -- sum args and f's context
   (τ_lam, argτs) <- case τ_sum of
                           (τ : τs) -> return (τ, τs)
@@ -202,8 +227,9 @@ checkSen' (Apply f args) scope = do
   τ_ret <- newVar -- a type var for the function return type
 
   -- addConstraint (Solvable (IsLessEqual (τ_lam, Fun [(argτs :->: τ_ret) :@ (Nothing, oneId)])))
+
   addConstraint (Solvable (IsFunctionArgument (τ_lam, Fun [(ForAll [] (argτs :->: τ_ret)) :@ (Nothing, oneId)])))
-  return τ_ret
+  return (Done τ_ret)
 
   {-
   let
@@ -229,6 +255,7 @@ checkSen' (Apply f args) scope = do
       -- f's type must be subtype of a choice arrow with matching arg types.
       addConstraint (Solvable (IsLessEqual (τ_lam, DMChoice [(argτs :->: τ_ret) :@ (Nothing, oneId)])))
       return τ_ret
+
 -}
 
 checkSen' (FLet fname sign term body) scope = do
@@ -243,13 +270,14 @@ checkSen' (FLet fname sign term body) scope = do
 
 
 checkSen' (Choice d) scope = do
-  -- check the terms of the choices and sum their context.
-  -- We ignore here the key (julia signature), since it is also given in the lambda term
-  choices <- msumS (map (\t -> checkSens t scope) (snd <$> H.toList d))
+  return $ Later $ \newscope -> do
+    -- check the terms of the choices and sum their context.
+    -- We ignore here the key (julia signature), since it is also given in the lambda term
+    choices <- msumS (map (\t -> checkSens t scope >>= getDelayed newscope) (snd <$> H.toList d))
 
-  -- combine the choices using (:∧:)
-  let combined = foldl (:∧:) (Fun []) choices
-  return combined
+    -- combine the choices using (:∧:)
+    let combined = foldl (:∧:) (Fun []) choices
+    return (Done combined)
 
   -- let
       -- checkChoice :: ([JuliaType], DMTerm) -> TC (DMType :& (Maybe [JuliaType], Sensitivity))
@@ -263,6 +291,7 @@ checkSen' (Choice d) scope = do
       --    dd <- mapM checkChoice (H.toList d)
       --    return (DMChoice dd)
 
+{-
 
 checkSen' (Tup ts) scope = do
   undefined
@@ -305,7 +334,7 @@ checkSen' (Loop it cs (xi, xc) b) scope = do
                   Iter fs stp ls -> return (opCeil ((ls `opSub` (fs `opSub` (Sng 1 JTNumInt))) `opDiv` stp))
                   _ -> throwError (ImpossibleError "Loop iterator must be an Iter term.")
 
-   let checkScale :: DMTerm -> TC (DMTypeOf (AnnKind AnnS), Sensitivity)
+   let checkScale :: DMTerm -> TC (DMAnnS, Sensitivity)
        checkScale term = do
           τ <- checkSens term scope
           s <- newVar
@@ -362,7 +391,7 @@ checkSen' (Gauss rp εp δp f) scope =
 -}
 
 checkSen' (MCreate n m body) scope =
-   let setDim :: DMTerm -> Sensitivity -> TC (DMTypeOf (AnnKind AnnS))
+   let setDim :: DMTerm -> Sensitivity -> TC (DMAnnS)
        setDim t s = do
           τ <- checkSens t scope -- check dimension term
           unify τ (NoFun (Numeric (Const s DMInt) :@ zeroId)) -- dimension must be integral
@@ -418,7 +447,7 @@ checkSen' (ClipM c m) scope = do
 
    -- change clip parameter to input
    return (NoFun (DMMat nrm c n m (Numeric DMData) :@ RealS η))
-
+-}
 -- Everything else is currently not supported.
 checkSen' t scope = throwError (UnsupportedTermError t)
 
@@ -426,8 +455,10 @@ checkSen' t scope = throwError (UnsupportedTermError t)
 --------------------------------------------------------------------------------
 -- Privacy terms
 
-checkPri' :: DMTerm -> DMScopes -> TC (DMTypeOf (AnnKind AnnP))
+checkPri' :: DMTerm -> DMScope -> TC (DMTypeOf (AnnKind AnnP))
+checkPri' = undefined
 
+  {-
 checkPri' (Ret t) scope = do
    τ <- checkSens t scope
    mtruncateP inftyP
@@ -496,7 +527,7 @@ checkPri' (Apply f args) scope = let
       mtruncateP p -- truncate it's context to p
       return (Trunc (RealP p) τ) -- also set it's type's annotation to p for putting it into the signature below
 
-   checkF :: TC (DMTypeOf (AnnKind AnnS))
+   checkF :: TC (DMAnnS)
    checkF = do
       τ <- checkSens f scope
       mtruncateP inftyP
@@ -572,4 +603,4 @@ checkPri' (Loop it cs (xi, xc) b) scope = do
 -}
 
 checkPri' t scope = checkPriv (Ret t) scope -- secretly return if the term has the wrong color.
-
+-}

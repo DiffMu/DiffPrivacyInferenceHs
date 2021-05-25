@@ -16,6 +16,8 @@ import Debug.Trace
 -- A scope with variables of type `v`, and contents of type `a` is simply a hashmap.
 type Scope v a = H.HashMap v a
 
+type SimpleScope = Scope Symbol DMTerm
+
 -- Our scopes have symbols as variables, and contain DMTerms and the scope in which the variable
 -- ought to be checked, i.e. the scope that was current during 
 newtype DMScope = DMScope (Scope Symbol (DMTerm, DMScope))

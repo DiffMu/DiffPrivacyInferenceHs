@@ -41,8 +41,10 @@ typecheckFromDMTerm term = do
         traceM $ "Checking term   : " <> show term
         -- typecheck the term t5
         tres <- checkSens term def
+        tres' <- getDelayed def tres
         solveAllConstraints SolveExact
-        tres' <- normalize tres
+        tres'' <- normalize tres'
+        tres''' <- normalize tres''
 
         -- a <- newVar
         -- b <- newVar
@@ -53,7 +55,7 @@ typecheckFromDMTerm term = do
         -- ss' <- normalize ss
         -- traceM $ "After norm: " <> show ss'
 
-        return tres'
+        return tres'''
 
         -- an example of subtyping
         {-
