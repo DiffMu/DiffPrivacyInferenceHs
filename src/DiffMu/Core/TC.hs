@@ -287,7 +287,9 @@ instance (FreeVars TVarOf x, Substitute TVarOf DMTypeOf x) => GoodConstraintCont
 
 
 class (MonadImpossible (t), MonadWatch (t),
-       MonadTerm DMTypeOf (t), MonadTerm SensitivityOf (t),
+       MonadTerm DMTypeOf (t),
+       MonadTermDuplication DMTypeOf (t),
+       MonadTerm SensitivityOf (t),
        MonadState (Full) (t),
        MonadError DMException (t),
        MonadInternalError t,
