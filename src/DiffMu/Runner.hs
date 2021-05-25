@@ -42,9 +42,10 @@ typecheckFromDMTerm term = do
         -- typecheck the term t5
         tres <- checkSens term def
         solveAllConstraints SolveExact
-        tres' <- normalize tres
 
+        tres' <- normalize tres
         return tres'
+
         -- let t = NoFun (Numeric (NonConst DMInt) :@ oneId)
         -- return t
 
