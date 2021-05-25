@@ -33,15 +33,15 @@ pushChoice name value scope =
   let oldval = getValue name scope
       newval = case oldval of
         Nothing -> undefined
-        Just v -> onlyLater v $ \old -> _
+        Just v -> onlyLater v $ \old -> undefined
   in undefined
 
 
 returnNoFun :: DMType -> DelayedS
-returnNoFun τ = do
+returnNoFun τ = Done $ do
   a <- newVar
   mscale a
-  return (Done (NoFun (τ :@ RealS a)))
+  return ((NoFun (τ :@ RealS a)))
 
 returnFun :: Maybe [JuliaType] -> DMFun -> TC (DMAnnS)
 returnFun sign τ = do
@@ -51,9 +51,9 @@ returnFun sign τ = do
   return (Fun [(ForAll frees τ :@ (sign , a))])
 
 
-data Delayed m x a = Done a | Later (x -> m (Delayed m x a))
-type DelayedS = TC (Delayed TC (DMScope AnnS) DMAnnS)
-type DelayedP = TC (Delayed TC (DMScope AnnP) DMAnnP)
+data Delayed m x a = Done (m a) | Later (x -> m (Delayed m x a))
+type DelayedS = (Delayed TC (DMScope AnnS) DMAnnS)
+type DelayedP = (Delayed TC (DMScope AnnP) DMAnnP)
 
 type DMAnnS = DMTypeOf (AnnKind AnnS)
 type DMAnnP = DMTypeOf (AnnKind AnnP)
@@ -79,7 +79,6 @@ onlyLater (Later f) g = Later (\x -> f x >>= \y -> insideDelayed y g)
 -- joinLater :: Delayed TC x DMAnnS -> Delayed TC x DMAnnS -> Delayed TC x DMAnnS
 -- joinLater (Later f) (Later g) = Later (\x -> do
 --                                           (a,b) <- msumTup (f x, g x)
-                                          
 
 ------------------------------------------------------------------------
 -- The typechecking function
@@ -121,6 +120,7 @@ checkSens t scope = do
       Left γ -> return res
       Right γ -> error $ "checkSens returned a privacy context!\n" <> "It is:\n" <> show γ <> "\nThe input term was:\n" <> show t
 
+  {-
 -- TODO: Here we assume that η really has type τ, and do not check it. Should maybe do that.
 checkSen' (Sng η τ) scope  = do
   res <- Numeric <$> (Const (constCoeff (Fin η)) <$> (createDMTypeNum τ))
@@ -489,6 +489,7 @@ checkSen' (ClipM c m) scope = do
    return (NoFun (DMMat nrm c n m (Numeric DMData) :@ RealS η))
 -}
 
+-}
 -}
 -- Everything else is currently not supported.
 checkSen' t scope = throwError (UnsupportedTermError t)
