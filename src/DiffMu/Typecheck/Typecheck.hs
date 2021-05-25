@@ -15,7 +15,26 @@ import qualified Data.HashMap.Strict as H
 
 import Debug.Trace
 
+newtype DMScope e = DMScope (Scope Symbol (Delayed TC (DMScope e) (DMTypeOf (AnnKind e))))
+  deriving Generic
 
+instance DictLike Symbol (Delayed TC (DMScope e) (DMTypeOf (AnnKind e))) (DMScope e) where
+  setValue v m (DMScope h) = DMScope (H.insert v m h)
+  deleteValue v (DMScope h) = DMScope (H.delete v h)
+  getValue k (DMScope h) = h H.!? k
+  emptyDict = DMScope H.empty
+  isEmptyDict (DMScope h) = isEmptyDict h
+  getAllKeys (DMScope h) = getAllKeys h
+
+instance Default (DMScope e) where
+
+pushChoice :: Symbol -> (Delayed TC (DMScope AnnS) DMAnnS) -> DMScope AnnS -> DMScope AnnS
+pushChoice name value scope =
+  let oldval = getValue name scope
+      newval = case oldval of
+        Nothing -> undefined
+        Just v -> onlyLater v $ \old -> _
+  in undefined
 
 
 returnNoFun :: DMType -> DelayedS
@@ -33,23 +52,34 @@ returnFun sign τ = do
 
 
 data Delayed m x a = Done a | Later (x -> m (Delayed m x a))
-type DelayedS = TC (Delayed TC DMScope DMAnnS)
-type DelayedP = TC (Delayed TC DMScope DMAnnP)
+type DelayedS = TC (Delayed TC (DMScope AnnS) DMAnnS)
+type DelayedP = TC (Delayed TC (DMScope AnnP) DMAnnP)
 
 type DMAnnS = DMTypeOf (AnnKind AnnS)
 type DMAnnP = DMTypeOf (AnnKind AnnP)
 
 getDelayed :: Monad m => x -> Delayed m x a -> m a
 getDelayed arg (Done a) = pure a
+-- getDelayed arg (Later f) = f arg
 getDelayed arg (Later f) = (f arg) >>= getDelayed arg
 
 insideDelayed :: Monad m => Delayed m x a -> (a -> m b) -> m (Delayed m x b)
 insideDelayed (Done a) g = Done <$> g a
+-- insideDelayed (Later f) g = pure $ Later (f >=> g)
 insideDelayed (Later f) g = pure $ Later (\x -> f x >>= \y -> insideDelayed y g)
 
 onlyDone :: Delayed TC x a -> TC a
 onlyDone (Done a) = pure a
 onlyDone (Later _) = error "Expected Done, but wasn't."
+
+onlyLater :: Delayed TC x a -> (a -> TC b) -> Delayed TC x b
+onlyLater (Done a) g = Later (\_ -> internalError "Expected Later, but wasn't.")
+onlyLater (Later f) g = Later (\x -> f x >>= \y -> insideDelayed y g)
+
+-- joinLater :: Delayed TC x DMAnnS -> Delayed TC x DMAnnS -> Delayed TC x DMAnnS
+-- joinLater (Later f) (Later g) = Later (\x -> do
+--                                           (a,b) <- msumTup (f x, g x)
+                                          
 
 ------------------------------------------------------------------------
 -- The typechecking function
@@ -57,9 +87,9 @@ onlyDone (Later _) = error "Expected Done, but wasn't."
 --------------------
 -- Sensitivity terms
 
-checkSen' :: DMTerm -> DMScope -> DelayedS
+checkSen' :: DMTerm -> DMScope AnnS -> DelayedS
 
-checkPriv :: DMTerm -> DMScope -> TC (DMTypeOf (AnnKind AnnP))
+checkPriv :: DMTerm -> DMScope AnnP -> TC (DMTypeOf (AnnKind AnnP))
 checkPriv t scope = do
    γ <- use types
    case γ of -- TODO prettify.
@@ -75,7 +105,7 @@ checkPriv t scope = do
       Right γ -> return res
       Left γ -> error $ "checkPriv returned a sensitivity context!\n" <> "It is:\n" <> show γ <> "\nThe input term was:\n" <> show t
 
-checkSens :: DMTerm -> DMScope -> DelayedS
+checkSens :: DMTerm -> DMScope AnnS -> DelayedS
 checkSens t scope = do
    γ <- use types
    case γ of -- TODO prettify.
@@ -107,20 +137,23 @@ checkSen' (Arg x dτ i) scope = do τ <- createDMType dτ -- TODO subtype!
                                   -- returnNoFun τ
 
 checkSen' (Var x dτ) scope = do -- get the term that corresponds to this variable from the scope dict
-                                (vt, scope') <- popDefinition scope x
+                                let (τ) = getValue x scope
+                                case τ of
+                                  Nothing -> throwError (VariableNotInScope x)
+                                  Just τ ->
 
                                 -- check the term in the new, smaller scope'
-                                τ <- checkSens vt scope'
+                                -- τ <- checkSens vt scope'
 
-                                insideDelayed τ $ \τ ->
-                                  case dτ of
-                                    JTAny -> return τ
-                                    dτ -> do
-                                      -- if the user has given an annotation
-                                      -- inferred type must be a subtype of the user annotation
-                                      dτd <- createDMType dτ
-                                      addConstraint (Solvable (IsLessEqual (τ, dτd) ))
-                                      return ( τ)
+                                    insideDelayed τ $ \τ ->
+                                      case dτ of
+                                        JTAny -> return τ
+                                        dτ -> do
+                                          -- if the user has given an annotation
+                                          -- inferred type must be a subtype of the user annotation
+                                          dτd <- createDMType dτ
+                                          addConstraint (Solvable (IsLessEqual (τ, dτd) ))
+                                          return ( τ)
 
 -- typechecking an op
 checkSen' (Op op args) scope =
@@ -164,7 +197,12 @@ checkSen' (Lam xτs body) scope = do
   return $ Later $ \scope -> do
     -- put a special term to mark x as a function argument. those get special tratment
     -- because we're interested in their sensitivity
-    scope' <- foldM (\sc -> (\(x :- τ) -> pushDefinition sc x (Arg x τ IsRelevant))) scope xτs
+    let checkArg :: Asgmt JuliaType -> DMScope AnnS -> TC (DMScope AnnS)
+        checkArg (x :- τ) d = do res <- checkSens (Arg x τ IsRelevant) scope
+                                 return (setValue x res d)
+    scope' <- foldM (\sc -> (\(x :- τ) -> checkArg (x :- τ) sc)) scope xτs
+    -- scope' <- foldM (\sc -> (\(x :- τ) -> setValue x (Arg x τ IsRelevant) sc)) scope xτs
+
 
     τr <- checkSens body scope'
 
@@ -207,7 +245,8 @@ checkSen' (SLet (x :- dτ) term body) scope = do
      dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
 
   -- we're very lazy, only adding the new term for v to its scope entry
-  scope' <- pushDefinition scope x term
+  termτ <- checkSens term scope
+  let scope' = setValue x termτ scope
 
   --check body, this will put the seinsitivity it has in the arguments in the monad context.
   τ <- checkSens body scope'
@@ -269,6 +308,7 @@ checkSen' (FLet fname sign term body) scope = do
    return result
 
 
+  {-
 checkSen' (Choice d) scope = do
   return $ Later $ \newscope -> do
     -- check the terms of the choices and sum their context.
@@ -448,6 +488,8 @@ checkSen' (ClipM c m) scope = do
    -- change clip parameter to input
    return (NoFun (DMMat nrm c n m (Numeric DMData) :@ RealS η))
 -}
+
+-}
 -- Everything else is currently not supported.
 checkSen' t scope = throwError (UnsupportedTermError t)
 
@@ -455,7 +497,7 @@ checkSen' t scope = throwError (UnsupportedTermError t)
 --------------------------------------------------------------------------------
 -- Privacy terms
 
-checkPri' :: DMTerm -> DMScope -> TC (DMTypeOf (AnnKind AnnP))
+checkPri' :: DMTerm -> DMScope AnnP -> TC (DMTypeOf (AnnKind AnnP))
 checkPri' = undefined
 
   {-

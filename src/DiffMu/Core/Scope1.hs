@@ -16,11 +16,11 @@ import Debug.Trace
 -- A scope with variables of type `v`, and contents of type `a` is simply a hashmap.
 type Scope v a = H.HashMap v a
 
-type SimpleScope = Scope Symbol DMTerm
+-- type SimpleScope = Scope Symbol DMTerm
 
 -- Our scopes have symbols as variables, and contain DMTerms and the scope in which the variable
 -- ought to be checked, i.e. the scope that was current during 
-newtype DMScope = DMScope (Scope Symbol (DMTerm, DMScope))
+-- newtype DMScope = DMScope (Scope Symbol (DMTerm, DMScope))
 
 -- typechecking actually carries two scopes, where the first one is the toplevel scope where nothing
 -- is ever popped, and the second that get's replaced by the one stored inside a Var terms entry
@@ -33,6 +33,7 @@ newtype DMScope = DMScope (Scope Symbol (DMTerm, DMScope))
 instance Default (Scope v a) where
   def = H.empty
 
+  {-
 instance Default DMScope where
   def = DMScope def
 
@@ -87,7 +88,7 @@ pushChoice scope fname sign term = do
                                         pushDefinition scope'' fname (Choice (H.insert sign term d))
                   _ -> throwError (ImpossibleError "Invalid scope entry.")
    return scope'
-
+-}
 -- All hashmaps are `DictLike`
 instance (DictKey k) => DictLike k v (H.HashMap k v) where
   setValue v m (h) = (H.insert v m h)
