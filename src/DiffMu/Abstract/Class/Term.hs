@@ -116,7 +116,7 @@ instance (KHashable v) => Hashable (SomeK v) where
   hashWithSalt salt (SomeK x) = hashWithSalt salt x
 
 instance (KShow v) => Show (SomeK (v :: j -> *)) where
-  show (SomeK (x :: v k)) = show x <> show (someTypeRep x)
+  show (SomeK (x :: v k)) = show x --  <> show (someTypeRep x)
     -- let pP = someTypeRep x
     -- in _
 

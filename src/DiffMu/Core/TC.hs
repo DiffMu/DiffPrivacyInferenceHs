@@ -80,6 +80,18 @@ instance Substitute TVarOf DMTypeOf (RealizeAnn a) where
   substitute σs (RealS s) = RealS <$> (substitute σs s)
   substitute σs (RealP s) = RealP <$> (substitute σs s)
 
+
+removeVars :: forall t. Monad t => (forall k. (IsKind k) => TVarOf k -> t (DMTypeOf k)) -> [SomeK (TVarOf)] -> t [SomeK (TVarOf)]
+removeVars σs vs = do
+  let f :: SomeK (TVarOf) -> t (Maybe (SomeK TVarOf))
+      f (SomeK var) = do
+        replacement <- σs var
+        case (replacement) of
+          TVar rep | rep == var -> return Nothing
+          _ -> return (Just (SomeK var))
+  newvs <- mapM f vs
+  return [v | (Just v) <- newvs]
+
 instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs Deleted = pure Deleted
   substitute σs L1 = pure L1
@@ -96,7 +108,7 @@ instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs (TVar x) = σs x
   substitute σs (τ1 :->: τ2) = (:->:) <$> substitute σs τ1 <*> substitute σs τ2
   substitute σs (τ1 :->*: τ2) = (:->*:) <$> substitute σs τ1 <*> substitute σs τ2
-  substitute σs (ForAll vs τ) = ForAll vs <$> substitute (removeFromSubstitution vs σs) τ
+  substitute σs (ForAll vs τ) = ForAll <$> (removeVars σs vs) <*> substitute σs τ
   substitute σs (DMTup τs) = DMTup <$> substitute σs τs
   substitute σs (DMMat nrm clp n m τ) = DMMat nrm clp <$> substitute σs n <*> substitute σs m <*> substitute σs τ
   substitute σs (DMChoice xs) = DMChoice <$> substitute σs xs

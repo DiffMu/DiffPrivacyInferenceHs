@@ -44,6 +44,10 @@ typecheckFromDMTerm term = do
         solveAllConstraints SolveExact
         tres' <- normalize tres
 
+        return tres'
+        -- let t = NoFun (Numeric (NonConst DMInt) :@ oneId)
+        -- return t
+
         -- a <- newVar
         -- b <- newVar
         -- let (ss :: Sensitivity) = injectVarId (Ln (oneId ⋆! oneId ⋆! a))
@@ -53,7 +57,6 @@ typecheckFromDMTerm term = do
         -- ss' <- normalize ss
         -- traceM $ "After norm: " <> show ss'
 
-        return tres'
 
         -- an example of subtyping
         {-
