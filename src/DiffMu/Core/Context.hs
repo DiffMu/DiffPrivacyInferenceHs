@@ -172,6 +172,23 @@ restrictAll s = let
       return ()
 
 
+-- add constraints that make sure all interesting context entries have sensitivity <= s.
+restrictInteresting :: Sensitivity -> TC ()
+restrictInteresting s = let
+   addC :: DMTypeOf (AnnKind AnnS) -> TC ()
+   addC τ = do
+      -- make constraints that say sv <= s and sv is the sensitivity of τ
+      sv :: Sensitivity <- newVar
+      addConstraint (Solvable (IsLessEqual (sv, s)))
+      addConstraint (Solvable (HasSensitivity (τ, sv)))
+      return ()
+   in do
+      γ <- use types
+      case γ of
+         Right _ -> throwError (ImpossibleError "restrictAll called on privacy context.")
+         Left (Ctx (MonCom h)) -> mapM (\(WithRelev IsRelevant τ) -> addC τ) h -- restrict sensitivities of relevant γ entries
+      return ()
+
 
 -- Look up the types and sensitivities/privacies of the variables in `xτs` from the current context.
 -- If a variable is not present in Σ (this means it was not used in the lambda body),
@@ -204,7 +221,6 @@ getArgList xτs = do
   types .= γ'
 
   return xτs'
-
 
 
 removeVar :: forall e t. (DMExtra e, MonadDMTC t) => Symbol -> t (WithRelev e)

@@ -333,33 +333,6 @@ checkSen' (Loop it cs (xi, xc) b) scope = do
 
           -}
 
-checkSen' (Gauss rp εp δp f) scope =
-  undefined
-  {-
-  let
-   setParam :: DMTerm -> TC Sensitivity
-   setParam t = do -- parameters must be const numbers.
-      τ <- checkSens t scope
-      v <- newVar
-      addConstraint (Solvable (IsLessEqual (τ, Numeric (Const v DMReal))))
-      return v
-   in do
-      τf <- checkSens f scope
-      (τs, senss, τfret) <- case τf of -- extract f's input types, sensitivities and return type.
-                                 xss :->: τ -> return ((map fstAnn xss), (map sndAnn xss), τ)
-                                 _ -> throwError (ImpossibleError "Gauss term must have Arr argument.")
-
-      τgauss <- newVar
-      addConstraint (Solvable (IsGaussResult (τgauss, τfret))) -- we decide later if its gauss or mgauss according to return type
-
-      r <- setParam rp
-      mapM (\s -> addConstraint (Solvable (IsLessEqual (s, r)))) senss -- all of f's sensitivities must be bounded by r
-
-      ε <- setParam εp
-      δ <- setParam δp
-
-      returnFun ((map (\t -> (t :@ (ε, δ))) τs) :->*: τgauss)
--}
 
 checkSen' (MCreate n m body) scope =
    let setDim :: DMTerm -> Sensitivity -> TC (DMTypeOf (AnnKind AnnS))
@@ -433,6 +406,47 @@ checkPri' (Ret t) scope = do
    mtruncateP inftyP
    return (Return τ)
 
+checkPri' (Gauss rp εp δp f) scope =
+  let
+   setParam :: DMTerm -> Sensitivity -> TC ()
+   setParam t v = do -- parameters must be const numbers.
+      τ <- checkSens t scope
+      sv :: Sensitivity <- newVar
+      τv <- newVar
+      unify τ (NoFun (Numeric (Const v τv) :@ RealS sv))
+      mtruncateP zeroId
+      return ()
+   checkBody (ε, δ) r = do
+      τf <- checkSens f scope
+      -- interesting input variables must have sensitivity <= r
+      restrictInteresting r
+      -- interesting output variables are set to (ε, δ), the rest is truncated to ∞
+      mtruncateP inftyP
+      (ivars, itypes) <- getInteresting
+      mapM (\(x, τ) -> setVarP x (WithRelev IsRelevant (Trunc (RealP (ε, δ)) τ))) (zip ivars itypes)
+      -- return type is a privacy type.
+      pv <- newPVar
+      return (Trunc (RealP (pv)) τf)
+   in do
+      v_ε :: Sensitivity <- newVar
+      v_δ :: Sensitivity <- newVar
+      v_r :: Sensitivity <- newVar
+
+      let mf = checkBody (v_ε, v_δ) v_r
+
+      let mr = setParam rp v_r
+      let mε = setParam εp v_ε
+      let mδ = setParam δp v_δ
+
+      (τf, _) <- msumTup (mf, msum3Tup (mr, mε, mδ))
+
+      τgauss <- newVar
+      addConstraint (Solvable (IsGaussResult (τgauss, τf))) -- we decide later if its gauss or mgauss according to return type
+
+      return τgauss
+
+
+
   {-
 checkPri' (SLet (x :- dτ) term body) scope =
   -- push x to scope, check body, and discard x from the result context.
@@ -464,8 +478,6 @@ checkPri' (FLet fname sign term body) scope = do -- this is the same as with che
    result <- checkPriv body scope'
    _ <- removeVar @AnnP fname
    return result
-
-
 
 
 {-

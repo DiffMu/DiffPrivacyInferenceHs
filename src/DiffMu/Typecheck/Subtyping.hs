@@ -219,21 +219,29 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsInfimum (DMTypeOf k, DMTypeO
 
 
 -- is it gauss or mgauss?
-instance Solve MonadDMTC IsGaussResult (DMType, DMType) where
+instance Solve MonadDMTC IsGaussResult (DMTypeOf (AnnKind AnnP), DMTypeOf (AnnKind AnnP)) where
   solve_ Dict _ name (IsGaussResult (τgauss, τin)) =
      case τin of
-        TVar x -> pure ()
-        DMMat nrm clp n m τ -> do
+        TVar x -> pure () -- we don't know yet.
+        NoFun (DMMat nrm clp n m τ :@ sin) -> do -- is mgauss
+
            iclp <- newVar -- clip of input matrix can be anything
-           -- set constraints for in- and output types as given in the rule
-           addConstraint (Solvable (IsLessEqual (τin, (DMMat L2 iclp n m (Numeric (NonConst DMReal))))))
-           addConstraint (Solvable (IsEqual (τgauss, (DMMat LInf U n m (Numeric (NonConst DMReal))))))
-           dischargeConstraint @MonadDMTC name
-        _ -> do -- regular gauss or invalid subtyping constraint later
-           τ <- newVar
-           addConstraint (Solvable (IsEqual (τin, Numeric τ)))
-           addConstraint (Solvable (IsEqual (τgauss, Numeric (NonConst DMReal))))
-           dischargeConstraint @MonadDMTC name
-           return ()
+           pv1 <- newPVar -- input annotation can be anythin
+           pv2 <- newPVar -- output annotation too
+           τv <- newVar -- input matrix element type can be anything (as long as it's numeric)
 
+           -- set in- and output types as given in the mgauss rule
+           unify τin (NoFun (DMMat L2 iclp n m (Numeric (τv)) :@ RealP pv1))
+           unify τgauss (NoFun ((DMMat LInf U n m (Numeric (NonConst DMReal))) :@ RealP pv2))
 
+           dischargeConstraint @MonadDMTC name
+        _ -> do -- regular gauss or unification errpr later
+           τ <- newVar -- input type can be anything (as long as it's numeric)
+           pv1 <- newPVar -- input annotation can be anything
+           p2 <- newPVar -- output annotation too.
+
+           -- set in- and output types as given in the gauss rule
+           unify τin (NoFun ((Numeric τ) :@ RealP pv1))
+           unify τgauss (NoFun ((Numeric (NonConst DMReal)) :@ RealP p2))
+
+           dischargeConstraint @MonadDMTC name

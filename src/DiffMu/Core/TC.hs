@@ -897,6 +897,12 @@ newTVar hint = meta.typeVars %%= ((newKindedName hint))
 newSVar :: forall k e t. (SingI k, MonadDMTC t, Typeable k) => Text -> t (SVarOf k)
 newSVar hint = meta.sensVars %%= (newKindedName hint)
 
+newPVar = do
+   p1 ::Sensitivity <- newVar
+   p2 :: Sensitivity <- newVar
+   return (p1, p2)
+
+
   -- where f names = let (τ , names') = newName hint names
   --                 in (TVar τ, names')
 
