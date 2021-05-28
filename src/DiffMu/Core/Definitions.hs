@@ -99,6 +99,7 @@ data DMKind =
   | NoFunKind
   | AnnKind Annotation
   | ForAllKind
+  | ReturnKind
   deriving (Typeable)
 
 -- Using the "TemplateHaskell" ghc-extension, and the following function from the singletons library,
@@ -117,6 +118,7 @@ instance Show DMKind where
   show NoFunKind = "NoFun"
   show (AnnKind a) = "Ann"
   show ForAllKind = "ForAll"
+  show ReturnKind = "Return"
 
 --------------------
 -- 2. DMTypes
@@ -182,13 +184,16 @@ data DMTypeOf (k :: DMKind) where
   ForAll :: [SomeK TVarOf] -> DMTypeOf FunKind -> DMTypeOf ForAllKind
 
   -- annotations
-  Return :: DMTypeOf (AnnKind AnnS) -> DMTypeOf (AnnKind AnnP) -- we need this so we can remember what the annotation was befor return
   NoFun :: DMExtra a => (DMTypeOf NoFunKind :& RealizeAnn a) -> DMTypeOf (AnnKind a)
-  Fun :: [DMTypeOf ForAllKind :& (Maybe [JuliaType], Sensitivity)] -> DMTypeOf (AnnKind AnnS)
+  Fun :: [DMTypeOf ForAllKind :& Sensitivity] -> DMTypeOf (AnnKind AnnS)
   (:∧:) :: (DMExtra a) => DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a) -- infimum
   (:↷:) :: Sensitivity -> DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a) -- scale
   Trunc :: (DMExtra a, DMExtra b) => RealizeAnn a -> DMTypeOf (AnnKind b) -> DMTypeOf (AnnKind a)
   TruncFunc :: DMExtra a => RealizeAnn a -> [DMTypeOf ForAllKind :& (Maybe [JuliaType], Sensitivity)] -> DMTypeOf (AnnKind a)
+
+  ReturnFun :: DMTypeOf [DMTypeOf ForAllKind :& ([JuliaType], Sensitivity)] -> DMTypeOf ReturnKind
+  ReturnNoFun :: DMTypeOf NoFunKind -> DMTypeOf ReturnKind
+  ReturnInfimum :: DMTypeOf ReturnKind -> DMTypeOf ReturnKind -> DMTypeOf ReturnKind
 
 type DMExtra e = (Typeable e, SingI e)
 --                   Eq (RealizeAnn e), Show (RealizeAnn e),
@@ -230,7 +235,9 @@ instance Show (DMTypeOf k) where
   show (x :∧: y) = "(" <> show x <> "∧" <> show y <> ")"
   show (Trunc a x) = "|" <> show x <> "|_" <> show a
   show (TruncFunc a x) = "|" <> show x <> "|_" <> show a
-  show (Return x) = "Ret( " <> show x <> ")"
+  show (ReturnNoFun x) = "Return (" <> show x <> ")"--"NoFun(" <> show x <> ")"
+  show (ReturnFun xs) =  "RFun(" <> show xs <> ")"
+  show (ReturnInfimum x y) =  "Return (" <> show x <> "∧" <> show y <> ")"
 
 
 instance Eq (DMTypeOf NormKind) where
