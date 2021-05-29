@@ -11,6 +11,36 @@ import qualified Data.HashMap.Strict as H
 
 import Debug.Trace
 
+{-
+   2021-05-29
+   Typechecking with 'ReturnKind's and new scopes:
+
+    ---- EXAMPLE ----
+    scope :: TC a | x -> TC b
+
+    check this (with y being the argument of sume function in whose body this happens):
+
+    x <- return y
+    return x+x
+
+
+    check "y" => scope[y] = computation that puts (y :: NoFun Int @ s) into gamma and returns (ReturnNoFun Int @ s)
+
+    check "return y" => execute computation in scope[y], take the return context and truncate it to (Inf,Inf), return (ReturnNoFun Int @ s)
+
+    check "x <- return y" => scope[x] = computation that checks "return y" (hence returns (ReturnNoFun Int @ s))
+
+    check "x" => execute computation in scope[x]
+
+    check "x+x" => execute computation in scope[x] (twice), msum the resulting gammas, set the sensitivities s (and s') to the typeOp constraint results, scale the gamma-sum with a new svar t, return (ReturnNoFun TypeOpResult @ t)
+
+    check "return x+x" => execute the computation that checks "x+x", truncate return context to (Inf,Inf), return (ReturnNoFun TypeOpResult @ t)
+
+    ---- EXAMPLE END ----
+
+-}
+
+
 -- Definition of the typechecking scope
 
 -- A scope with variables of type `v`, and contents of type `a` is simply a hashmap.
