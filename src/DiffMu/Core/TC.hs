@@ -585,7 +585,9 @@ instance Monad m => MonadTerm DMTypeOf (TCT m) where
   getSubs = view (meta.typeSubs) <$> get
   addSub σ = do
     σs <- use (meta.typeSubs)
+    -- traceM ("/ Type: I have the subs " <> show σs <> ", and I want to add: " <> show σ)
     σs' <- σs ⋆ singletonSub σ
+    -- traceM ("\\ Type: I now have: " <> show σs')
     meta.typeSubs .= σs'
     meta.typeVars %= (removeNameBySubstitution σ)
   newVar = TVar <$> newTVar "τ"
@@ -595,7 +597,7 @@ instance Monad m => MonadTerm SensitivityOf (TCT m) where
   getSubs = view (meta.sensSubs) <$> get
   addSub σ = do
     σs <- use (meta.sensSubs)
-    traceM ("I have the subs " <> show σs <> ", and I want to add: " <> show σ)
+    -- traceM ("I have the subs " <> show σs <> ", and I want to add: " <> show σ)
     σs' <- σs ⋆ singletonSub σ
     meta.sensSubs .= σs'
     meta.sensVars %= (removeNameBySubstitution σ)

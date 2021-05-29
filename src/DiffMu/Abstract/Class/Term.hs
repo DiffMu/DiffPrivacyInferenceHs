@@ -168,7 +168,7 @@ trySubstitute (Subs m) (x :: v k) = case H.lookup (SomeK x) m of
 
 -- trySubstitute :: (MonadImpossible t, MonadWatch t, Term v a, Typeable k) => Subs v a -> v k -> t (a k)
 
-substituteSingle :: (Typeable k, Term v a) => Sub v a k -> a k -> a k
+substituteSingle :: (Typeable k, Term v a) => Sub v a k -> a j -> a j
 substituteSingle ((x :: v k) := (a :: a k)) b = runIdentity (substitute f b)
   where f :: (forall k. (IsKind k) => v k -> Identity (a k))
         f (v :: v k2) = case testEquality (typeRep @k) (typeRep @k2) of
@@ -188,10 +188,7 @@ wellkindedSub ((x :: v k) :=~ (a :: a j)) =
 
 
 substituteSingle' :: (Typeable k, Term v a) => Sub v a k -> SomeK a -> SomeK a
-substituteSingle' ((x :: v k) := (a :: a k)) (SomeK (a0 :: a j)) =
-    case testEquality (typeRep @k) (typeRep @j) of
-      Nothing -> (SomeK a0)
-      Just Refl -> SomeK (substituteSingle (x := a) a0)
+substituteSingle' ((x :: v k) := (a :: a k)) (SomeK (a0 :: a j)) = SomeK (substituteSingle (x := a) a0)
 
 
 --       Nothing -> impossible $ "Encountered a wrongly kinded substitution: " <> show (typeRep @j) <> " ≠ " <> show (typeRep @j0)
