@@ -95,35 +95,35 @@ instance Solve MonadDMTC HasSensitivity (DMTypeOf (AnnKind AnnS), Sensitivity) w
   solve_ Dict _ name (HasSensitivity a) = solveHasSensitivity name a
 
 solveHasSensitivity :: forall t. IsT MonadDMTC t => Symbol -> (DMTypeOf (AnnKind AnnS), Sensitivity) -> t ()
-solveHasSensitivity name (τ, s) = do
-  case τ of
-      NoFun (τ' :@ (RealS s')) -> do
-         unify s s'
-         dischargeConstraint name
-         return ()
-      Fun τs -> do
-         let sums = foldl (\a -> \b -> a ⋆! b) oneId [s' | (_ :@ (_, s')) <- τs]
-         unify s sums
-         dischargeConstraint name
-         return ()
-      _ -> return () -- TODO can we do more?
+solveHasSensitivity name (τ, s) = undefined -- do
+  -- case τ of
+  --     NoFun (τ' :@ (RealS s')) -> do
+  --        unify s s'
+  --        dischargeConstraint name
+  --        return ()
+  --     Fun τs -> do
+  --        let sums = foldl (\a -> \b -> a ⋆! b) oneId [s' | (_ :@ (_, s')) <- τs]
+  --        unify s sums
+  --        dischargeConstraint name
+  --        return ()
+  --     _ -> return () -- TODO can we do more?
 
 
 instance Solve MonadDMTC SetMultiplier (DMTypeOf (AnnKind AnnS), Sensitivity) where
   solve_ Dict _ name (SetMultiplier a) = solveSetMultiplier name a
 
 solveSetMultiplier :: forall t. IsT MonadDMTC t => Symbol -> (DMTypeOf (AnnKind AnnS), Sensitivity) -> t ()
-solveSetMultiplier name (τ, s) = do
-  case τ of
-      NoFun (τ' :@ (RealS s')) -> do
-         unify s s'
-         dischargeConstraint name
-         return ()
-      Fun τs -> do
-         mapM (\s' -> unify s s') [s'' | (_ :@ (_, s'')) <- τs]
-         dischargeConstraint name
-         return ()
-      _ -> return () -- TODO can we do more?
+solveSetMultiplier name (τ, s) = undefined -- do
+  -- case τ of
+  --     NoFun (τ' :@ (RealS s')) -> do
+  --        unify s s'
+  --        dischargeConstraint name
+  --        return ()
+  --     Fun τs -> do
+  --        mapM (\s' -> unify s s') [s'' | (_ :@ (_, s'')) <- τs]
+  --        dischargeConstraint name
+  --        return ()
+  --     _ -> return () -- TODO can we do more?
 
 
 -------------------------------------------------------------------

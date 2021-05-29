@@ -189,10 +189,10 @@ data DMTypeOf (k :: DMKind) where
   (:∧:) :: (DMExtra a) => DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a) -- infimum
   (:↷:) :: Sensitivity -> DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a) -- scale
   Trunc :: (DMExtra a, DMExtra b) => RealizeAnn a -> DMTypeOf (AnnKind b) -> DMTypeOf (AnnKind a)
-  TruncFunc :: DMExtra a => RealizeAnn a -> [DMTypeOf ForAllKind :& (Maybe [JuliaType], Sensitivity)] -> DMTypeOf (AnnKind a)
+  TruncFunc :: DMExtra a => RealizeAnn a -> [DMTypeOf ForAllKind :& (Sensitivity)] -> DMTypeOf (AnnKind a)
 
-  ReturnFun :: DMTypeOf [DMTypeOf ForAllKind :& ([JuliaType], Sensitivity)] -> DMTypeOf ReturnKind
-  ReturnNoFun :: DMTypeOf NoFunKind -> DMTypeOf ReturnKind
+  ReturnFun :: [DMTypeOf ForAllKind :& ([JuliaType], SVar)] -> DMTypeOf ReturnKind
+  ReturnNoFun :: (DMTypeOf NoFunKind :& SVar) -> DMTypeOf ReturnKind
   ReturnInfimum :: DMTypeOf ReturnKind -> DMTypeOf ReturnKind -> DMTypeOf ReturnKind
 
 type DMExtra e = (Typeable e, SingI e)

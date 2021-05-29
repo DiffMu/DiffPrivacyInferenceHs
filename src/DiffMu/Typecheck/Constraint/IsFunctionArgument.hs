@@ -46,7 +46,7 @@ forceNoFun (TVar x) = do
 -- these cases just recurse
 forceNoFun (Trunc s x) = Trunc s <$> forceNoFun x
 forceNoFun (NoFun x) = pure $ NoFun x
-forceNoFun (Return x) = Return <$> forceNoFun x
+-- forceNoFun (Return x) = Return <$> forceNoFun x
 forceNoFun (x :∧: y) = do
   xx <- forceNoFun x
   yy <- forceNoFun y
@@ -59,7 +59,9 @@ forceNoFun (Fun _) = error "Mismatch!"
 forceNoFun (TruncFunc _ _) = error "Mismatch!"
 
 solveIsFunctionArgument :: IsT MonadDMTC t => Symbol -> (DMTypeOf (AnnKind a), DMTypeOf (AnnKind a)) -> t ()
+solveIsFunctionArgument = undefined
 
+{-
 -- if the given argument is a non-function, and we also expect a non-function, we unify their types and sensitities
 solveIsFunctionArgument name (NoFun (a1 :@ RealS η1), NoFun (a2 :@ RealS η2)) = do
   a1 ==! a2
@@ -112,6 +114,7 @@ solveIsFunctionArgument name (TVar a, Fun xs) = addSub (a := Fun xs) >> discharg
 -- if both sides are variables, or are {trunc,↷,∧} terms of variables
 -- then we cannot do anything yet, since we do not know whether we have function terms inside, or not.
 solveIsFunctionArgument name (_, _) = return ()
+-}
 
 instance Solve MonadDMTC IsFunctionArgument (DMTypeOf (AnnKind a), DMTypeOf (AnnKind a)) where
   solve_ Dict _ name (IsFunctionArgument (a,b)) = solveIsFunctionArgument name (a,b)

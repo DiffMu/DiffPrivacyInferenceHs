@@ -127,6 +127,9 @@ instance Substitute SVarOf SensitivityOf (RealizeAnn a) where
   substitute σs (RealS s) = RealS <$> (substitute σs s)
   substitute σs (RealP s) = RealP <$> (substitute σs s)
 
+instance Substitute SVarOf (SensitivityOf) (SVarOf k) where
+  substitute _ = pure
+
 instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
   substitute σs Deleted = pure Deleted
   substitute σs L1 = pure L1
@@ -1023,7 +1026,7 @@ normalizeAnn (η :↷: a) = do
   a' <- normalizeAnn a
   case a' of
     NoFun (x :@ η_old) -> pure $ NoFun (x :@ scaleExtra η η_old)
-    Fun xs             -> pure $ Fun ((\(x :@ (jt , a)) -> (x :@ (jt , η ⋅! a))) <$> xs)
+    Fun xs             -> pure $ Fun ((\(x :@ (a)) -> (x :@ (η ⋅! a))) <$> xs)
     other              -> pure $ (η :↷: other)
 normalizeAnn (a :∧: b) = do
   a' <- normalizeAnn a
@@ -1035,13 +1038,13 @@ normalizeAnn (a :∧: b) = do
                                              addConstraint (Solvable (IsInfimum (x, y, z)))
                                              return (NoFun (z :@ (ηx ⋆! ηy)))
     (_ , _) -> return (a' :∧: b')
-normalizeAnn (Return x) = do
-   x' <- normalizeAnn x
-   case x' of
-      NoFun (xτ :@ xs) -> do
-         xτ' <- normalizeAnn xτ
-         return (NoFun (xτ' :@ RealP inftyP))
-      _ -> pure $ Return x' -- TODO maybe we can do something for Fun?
+-- normalizeAnn (Return x) = do
+--    x' <- normalizeAnn x
+--    case x' of
+--       NoFun (xτ :@ xs) -> do
+--          xτ' <- normalizeAnn xτ
+--          return (NoFun (xτ' :@ RealP inftyP))
+--       _ -> pure $ Return x' -- TODO maybe we can do something for Fun?
 normalizeAnn (xs :->: y) = (:->:) <$> mapM normalizeAnn xs <*> normalizeAnn y
 normalizeAnn (xs :->*: y) = (:->*:) <$> mapM normalizeAnn xs <*> normalizeAnn y
 normalizeAnn x = pure x
