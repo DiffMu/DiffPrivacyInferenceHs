@@ -20,11 +20,12 @@ instance Unify MonadDMTC JuliaType where
   unify_ t s = throwError (UnificationError t s)
 
 
-instance Unify MonadDMTC (RealizeAnn e) where
+instance Unify MonadDMTC (Annotation l e) where
   -- NOTE: we can use the unify_ (with underscore) function here,
   -- because we do not have to normalize the just normalized arguments
-  unify_ (RealS s) (RealS t) = RealS <$> unify_ s t
-  unify_ (RealP s) (RealP t) = RealP <$> unify_ s t
+  unify_ (Sens s) (Sens t) = Sens <$> unify_ s t
+  unify_ (Priv s1 s2) (Priv t1 t2) = Priv <$> unify_ s1 t1 <*> unify s2 t2
+  unify_ x y = internalError $ "In unification of TauK-located types: Not implemented: " <> show x <> " =?= " <> show y
 
 -- TODO: Check, is i <> j what we want to do here?
 -- instance Unify MonadDMTC e => Unify MonadDMTC (WithRelev e) where
@@ -32,6 +33,10 @@ instance Unify MonadDMTC (RealizeAnn e) where
 
 instance Unify MonadDMTC (WithRelev e) where
   unify_ (WithRelev i e) (WithRelev j f)  = WithRelev (i <> j) <$> unify_ e f
+
+instance Unify MonadDMTC (Signature l) where
+  unify_ a b = internalError "Unification of signatures is not implemented"
+
 
 -- Unification of DMTypes (of any kind k) is given by:
 instance Unify MonadDMTC (DMTypeOf k) where
@@ -61,7 +66,6 @@ instance Unify MonadDMTC (DMTypeOf k) where
   unify_ (a :↷: x) (b :↷: y)              = undefined
   unify_ (x :∧: y) (v :∧: w)              = undefined
   unify_ (Trunc a x) (Trunc b y)          = undefined
-  unify_ (TruncFunc a x) (TruncFunc b y)  = undefined
   unify_ t s                              = throwError (UnificationError t s)
 
 -- Above we implictly use unification of terms of the type (a :& b).
@@ -91,13 +95,13 @@ instance Solve MonadDMTC IsLoopResult ((Sensitivity, Sensitivity, Sensitivity), 
   solve_ Dict _ _ (IsLoopResult ((s1, s2, s3), s, τ_iter)) = pure ()
 
 
-instance Solve MonadDMTC HasSensitivity (DMTypeOf (AnnKind AnnS), Sensitivity) where
+instance Solve MonadDMTC HasSensitivity (DMTypeOf (AnnotatedKind GammaK SensitivityK), Sensitivity) where
   solve_ Dict _ name (HasSensitivity a) = solveHasSensitivity name a
 
-solveHasSensitivity :: forall t. IsT MonadDMTC t => Symbol -> (DMTypeOf (AnnKind AnnS), Sensitivity) -> t ()
+solveHasSensitivity :: forall t. IsT MonadDMTC t => Symbol -> (DMTypeOf (AnnotatedKind GammaK SensitivityK), Sensitivity) -> t ()
 solveHasSensitivity name (τ, s) = undefined -- do
   -- case τ of
-  --     NoFun (τ' :@ (RealS s')) -> do
+  --     NoFun (τ' :@ (Sens s')) -> do
   --        unify s s'
   --        dischargeConstraint name
   --        return ()
@@ -109,13 +113,13 @@ solveHasSensitivity name (τ, s) = undefined -- do
   --     _ -> return () -- TODO can we do more?
 
 
-instance Solve MonadDMTC SetMultiplier (DMTypeOf (AnnKind AnnS), Sensitivity) where
+instance Solve MonadDMTC SetMultiplier (DMTypeOf (AnnotatedKind GammaK SensitivityK), Sensitivity) where
   solve_ Dict _ name (SetMultiplier a) = solveSetMultiplier name a
 
-solveSetMultiplier :: forall t. IsT MonadDMTC t => Symbol -> (DMTypeOf (AnnKind AnnS), Sensitivity) -> t ()
+solveSetMultiplier :: forall t. IsT MonadDMTC t => Symbol -> (DMTypeOf (AnnotatedKind GammaK SensitivityK), Sensitivity) -> t ()
 solveSetMultiplier name (τ, s) = undefined -- do
   -- case τ of
-  --     NoFun (τ' :@ (RealS s')) -> do
+  --     NoFun (τ' :@ (Sens s')) -> do
   --        unify s s'
   --        dischargeConstraint name
   --        return ()
@@ -132,10 +136,10 @@ solveSetMultiplier name (τ, s) = undefined -- do
 
 -- new monoid structure using infimum
 
-instance (DMExtra a, IsT MonadDMTC t) => SemigroupM (t) (DMTypeOf (AnnKind a)) where
+instance (DMExtra a, IsT MonadDMTC t) => SemigroupM (t) (DMTypeOf (AnnotatedKind GammaK a)) where
   (⋆) x y = return (x :∧: y)
 
-instance (Typeable a, SingI a, IsT MonadDMTC t) => MonoidM (t) (DMTypeOf (AnnKind a)) where
+instance (Typeable a, SingI a, IsT MonadDMTC t) => MonoidM (t) (DMTypeOf (AnnotatedKind GammaK a)) where
   neutral = newVar
 
 

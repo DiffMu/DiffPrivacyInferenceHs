@@ -871,6 +871,9 @@ instance MonadDMTC t => Normalize t (Location l) where
   normalize (GammaLocation s) = GammaLocation <$> normalize s
   normalize (TauLocation s) = TauLocation <$> normalize s
 
+instance MonadDMTC t => Normalize t (Signature l) where
+  normalize = pure
+
 instance MonadDMTC t => Normalize t (Annotation l a) where
   normalize (SensitivityAnnotation s) = SensitivityAnnotation <$> normalize s
   normalize (PrivacyAnnotation s) = PrivacyAnnotation <$> normalize s
