@@ -77,8 +77,8 @@ instance Substitute TVarOf DMTypeOf DMTypeOp where
   substitute σs (BinaryNum op args res) = (BinaryNum op <$> substitute σs args <*> substitute σs res)
 
 instance Substitute TVarOf DMTypeOf (RealizeAnn a) where
-  substitute σs (RealS s) = RealS <$> (substitute σs s)
-  substitute σs (RealP s) = RealP <$> (substitute σs s)
+  substitute σs (SensitivityAnnotation s) = SensitivityAnnotation <$> (substitute σs s)
+  substitute σs (PrivacyAnnotation s) = PrivacyAnnotation <$> (substitute σs s)
 
 
 removeVars :: forall t. Monad t => (forall k. (IsKind k) => TVarOf k -> t (DMTypeOf k)) -> [SomeK (TVarOf)] -> t [SomeK (TVarOf)]
@@ -124,8 +124,8 @@ instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
 
 
 instance Substitute SVarOf SensitivityOf (RealizeAnn a) where
-  substitute σs (RealS s) = RealS <$> (substitute σs s)
-  substitute σs (RealP s) = RealP <$> (substitute σs s)
+  substitute σs (SensitivityAnnotation s) = SensitivityAnnotation <$> (substitute σs s)
+  substitute σs (PrivacyAnnotation s) = PrivacyAnnotation <$> (substitute σs s)
 
 instance Substitute SVarOf (SensitivityOf) (SVarOf k) where
   substitute _ = pure
@@ -193,8 +193,8 @@ instance FreeVars TVarOf DMTypeOp where
   freeVars (BinaryNum op arg res) = freeVars arg <> freeVars res
 
 instance Typeable a => FreeVars TVarOf (RealizeAnn a) where
-  freeVars (RealS s) = freeVars s
-  freeVars (RealP s) = freeVars s
+  freeVars (SensitivityAnnotation s) = freeVars s
+  freeVars (PrivacyAnnotation s) = freeVars s
 
 instance Typeable k => FreeVars TVarOf (DMTypeOf k) where
   freeVars Deleted = []
@@ -421,7 +421,7 @@ instance Cast (Either Sensitivity Privacy) Privacy where
   cast (Left e) = error $ "Expected a privacy but got a sensitivity (" <> show e <> ")."
   cast (Right e) = return e
 
-instance Typeable x => Cast (Either (DMTypeOf (AnnKind AnnS)) (DMTypeOf (AnnKind AnnP))) (DMTypeOf (AnnKind x)) where
+instance Typeable x => Cast (Either (DMTypeOf (AnnotatedKind AnnS)) (DMTypeOf (AnnotatedKind AnnP))) (DMTypeOf (AnnotatedKind x)) where
   cast e =
     let case1 = testEquality (typeRep @x) (typeRep @AnnS)
         case2 = testEquality (typeRep @x) (typeRep @AnnP)
@@ -432,12 +432,12 @@ instance Typeable x => Cast (Either (DMTypeOf (AnnKind AnnS)) (DMTypeOf (AnnKind
       (_ , Just Refl) -> case e of
                           Right e -> return e
                           Left _ -> error "Expected a privacy but got a sensitivity."
-      _    -> impossible "Found an AnnKind which was neither AnnS nor AnnP."
--- instance Cast (Either (DMTypeOf (AnnKind AnnS)) (DMTypeOf (AnnKind AnnP))) (DMTypeOf (AnnKind x)) where
+      _    -> impossible "Found an AnnotatedKind which was neither AnnS nor AnnP."
+-- instance Cast (Either (DMTypeOf (AnnotatedKind AnnS)) (DMTypeOf (AnnotatedKind AnnP))) (DMTypeOf (AnnotatedKind x)) where
 
 instance Typeable x => Cast (Either (WithRelev AnnS) (WithRelev AnnP)) (WithRelev x) where
-  cast (Left (WithRelev i x)) = WithRelev i <$> cast @(Either (DMTypeOf (AnnKind AnnS)) (DMTypeOf (AnnKind AnnP))) (Left x)
-  cast (Right (WithRelev i x)) = WithRelev i <$> cast @(Either (DMTypeOf (AnnKind AnnS)) (DMTypeOf (AnnKind AnnP))) (Right x)
+  cast (Left (WithRelev i x)) = WithRelev i <$> cast @(Either (DMTypeOf (AnnotatedKind AnnS)) (DMTypeOf (AnnotatedKind AnnP))) (Left x)
+  cast (Right (WithRelev i x)) = WithRelev i <$> cast @(Either (DMTypeOf (AnnotatedKind AnnS)) (DMTypeOf (AnnotatedKind AnnP))) (Right x)
   -- cast (Left (WithRelev i (x :@ e))) = WithRelev i <$> (x :@) <$> cast @(Either (RealizeAnn a) (RealizeAnn b)) (Left e)
   -- cast (Right (WithRelev i (x :@ e))) = WithRelev i <$> (x :@) <$> cast @(Either (RealizeAnn a) (RealizeAnn b)) (Right e)
 
@@ -861,8 +861,8 @@ instance Monad t => Normalize t (SymbolOf k) where
   normalize = pure
 
 instance MonadDMTC t => Normalize t (RealizeAnn a) where
-  normalize (RealS s) = RealS <$> normalize s
-  normalize (RealP s) = RealP <$> normalize s
+  normalize (SensitivityAnnotation s) = SensitivityAnnotation <$> normalize s
+  normalize (PrivacyAnnotation s) = PrivacyAnnotation <$> normalize s
 
 instance (Monad t, Normalize t a) => Normalize t (Maybe a) where
   normalize Nothing = pure Nothing
@@ -972,14 +972,14 @@ createDMTypeNum (JuliaType str)  = throwError (TypeMismatchError $ "expected " <
 -- -- TODO: is it correct to create tvars for anything else?
 -- createDMType _ = TVar <$> newTVar "any"
 
-createDMType :: MonadDMTC t => JuliaType -> t (DMTypeOf (AnnKind AnnS))
+createDMType :: MonadDMTC t => JuliaType -> t (DMTypeOf (AnnotatedKind AnnS))
  -- NOTE: defaulting to non-const might or might not be what we want to do here.
 createDMType (JuliaType "Integer") = do
   s <- newVar
-  return (NoFun (Numeric (NonConst DMInt) :@ RealS s))
+  return (NoFun (Numeric (NonConst DMInt) :@ SensitivityAnnotation s))
 createDMType (JuliaType "Real") = do
   s <- newVar
-  return (NoFun (Numeric (NonConst DMReal) :@ RealS s))
+  return (NoFun (Numeric (NonConst DMReal) :@ SensitivityAnnotation s))
 -- TODO: is it correct to create tvars for anything else?
 createDMType _ = TVar <$> newTVar "any"
 
@@ -999,15 +999,15 @@ truncateExtra η η_old =
       True -> zeroId
       _    -> η)
 -- truncateExtra :: RealizeAnn f -> RealizeAnn e -> RealizeAnn f
--- truncateExtra η (RealS η_old) = 
+-- truncateExtra η (SensitivityAnnotation η_old) = 
 --   (case η_old == zeroId of
 --       True -> zeroId
 --       _    -> η)
 -- truncateExtra η η_old =
 
 scaleExtra :: forall (a :: Annotation). Sensitivity -> RealizeAnn a -> RealizeAnn a
-scaleExtra η (RealS s) = RealS (η ⋅! s)
-scaleExtra η (RealP (ε, δ)) = RealP (η ⋅! ε , η ⋅! δ)
+scaleExtra η (SensitivityAnnotation s) = SensitivityAnnotation (η ⋅! s)
+scaleExtra η (PrivacyAnnotation (ε, δ)) = PrivacyAnnotation (η ⋅! ε , η ⋅! δ)
 
 -- scaleSens :: forall (a :: Annotation). Sensitivity -> Sensitivi -> RealizeAnn a
 -- scaleSens = undefined
@@ -1045,13 +1045,13 @@ normalizeAnn (a :∧: b) = do
 --    case x' of
 --       NoFun (xτ :@ xs) -> do
 --          xτ' <- normalizeAnn xτ
---          return (NoFun (xτ' :@ RealP inftyP))
+--          return (NoFun (xτ' :@ PrivacyAnnotation inftyP))
 --       _ -> pure $ Return x' -- TODO maybe we can do something for Fun?
 normalizeAnn (xs :->: y) = (:->:) <$> mapM normalizeAnn xs <*> normalizeAnn y
 normalizeAnn (xs :->*: y) = (:->*:) <$> mapM normalizeAnn xs <*> normalizeAnn y
 normalizeAnn x = pure x
 
--- normalizeInsideAnn :: MonadDMTC t => DMTypeOf (AnnKind a) -> t (DMTypeOf (AnnKind a))
+-- normalizeInsideAnn :: MonadDMTC t => DMTypeOf (AnnotatedKind a) -> t (DMTypeOf (AnnotatedKind a))
 -- normalizeInsideAnn (TVar a) = undefined
 
 -- normalizeRewritingDMType :: MonadDMTC t -> 
