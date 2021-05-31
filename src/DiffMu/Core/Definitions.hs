@@ -99,7 +99,7 @@ data Annotation (l :: LocationKind) (a :: AnnotationKind) where
   SensitivityAnnotation :: Location l -> Annotation l SensitivityK
   PrivacyAnnotation :: (Location l, Location l) -> Annotation l PrivacyK
 
-data Signature (l :: Location) where
+data Signature (l :: LocationKind) where
   TauSignature :: [JuliaType] -> Signature TauK
   GammaSignature :: Signature GammaK
 
@@ -251,8 +251,17 @@ type DMExtra e = (Typeable e, SingI e)
 --                  )
 
 instance Show (Annotation l a) where
-  show (SensitivityAnnotation s) = show p
-  show (PrivacyAnnotation (e,d)) = show s
+  show (SensitivityAnnotation s) = show s
+  show (PrivacyAnnotation p) = show p
+
+instance Show (Location l) where
+  show (GammaLocation s) = show s
+  show (TauLocation s) = show s
+
+instance Show (Signature l) where
+   show (TauSignature s) = show s
+   show GammaSignature = ""
+
 
 -- Types are pretty printed as follows.
 instance Show (DMTypeOf k) where
