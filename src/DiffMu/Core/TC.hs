@@ -76,7 +76,7 @@ instance Substitute TVarOf DMTypeOf DMTypeOp where
   substitute σs (UnaryNum op arg res) = (UnaryNum op <$> substitute σs arg <*> substitute σs res)
   substitute σs (BinaryNum op args res) = (BinaryNum op <$> substitute σs args <*> substitute σs res)
 
-instance Substitute TVarOf DMTypeOf (AnnotatedKind l a) where
+instance Substitute TVarOf DMTypeOf (Annotation l a) where
   substitute σs (SensitivityAnnotation s) = SensitivityAnnotation <$> (substitute σs s)
   substitute σs (PrivacyAnnotation s) = PrivacyAnnotation <$> (substitute σs s)
 
@@ -119,7 +119,7 @@ instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs (Trunc a x) = Trunc a <$> substitute σs x
 
 
-instance Substitute SVarOf SensitivityOf (AnnotatedKind l a) where
+instance Substitute SVarOf SensitivityOf (Annotation l a) where
   substitute σs (SensitivityAnnotation s) = SensitivityAnnotation <$> (substitute σs s)
   substitute σs (PrivacyAnnotation s) = PrivacyAnnotation <$> (substitute σs s)
 
@@ -184,7 +184,7 @@ instance FreeVars TVarOf DMTypeOp where
   freeVars (UnaryNum op arg res) = freeVars arg <> freeVars res
   freeVars (BinaryNum op arg res) = freeVars arg <> freeVars res
 
-instance Typeable a => FreeVars TVarOf (AnnotatedKind l a) where
+instance Typeable a => FreeVars TVarOf (Annotation l a) where
   freeVars (SensitivityAnnotation s) = freeVars s
   freeVars (PrivacyAnnotation s) = freeVars s
 
@@ -423,9 +423,9 @@ instance Typeable x => Cast (Either (DMTypeOf (AnnotatedKind l SensitivityK)) (D
       _    -> impossible "Found an AnnotatedKind which was neither SensitivityK nor PrivacyK."
 -- instance Cast (Either (DMTypeOf (AnnotatedKind SensitivityK)) (DMTypeOf (AnnotatedKind PrivacyK))) (DMTypeOf (AnnotatedKind x)) where
 
-instance Typeable x => Cast (Either (WithRelev (AnnotatedKind l SensitivityK)) (WithRelev (AnnotatedKind l PrivacyK))) (WithRelev x) where
-  cast (Left (WithRelev i x)) = WithRelev i <$> cast @(Either (DMTypeOf (AnnotatedKind l SensitivityK)) (DMTypeOf (AnnotatedKind l PrivacyK))) (Left x)
-  cast (Right (WithRelev i x)) = WithRelev i <$> cast @(Either (DMTypeOf (AnnotatedKind l SensitivityK)) (DMTypeOf (AnnotatedKind l PrivacyK))) (Right x)
+instance Typeable x => Cast (Either (WithRelev (SensitivityK)) (WithRelev PrivacyK)) (WithRelev x) where
+  cast (Left (WithRelev i x)) = WithRelev i <$> cast @(Either (DMTypeOf (AnnotatedKind _ SensitivityK)) (DMTypeOf (AnnotatedKind _ PrivacyK))) (Left x)
+  cast (Right (WithRelev i x)) = WithRelev i <$> cast @(Either (DMTypeOf (AnnotatedKind _ SensitivityK)) (DMTypeOf (AnnotatedKind _ PrivacyK))) (Right x)
   -- cast (Left (WithRelev i (x :@ e))) = WithRelev i <$> (x :@) <$> cast @(Either (RealizeAnn a) (RealizeAnn b)) (Left e)
   -- cast (Right (WithRelev i (x :@ e))) = WithRelev i <$> (x :@) <$> cast @(Either (RealizeAnn a) (RealizeAnn b)) (Right e)
 
@@ -848,7 +848,7 @@ instance MonadDMTC t => Normalize (t) Sensitivity where
 instance Monad t => Normalize t (SymbolOf k) where
   normalize = pure
 
-instance MonadDMTC t => Normalize t (RealizeAnn a) where
+instance MonadDMTC t => Normalize t (Annotation l a) where
   normalize (SensitivityAnnotation s) = SensitivityAnnotation <$> normalize s
   normalize (PrivacyAnnotation s) = PrivacyAnnotation <$> normalize s
 
@@ -960,7 +960,7 @@ createDMTypeNum (JuliaType str)  = throwError (TypeMismatchError $ "expected " <
 -- -- TODO: is it correct to create tvars for anything else?
 -- createDMType _ = TVar <$> newTVar "any"
 
-createDMType :: MonadDMTC t => JuliaType -> t (DMTypeOf (AnnotatedKind SensitivityK))
+createDMType :: MonadDMTC t => JuliaType -> t (DMTypeOf (AnnotatedKind l SensitivityK))
  -- NOTE: defaulting to non-const might or might not be what we want to do here.
 createDMType (JuliaType "Integer") = do
   s <- newVar
@@ -993,7 +993,7 @@ truncateExtra η η_old =
 --       _    -> η)
 -- truncateExtra η η_old =
 
-scaleExtra :: forall (a :: Annotation). Sensitivity -> RealizeAnn a -> RealizeAnn a
+scaleExtra :: forall (a :: AnnotationKind). Sensitivity -> Annotation TauK a -> Annotation TauK a
 scaleExtra η (SensitivityAnnotation s) = SensitivityAnnotation (η ⋅! s)
 scaleExtra η (PrivacyAnnotation (ε, δ)) = PrivacyAnnotation (η ⋅! ε , η ⋅! δ)
 
