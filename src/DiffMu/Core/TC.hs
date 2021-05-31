@@ -409,10 +409,10 @@ instance Cast (Either Sensitivity Privacy) Privacy where
   cast (Left e) = error $ "Expected a privacy but got a sensitivity (" <> show e <> ")."
   cast (Right e) = return e
 
-instance Typeable x => Cast (Either (DMTypeOf (AnnotatedKind AnnS)) (DMTypeOf (AnnotatedKind AnnP))) (DMTypeOf (AnnotatedKind x)) where
+instance Typeable x => Cast (Either (DMTypeOf (AnnotatedKind l SensitivityK)) (DMTypeOf (AnnotatedKind l PrivacyK))) (DMTypeOf (AnnotatedKind l x)) where
   cast e =
-    let case1 = testEquality (typeRep @x) (typeRep @AnnS)
-        case2 = testEquality (typeRep @x) (typeRep @AnnP)
+    let case1 = testEquality (typeRep @x) (typeRep @SensitivityK)
+        case2 = testEquality (typeRep @x) (typeRep @PrivacyK)
     in case (case1,case2) of
       (Just Refl, _) -> case e of
                           Left e -> return e
@@ -420,12 +420,12 @@ instance Typeable x => Cast (Either (DMTypeOf (AnnotatedKind AnnS)) (DMTypeOf (A
       (_ , Just Refl) -> case e of
                           Right e -> return e
                           Left _ -> error "Expected a privacy but got a sensitivity."
-      _    -> impossible "Found an AnnotatedKind which was neither AnnS nor AnnP."
--- instance Cast (Either (DMTypeOf (AnnotatedKind AnnS)) (DMTypeOf (AnnotatedKind AnnP))) (DMTypeOf (AnnotatedKind x)) where
+      _    -> impossible "Found an AnnotatedKind which was neither SensitivityK nor PrivacyK."
+-- instance Cast (Either (DMTypeOf (AnnotatedKind SensitivityK)) (DMTypeOf (AnnotatedKind PrivacyK))) (DMTypeOf (AnnotatedKind x)) where
 
-instance Typeable x => Cast (Either (WithRelev AnnS) (WithRelev AnnP)) (WithRelev x) where
-  cast (Left (WithRelev i x)) = WithRelev i <$> cast @(Either (DMTypeOf (AnnotatedKind AnnS)) (DMTypeOf (AnnotatedKind AnnP))) (Left x)
-  cast (Right (WithRelev i x)) = WithRelev i <$> cast @(Either (DMTypeOf (AnnotatedKind AnnS)) (DMTypeOf (AnnotatedKind AnnP))) (Right x)
+instance Typeable x => Cast (Either (WithRelev (AnnotatedKind l SensitivityK)) (WithRelev (AnnotatedKind l PrivacyK))) (WithRelev x) where
+  cast (Left (WithRelev i x)) = WithRelev i <$> cast @(Either (DMTypeOf (AnnotatedKind l SensitivityK)) (DMTypeOf (AnnotatedKind l PrivacyK))) (Left x)
+  cast (Right (WithRelev i x)) = WithRelev i <$> cast @(Either (DMTypeOf (AnnotatedKind l SensitivityK)) (DMTypeOf (AnnotatedKind l PrivacyK))) (Right x)
   -- cast (Left (WithRelev i (x :@ e))) = WithRelev i <$> (x :@) <$> cast @(Either (RealizeAnn a) (RealizeAnn b)) (Left e)
   -- cast (Right (WithRelev i (x :@ e))) = WithRelev i <$> (x :@) <$> cast @(Either (RealizeAnn a) (RealizeAnn b)) (Right e)
 
@@ -464,7 +464,7 @@ instance (MonadDMTC t) => Normalize t (WithRelev e) where
 
 
 type TypeCtx extra = Ctx Symbol (WithRelev extra)
-type TypeCtxSP = Either (TypeCtx AnnS) (TypeCtx AnnP)
+type TypeCtxSP = Either (TypeCtx SensitivityK) (TypeCtx PrivacyK)
 
 data Watcher = Watcher Changed
   deriving (Generic)
@@ -960,7 +960,7 @@ createDMTypeNum (JuliaType str)  = throwError (TypeMismatchError $ "expected " <
 -- -- TODO: is it correct to create tvars for anything else?
 -- createDMType _ = TVar <$> newTVar "any"
 
-createDMType :: MonadDMTC t => JuliaType -> t (DMTypeOf (AnnotatedKind AnnS))
+createDMType :: MonadDMTC t => JuliaType -> t (DMTypeOf (AnnotatedKind SensitivityK))
  -- NOTE: defaulting to non-const might or might not be what we want to do here.
 createDMType (JuliaType "Integer") = do
   s <- newVar
