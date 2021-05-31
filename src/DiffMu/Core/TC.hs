@@ -76,7 +76,7 @@ instance Substitute TVarOf DMTypeOf DMTypeOp where
   substitute σs (UnaryNum op arg res) = (UnaryNum op <$> substitute σs arg <*> substitute σs res)
   substitute σs (BinaryNum op args res) = (BinaryNum op <$> substitute σs args <*> substitute σs res)
 
-instance Substitute TVarOf DMTypeOf (RealizeAnn a) where
+instance Substitute TVarOf DMTypeOf (AnnotatedKind l a) where
   substitute σs (SensitivityAnnotation s) = SensitivityAnnotation <$> (substitute σs s)
   substitute σs (PrivacyAnnotation s) = PrivacyAnnotation <$> (substitute σs s)
 
@@ -117,13 +117,9 @@ instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs (a :↷: x) = (a :↷:) <$> substitute σs x
   substitute σs (x :∧: y) = (:∧:) <$> substitute σs x <*> substitute σs y
   substitute σs (Trunc a x) = Trunc a <$> substitute σs x
-  substitute σs (TruncFunc a x) = TruncFunc a <$> substitute σs x
-  substitute σs (ReturnNoFun τ) = ReturnNoFun <$> substitute σs τ
-  substitute σs (ReturnFun τs) = ReturnFun <$> substitute σs τs
-  substitute σs (ReturnInfimum x y) = ReturnInfimum <$> substitute σs x <*> substitute σs y
 
 
-instance Substitute SVarOf SensitivityOf (RealizeAnn a) where
+instance Substitute SVarOf SensitivityOf (AnnotatedKind l a) where
   substitute σs (SensitivityAnnotation s) = SensitivityAnnotation <$> (substitute σs s)
   substitute σs (PrivacyAnnotation s) = PrivacyAnnotation <$> (substitute σs s)
 
@@ -155,10 +151,6 @@ instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
   substitute σs (a :↷: x) = (:↷:) <$> substitute σs a <*> substitute σs x
   substitute σs (x :∧: y) = (:∧:) <$> substitute σs x <*> substitute σs y
   substitute σs (Trunc a x) = Trunc <$> substitute σs a <*> substitute σs x
-  substitute σs (TruncFunc a x) = TruncFunc <$> substitute σs a <*> substitute σs x
-  substitute σs (ReturnNoFun τ) = ReturnNoFun <$> substitute σs τ
-  substitute σs (ReturnFun τs) = ReturnFun <$> substitute σs τs
-  substitute σs (ReturnInfimum x y) = ReturnInfimum <$> substitute σs x <*> substitute σs y
 
 
 instance Term TVarOf DMTypeOf where
@@ -192,7 +184,7 @@ instance FreeVars TVarOf DMTypeOp where
   freeVars (UnaryNum op arg res) = freeVars arg <> freeVars res
   freeVars (BinaryNum op arg res) = freeVars arg <> freeVars res
 
-instance Typeable a => FreeVars TVarOf (RealizeAnn a) where
+instance Typeable a => FreeVars TVarOf (AnnotatedKind l a) where
   freeVars (SensitivityAnnotation s) = freeVars s
   freeVars (PrivacyAnnotation s) = freeVars s
 
@@ -221,10 +213,6 @@ instance Typeable k => FreeVars TVarOf (DMTypeOf k) where
   freeVars (a :↷: x) = freeVars x
   freeVars (x :∧: y) = freeVars x <> freeVars y
   freeVars (Trunc a x) = freeVars x
-  freeVars (TruncFunc a x) = freeVars x
-  freeVars (ReturnFun x) = freeVars x
-  freeVars (ReturnNoFun x) = freeVars x
-  freeVars (ReturnInfimum x y) = freeVars x <> freeVars y
 
 
 
