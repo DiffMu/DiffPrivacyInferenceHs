@@ -118,23 +118,31 @@ data Signature (l :: LocationKind) where
 --   RealizeSVar :: SVar -> RealizeVar SensitivityK
 --   RealizePVar :: (SVar, SVar) -> RealizeVar PrivacyK
 
-  {-
-instance Eq (Annotation a) where
-  (RealS a) == RealS b = a == b
-  (RealP a) == RealP b = a == b
+pattern Sens x = SensitivityAnnotation (GammaLocation x)
+pattern Priv a b = PrivacyAnnotation (GammaLocation a, GammaLocation b)
 
-instance Monad t => SemigroupM t (Annotation a) where
-  (RealS a) ⋆ (RealS b) = RealS <$> (a ⋆ b)
-  (RealP a) ⋆ (RealP b) = RealP <$> (a ⋆ b)
-instance Typeable a => MonoidM Identity (Annotation a) where
+instance Eq (Location GammaK) where
+  (GammaLocation s) == (GammaLocation s') = (s == s')
+
+instance Eq (Annotation GammaK a) where
+  (SensitivityAnnotation a) == SensitivityAnnotation b = a == b
+  (PrivacyAnnotation a) == PrivacyAnnotation b = a == b
+
+instance (Monad t) => SemigroupM t (Annotation GammaK a) where
+  (Sens a) ⋆ (Sens b) = Sens <$> ((a ⋆ b))
+  (Priv x a) ⋆ (Priv y b) = Priv <$> (x ⋆ y) <*> (a ⋆ b)
+  a ⋆ b = error "This is very strange, and shouldn't actually happen..."
+
+instance Typeable a => MonoidM Identity (Annotation GammaK a) where
   neutral = let case1 = testEquality (typeRep @a) (typeRep @SensitivityK)
                 case2 = testEquality (typeRep @a) (typeRep @PrivacyK)
             in case (case1, case2) of
-                (Just Refl , _) -> pure $ RealS zeroId
-                (_ , Just Refl) -> pure $ RealP (zeroId, zeroId)
+                (Just Refl , _) -> pure $ Sens zeroId
+                (_ , Just Refl) -> pure $ Priv zeroId zeroId
                 _ -> undefined
 
-instance Typeable a => CMonoidM Identity (Annotation a) where
+instance Typeable a => CMonoidM Identity (Annotation GammaK a) where
+  {-
 -- type family Annotation SensitivityK = Sensitivity
 
 -}

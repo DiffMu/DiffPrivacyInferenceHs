@@ -993,9 +993,9 @@ truncateExtra η η_old =
 --       _    -> η)
 -- truncateExtra η η_old =
 
-scaleExtra :: forall (a :: AnnotationKind). Sensitivity -> Annotation TauK a -> Annotation TauK a
-scaleExtra η (SensitivityAnnotation s) = SensitivityAnnotation (η ⋅! s)
-scaleExtra η (PrivacyAnnotation (ε, δ)) = PrivacyAnnotation (η ⋅! ε , η ⋅! δ)
+scaleExtra :: forall (a :: AnnotationKind). Sensitivity -> Annotation GammaK a -> Annotation GammaK a
+scaleExtra η (SensitivityAnnotation (GammaLocation s)) = SensitivityAnnotation (GammaLocation (η ⋅! s))
+scaleExtra η (PrivacyAnnotation (GammaLocation ε, GammaLocation δ)) = PrivacyAnnotation (GammaLocation (η ⋅! ε) , GammaLocation (η ⋅! δ))
 
 -- scaleSens :: forall (a :: Annotation). Sensitivity -> Sensitivi -> RealizeAnn a
 -- scaleSens = undefined
@@ -1010,23 +1010,31 @@ normalizeAnn (Trunc η a) = do
   a' <- normalizeAnn a
   case a' of
     NoFun (x :@ η_old) -> pure $ NoFun (x :@ truncateExtra η η_old)
-    Fun xs             -> pure $ TruncFunc η xs
+    Fun xs             -> pure $ Fun (f <$> xs)
+      where f (x :@ (sig, _)) = (x :@ (sig, η))
     other              -> pure $ Trunc η other
 normalizeAnn (η :↷: a) = do
   a' <- normalizeAnn a
   case a' of
     NoFun (x :@ η_old) -> pure $ NoFun (x :@ scaleExtra η η_old)
-    Fun xs             -> pure $ Fun ((\(x :@ (a)) -> (x :@ (η ⋅! a))) <$> xs)
+    Fun xs             -> pure $ Fun (f <$> xs)
+      where f (x :@ (sig, η_old)) = (x :@ (sig, scaleExtra η η_old))
+    -- ((\(x :@ (a)) -> (x :@ (η ⋅! a))) <$> xs)
     other              -> pure $ (η :↷: other)
 normalizeAnn (a :∧: b) = do
   a' <- normalizeAnn a
   b' <- normalizeAnn b
   case (a', b') of
     (Fun xs, Fun ys) -> pure $ Fun (xs <> ys)
-    (NoFun (x :@ ηx), NoFun (y :@ ηy)) -> do -- z <- infimum @MonadDMTC @t x y
+    (NoFun (x :@ (Sens ηx)), NoFun (y :@ (Sens ηy))) -> do -- z <- infimum @MonadDMTC @t x y
                                              z <- newVar
                                              addConstraint (Solvable (IsInfimum (x, y, z)))
-                                             return (NoFun (z :@ (ηx ⋆! ηy)))
+                                             return (NoFun (z :@ Sens (ηx ⋆! ηy)))
+
+    (NoFun (x :@ (Priv εx δx)), NoFun (y :@ (Priv εy δy))) -> do -- z <- infimum @MonadDMTC @t x y
+                                             z <- newVar
+                                             addConstraint (Solvable (IsInfimum (x, y, z)))
+                                             return (NoFun (z :@ Priv (εx ⋆! εy) (δx ⋆! δy)))
     (_ , _) -> return (a' :∧: b')
 -- normalizeAnn (Return x) = do
 --    x' <- normalizeAnn x
