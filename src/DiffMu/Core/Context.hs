@@ -25,7 +25,7 @@ scale η (Left γ) = Left (f <$> γ)
   -- where f (WithRelev i (τ :@ s)) = WithRelev i (τ :@ (η ⋅! s))
 scale η (Right γ) = Right (f <$> γ)
   where f (WithRelev i x) = WithRelev i (η :↷: x)
-  -- where f :: WithRelev AnnP -> WithRelev AnnP
+  -- where f :: WithRelev PrivacyK -> WithRelev PrivacyK
   --       f (WithRelev i (τ :@ (δ,ε))) = WithRelev i (τ :@ (η ⋅! δ, η ⋅! ε))
 
 -- Scales the current type context living in our typechecking-state monad by a given `η`.
@@ -45,7 +45,7 @@ instance Default Privacy where
 instance (CMonoidM t a, CMonoidM t b) => CMonoidM t (a,b)
 
 -- truncate_impl :: forall f e. (CMonoidM Identity f, CMonoidM Identity e, Eq e) => f -> TypeCtx e -> TypeCtx f
-truncate_impl :: forall f e. (DMExtra e, DMExtra f) => RealizeAnn f -> TypeCtx e -> TypeCtx f
+truncate_impl :: forall f e. (DMExtra e, DMExtra f) => Annotation GammaK f -> TypeCtx e -> TypeCtx f
 truncate_impl η γ = truncate_annotation <$> γ
    where
       truncate_annotation :: (WithRelev e) -> (WithRelev f)
@@ -56,12 +56,12 @@ truncate_impl η γ = truncate_annotation <$> γ
       --       _    -> WithRelev i (τ :@ η))
 
 truncateS :: Sensitivity -> TypeCtxSP -> TypeCtxSP
-truncateS η (Left γ) = Left (truncate_impl (RealS η) γ)
-truncateS η (Right γ) = Left (truncate_impl (RealS η) γ)
+truncateS η (Left γ) = Left (truncate_impl (Sens η) γ)
+truncateS η (Right γ) = Left (truncate_impl (Sens η) γ)
 
 truncateP :: Privacy -> TypeCtxSP -> TypeCtxSP
-truncateP η (Left γ) = Right (truncate_impl (RealP η) γ)
-truncateP η (Right γ) = Right (truncate_impl (RealP η) γ)
+truncateP (ε, δ) (Left γ) = Right (truncate_impl (Priv ε δ) γ)
+truncateP (ε, δ) (Right γ) = Right (truncate_impl (Priv ε δ) γ)
 
 -- Truncates the current type context living in our typechecking-state monad by a given Sensitivity `η`.
 mtruncateS :: MonadDMTC t => Sensitivity -> t ()
@@ -147,17 +147,17 @@ msum3Tup (ma, mb, mc) = do
 
 
 
-setVarS :: MonadDMTC t => Symbol -> WithRelev AnnS -> t ()
-setVarS k v = types %=~ setValueM k (Left v :: Either (WithRelev AnnS) (WithRelev AnnP))
+setVarS :: MonadDMTC t => Symbol -> WithRelev SensitivityK -> t ()
+setVarS k v = types %=~ setValueM k (Left v :: Either (WithRelev SensitivityK) (WithRelev PrivacyK))
 
-setVarP :: MonadDMTC t => Symbol -> WithRelev AnnP -> t ()
-setVarP k v = types %=~ setValueM k (Right v :: Either (WithRelev AnnS) (WithRelev AnnP))
+setVarP :: MonadDMTC t => Symbol -> WithRelev PrivacyK -> t ()
+setVarP k v = types %=~ setValueM k (Right v :: Either (WithRelev SensitivityK) (WithRelev PrivacyK))
 
 
 -- add constraints that make sure all current context entries have sensitivity <= s.
 restrictAll :: Sensitivity -> TC ()
 restrictAll s = let
-   addC :: DMTypeOf (AnnKind AnnS) -> TC ()
+   addC :: DMTypeOf (AnnotatedKind GammaK SensitivityK) -> TC ()
    addC τ = do
       -- make constraints that say sv <= s and sv is the sensitivity of τ
       sv :: Sensitivity <- newVar
@@ -175,7 +175,7 @@ restrictAll s = let
 -- add constraints that make sure all interesting context entries have sensitivity <= s.
 restrictInteresting :: Sensitivity -> TC ()
 restrictInteresting s = let
-   addC :: DMTypeOf (AnnKind AnnS) -> TC ()
+   addC :: DMTypeOf (AnnotatedKind GammaK SensitivityK) -> TC ()
    addC τ = do
       -- make constraints that say sv <= s and sv is the sensitivity of τ
       sv :: Sensitivity <- newVar
@@ -194,11 +194,11 @@ restrictInteresting s = let
 -- If a variable is not present in Σ (this means it was not used in the lambda body),
 -- create a new type/typevar according to type hint given in `xτs` and give it zero annotation.
 -- The result is the signature of the lambda the checking of whose body returned the current context.
-getArgList :: forall t e. (MonadDMTC t, DMExtra e) => [Asgmt JuliaType] -> t [DMTypeOf (AnnKind e)]
+getArgList :: forall t e. (MonadDMTC t, DMExtra e) => [Asgmt JuliaType] -> t [DMTypeOf (AnnotatedKind GammaK e)]
 getArgList xτs = do
   (γ :: TypeCtxSP) <- use types
 
-  let f :: Asgmt JuliaType -> t (DMTypeOf (AnnKind e))
+  let f :: Asgmt JuliaType -> t (DMTypeOf (AnnotatedKind GammaK e))
       f (x :- τ) = do
         val <- getValueM x γ
         case val of
@@ -241,13 +241,13 @@ lookupVar x =  do
   v <- getValueM x γ
   cast v
 
-getInteresting :: MonadDMTC t => t ([Symbol],[DMTypeOf (AnnKind AnnP)])
+getInteresting :: MonadDMTC t => t ([Symbol],[DMTypeOf (AnnotatedKind GammaK PrivacyK)])
 getInteresting = do
    γ <- use types
    h <- case γ of
            Left _ -> throwError (ImpossibleError "getInteresting called on sensitivity context.")
            Right (Ctx (MonCom h')) -> return (H.toList h')
-   let f :: [(Symbol, WithRelev AnnP)] -> ([(Symbol, DMTypeOf (AnnKind AnnP))])
+   let f :: [(Symbol, WithRelev PrivacyK)] -> ([(Symbol, DMTypeOf (AnnotatedKind GammaK PrivacyK))])
        f xs = [ (x , τ) | (x , WithRelev IsRelevant τ) <- xs ]
    return (unzip (f h))
 
