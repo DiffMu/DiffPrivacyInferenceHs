@@ -48,6 +48,35 @@ type SVar   = SVarOf MainSensKind
 -- NOTE: Sensitivities only have a single kind, `MainSensKind`.
 
 ---------------------------------------------------------
+-- Sensitivity and Privacy
+--
+-- The actual definition of sensitivity terms is in Core.Symbolic.
+-- Here we only give it a different name .
+
+-- In order to fit the same type classes (in particular Term, and MonadTerm from Abstract.Class),
+-- sensitivities are also annotated with (k :: SensKind). Even though this type only contains a single
+-- kind (MainSensKind :: SensKind). But because of this we also have a kinded, and an abbreviated definition:
+type SensitivityOf = SymTerm
+type Sensitivity = SymTerm MainSensKind
+
+-- Privacies are defined similarly.
+-- NOTE: Since they are currently not used anywhere, this definition is not battle tested.
+--       We might want to define them slightly differently, for example using a newtype.
+--       On the other hand, this seems to be the most sensible option currently, with the least syntactic overhead.
+type PrivacyOf a = (SensitivityOf a,SensitivityOf a)
+type Privacy = PrivacyOf MainSensKind
+
+
+
+
+-------
+--- TODO: REORDER FILE?
+newtype JuliaType = JuliaType String
+  deriving (Generic, Eq, Ord)
+
+
+
+---------------------------------------------------------
 -- Definition of DMTypes
 --
 -- Our DMTypes do not only contain the real types of the duet
@@ -58,36 +87,57 @@ type SVar   = SVarOf MainSensKind
 --------------------
 -- 1. DMKinds
 
-data Annotation = AnnS | AnnP
+data AnnotationKind = SensitivityK | PrivacyK
 
--- type family RealizeAnn (a :: Annotation) = (result :: *) | result -> a where
--- data family RealizeAnn (a :: Annotation) :: *
--- data instance RealizeAnn AnnS = SymTerm MainSensKind
--- data instance RealizeAnn AnnP = (SymTerm MainSensKind, SymTerm MainSensKind)
+data LocationKind = GammaK | TauK
 
-data RealizeAnn (a :: Annotation) where
-  RealS :: SymTerm MainSensKind -> RealizeAnn AnnS
-  RealP :: (SymTerm MainSensKind, SymTerm MainSensKind) -> RealizeAnn AnnP
+data Location (l :: LocationKind) where
+  GammaLocation :: Sensitivity -> Location GammaK
+  TauLocation :: SVar -> Location TauK
 
-instance Eq (RealizeAnn a) where
+data Annotation (l :: LocationKind) (a :: AnnotationKind) where
+  SensitivityAnnotation :: Location l -> Annotation l SensitivityK
+  PrivacyAnnotation :: (Location l, Location l) -> Annotation l PrivacyK
+
+data Signature (l :: Location) where
+  TauSignature :: [JuliaType] -> Signature TauK
+  GammaSignature :: Signature GammaK
+
+-- data Signature (s :: SignatureKind) where
+--   MethodSignature :: [JuliaType] -> Signature MethodK
+--   EmptySignature :: Signature EmptyK
+
+-- type family Annotation (a :: Annotation) = (result :: *) | result -> a where
+-- data family Annotation (a :: Annotation) :: *
+-- data instance Annotation SensitivityK = SymTerm MainSensKind
+-- data instance Annotation PrivacyK = (SymTerm MainSensKind, SymTerm MainSensKind)
+
+-- data RealizeType (l :: Location) (a :: Annotation) where
+
+-- data RealizeVar (a :: Annotation) where
+--   RealizeSVar :: SVar -> RealizeVar SensitivityK
+--   RealizePVar :: (SVar, SVar) -> RealizeVar PrivacyK
+
+  {-
+instance Eq (Annotation a) where
   (RealS a) == RealS b = a == b
   (RealP a) == RealP b = a == b
 
-instance Monad t => SemigroupM t (RealizeAnn a) where
+instance Monad t => SemigroupM t (Annotation a) where
   (RealS a) ⋆ (RealS b) = RealS <$> (a ⋆ b)
   (RealP a) ⋆ (RealP b) = RealP <$> (a ⋆ b)
-
-instance Typeable a => MonoidM Identity (RealizeAnn a) where
-  neutral = let case1 = testEquality (typeRep @a) (typeRep @AnnS)
-                case2 = testEquality (typeRep @a) (typeRep @AnnP)
+instance Typeable a => MonoidM Identity (Annotation a) where
+  neutral = let case1 = testEquality (typeRep @a) (typeRep @SensitivityK)
+                case2 = testEquality (typeRep @a) (typeRep @PrivacyK)
             in case (case1, case2) of
                 (Just Refl , _) -> pure $ RealS zeroId
                 (_ , Just Refl) -> pure $ RealP (zeroId, zeroId)
                 _ -> undefined
 
-instance Typeable a => CMonoidM Identity (RealizeAnn a) where
--- type family RealizeAnn AnnS = Sensitivity
+instance Typeable a => CMonoidM Identity (Annotation a) where
+-- type family Annotation SensitivityK = Sensitivity
 
+-}
 -- A `DMKind` is one of the following constructors:
 data DMKind =
     MainKind
@@ -97,14 +147,14 @@ data DMKind =
   | NormKind
   | FunKind
   | NoFunKind
-  | AnnKind Annotation
+  | AnnotatedKind LocationKind AnnotationKind
   | ForAllKind
-  | ReturnKind
   deriving (Typeable)
 
 -- Using the "TemplateHaskell" ghc-extension, and the following function from the singletons library,
 -- we generate the `SingI` instances (and related stuff) needed to work with `DMKind` expressions on the type level.
-genSingletons [''Annotation]
+genSingletons [''AnnotationKind]
+genSingletons [''LocationKind]
 genSingletons [''DMKind]
 
 -- DMKinds are pretty printed as follows. For this we implement the `Show` typeclass for `DMKind`.
@@ -116,9 +166,9 @@ instance Show DMKind where
   show NormKind = "Norm"
   show FunKind = "Fun"
   show NoFunKind = "NoFun"
-  show (AnnKind a) = "Ann"
+  show (AnnotatedKind l a) = "Ann"
   show ForAllKind = "ForAll"
-  show ReturnKind = "Return"
+  -- show ReturnKind = "Return"
 
 --------------------
 -- 2. DMTypes
@@ -155,12 +205,10 @@ data DMTypeOf (k :: DMKind) where
   TVar :: IsKind k => SymbolOf k -> DMTypeOf k
 
   -- the arrow type
-  (:->:) :: [DMTypeOf (AnnKind AnnS)] -> DMTypeOf (AnnKind AnnS) -> DMFun
-  -- (:->:) :: [DMType :& Sensitivity] -> DMTypeOf (AnnKind AnnS) -> DMFun
+  (:->:) :: [DMTypeOf (AnnotatedKind GammaK SensitivityK)] -> DMTypeOf (AnnotatedKind TauK SensitivityK) -> DMFun
 
   -- the privacy-arrow type
-  (:->*:) :: [DMTypeOf (AnnKind AnnP)] -> DMTypeOf (AnnKind AnnP) -> DMFun
-  -- (:->*:) :: [DMType :& Privacy] -> DMTypeOf (AnnKind AnnP) -> DMFun
+  (:->*:) :: [DMTypeOf (AnnotatedKind GammaK PrivacyK)] -> DMTypeOf (AnnotatedKind TauK PrivacyK) -> DMFun
 
   -- tuples
   DMTup :: [DMType] -> DMType
@@ -184,27 +232,27 @@ data DMTypeOf (k :: DMKind) where
   ForAll :: [SomeK TVarOf] -> DMTypeOf FunKind -> DMTypeOf ForAllKind
 
   -- annotations
-  NoFun :: DMExtra a => (DMTypeOf NoFunKind :& RealizeAnn a) -> DMTypeOf (AnnKind a)
-  Fun :: [DMTypeOf ForAllKind :& Sensitivity] -> DMTypeOf (AnnKind AnnS)
-  (:∧:) :: (DMExtra a) => DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a) -- infimum
-  (:↷:) :: Sensitivity -> DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a) -- scale
-  Trunc :: (DMExtra a, DMExtra b) => RealizeAnn a -> DMTypeOf (AnnKind b) -> DMTypeOf (AnnKind a)
-  TruncFunc :: DMExtra a => RealizeAnn a -> [DMTypeOf ForAllKind :& (Sensitivity)] -> DMTypeOf (AnnKind a)
+  NoFun :: DMExtra a => (DMTypeOf NoFunKind :& Annotation l a) -> DMTypeOf (AnnotatedKind l a)
+  Fun :: [DMTypeOf ForAllKind :& (Signature l, Annotation l a)] -> DMTypeOf (AnnotatedKind l a)
+  (:∧:) :: (DMExtra a) => DMTypeOf (AnnotatedKind l a) -> DMTypeOf (AnnotatedKind l a) -> DMTypeOf (AnnotatedKind l a) -- infimum
+  (:↷:) :: Sensitivity -> DMTypeOf (AnnotatedKind GammaK a) -> DMTypeOf (AnnotatedKind GammaK a) -- scale
+  Trunc :: (DMExtra a, DMExtra b) => Annotation GammaK a -> DMTypeOf (AnnotatedKind GammaK b) -> DMTypeOf (AnnotatedKind GammaK a)
+  -- TruncFunc :: DMExtra a => Annotation a -> [DMTypeOf ForAllKind :& (Sensitivity)] -> DMTypeOf (AnnotatedKind a)
 
-  ReturnFun :: [DMTypeOf ForAllKind :& ([JuliaType], SVar)] -> DMTypeOf ReturnKind
-  ReturnNoFun :: (DMTypeOf NoFunKind :& SVar) -> DMTypeOf ReturnKind
-  ReturnInfimum :: DMTypeOf ReturnKind -> DMTypeOf ReturnKind -> DMTypeOf ReturnKind
+  -- ReturnFun :: [DMTypeOf ForAllKind :& ([JuliaType], SVar)] -> DMTypeOf ReturnKind
+  -- ReturnNoFun :: (DMTypeOf NoFunKind :& SVar) -> DMTypeOf ReturnKind
+  -- ReturnInfimum :: DMTypeOf ReturnKind -> DMTypeOf ReturnKind -> DMTypeOf ReturnKind
 
 type DMExtra e = (Typeable e, SingI e)
---                   Eq (RealizeAnn e), Show (RealizeAnn e),
---                   CMonoidM Identity (RealizeAnn e),
---                   -- Substitute SVarOf SensitivityOf (RealizeAnn e), FreeVars TVarOf (RealizeAnn e),
---                   -- Unify MonadDMTC (RealizeAnn e) --, (HasNormalize MonadDMTC (RealizeAnn e))
+--                   Eq (Annotation e), Show (Annotation e),
+--                   CMonoidM Identity (Annotation e),
+--                   -- Substitute SVarOf SensitivityOf (Annotation e), FreeVars TVarOf (Annotation e),
+--                   -- Unify MonadDMTC (Annotation e) --, (HasNormalize MonadDMTC (Annotation e))
 --                  )
 
-instance Show (RealizeAnn a) where
-  show (RealP p) = show p
-  show (RealS s) = show s
+instance Show (Annotation l a) where
+  show (SensitivityAnnotation s) = show p
+  show (PrivacyAnnotation (e,d)) = show s
 
 -- Types are pretty printed as follows.
 instance Show (DMTypeOf k) where
@@ -234,10 +282,10 @@ instance Show (DMTypeOf k) where
   show (a :↷: x) = show a <> " ↷ " <> show x
   show (x :∧: y) = "(" <> show x <> "∧" <> show y <> ")"
   show (Trunc a x) = "|" <> show x <> "|_" <> show a
-  show (TruncFunc a x) = "|" <> show x <> "|_" <> show a
-  show (ReturnNoFun x) = "Return (" <> show x <> ")"--"NoFun(" <> show x <> ")"
-  show (ReturnFun xs) =  "RFun(" <> show xs <> ")"
-  show (ReturnInfimum x y) =  "Return (" <> show x <> "∧" <> show y <> ")"
+  -- show (TruncFunc a x) = "|" <> show x <> "|_" <> show a
+  -- show (ReturnNoFun x) = "Return (" <> show x <> ")"--"NoFun(" <> show x <> ")"
+  -- show (ReturnFun xs) =  "RFun(" <> show xs <> ")"
+  -- show (ReturnInfimum x y) =  "Return (" <> show x <> "∧" <> show y <> ")"
 
 
 instance Eq (DMTypeOf NormKind) where
@@ -303,28 +351,8 @@ sndAnn (a :@ b) = b
 -- fstAnnI :: (WithRelev b) -> DMType
 -- fstAnnI (WithRelev _ (a :@ b)) = a
 
--- sndAnnI :: WithRelev b -> (RealizeAnn b)
+-- sndAnnI :: WithRelev b -> (Annotation b)
 -- sndAnnI (WithRelev _ (a :@ b)) = b
-
-
----------------------------------------------------------
--- Sensitivity and Privacy
---
--- The actual definition of sensitivity terms is in Core.Symbolic.
--- Here we only give it a different name .
-
--- In order to fit the same type classes (in particular Term, and MonadTerm from Abstract.Class),
--- sensitivities are also annotated with (k :: SensKind). Even though this type only contains a single
--- kind (MainSensKind :: SensKind). But because of this we also have a kinded, and an abbreviated definition:
-type SensitivityOf = SymTerm
-type Sensitivity = SymTerm MainSensKind
-
--- Privacies are defined similarly.
--- NOTE: Since they are currently not used anywhere, this definition is not battle tested.
---       We might want to define them slightly differently, for example using a newtype.
---       On the other hand, this seems to be the most sensible option currently, with the least syntactic overhead.
-type PrivacyOf a = (SensitivityOf a,SensitivityOf a)
-type Privacy = PrivacyOf MainSensKind
 
 
 ---------------------------------------------------------
@@ -341,9 +369,6 @@ type Privacy = PrivacyOf MainSensKind
 
 -- data JuliaType = JTAny | JTNum JuliaNumType
 --   deriving (Generic, Show, Eq)
-
-newtype JuliaType = JuliaType String
-  deriving (Generic, Eq, Ord)
 
 instance Hashable JuliaType where
 
@@ -617,7 +642,7 @@ instance Show Relevance where
    show IsRelevant = "interesting"
    show NotRelevant = "uninteresting"
 
-data WithRelev extra = WithRelev Relevance (DMTypeOf (AnnKind extra))
+data WithRelev extra = WithRelev Relevance (DMTypeOf (AnnotatedKind GammaK extra))
 
 instance Semigroup Relevance where
   (<>) IsRelevant b = IsRelevant
@@ -628,9 +653,9 @@ instance Show (WithRelev e) where
   show (WithRelev IsRelevant  x) = show x
   show (WithRelev NotRelevant x) = "{" <> show x <> "}"
 
-makeRelev :: (DMTypeOf (AnnKind e)) -> WithRelev e
+makeRelev :: (DMTypeOf (AnnotatedKind GammaK e)) -> WithRelev e
 makeRelev = WithRelev IsRelevant
 
-makeNotRelev :: (DMTypeOf (AnnKind e)) -> WithRelev e
+makeNotRelev :: (DMTypeOf (AnnotatedKind GammaK e)) -> WithRelev e
 makeNotRelev = WithRelev NotRelevant
 
