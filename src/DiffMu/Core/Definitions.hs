@@ -240,8 +240,8 @@ data DMTypeOf (k :: DMKind) where
   ForAll :: [SomeK TVarOf] -> DMTypeOf FunKind -> DMTypeOf ForAllKind
 
   -- annotations
-  NoFun :: DMExtra a => (DMTypeOf NoFunKind :& Annotation l a) -> DMTypeOf (AnnotatedKind l a)
-  Fun :: [DMTypeOf ForAllKind :& (Signature l, Annotation l a)] -> DMTypeOf (AnnotatedKind l a)
+  NoFun :: (DMExtra a, Typeable l) => (DMTypeOf NoFunKind :& Annotation l a) -> DMTypeOf (AnnotatedKind l a)
+  Fun :: (Typeable l, Typeable a) => [DMTypeOf ForAllKind :& (Signature l, Annotation l a)] -> DMTypeOf (AnnotatedKind l a)
   (:∧:) :: (DMExtra a) => DMTypeOf (AnnotatedKind l a) -> DMTypeOf (AnnotatedKind l a) -> DMTypeOf (AnnotatedKind l a) -- infimum
   (:↷:) :: Sensitivity -> DMTypeOf (AnnotatedKind GammaK a) -> DMTypeOf (AnnotatedKind GammaK a) -- scale
   Trunc :: (DMExtra a, DMExtra b) => Annotation GammaK a -> DMTypeOf (AnnotatedKind GammaK b) -> DMTypeOf (AnnotatedKind GammaK a)

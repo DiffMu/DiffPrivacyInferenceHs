@@ -76,9 +76,15 @@ instance Substitute TVarOf DMTypeOf DMTypeOp where
   substitute σs (UnaryNum op arg res) = (UnaryNum op <$> substitute σs arg <*> substitute σs res)
   substitute σs (BinaryNum op args res) = (BinaryNum op <$> substitute σs args <*> substitute σs res)
 
+instance Substitute TVarOf DMTypeOf (Location l) where
+  substitute σs = pure
+
 instance Substitute TVarOf DMTypeOf (Annotation l a) where
   substitute σs (SensitivityAnnotation s) = SensitivityAnnotation <$> (substitute σs s)
   substitute σs (PrivacyAnnotation s) = PrivacyAnnotation <$> (substitute σs s)
+
+instance Substitute TVarOf DMTypeOf (Signature l) where
+  substitute σs = pure
 
 
 removeVars :: forall t. Monad t => (forall k. (IsKind k) => TVarOf k -> t (DMTypeOf k)) -> [SomeK (TVarOf)] -> t [SomeK (TVarOf)]
@@ -118,6 +124,12 @@ instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs (x :∧: y) = (:∧:) <$> substitute σs x <*> substitute σs y
   substitute σs (Trunc a x) = Trunc a <$> substitute σs x
 
+instance Substitute SVarOf SensitivityOf (Location l) where
+  substitute σs (GammaLocation s) = GammaLocation <$> substitute σs s
+  substitute σs (TauLocation s) = TauLocation <$> substitute σs s
+
+instance Substitute SVarOf (SensitivityOf) (Signature l) where
+  substitute _ = pure
 
 instance Substitute SVarOf SensitivityOf (Annotation l a) where
   substitute σs (SensitivityAnnotation s) = SensitivityAnnotation <$> (substitute σs s)
@@ -184,7 +196,13 @@ instance FreeVars TVarOf DMTypeOp where
   freeVars (UnaryNum op arg res) = freeVars arg <> freeVars res
   freeVars (BinaryNum op arg res) = freeVars arg <> freeVars res
 
-instance Typeable a => FreeVars TVarOf (Annotation l a) where
+instance Typeable l => FreeVars TVarOf (Location l) where
+  freeVars _ = mempty
+
+instance Typeable l => FreeVars TVarOf (Signature l) where
+  freeVars _ = mempty
+
+instance (Typeable a, Typeable l) => FreeVars TVarOf (Annotation l a) where
   freeVars (SensitivityAnnotation s) = freeVars s
   freeVars (PrivacyAnnotation s) = freeVars s
 
@@ -424,8 +442,9 @@ instance Typeable x => Cast (Either (DMTypeOf (AnnotatedKind l SensitivityK)) (D
 -- instance Cast (Either (DMTypeOf (AnnotatedKind SensitivityK)) (DMTypeOf (AnnotatedKind PrivacyK))) (DMTypeOf (AnnotatedKind x)) where
 
 instance Typeable x => Cast (Either (WithRelev (SensitivityK)) (WithRelev PrivacyK)) (WithRelev x) where
-  cast (Left (WithRelev i x)) = WithRelev i <$> cast @(Either (DMTypeOf (AnnotatedKind _ SensitivityK)) (DMTypeOf (AnnotatedKind _ PrivacyK))) (Left x)
-  cast (Right (WithRelev i x)) = WithRelev i <$> cast @(Either (DMTypeOf (AnnotatedKind _ SensitivityK)) (DMTypeOf (AnnotatedKind _ PrivacyK))) (Right x)
+  cast (Left (WithRelev i x)) = WithRelev i <$> cast @(Either (DMTypeOf (AnnotatedKind GammaK SensitivityK)) (DMTypeOf (AnnotatedKind GammaK PrivacyK))) (Left x)
+  cast (Right (WithRelev i x)) = WithRelev i <$> cast @(Either (DMTypeOf (AnnotatedKind GammaK SensitivityK)) (DMTypeOf (AnnotatedKind GammaK PrivacyK))) (Right x)
+
   -- cast (Left (WithRelev i (x :@ e))) = WithRelev i <$> (x :@) <$> cast @(Either (RealizeAnn a) (RealizeAnn b)) (Left e)
   -- cast (Right (WithRelev i (x :@ e))) = WithRelev i <$> (x :@) <$> cast @(Either (RealizeAnn a) (RealizeAnn b)) (Right e)
 
@@ -848,6 +867,10 @@ instance MonadDMTC t => Normalize (t) Sensitivity where
 instance Monad t => Normalize t (SymbolOf k) where
   normalize = pure
 
+instance MonadDMTC t => Normalize t (Location l) where
+  normalize (GammaLocation s) = GammaLocation <$> normalize s
+  normalize (TauLocation s) = TauLocation <$> normalize s
+
 instance MonadDMTC t => Normalize t (Annotation l a) where
   normalize (SensitivityAnnotation s) = SensitivityAnnotation <$> normalize s
   normalize (PrivacyAnnotation s) = PrivacyAnnotation <$> normalize s
@@ -960,14 +983,14 @@ createDMTypeNum (JuliaType str)  = throwError (TypeMismatchError $ "expected " <
 -- -- TODO: is it correct to create tvars for anything else?
 -- createDMType _ = TVar <$> newTVar "any"
 
-createDMType :: MonadDMTC t => JuliaType -> t (DMTypeOf (AnnotatedKind l SensitivityK))
+createDMType :: MonadDMTC t => JuliaType -> t (DMTypeOf (AnnotatedKind GammaK SensitivityK))
  -- NOTE: defaulting to non-const might or might not be what we want to do here.
 createDMType (JuliaType "Integer") = do
   s <- newVar
-  return (NoFun (Numeric (NonConst DMInt) :@ SensitivityAnnotation s))
+  return (NoFun (Numeric (NonConst DMInt) :@ SensitivityAnnotation (GammaLocation s)))
 createDMType (JuliaType "Real") = do
   s <- newVar
-  return (NoFun (Numeric (NonConst DMReal) :@ SensitivityAnnotation s))
+  return (NoFun (Numeric (NonConst DMReal) :@ SensitivityAnnotation (GammaLocation s)))
 -- TODO: is it correct to create tvars for anything else?
 createDMType _ = TVar <$> newTVar "any"
 
