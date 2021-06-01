@@ -219,7 +219,7 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsInfimum (DMTypeOf k, DMTypeO
 
 
 -- is it gauss or mgauss?
-instance Solve MonadDMTC IsGaussResult (DMTypeOf (AnnKind AnnP), DMTypeOf (AnnKind AnnP)) where
+instance Solve MonadDMTC IsGaussResult (DMTypeOf (AnnotatedKind PrivacyK), DMTypeOf (AnnotatedKind PrivacyK)) where
   solve_ Dict _ name (IsGaussResult (τgauss, τin)) =
      case τin of
         TVar x -> pure () -- we don't know yet.
@@ -231,8 +231,8 @@ instance Solve MonadDMTC IsGaussResult (DMTypeOf (AnnKind AnnP), DMTypeOf (AnnKi
            τv <- newVar -- input matrix element type can be anything (as long as it's numeric)
 
            -- set in- and output types as given in the mgauss rule
-           unify τin (NoFun (DMMat L2 iclp n m (Numeric (τv)) :@ RealP pv1))
-           unify τgauss (NoFun ((DMMat LInf U n m (Numeric (NonConst DMReal))) :@ RealP pv2))
+           unify τin (NoFun (DMMat L2 iclp n m (Numeric (τv)) :@ PrivacyAnnotation pv1))
+           unify τgauss (NoFun ((DMMat LInf U n m (Numeric (NonConst DMReal))) :@ PrivacyAnnotation pv2))
 
            dischargeConstraint @MonadDMTC name
         _ -> do -- regular gauss or unification errpr later
@@ -241,7 +241,7 @@ instance Solve MonadDMTC IsGaussResult (DMTypeOf (AnnKind AnnP), DMTypeOf (AnnKi
            p2 <- newPVar -- output annotation too.
 
            -- set in- and output types as given in the gauss rule
-           unify τin (NoFun ((Numeric τ) :@ RealP pv1))
-           unify τgauss (NoFun ((Numeric (NonConst DMReal)) :@ RealP p2))
+           unify τin (NoFun ((Numeric τ) :@ PrivacyAnnotation pv1))
+           unify τgauss (NoFun ((Numeric (NonConst DMReal)) :@ PrivacyAnnotation p2))
 
            dischargeConstraint @MonadDMTC name

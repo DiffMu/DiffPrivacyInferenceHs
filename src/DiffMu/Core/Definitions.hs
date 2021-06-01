@@ -58,35 +58,35 @@ type SVar   = SVarOf MainSensKind
 --------------------
 -- 1. DMKinds
 
-data Annotation = AnnS | AnnP
+data AnnotationKind = SensitivityK | PrivacyK
 
--- type family RealizeAnn (a :: Annotation) = (result :: *) | result -> a where
--- data family RealizeAnn (a :: Annotation) :: *
--- data instance RealizeAnn AnnS = SymTerm MainSensKind
--- data instance RealizeAnn AnnP = (SymTerm MainSensKind, SymTerm MainSensKind)
+-- type family Annotation (a :: AnnotationKind) = (result :: *) | result -> a where
+-- data family Annotation (a :: AnnotationKind) :: *
+-- data instance Annotation SensitivityK = SymTerm MainSensKind
+-- data instance Annotation PrivacyK = (SymTerm MainSensKind, SymTerm MainSensKind)
 
-data RealizeAnn (a :: Annotation) where
-  RealS :: SymTerm MainSensKind -> RealizeAnn AnnS
-  RealP :: (SymTerm MainSensKind, SymTerm MainSensKind) -> RealizeAnn AnnP
+data Annotation (a :: AnnotationKind) where
+  SensitivityAnnotation :: SymTerm MainSensKind -> Annotation SensitivityK
+  PrivacyAnnotation :: (SymTerm MainSensKind, SymTerm MainSensKind) -> Annotation PrivacyK
 
-instance Eq (RealizeAnn a) where
-  (RealS a) == RealS b = a == b
-  (RealP a) == RealP b = a == b
+instance Eq (Annotation a) where
+  (SensitivityAnnotation a) == SensitivityAnnotation b = a == b
+  (PrivacyAnnotation a) == PrivacyAnnotation b = a == b
 
-instance Monad t => SemigroupM t (RealizeAnn a) where
-  (RealS a) ⋆ (RealS b) = RealS <$> (a ⋆ b)
-  (RealP a) ⋆ (RealP b) = RealP <$> (a ⋆ b)
+instance Monad t => SemigroupM t (Annotation a) where
+  (SensitivityAnnotation a) ⋆ (SensitivityAnnotation b) = SensitivityAnnotation <$> (a ⋆ b)
+  (PrivacyAnnotation a) ⋆ (PrivacyAnnotation b) = PrivacyAnnotation <$> (a ⋆ b)
 
-instance Typeable a => MonoidM Identity (RealizeAnn a) where
-  neutral = let case1 = testEquality (typeRep @a) (typeRep @AnnS)
-                case2 = testEquality (typeRep @a) (typeRep @AnnP)
+instance Typeable a => MonoidM Identity (Annotation a) where
+  neutral = let case1 = testEquality (typeRep @a) (typeRep @SensitivityK)
+                case2 = testEquality (typeRep @a) (typeRep @PrivacyK)
             in case (case1, case2) of
-                (Just Refl , _) -> pure $ RealS zeroId
-                (_ , Just Refl) -> pure $ RealP (zeroId, zeroId)
+                (Just Refl , _) -> pure $ SensitivityAnnotation zeroId
+                (_ , Just Refl) -> pure $ PrivacyAnnotation (zeroId, zeroId)
                 _ -> undefined
 
-instance Typeable a => CMonoidM Identity (RealizeAnn a) where
--- type family RealizeAnn AnnS = Sensitivity
+instance Typeable a => CMonoidM Identity (Annotation a) where
+-- type family Annotation SensitivityK = Sensitivity
 
 -- A `DMKind` is one of the following constructors:
 data DMKind =
@@ -97,13 +97,13 @@ data DMKind =
   | NormKind
   | FunKind
   | NoFunKind
-  | AnnKind Annotation
+  | AnnotatedKind AnnotationKind
   | ForAllKind
   deriving (Typeable)
 
 -- Using the "TemplateHaskell" ghc-extension, and the following function from the singletons library,
 -- we generate the `SingI` instances (and related stuff) needed to work with `DMKind` expressions on the type level.
-genSingletons [''Annotation]
+genSingletons [''AnnotationKind]
 genSingletons [''DMKind]
 
 -- DMKinds are pretty printed as follows. For this we implement the `Show` typeclass for `DMKind`.
@@ -115,7 +115,7 @@ instance Show DMKind where
   show NormKind = "Norm"
   show FunKind = "Fun"
   show NoFunKind = "NoFun"
-  show (AnnKind a) = "Ann"
+  show (AnnotatedKind a) = "Ann"
   show ForAllKind = "ForAll"
 
 --------------------
@@ -153,12 +153,12 @@ data DMTypeOf (k :: DMKind) where
   TVar :: IsKind k => SymbolOf k -> DMTypeOf k
 
   -- the arrow type
-  (:->:) :: [DMTypeOf (AnnKind AnnS)] -> DMTypeOf (AnnKind AnnS) -> DMFun
-  -- (:->:) :: [DMType :& Sensitivity] -> DMTypeOf (AnnKind AnnS) -> DMFun
+  (:->:) :: [DMTypeOf (AnnotatedKind SensitivityK)] -> DMTypeOf (AnnotatedKind SensitivityK) -> DMFun
+  -- (:->:) :: [DMType :& Sensitivity] -> DMTypeOf (AnnotatedKind SensitivityK) -> DMFun
 
   -- the privacy-arrow type
-  (:->*:) :: [DMTypeOf (AnnKind AnnP)] -> DMTypeOf (AnnKind AnnP) -> DMFun
-  -- (:->*:) :: [DMType :& Privacy] -> DMTypeOf (AnnKind AnnP) -> DMFun
+  (:->*:) :: [DMTypeOf (AnnotatedKind PrivacyK)] -> DMTypeOf (AnnotatedKind PrivacyK) -> DMFun
+  -- (:->*:) :: [DMType :& Privacy] -> DMTypeOf (AnnotatedKind PrivacyK) -> DMFun
 
   -- tuples
   DMTup :: [DMType] -> DMType
@@ -182,24 +182,24 @@ data DMTypeOf (k :: DMKind) where
   ForAll :: [SomeK TVarOf] -> DMTypeOf FunKind -> DMTypeOf ForAllKind
 
   -- annotations
-  Return :: DMTypeOf (AnnKind AnnS) -> DMTypeOf (AnnKind AnnP) -- we need this so we can remember what the annotation was befor return
-  NoFun :: DMExtra a => (DMTypeOf NoFunKind :& RealizeAnn a) -> DMTypeOf (AnnKind a)
-  Fun :: [DMTypeOf ForAllKind :& (Maybe [JuliaType], Sensitivity)] -> DMTypeOf (AnnKind AnnS)
-  (:∧:) :: (DMExtra a) => DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a) -- infimum
-  (:↷:) :: Sensitivity -> DMTypeOf (AnnKind a) -> DMTypeOf (AnnKind a) -- scale
-  Trunc :: (DMExtra a, DMExtra b) => RealizeAnn a -> DMTypeOf (AnnKind b) -> DMTypeOf (AnnKind a)
-  TruncFunc :: DMExtra a => RealizeAnn a -> [DMTypeOf ForAllKind :& (Maybe [JuliaType], Sensitivity)] -> DMTypeOf (AnnKind a)
+  Return :: DMTypeOf (AnnotatedKind SensitivityK) -> DMTypeOf (AnnotatedKind PrivacyK) -- we need this so we can remember what the annotation was befor return
+  NoFun :: DMExtra a => (DMTypeOf NoFunKind :& Annotation a) -> DMTypeOf (AnnotatedKind a)
+  Fun :: [DMTypeOf ForAllKind :& (Maybe [JuliaType], Sensitivity)] -> DMTypeOf (AnnotatedKind SensitivityK)
+  (:∧:) :: (DMExtra a) => DMTypeOf (AnnotatedKind a) -> DMTypeOf (AnnotatedKind a) -> DMTypeOf (AnnotatedKind a) -- infimum
+  (:↷:) :: Sensitivity -> DMTypeOf (AnnotatedKind a) -> DMTypeOf (AnnotatedKind a) -- scale
+  Trunc :: (DMExtra a, DMExtra b) => Annotation a -> DMTypeOf (AnnotatedKind b) -> DMTypeOf (AnnotatedKind a)
+  TruncFunc :: DMExtra a => Annotation a -> [DMTypeOf ForAllKind :& (Maybe [JuliaType], Sensitivity)] -> DMTypeOf (AnnotatedKind a)
 
 type DMExtra e = (Typeable e, SingI e)
---                   Eq (RealizeAnn e), Show (RealizeAnn e),
---                   CMonoidM Identity (RealizeAnn e),
---                   -- Substitute SVarOf SensitivityOf (RealizeAnn e), FreeVars TVarOf (RealizeAnn e),
---                   -- Unify MonadDMTC (RealizeAnn e) --, (HasNormalize MonadDMTC (RealizeAnn e))
+--                   Eq (Annotation e), Show (Annotation e),
+--                   CMonoidM Identity (Annotation e),
+--                   -- Substitute SVarOf SensitivityOf (Annotation e), FreeVars TVarOf (Annotation e),
+--                   -- Unify MonadDMTC (Annotation e) --, (HasNormalize MonadDMTC (Annotation e))
 --                  )
 
-instance Show (RealizeAnn a) where
-  show (RealP p) = show p
-  show (RealS s) = show s
+instance Show (Annotation a) where
+  show (PrivacyAnnotation p) = show p
+  show (SensitivityAnnotation s) = show s
 
 -- Types are pretty printed as follows.
 instance Show (DMTypeOf k) where
@@ -296,7 +296,7 @@ sndAnn (a :@ b) = b
 -- fstAnnI :: (WithRelev b) -> DMType
 -- fstAnnI (WithRelev _ (a :@ b)) = a
 
--- sndAnnI :: WithRelev b -> (RealizeAnn b)
+-- sndAnnI :: WithRelev b -> (Annotation b)
 -- sndAnnI (WithRelev _ (a :@ b)) = b
 
 
@@ -610,7 +610,7 @@ instance Show Relevance where
    show IsRelevant = "interesting"
    show NotRelevant = "uninteresting"
 
-data WithRelev extra = WithRelev Relevance (DMTypeOf (AnnKind extra))
+data WithRelev extra = WithRelev Relevance (DMTypeOf (AnnotatedKind extra))
 
 instance Semigroup Relevance where
   (<>) IsRelevant b = IsRelevant
@@ -621,9 +621,9 @@ instance Show (WithRelev e) where
   show (WithRelev IsRelevant  x) = show x
   show (WithRelev NotRelevant x) = "{" <> show x <> "}"
 
-makeRelev :: (DMTypeOf (AnnKind e)) -> WithRelev e
+makeRelev :: (DMTypeOf (AnnotatedKind e)) -> WithRelev e
 makeRelev = WithRelev IsRelevant
 
-makeNotRelev :: (DMTypeOf (AnnKind e)) -> WithRelev e
+makeNotRelev :: (DMTypeOf (AnnotatedKind e)) -> WithRelev e
 makeNotRelev = WithRelev NotRelevant
 

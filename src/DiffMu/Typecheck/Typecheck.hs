@@ -15,10 +15,10 @@ import qualified Data.HashMap.Strict as H
 
 import Debug.Trace
 
-newtype DMScope e = DMScope (Scope Symbol (Delayed TC (DMScope e) (DMTypeOf (AnnKind e))))
+newtype DMScope e = DMScope (Scope Symbol (Delayed TC (DMScope e) (DMTypeOf (AnnotatedKind e))))
   deriving Generic
 
-instance DictLike Symbol (Delayed TC (DMScope e) (DMTypeOf (AnnKind e))) (DMScope e) where
+instance DictLike Symbol (Delayed TC (DMScope e) (DMTypeOf (AnnotatedKind e))) (DMScope e) where
   setValue v m (DMScope h) = DMScope (H.insert v m h)
   deleteValue v (DMScope h) = DMScope (H.delete v h)
   getValue k (DMScope h) = h H.!? k
@@ -28,7 +28,7 @@ instance DictLike Symbol (Delayed TC (DMScope e) (DMTypeOf (AnnKind e))) (DMScop
 
 instance Default (DMScope e) where
 
-pushChoice :: Symbol -> (Delayed TC (DMScope AnnS) DMAnnS) -> DMScope AnnS -> DMScope AnnS
+pushChoice :: Symbol -> (Delayed TC (DMScope SensitivityK) DMSensitivityK) -> DMScope SensitivityK -> DMScope SensitivityK
 pushChoice name value scope =
   let oldval = getValue name scope
       newval = case oldval of
@@ -41,9 +41,9 @@ returnNoFun :: DMType -> DelayedS
 returnNoFun τ = Done $ do
   a <- newVar
   mscale a
-  return ((NoFun (τ :@ RealS a)))
+  return ((NoFun (τ :@ SensitivityAnnotation a)))
 
-returnFun :: Maybe [JuliaType] -> DMFun -> TC (DMAnnS)
+returnFun :: Maybe [JuliaType] -> DMFun -> TC (DMSensitivityK)
 returnFun sign τ = do
   a <- newVar
   mscale a
@@ -52,11 +52,11 @@ returnFun sign τ = do
 
 
 data Delayed m x a = Done (m a) | Later (x -> m (Delayed m x a))
-type DelayedS = (Delayed TC (DMScope AnnS) DMAnnS)
-type DelayedP = (Delayed TC (DMScope AnnP) DMAnnP)
+type DelayedS = (Delayed TC (DMScope SensitivityK) DMSensitivityK)
+type DelayedP = (Delayed TC (DMScope PrivacyK) DMPrivacyK)
 
-type DMAnnS = DMTypeOf (AnnKind AnnS)
-type DMAnnP = DMTypeOf (AnnKind AnnP)
+type DMSensitivityK = DMTypeOf (AnnotatedKind SensitivityK)
+type DMPrivacyK = DMTypeOf (AnnotatedKind PrivacyK)
 
 getDelayed :: Monad m => x -> Delayed m x a -> m a
 getDelayed arg (Done a) = pure a
@@ -76,7 +76,7 @@ onlyLater :: Delayed TC x a -> (a -> TC b) -> Delayed TC x b
 onlyLater (Done a) g = Later (\_ -> internalError "Expected Later, but wasn't.")
 onlyLater (Later f) g = Later (\x -> f x >>= \y -> insideDelayed y g)
 
--- joinLater :: Delayed TC x DMAnnS -> Delayed TC x DMAnnS -> Delayed TC x DMAnnS
+-- joinLater :: Delayed TC x DMSensitivityK -> Delayed TC x DMSensitivityK -> Delayed TC x DMSensitivityK
 -- joinLater (Later f) (Later g) = Later (\x -> do
 --                                           (a,b) <- msumTup (f x, g x)
 
@@ -86,9 +86,9 @@ onlyLater (Later f) g = Later (\x -> f x >>= \y -> insideDelayed y g)
 --------------------
 -- Sensitivity terms
 
-checkSen' :: DMTerm -> DMScope AnnS -> DelayedS
+checkSen' :: DMTerm -> DMScope SensitivityK -> DelayedS
 
-checkPriv :: DMTerm -> DMScope AnnP -> TC (DMTypeOf (AnnKind AnnP))
+checkPriv :: DMTerm -> DMScope PrivacyK -> TC (DMTypeOf (AnnotatedKind PrivacyK))
 checkPriv t scope = do
    γ <- use types
    case γ of -- TODO prettify.
@@ -104,7 +104,7 @@ checkPriv t scope = do
       Right γ -> return res
       Left γ -> error $ "checkPriv returned a sensitivity context!\n" <> "It is:\n" <> show γ <> "\nThe input term was:\n" <> show t
 
-checkSens :: DMTerm -> DMScope AnnS -> DelayedS
+checkSens :: DMTerm -> DMScope SensitivityK -> DelayedS
 checkSens t scope = do
    γ <- use types
    case γ of -- TODO prettify.
@@ -161,7 +161,7 @@ checkSen' (Op op args) scope =
   -- and scales the current context by s.
   let checkOpArg (arg,(τ,s)) = do
         τ_arg <- checkSens arg scope >>= onlyDone
-        unify (NoFun (Numeric τ :@ RealS (svar s))) τ_arg
+        unify (NoFun (Numeric τ :@ SensitivityAnnotation (svar s))) τ_arg
         -- mscale (svar s)
   in do
     -- We get create a new typeop constraint for op
@@ -197,7 +197,7 @@ checkSen' (Lam xτs body) scope = do
   return $ Later $ \scope -> do
     -- put a special term to mark x as a function argument. those get special tratment
     -- because we're interested in their sensitivity
-    let checkArg :: Asgmt JuliaType -> DMScope AnnS -> TC (DMScope AnnS)
+    let checkArg :: Asgmt JuliaType -> DMScope SensitivityK -> TC (DMScope SensitivityK)
         checkArg (x :- τ) d = do res <- checkSens (Arg x τ IsRelevant) scope
                                  return (setValue x res d)
     scope' <- foldM (\sc -> (\(x :- τ) -> checkArg (x :- τ) sc)) scope xτs
@@ -253,7 +253,7 @@ checkSen' (SLet (x :- dτ) term body) scope = do
   return τ
 
 checkSen' (Apply f args) scope = do
-  let checkFArg :: DMTerm -> TC (DMAnnS)
+  let checkFArg :: DMTerm -> TC (DMSensitivityK)
       checkFArg arg = do
           τ <- checkSens arg scope >>= getDelayed scope
           return τ
@@ -304,7 +304,7 @@ checkSen' (FLet fname sign term body) scope = do
 
    -- check body with that new scope. Choice terms will result in IsChoice constraints upon ivocation of fname
    result <- checkSens body scope'
-   _ <- removeVar @AnnS fname
+   _ <- removeVar @SensitivityK fname
    return result
 
 
@@ -356,7 +356,7 @@ checkSen' (TLet xs tu body) scope = do
 
           τb <- checkSens body scope'
 
-          sτs <- mapM (removeVar @AnnS) xnames -- get inference result for xs
+          sτs <- mapM (removeVar @SensitivityK) xnames -- get inference result for xs
 
           let s = maxS (map sndAnnI sτs) -- set maxs to maximum of inferred sensitivites
           s ==! maxs
@@ -374,7 +374,7 @@ checkSen' (Loop it cs (xi, xc) b) scope = do
                   Iter fs stp ls -> return (opCeil ((ls `opSub` (fs `opSub` (Sng 1 JTNumInt))) `opDiv` stp))
                   _ -> throwError (ImpossibleError "Loop iterator must be an Iter term.")
 
-   let checkScale :: DMTerm -> TC (DMAnnS, Sensitivity)
+   let checkScale :: DMTerm -> TC (DMSensitivityK, Sensitivity)
        checkScale term = do
           τ <- checkSens term scope
           s <- newVar
@@ -385,8 +385,8 @@ checkSen' (Loop it cs (xi, xc) b) scope = do
          scope' <- pushDefinition scope xi (Arg xi JTNumInt NotRelevant)
          scope'' <- pushDefinition scope' xc (Arg xc JTAny IsRelevant)
          τ <- checkSens b scope
-         xii <- removeVar @AnnS xi
-         xci <- removeVar @AnnS xc
+         xii <- removeVar @SensitivityK xi
+         xci <- removeVar @SensitivityK xc
          s <- newVar
          mscale s
          return (τ, s, xii, xci)
@@ -404,7 +404,7 @@ checkSen' (Loop it cs (xi, xc) b) scope = do
 
 
 checkSen' (MCreate n m body) scope =
-   let setDim :: DMTerm -> Sensitivity -> TC (DMAnnS)
+   let setDim :: DMTerm -> Sensitivity -> TC (DMSensitivityK)
        setDim t s = do
           τ <- checkSens t scope -- check dimension term
           unify τ (NoFun (Numeric (Const s DMInt) :@ zeroId)) -- dimension must be integral
@@ -417,7 +417,7 @@ checkSen' (MCreate n m body) scope =
 
           -- unify with expected type to set sensitivity (dimension penalty) and extract return type
           τbody <- newVar
-          let τ_expected = Fun [(ForAll [] ([NoFun (Numeric (NonConst DMInt) :@ RealS inftyS) , NoFun (Numeric (NonConst DMInt) :@ RealS inftyS)] :->: (NoFun (τbody :@ RealS oneId))) :@ (Nothing , (nv ⋅! mv)))]
+          let τ_expected = Fun [(ForAll [] ([NoFun (Numeric (NonConst DMInt) :@ SensitivityAnnotation inftyS) , NoFun (Numeric (NonConst DMInt) :@ SensitivityAnnotation inftyS)] :->: (NoFun (τbody :@ SensitivityAnnotation oneId))) :@ (Nothing , (nv ⋅! mv)))]
           τ_expected ==! τ
           return τbody
 
@@ -456,10 +456,10 @@ checkSen' (ClipM c m) scope = do
 
    -- set correct matrix type
    η <- newVar
-   unify τb (NoFun (DMMat nrm clp n m (Numeric DMData) :@ RealS η))
+   unify τb (NoFun (DMMat nrm clp n m (Numeric DMData) :@ SensitivityAnnotation η))
 
    -- change clip parameter to input
-   return (NoFun (DMMat nrm c n m (Numeric DMData) :@ RealS η))
+   return (NoFun (DMMat nrm c n m (Numeric DMData) :@ SensitivityAnnotation η))
 -}
 
 -}
@@ -471,7 +471,7 @@ checkSen' t scope = throwError (UnsupportedTermError t)
 --------------------------------------------------------------------------------
 -- Privacy terms
 
-checkPri' :: DMTerm -> DMScope AnnP -> TC (DMTypeOf (AnnKind AnnP))
+checkPri' :: DMTerm -> DMScope PrivacyK -> TC (DMTypeOf (AnnotatedKind PrivacyK))
 checkPri' = undefined
 
   {-
@@ -487,7 +487,7 @@ checkPri' (Gauss rp εp δp f) scope =
       τ <- checkSens t scope
       sv :: Sensitivity <- newVar
       τv <- newVar
-      unify τ (NoFun (Numeric (Const v τv) :@ RealS sv))
+      unify τ (NoFun (Numeric (Const v τv) :@ SensitivityAnnotation sv))
       mtruncateP zeroId
       return ()
    checkBody (ε, δ) r = do
@@ -497,10 +497,10 @@ checkPri' (Gauss rp εp δp f) scope =
       -- interesting output variables are set to (ε, δ), the rest is truncated to ∞
       mtruncateP inftyP
       (ivars, itypes) <- getInteresting
-      mapM (\(x, τ) -> setVarP x (WithRelev IsRelevant (Trunc (RealP (ε, δ)) τ))) (zip ivars itypes)
+      mapM (\(x, τ) -> setVarP x (WithRelev IsRelevant (Trunc (PrivacyAnnotation (ε, δ)) τ))) (zip ivars itypes)
       -- return type is a privacy type.
       pv <- newPVar
-      return (Trunc (RealP (pv)) τf)
+      return (Trunc (PrivacyAnnotation (pv)) τf)
    in do
       v_ε :: Sensitivity <- newVar
       v_δ :: Sensitivity <- newVar
@@ -528,7 +528,7 @@ checkPri' (SLet (x :- dτ) term body) scope =
   let mbody = do
          scope' <- pushDefinition scope x (Arg x dτ IsRelevant)
          τ <- checkPriv body scope'
-         _ <- removeVar @AnnP x
+         _ <- removeVar @PrivacyK x
          return τ
   in do
      -- TODO this requires saving the annotation in the dict.
@@ -550,7 +550,7 @@ checkPri' (FLet fname sign term body) scope = do -- this is the same as with che
 
    -- check body with that new scope. Choice terms will result in IsChoice constraints upon ivocation of fname
    result <- checkPriv body scope'
-   _ <- removeVar @AnnP fname
+   _ <- removeVar @PrivacyK fname
    return result
 
 
@@ -574,15 +574,15 @@ checkPri' (Phi cond ifbr elsebr) scope = -- this is the same as with checkSens
 
 checkPri' (Apply f args) scope = let
    -- check a single argument, scale its context with the corresponding sensitivity variable
-   checkFArg :: DMTerm -> Privacy -> TC (DMTypeOf (AnnKind AnnP))
+   checkFArg :: DMTerm -> Privacy -> TC (DMTypeOf (AnnotatedKind PrivacyK))
    checkFArg arg p = do
       τ <- checkSens arg scope
       addConstraint (Solvable (SetMultiplier (τ, oneId::Sensitivity)))
       restrictAll oneId -- sensitivity of everything in context must be <= 1
       mtruncateP p -- truncate it's context to p
-      return (Trunc (RealP p) τ) -- also set it's type's annotation to p for putting it into the signature below
+      return (Trunc (PrivacyAnnotation p) τ) -- also set it's type's annotation to p for putting it into the signature below
 
-   checkF :: TC (DMAnnS)
+   checkF :: TC (DMSensitivityK)
    checkF = do
       τ <- checkSens f scope
       mtruncateP inftyP
@@ -636,8 +636,8 @@ checkPri' (Loop it cs (xi, xc) b) scope = do
          scope' <- pushDefinition scope xi (Arg xi JTNumInt NotRelevant)
          scope'' <- pushDefinition scope' xc (Arg xc JTAny IsRelevant)
          τ <- checkPriv b scope''
-         _ <- removeVar @AnnP xi -- TODO do something?
-         _ <- removeVar @AnnP xc -- TODO unify with caps type?
+         _ <- removeVar @PrivacyK xi -- TODO do something?
+         _ <- removeVar @PrivacyK xc -- TODO unify with caps type?
 
          interesting <- getInteresting
          mtruncateP inftyP

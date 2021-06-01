@@ -20,11 +20,11 @@ instance Unify MonadDMTC JuliaType where
   unify_ t s = throwError (UnificationError t s)
 
 
-instance Unify MonadDMTC (RealizeAnn e) where
+instance Unify MonadDMTC (Annotation e) where
   -- NOTE: we can use the unify_ (with underscore) function here,
   -- because we do not have to normalize the just normalized arguments
-  unify_ (RealS s) (RealS t) = RealS <$> unify_ s t
-  unify_ (RealP s) (RealP t) = RealP <$> unify_ s t
+  unify_ (SensitivityAnnotation s) (SensitivityAnnotation t) = SensitivityAnnotation <$> unify_ s t
+  unify_ (PrivacyAnnotation s) (PrivacyAnnotation t) = PrivacyAnnotation <$> unify_ s t
 
 -- TODO: Check, is i <> j what we want to do here?
 -- instance Unify MonadDMTC e => Unify MonadDMTC (WithRelev e) where
@@ -91,13 +91,13 @@ instance Solve MonadDMTC IsLoopResult ((Sensitivity, Sensitivity, Sensitivity), 
   solve_ Dict _ _ (IsLoopResult ((s1, s2, s3), s, τ_iter)) = pure ()
 
 
-instance Solve MonadDMTC HasSensitivity (DMTypeOf (AnnKind AnnS), Sensitivity) where
+instance Solve MonadDMTC HasSensitivity (DMTypeOf (AnnotatedKind SensitivityK), Sensitivity) where
   solve_ Dict _ name (HasSensitivity a) = solveHasSensitivity name a
 
-solveHasSensitivity :: forall t. IsT MonadDMTC t => Symbol -> (DMTypeOf (AnnKind AnnS), Sensitivity) -> t ()
+solveHasSensitivity :: forall t. IsT MonadDMTC t => Symbol -> (DMTypeOf (AnnotatedKind SensitivityK), Sensitivity) -> t ()
 solveHasSensitivity name (τ, s) = do
   case τ of
-      NoFun (τ' :@ (RealS s')) -> do
+      NoFun (τ' :@ (SensitivityAnnotation s')) -> do
          unify s s'
          dischargeConstraint name
          return ()
@@ -109,13 +109,13 @@ solveHasSensitivity name (τ, s) = do
       _ -> return () -- TODO can we do more?
 
 
-instance Solve MonadDMTC SetMultiplier (DMTypeOf (AnnKind AnnS), Sensitivity) where
+instance Solve MonadDMTC SetMultiplier (DMTypeOf (AnnotatedKind SensitivityK), Sensitivity) where
   solve_ Dict _ name (SetMultiplier a) = solveSetMultiplier name a
 
-solveSetMultiplier :: forall t. IsT MonadDMTC t => Symbol -> (DMTypeOf (AnnKind AnnS), Sensitivity) -> t ()
+solveSetMultiplier :: forall t. IsT MonadDMTC t => Symbol -> (DMTypeOf (AnnotatedKind SensitivityK), Sensitivity) -> t ()
 solveSetMultiplier name (τ, s) = do
   case τ of
-      NoFun (τ' :@ (RealS s')) -> do
+      NoFun (τ' :@ (SensitivityAnnotation s')) -> do
          unify s s'
          dischargeConstraint name
          return ()
@@ -132,10 +132,10 @@ solveSetMultiplier name (τ, s) = do
 
 -- new monoid structure using infimum
 
-instance (DMExtra a, IsT MonadDMTC t) => SemigroupM (t) (DMTypeOf (AnnKind a)) where
+instance (DMExtra a, IsT MonadDMTC t) => SemigroupM (t) (DMTypeOf (AnnotatedKind a)) where
   (⋆) x y = return (x :∧: y)
 
-instance (Typeable a, SingI a, IsT MonadDMTC t) => MonoidM (t) (DMTypeOf (AnnKind a)) where
+instance (Typeable a, SingI a, IsT MonadDMTC t) => MonoidM (t) (DMTypeOf (AnnotatedKind a)) where
   neutral = newVar
 
 

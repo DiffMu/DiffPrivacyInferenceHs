@@ -29,17 +29,17 @@ import qualified Data.HashMap.Strict as H
 -- if one side of the IsFunctionArgument constraint is NoFun, the other has to be NoFun as well.
 -- this can be carried on into operations on annotated types.
 -- this function creates all the constraints/substitutions to enforce the input type is NoFun
-forceNoFun :: forall t a.(IsT MonadDMTC t, DMExtra a) => DMTypeOf (AnnKind a) -> t (DMTypeOf (AnnKind a))
+forceNoFun :: forall t a.(IsT MonadDMTC t, DMExtra a) => DMTypeOf (AnnotatedKind a) -> t (DMTypeOf (AnnotatedKind a))
 forceNoFun (TVar x) = do
-  -- a lot of code for saying that we want a RealS variable if a is AnnS and a RealP variable otherwise.
-  let case1 = testEquality (typeRep @a) (typeRep @AnnS)
-      case2 = testEquality (typeRep @a) (typeRep @AnnP)
+  -- a lot of code for saying that we want a SensitivityAnnotation variable if a is SensitivityK and a PrivacyAnnotation variable otherwise.
+  let case1 = testEquality (typeRep @a) (typeRep @SensitivityK)
+      case2 = testEquality (typeRep @a) (typeRep @PrivacyK)
   s <- case (case1, case2) of
-     (Just Refl, Nothing) -> RealS <$> newVar
+     (Just Refl, Nothing) -> SensitivityAnnotation <$> newVar
      (Nothing, Just Refl) -> do
         ε <- newVar
         δ <- newVar
-        return (RealP (ε, δ))
+        return (PrivacyAnnotation (ε, δ))
      _ -> error "Mismatch!"
   v <- newVar
   unify (TVar x) (NoFun (v :@ s)) -- the tvar is NoFun with some annotation s of correct type
@@ -58,16 +58,16 @@ forceNoFun (x :↷: y) = do
 forceNoFun (Fun _) = error "Mismatch!"
 forceNoFun (TruncFunc _ _) = error "Mismatch!"
 
-solveIsFunctionArgument :: IsT MonadDMTC t => Symbol -> (DMTypeOf (AnnKind a), DMTypeOf (AnnKind a)) -> t ()
+solveIsFunctionArgument :: IsT MonadDMTC t => Symbol -> (DMTypeOf (AnnotatedKind a), DMTypeOf (AnnotatedKind a)) -> t ()
 
 -- if the given argument is a non-function, and we also expect a non-function, we unify their types and sensitities
-solveIsFunctionArgument name (NoFun (a1 :@ RealS η1), NoFun (a2 :@ RealS η2)) = do
+solveIsFunctionArgument name (NoFun (a1 :@ SensitivityAnnotation η1), NoFun (a2 :@ SensitivityAnnotation η2)) = do
   a1 ==! a2
   η1 ==! η2
   dischargeConstraint name
 
 -- same with privacies.
-solveIsFunctionArgument name (NoFun (a1 :@ RealP (ε1,δ1)), NoFun (a2 :@ RealP (ε2,δ2))) = do
+solveIsFunctionArgument name (NoFun (a1 :@ PrivacyAnnotation (ε1,δ1)), NoFun (a2 :@ PrivacyAnnotation (ε2,δ2))) = do
   a1 ==! a2
   ε1 ==! ε2
   δ1 ==! δ2
@@ -113,7 +113,7 @@ solveIsFunctionArgument name (TVar a, Fun xs) = addSub (a := Fun xs) >> discharg
 -- then we cannot do anything yet, since we do not know whether we have function terms inside, or not.
 solveIsFunctionArgument name (_, _) = return ()
 
-instance Solve MonadDMTC IsFunctionArgument (DMTypeOf (AnnKind a), DMTypeOf (AnnKind a)) where
+instance Solve MonadDMTC IsFunctionArgument (DMTypeOf (AnnotatedKind a), DMTypeOf (AnnotatedKind a)) where
   solve_ Dict _ name (IsFunctionArgument (a,b)) = solveIsFunctionArgument name (a,b)
 
 ------------------------------------------------------------------------------------------------------
@@ -209,7 +209,7 @@ resolveChoiceHash ((ForAll freevs method :@ meths), matches) = let
       -- 'method' is the function that is called in the julia runtime where 'match' came out of typechecking Apply term.
       -- they hence have to be the same type, except when one of their arguments is itself a function, in which case we need to
       -- get a new IsChoice constraint. we hence add IsFunctionArgument constraints, which will be resolved just like so.
-      let addC :: Typeable a => (DMTypeOf (AnnKind a), DMTypeOf (AnnKind a)) -> t Symbol
+      let addC :: Typeable a => (DMTypeOf (AnnotatedKind a), DMTypeOf (AnnotatedKind a)) -> t Symbol
           addC (a, b) = addConstraint (Solvable (IsFunctionArgument (a,b)))
       case (match, method) of
          (aargs :->: aret, margs :->: mret) -> do
@@ -297,7 +297,7 @@ getMatchCandidates τsτ provided = do
 
 
 -- determine whether a function with the given dmtype signature could match a method with the given juliatype signature.
-choiceCouldMatch :: forall e. (DMExtra e) => [DMTypeOf (AnnKind e)] -> [JuliaType] -> Bool
+choiceCouldMatch :: forall e. (DMExtra e) => [DMTypeOf (AnnotatedKind e)] -> [JuliaType] -> Bool
 choiceCouldMatch args cs =
    case length args == length cs of
         False -> False
@@ -306,5 +306,5 @@ choiceCouldMatch args cs =
 
 
 -- return False if this type would become a "Function" if converted to a julia type
-noJuliaFunction :: forall e. (DMExtra e) => DMTypeOf (AnnKind e) -> Bool
+noJuliaFunction :: forall e. (DMExtra e) => DMTypeOf (AnnotatedKind e) -> Bool
 noJuliaFunction τ = (juliatypes τ == [JuliaType "Function"])
