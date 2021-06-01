@@ -45,12 +45,22 @@ throwDelayedError e = Done $ (throwError e, throwError e)
 --   mscale a
 --   return ((NoFun (τ :@ SensitivityAnnotation a)))
 
--- returnFun :: Maybe [JuliaType] -> DMFun -> TC (DMSensitivity)
--- returnFun sign τ = do
---   a <- newVar
---   mscale a
---   frees <- getActuallyFreeVars τ
---   return (Fun [(ForAll frees τ :@ (sign , a))])
+returnFun ::  Maybe [JuliaType] -> TC DMFun -> Delayed DMScope (TC DMSensitivity, TC DMPrivacy)
+returnFun sign mτ = let
+   sbranch = do
+      τ <- mτ
+      a <- newVar
+      mscale a
+      frees <- getActuallyFreeVars τ
+      return (Fun [(ForAll frees τ :@ (sign , SensitivityAnnotation a))])
+   pbranch = do
+      τ <- mτ
+      p <- newPVar
+      mtruncateP p
+      frees <- getActuallyFreeVars τ
+      return (Fun [(ForAll frees τ :@ (sign , PrivacyAnnotation p))])
+   in
+      Done (sbranch, pbranch)
 
 type DMDelayed = Delayed DMScope (TC DMSensitivity, TC DMPrivacy)
 data Delayed x a = Done (a) | Later (x -> (Delayed x a))
@@ -200,29 +210,23 @@ checkSen' (Phi cond ifbr elsebr) scope =
       return (Done τ)
 
 -}
-checkSen' (Lam xτs body) scope =
 
+checkSen' (Lam xτs body) scope =
 
   -- the body is checked in the toplevel scope, not the current variable scope.
   -- this reflects the julia behaviour
   Later $ \scope -> do
     -- put a special term to mark x as a function argument. those get special tratment
     -- because we're interested in their sensitivity
-    let checkArg :: Asgmt JuliaType -> DMScope -> DMDelayed
-        checkArg (x :- τ) d = do res <- checkSens (Arg x τ IsRelevant) scope
-                                 return (setValue x res d)
-    scope' <- foldM (\sc -> (\(x :- τ) -> checkArg (x :- τ) sc)) scope xτs
-    -- scope' <- foldM (\sc -> (\(x :- τ) -> setValue x (Arg x τ IsRelevant) sc)) scope xτs
+    let scope' = foldl (\sc -> (\(x :- τ) -> setValue x (checkSens (Arg x τ IsRelevant) scope) sc)) scope xτs
 
 
-    τr <- checkSens body scope'
-
-    insideDelayed τr $ \τr -> do
+    τr <- fst <$> checkSens body scope'
+    let sign = (sndA <$> xτs)
+    returnFun (Just sign) $ do
+      restype <- τr
       xrτs <- getArgList xτs
-
-      -- get the julia signature from xτs
-      let sign = (sndA <$> xτs)
-      returnFun (Just sign) (xrτs :->: τr)
+      return (xrτs :->: restype)
 
 {-
 {-
