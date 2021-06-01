@@ -59,17 +59,17 @@ type DMSensitivityK = DMTypeOf (AnnotatedKind SensitivityK)
 type DMPrivacyK = DMTypeOf (AnnotatedKind PrivacyK)
 
 getDelayed :: Monad m => x -> Delayed m x a -> m a
-getDelayed arg (Done a) = pure a
+getDelayed arg (Done a) = a
 -- getDelayed arg (Later f) = f arg
 getDelayed arg (Later f) = (f arg) >>= getDelayed arg
 
 insideDelayed :: Monad m => Delayed m x a -> (a -> m b) -> m (Delayed m x b)
-insideDelayed (Done a) g = Done <$> g a
+insideDelayed (Done a) g = pure $ Done (a >>= g)
 -- insideDelayed (Later f) g = pure $ Later (f >=> g)
 insideDelayed (Later f) g = pure $ Later (\x -> f x >>= \y -> insideDelayed y g)
 
 onlyDone :: Delayed TC x a -> TC a
-onlyDone (Done a) = pure a
+onlyDone (Done a) = a
 onlyDone (Later _) = error "Expected Done, but wasn't."
 
 onlyLater :: Delayed TC x a -> (a -> TC b) -> Delayed TC x b
@@ -189,6 +189,7 @@ checkSen' (Phi cond ifbr elsebr) scope =
       addConstraint (Solvable (IsSupremum (τ, τif, τelse)))
       return (Done τ)
 
+-}
 checkSen' (Lam xτs body) scope = do
 
 
@@ -213,7 +214,7 @@ checkSen' (Lam xτs body) scope = do
       let sign = (sndA <$> xτs)
       returnFun (Just sign) (xrτs :->: τr)
 
-
+{-
 {-
 checkSen' (LamStar xτs body) scope = do
 
