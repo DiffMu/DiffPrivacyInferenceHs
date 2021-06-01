@@ -65,7 +65,14 @@ type DMPrivacy = DMTypeOf (AnnotatedKind PrivacyK)
 -- -- getDelayed arg (Later f) = f arg
 -- getDelayed arg (Later f) = (f arg) >>= getDelayed arg
 
--- insideDelayed :: Delayed x a -> (a -> m b) -> m (Delayed m x b)
+instance Monad (Delayed x) where
+  return = Done
+  x >>= f = insideDelayed x f
+
+insideDelayed :: Delayed x a -> (a -> Delayed x b) -> (Delayed x b)
+insideDelayed (Done a) f = (f a)
+insideDelayed (Later g) f = Later (\x -> insideDelayed (g x) f)
+
 -- insideDelayed (Done a) g = pure $ Done (a >>= g)
 -- -- insideDelayed (Later f) g = pure $ Later (f >=> g)
 -- insideDelayed (Later f) g = pure $ Later (\x -> f x >>= \y -> insideDelayed y g)
@@ -193,12 +200,12 @@ checkSen' (Phi cond ifbr elsebr) scope =
       return (Done τ)
 
 -}
-checkSen' (Lam xτs body) scope = do
+checkSen' (Lam xτs body) scope =
 
 
   -- the body is checked in the toplevel scope, not the current variable scope.
   -- this reflects the julia behaviour
-  return $ Later $ \scope -> do
+  Later $ \scope -> do
     -- put a special term to mark x as a function argument. those get special tratment
     -- because we're interested in their sensitivity
     let checkArg :: Asgmt JuliaType -> DMScope -> DMDelayed
