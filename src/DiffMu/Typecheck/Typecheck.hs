@@ -75,6 +75,17 @@ type DMPrivacy = DMTypeOf (AnnotatedKind PrivacyK)
 -- -- getDelayed arg (Later f) = f arg
 -- getDelayed arg (Later f) = (f arg) >>= getDelayed arg
 
+instance Functor (Delayed x) where
+  fmap f (Done a) = Done (f a)
+  fmap f (Later g) = Later (\x -> fmap f (g x))
+
+instance Applicative (Delayed x) where
+  pure a = Done a
+  (<*>) (Done g) (Done a) = Done (g a)    -- f (a -> b) -> f a -> f b
+  (<*>) (Done g) (Later g') = Later (\x -> (Done g) <*> (g' x))
+  (<*>) (Later g) (Done a) = Later (\x -> (g x) <*> (Done a))
+  (<*>) (Later g) (Later g') = Later (\x -> (g x) <*> (g' x))
+
 instance Monad (Delayed x) where
   return = Done
   x >>= f = insideDelayed x f
