@@ -117,7 +117,6 @@ instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs (a :↷: x) = (a :↷:) <$> substitute σs x
   substitute σs (x :∧: y) = (:∧:) <$> substitute σs x <*> substitute σs y
   substitute σs (Trunc a x) = Trunc a <$> substitute σs x
-  substitute σs (TruncFunc a x) = TruncFunc a <$> substitute σs x
   substitute σs (Return τ) = Return <$> substitute σs τ
 
 
@@ -150,7 +149,6 @@ instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
   substitute σs (a :↷: x) = (:↷:) <$> substitute σs a <*> substitute σs x
   substitute σs (x :∧: y) = (:∧:) <$> substitute σs x <*> substitute σs y
   substitute σs (Trunc a x) = Trunc <$> substitute σs a <*> substitute σs x
-  substitute σs (TruncFunc a x) = TruncFunc <$> substitute σs a <*> substitute σs x
   substitute σs (Return τ) = Return <$> substitute σs τ
 
 
@@ -214,7 +212,6 @@ instance Typeable k => FreeVars TVarOf (DMTypeOf k) where
   freeVars (a :↷: x) = freeVars x
   freeVars (x :∧: y) = freeVars x <> freeVars y
   freeVars (Trunc a x) = freeVars x
-  freeVars (TruncFunc a x) = freeVars x
   freeVars (Return x) = freeVars x
 
 
@@ -1013,13 +1010,13 @@ normalizeAnn (Trunc η a) = do
   a' <- normalizeAnn a
   case a' of
     NoFun (x :@ η_old) -> pure $ NoFun (x :@ truncateExtra η η_old)
-    Fun xs             -> pure $ TruncFunc η xs
+    Fun xs             -> pure $ Fun [(τf :@ (sf, truncateExtra η ηf)) | (τf :@ (sf, ηf)) <- xs]
     other              -> pure $ Trunc η other
 normalizeAnn (η :↷: a) = do
   a' <- normalizeAnn a
   case a' of
     NoFun (x :@ η_old) -> pure $ NoFun (x :@ scaleExtra η η_old)
-    Fun xs             -> pure $ Fun ((\(x :@ (jt , a)) -> (x :@ (jt , η ⋅! a))) <$> xs)
+    Fun xs             -> pure $ Fun ((\(x :@ (jt , a)) -> (x :@ (jt , scaleExtra η a))) <$> xs)
     other              -> pure $ (η :↷: other)
 normalizeAnn (a :∧: b) = do
   a' <- normalizeAnn a

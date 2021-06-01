@@ -184,11 +184,10 @@ data DMTypeOf (k :: DMKind) where
   -- annotations
   Return :: DMTypeOf (AnnotatedKind SensitivityK) -> DMTypeOf (AnnotatedKind PrivacyK) -- we need this so we can remember what the annotation was befor return
   NoFun :: DMExtra a => (DMTypeOf NoFunKind :& Annotation a) -> DMTypeOf (AnnotatedKind a)
-  Fun :: [DMTypeOf ForAllKind :& (Maybe [JuliaType], Sensitivity)] -> DMTypeOf (AnnotatedKind SensitivityK)
+  Fun :: DMExtra a => [DMTypeOf ForAllKind :& (Maybe [JuliaType], Annotation a)] -> DMTypeOf (AnnotatedKind a)
   (:∧:) :: (DMExtra a) => DMTypeOf (AnnotatedKind a) -> DMTypeOf (AnnotatedKind a) -> DMTypeOf (AnnotatedKind a) -- infimum
   (:↷:) :: Sensitivity -> DMTypeOf (AnnotatedKind a) -> DMTypeOf (AnnotatedKind a) -- scale
   Trunc :: (DMExtra a, DMExtra b) => Annotation a -> DMTypeOf (AnnotatedKind b) -> DMTypeOf (AnnotatedKind a)
-  TruncFunc :: DMExtra a => Annotation a -> [DMTypeOf ForAllKind :& (Maybe [JuliaType], Sensitivity)] -> DMTypeOf (AnnotatedKind a)
 
 type DMExtra e = (Typeable e, SingI e)
 --                   Eq (Annotation e), Show (Annotation e),
@@ -229,7 +228,6 @@ instance Show (DMTypeOf k) where
   show (a :↷: x) = show a <> " ↷ " <> show x
   show (x :∧: y) = "(" <> show x <> "∧" <> show y <> ")"
   show (Trunc a x) = "|" <> show x <> "|_" <> show a
-  show (TruncFunc a x) = "|" <> show x <> "|_" <> show a
   show (Return x) = "Ret( " <> show x <> ")"
 
 

@@ -56,7 +56,6 @@ forceNoFun (x :↷: y) = do
    return (x :↷: yy)
 -- these cases are forbidden, they cannot be NoFun
 forceNoFun (Fun _) = error "Mismatch!"
-forceNoFun (TruncFunc _ _) = error "Mismatch!"
 
 solveIsFunctionArgument :: IsT MonadDMTC t => Symbol -> (DMTypeOf (AnnotatedKind a), DMTypeOf (AnnotatedKind a)) -> t ()
 
@@ -87,9 +86,9 @@ solveIsFunctionArgument name (b, NoFun a1) = do
 -- if the given argument and expected argument are both functions / collections of functions
 solveIsFunctionArgument name (Fun xs, Fun ys) = do
   let wantedFunctions :: [DMTypeOf FunKind :& Sensitivity]
-      wantedFunctions = [f :@ a | (ForAll _ f :@ (_ , a)) <- ys]  -- TODO check if ForAll is empty and signature is Nothing
+      wantedFunctions = [f :@ a | (ForAll _ f :@ (_ , SensitivityAnnotation a)) <- ys]  -- TODO check if ForAll is empty and signature is Nothing
   let existingFunctions :: [([JuliaType], (DMTypeOf ForAllKind :& Sensitivity, [DMTypeOf FunKind :& Sensitivity]))]
-      existingFunctions = [(jts , ((f :@ a), [])) | (f :@ (Just jts , a)) <- xs]
+      existingFunctions = [(jts , ((f :@ a), [])) | (f :@ (Just jts , SensitivityAnnotation a)) <- xs]
 
   -- We check if there were any functions in xs (those which are given by a dict), which did not have a
   -- julia type annotation

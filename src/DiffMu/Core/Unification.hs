@@ -61,7 +61,6 @@ instance Unify MonadDMTC (DMTypeOf k) where
   unify_ (a :↷: x) (b :↷: y)              = undefined
   unify_ (x :∧: y) (v :∧: w)              = undefined
   unify_ (Trunc a x) (Trunc b y)          = undefined
-  unify_ (TruncFunc a x) (TruncFunc b y)  = undefined
   unify_ t s                              = throwError (UnificationError t s)
 
 -- Above we implictly use unification of terms of the type (a :& b).
@@ -102,7 +101,7 @@ solveHasSensitivity name (τ, s) = do
          dischargeConstraint name
          return ()
       Fun τs -> do
-         let sums = foldl (\a -> \b -> a ⋆! b) oneId [s' | (_ :@ (_, s')) <- τs]
+         let sums = foldl (\a -> \b -> (a ⋆! b)) oneId [s' | (_ :@ (_, SensitivityAnnotation s')) <- τs]
          unify s sums
          dischargeConstraint name
          return ()
@@ -120,7 +119,7 @@ solveSetMultiplier name (τ, s) = do
          dischargeConstraint name
          return ()
       Fun τs -> do
-         mapM (\s' -> unify s s') [s'' | (_ :@ (_, s'')) <- τs]
+         mapM (\s' -> unify s s') [s'' | (_ :@ (_, SensitivityAnnotation s'')) <- τs]
          dischargeConstraint name
          return ()
       _ -> return () -- TODO can we do more?
