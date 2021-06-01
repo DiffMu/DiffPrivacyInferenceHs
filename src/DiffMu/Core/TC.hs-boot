@@ -15,7 +15,9 @@ class (FreeVars TVarOf x, Substitute TVarOf DMTypeOf x) => GoodConstraintContent
 instance (FreeVars TVarOf x, Substitute TVarOf DMTypeOf x) => GoodConstraintContent x where
 
 class (MonadImpossible (t), MonadWatch (t),
-       MonadTerm DMTypeOf (t), MonadTerm SymTerm (t),
+       MonadTerm DMTypeOf (t),
+       MonadTermDuplication DMTypeOf (t),
+       MonadTerm SymTerm (t),
        MonadState (Full) (t),
        MonadError DMException (t),
        MonadInternalError t,
@@ -26,3 +28,4 @@ class (MonadImpossible (t), MonadWatch (t),
        ConstraintOnSolvable t ~ GoodConstraintContent
        -- LiftTC t
       ) => MonadDMTC (t :: * -> *) where
+

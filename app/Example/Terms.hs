@@ -18,15 +18,15 @@ t2 = Sng 2 JTNumInt
 
 t3 a = Arg (Symbol a) (JTAny) IsRelevant
 
-t₄ = Op (IsBinary DMOpAdd) [t3 "x", t3 "x"]
+t4 = Op (IsBinary DMOpAdd) [t3 "x", t3 "x"]
 
 t5 a b = Op (IsBinary DMOpAdd) [a, b]
 
-t₆ = Lam [Symbol "y" :- (JTAny)] (SLet (Symbol "x" :- (JTAny)) (Sng 3 JTNumInt) (Op (IsBinary DMOpMul) [(var "x"), (var "y")]))
+t6 = Lam [Symbol "y" :- (JTAny)] (SLet (Symbol "x" :- (JTAny)) (Sng 3 JTNumInt) (Op (IsBinary DMOpMul) [(var "x"), (var "y")]))
 
-t₇ = Lam [Symbol "x" :- (JTNumInt), Symbol "y" :- (JTAny)] (t5 t₄ t2)
+t7 = Lam [Symbol "x" :- (JTNumInt), Symbol "y" :- (JTAny)] (t5 t4 t2)
 
-t8 = FLet (Symbol "f") [JTNumInt, (JTAny)] t₇ (FLet (Symbol "f") [JTNumInt, (JTAny)] t₆ (FLet (Symbol "f") [(JTAny), (JTAny)] t₆ (var "f") ))
+t8 = FLet (Symbol "f") [JTNumInt, (JTAny)] t7 (FLet (Symbol "f") [JTNumInt, (JTAny)] t6 (FLet (Symbol "f") [(JTAny), (JTAny)] t6 (var "f") ))
 
 t9 = Apply t8 [t2, t2]
 
@@ -43,7 +43,9 @@ t14 = (Apply t12 [(var "x"), (var "x")])
 
 t15 = Phi t2 t13 t2
 
-t16 = Gauss t2 t2 t2 t₆
+t16 = Gauss t2 t2 t2 t4
+
+t16s = LamStar [((Symbol "x" :- (JTNumInt)), IsRelevant), ((Symbol "y" :- (JTAny)), IsRelevant)] t16
 
 t17 = MCreate (Sng 1 JTNumInt) (Sng 1 JTNumInt) (Lam [Symbol "x1" :- JTNumInt, Symbol "x2" :- (JTAny)] (var "y"))
 

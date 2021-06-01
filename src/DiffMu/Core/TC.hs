@@ -80,6 +80,18 @@ instance Substitute TVarOf DMTypeOf (RealizeAnn a) where
   substitute σs (RealS s) = RealS <$> (substitute σs s)
   substitute σs (RealP s) = RealP <$> (substitute σs s)
 
+
+removeVars :: forall t. Monad t => (forall k. (IsKind k) => TVarOf k -> t (DMTypeOf k)) -> [SomeK (TVarOf)] -> t [SomeK (TVarOf)]
+removeVars σs vs = do
+  let f :: SomeK (TVarOf) -> t (Maybe (SomeK TVarOf))
+      f (SomeK var) = do
+        replacement <- σs var
+        case (replacement) of
+          TVar rep | rep == var -> return (Just (SomeK var))
+          _ -> return Nothing
+  newvs <- mapM f vs
+  return [v | (Just v) <- newvs]
+
 instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs Deleted = pure Deleted
   substitute σs L1 = pure L1
@@ -96,7 +108,7 @@ instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs (TVar x) = σs x
   substitute σs (τ1 :->: τ2) = (:->:) <$> substitute σs τ1 <*> substitute σs τ2
   substitute σs (τ1 :->*: τ2) = (:->*:) <$> substitute σs τ1 <*> substitute σs τ2
-  substitute σs (ForAll vs τ) = ForAll vs <$> substitute (removeFromSubstitution vs σs) τ
+  substitute σs (ForAll vs τ) = ForAll <$> (removeVars σs vs) <*> substitute σs τ
   substitute σs (DMTup τs) = DMTup <$> substitute σs τs
   substitute σs (DMMat nrm clp n m τ) = DMMat nrm clp <$> substitute σs n <*> substitute σs m <*> substitute σs τ
   substitute σs (DMChoice xs) = DMChoice <$> substitute σs xs
@@ -287,7 +299,9 @@ instance (FreeVars TVarOf x, Substitute TVarOf DMTypeOf x) => GoodConstraintCont
 
 
 class (MonadImpossible (t), MonadWatch (t),
-       MonadTerm DMTypeOf (t), MonadTerm SensitivityOf (t),
+       MonadTerm DMTypeOf (t),
+       MonadTermDuplication DMTypeOf (t),
+       MonadTerm SensitivityOf (t),
        MonadState (Full) (t),
        MonadError DMException (t),
        MonadInternalError t,
@@ -562,7 +576,9 @@ instance Monad m => MonadTerm DMTypeOf (TCT m) where
   getSubs = view (meta.typeSubs) <$> get
   addSub σ = do
     σs <- use (meta.typeSubs)
+    -- traceM ("/ Type: I have the subs " <> show σs <> ", and I want to add: " <> show σ)
     σs' <- σs ⋆ singletonSub σ
+    -- traceM ("\\ Type: I now have: " <> show σs')
     meta.typeSubs .= σs'
     meta.typeVars %= (removeNameBySubstitution σ)
   newVar = TVar <$> newTVar "τ"
@@ -572,7 +588,7 @@ instance Monad m => MonadTerm SensitivityOf (TCT m) where
   getSubs = view (meta.sensSubs) <$> get
   addSub σ = do
     σs <- use (meta.sensSubs)
-    traceM ("I have the subs " <> show σs <> ", and I want to add: " <> show σ)
+    -- traceM ("I have the subs " <> show σs <> ", and I want to add: " <> show σ)
     σs' <- σs ⋆ singletonSub σ
     meta.sensSubs .= σs'
     meta.sensVars %= (removeNameBySubstitution σ)
@@ -882,6 +898,12 @@ newTVar hint = meta.typeVars %%= ((newKindedName hint))
 
 newSVar :: forall k e t. (SingI k, MonadDMTC t, Typeable k) => Text -> t (SVarOf k)
 newSVar hint = meta.sensVars %%= (newKindedName hint)
+
+newPVar = do
+   p1 ::Sensitivity <- newVar
+   p2 :: Sensitivity <- newVar
+   return (p1, p2)
+
 
   -- where f names = let (τ , names') = newName hint names
   --                 in (TVar τ, names')
