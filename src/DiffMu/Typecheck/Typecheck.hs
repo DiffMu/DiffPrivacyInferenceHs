@@ -15,10 +15,10 @@ import qualified Data.HashMap.Strict as H
 
 import Debug.Trace
 
-newtype DMScope e = DMScope (Scope Symbol (Delayed TC (DMScope e) (DMTypeOf (AnnotatedKind e))))
+newtype DMScope = DMScope (Scope Symbol (DMDelayed))
   deriving Generic
 
-instance DictLike Symbol (Delayed TC (DMScope e) (DMTypeOf (AnnotatedKind e))) (DMScope e) where
+instance DictLike Symbol (DMDelayed) (DMScope) where
   setValue v m (DMScope h) = DMScope (H.insert v m h)
   deleteValue v (DMScope h) = DMScope (H.delete v h)
   getValue k (DMScope h) = h H.!? k
@@ -26,57 +26,59 @@ instance DictLike Symbol (Delayed TC (DMScope e) (DMTypeOf (AnnotatedKind e))) (
   isEmptyDict (DMScope h) = isEmptyDict h
   getAllKeys (DMScope h) = getAllKeys h
 
-instance Default (DMScope e) where
+instance Default (DMScope) where
 
-pushChoice :: Symbol -> (Delayed TC (DMScope SensitivityK) DMSensitivityK) -> DMScope SensitivityK -> DMScope SensitivityK
-pushChoice name value scope =
-  let oldval = getValue name scope
-      newval = case oldval of
-        Nothing -> undefined
-        Just v -> onlyLater v $ \old -> undefined
-  in undefined
+throwDelayedError e = Done $ (throwError e, throwError e)
 
-
-returnNoFun :: DMType -> DelayedS
-returnNoFun τ = Done $ do
-  a <- newVar
-  mscale a
-  return ((NoFun (τ :@ SensitivityAnnotation a)))
-
-returnFun :: Maybe [JuliaType] -> DMFun -> TC (DMSensitivityK)
-returnFun sign τ = do
-  a <- newVar
-  mscale a
-  frees <- getActuallyFreeVars τ
-  return (Fun [(ForAll frees τ :@ (sign , a))])
+-- pushChoice :: Symbol -> (DMDelayed) -> DMScope -> DMScope
+-- pushChoice name value scope =
+--   let oldval = getValue name scope
+--       newval = case oldval of
+--         Nothing -> undefined
+--         Just v -> onlyLater v $ \old -> undefined
+--   in undefined
 
 
-data Delayed m x a = Done (m a) | Later (x -> m (Delayed m x a))
-type DelayedS = (Delayed TC (DMScope SensitivityK) DMSensitivityK)
-type DelayedP = (Delayed TC (DMScope PrivacyK) DMPrivacyK)
+-- returnNoFun :: DMType -> DMDelayed
+-- returnNoFun τ = Done $ do
+--   a <- newVar
+--   mscale a
+--   return ((NoFun (τ :@ SensitivityAnnotation a)))
 
-type DMSensitivityK = DMTypeOf (AnnotatedKind SensitivityK)
-type DMPrivacyK = DMTypeOf (AnnotatedKind PrivacyK)
+-- returnFun :: Maybe [JuliaType] -> DMFun -> TC (DMSensitivity)
+-- returnFun sign τ = do
+--   a <- newVar
+--   mscale a
+--   frees <- getActuallyFreeVars τ
+--   return (Fun [(ForAll frees τ :@ (sign , a))])
 
-getDelayed :: Monad m => x -> Delayed m x a -> m a
-getDelayed arg (Done a) = a
--- getDelayed arg (Later f) = f arg
-getDelayed arg (Later f) = (f arg) >>= getDelayed arg
+type DMDelayed = Delayed DMScope (TC DMSensitivity, TC DMPrivacy)
+data Delayed x a = Done (a) | Later (x -> (Delayed x a))
+-- type DelayedS = (Delayed TC (DMScope SensitivityK) DMSensitivity)
+-- type DelayedP = (Delayed TC (DMScope PrivacyK) DMPrivacy)
 
-insideDelayed :: Monad m => Delayed m x a -> (a -> m b) -> m (Delayed m x b)
-insideDelayed (Done a) g = pure $ Done (a >>= g)
--- insideDelayed (Later f) g = pure $ Later (f >=> g)
-insideDelayed (Later f) g = pure $ Later (\x -> f x >>= \y -> insideDelayed y g)
+type DMSensitivity = DMTypeOf (AnnotatedKind SensitivityK)
+type DMPrivacy = DMTypeOf (AnnotatedKind PrivacyK)
 
-onlyDone :: Delayed TC x a -> TC a
-onlyDone (Done a) = a
-onlyDone (Later _) = error "Expected Done, but wasn't."
+-- getDelayed :: x -> Delayed x a -> a
+-- getDelayed arg (Done a) = a
+-- -- getDelayed arg (Later f) = f arg
+-- getDelayed arg (Later f) = (f arg) >>= getDelayed arg
 
-onlyLater :: Delayed TC x a -> (a -> TC b) -> Delayed TC x b
-onlyLater (Done a) g = Later (\_ -> internalError "Expected Later, but wasn't.")
-onlyLater (Later f) g = Later (\x -> f x >>= \y -> insideDelayed y g)
+-- insideDelayed :: Delayed x a -> (a -> m b) -> m (Delayed m x b)
+-- insideDelayed (Done a) g = pure $ Done (a >>= g)
+-- -- insideDelayed (Later f) g = pure $ Later (f >=> g)
+-- insideDelayed (Later f) g = pure $ Later (\x -> f x >>= \y -> insideDelayed y g)
 
--- joinLater :: Delayed TC x DMSensitivityK -> Delayed TC x DMSensitivityK -> Delayed TC x DMSensitivityK
+-- onlyDone :: Delayed TC x a -> TC a
+-- onlyDone (Done a) = a
+-- onlyDone (Later _) = error "Expected Done, but wasn't."
+
+-- onlyLater :: Delayed TC x a -> (a -> TC b) -> Delayed TC x b
+-- onlyLater (Done a) g = Later (\_ -> internalError "Expected Later, but wasn't.")
+-- onlyLater (Later f) g = Later (\x -> f x >>= \y -> insideDelayed y g)
+
+-- joinLater :: Delayed TC x DMSensitivity -> Delayed TC x DMSensitivity -> Delayed TC x DMSensitivity
 -- joinLater (Later f) (Later g) = Later (\x -> do
 --                                           (a,b) <- msumTup (f x, g x)
 
@@ -86,39 +88,40 @@ onlyLater (Later f) g = Later (\x -> f x >>= \y -> insideDelayed y g)
 --------------------
 -- Sensitivity terms
 
-checkSen' :: DMTerm -> DMScope SensitivityK -> DelayedS
+checkSen' :: DMTerm -> DMScope -> DMDelayed
 
-checkPriv :: DMTerm -> DMScope PrivacyK -> TC (DMTypeOf (AnnotatedKind PrivacyK))
-checkPriv t scope = do
-   γ <- use types
-   case γ of -- TODO prettify.
-      Left (Ctx (MonCom c)) | H.null c -> return ()
-      Right (Ctx (MonCom c)) | H.null c -> return ()
-      _   -> throwError (ImpossibleError "Input context for checking must be empty.")
-   types .= Right def -- cast to privacy context.
+checkPriv :: DMTerm -> DMScope -> DMDelayed
+checkPriv t scope = undefined
+  -- do
+  --  γ <- use types
+  --  case γ of -- TODO prettify.
+  --     Left (Ctx (MonCom c)) | H.null c -> return ()
+  --     Right (Ctx (MonCom c)) | H.null c -> return ()
+  --     _   -> throwError (ImpossibleError "Input context for checking must be empty.")
+  --  types .= Right def -- cast to privacy context.
 
-   res <- checkPri' t scope
+  --  res <- checkPri' t scope
 
-   γ <- use types
-   case γ of
-      Right γ -> return res
-      Left γ -> error $ "checkPriv returned a sensitivity context!\n" <> "It is:\n" <> show γ <> "\nThe input term was:\n" <> show t
+  --  γ <- use types
+  --  case γ of
+  --     Right γ -> return res
+  --     Left γ -> error $ "checkPriv returned a sensitivity context!\n" <> "It is:\n" <> show γ <> "\nThe input term was:\n" <> show t
 
-checkSens :: DMTerm -> DMScope SensitivityK -> DelayedS
-checkSens t scope = do
-   γ <- use types
-   case γ of -- TODO prettify.
-      Left (Ctx (MonCom c)) | H.null c -> return ()
-      Right (Ctx (MonCom c)) | H.null c -> return ()
-      _   -> throwError (ImpossibleError "Input context for checking must be empty.")
-   types .= Left def -- cast to sensitivity context.
+checkSens :: DMTerm -> DMScope -> DMDelayed
+checkSens t scope = undefined -- do
+   -- γ <- use types
+   -- case γ of -- TODO prettify.
+   --    Left (Ctx (MonCom c)) | H.null c -> return ()
+   --    Right (Ctx (MonCom c)) | H.null c -> return ()
+   --    _   -> throwError (ImpossibleError "Input context for checking must be empty.")
+   -- types .= Left def -- cast to sensitivity context.
 
-   res <- checkSen' t scope
+   -- res <- checkSen' t scope
 
-   γ <- use types
-   case γ of
-      Left γ -> return res
-      Right γ -> error $ "checkSens returned a privacy context!\n" <> "It is:\n" <> show γ <> "\nThe input term was:\n" <> show t
+   -- γ <- use types
+   -- case γ of
+   --    Left γ -> return res
+   --    Right γ -> error $ "checkSens returned a privacy context!\n" <> "It is:\n" <> show γ <> "\nThe input term was:\n" <> show t
 
   {-
 -- TODO: Here we assume that η really has type τ, and do not check it. Should maybe do that.
@@ -198,7 +201,7 @@ checkSen' (Lam xτs body) scope = do
   return $ Later $ \scope -> do
     -- put a special term to mark x as a function argument. those get special tratment
     -- because we're interested in their sensitivity
-    let checkArg :: Asgmt JuliaType -> DMScope SensitivityK -> TC (DMScope SensitivityK)
+    let checkArg :: Asgmt JuliaType -> DMScope -> DMDelayed
         checkArg (x :- τ) d = do res <- checkSens (Arg x τ IsRelevant) scope
                                  return (setValue x res d)
     scope' <- foldM (\sc -> (\(x :- τ) -> checkArg (x :- τ) sc)) scope xτs
@@ -254,7 +257,7 @@ checkSen' (SLet (x :- dτ) term body) scope = do
   return τ
 
 checkSen' (Apply f args) scope = do
-  let checkFArg :: DMTerm -> TC (DMSensitivityK)
+  let checkFArg :: DMTerm -> TC (DMSensitivity)
       checkFArg arg = do
           τ <- checkSens arg scope >>= getDelayed scope
           return τ
@@ -375,7 +378,7 @@ checkSen' (Loop it cs (xi, xc) b) scope = do
                   Iter fs stp ls -> return (opCeil ((ls `opSub` (fs `opSub` (Sng 1 JTNumInt))) `opDiv` stp))
                   _ -> throwError (ImpossibleError "Loop iterator must be an Iter term.")
 
-   let checkScale :: DMTerm -> TC (DMSensitivityK, Sensitivity)
+   let checkScale :: DMTerm -> TC (DMSensitivity, Sensitivity)
        checkScale term = do
           τ <- checkSens term scope
           s <- newVar
@@ -405,7 +408,7 @@ checkSen' (Loop it cs (xi, xc) b) scope = do
 
 
 checkSen' (MCreate n m body) scope =
-   let setDim :: DMTerm -> Sensitivity -> TC (DMSensitivityK)
+   let setDim :: DMTerm -> Sensitivity -> TC (DMSensitivity)
        setDim t s = do
           τ <- checkSens t scope -- check dimension term
           unify τ (NoFun (Numeric (Const s DMInt) :@ zeroId)) -- dimension must be integral
@@ -466,13 +469,13 @@ checkSen' (ClipM c m) scope = do
 -}
 -}
 -- Everything else is currently not supported.
-checkSen' t scope = throwError (UnsupportedTermError t)
+checkSen' t scope = (throwDelayedError (UnsupportedTermError t))
 
 
 --------------------------------------------------------------------------------
 -- Privacy terms
 
-checkPri' :: DMTerm -> DMScope PrivacyK -> TC (DMTypeOf (AnnotatedKind PrivacyK))
+checkPri' :: DMTerm -> DMScope -> DMDelayed
 checkPri' = undefined
 
   {-
@@ -583,7 +586,7 @@ checkPri' (Apply f args) scope = let
       mtruncateP p -- truncate it's context to p
       return (Trunc (PrivacyAnnotation p) τ) -- also set it's type's annotation to p for putting it into the signature below
 
-   checkF :: TC (DMSensitivityK)
+   checkF :: TC (DMSensitivity)
    checkF = do
       τ <- checkSens f scope
       mtruncateP inftyP
