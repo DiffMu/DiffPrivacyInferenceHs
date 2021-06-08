@@ -97,7 +97,7 @@ instance Monad (Delayed x) where
 
 insideDelayed :: Delayed x a -> (a -> Delayed x b) -> (Delayed x b)
 insideDelayed (Done a) f = (f a)
-insideDelayed (Later g) f = Later (\x -> insideDelayed (g x) f)
+insideDelayed (Later g) f = Later (\x -> insideDelayed (g x) (\a -> applyDelayedLayer x (f a)))
 
 -- insideDelayed (Done a) g = pure $ Done (a >>= g)
 -- -- insideDelayed (Later f) g = pure $ Later (f >=> g)
