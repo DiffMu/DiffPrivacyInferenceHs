@@ -245,8 +245,29 @@ checkSen' (Phi cond ifbr elsebr) scope =
 
 -}
 
-checkSen' (Lam xτs body) scope =
+checkSen' (Arg x dτ i) scope = Done $ do τ <- createDMType dτ -- TODO subtype!
+                                         setVarS x (WithRelev i (τ :@ SensitivityAnnotation oneId))
+                                         return τ
 
+checkSen' (Var x dτ) scope =  -- get the term that corresponds to this variable from the scope dict
+   let delτ = getValue x scope
+   in case delτ of
+     Nothing -> Done $ throwError (VariableNotInScope x)
+     Just delτ ->
+         case dτ of
+           JTAny -> delτ
+           dτ -> do
+              mτ <- delτ -- get the computation that will give us the type of x
+              Done $ do
+                 τ <- mτ -- extract the type of x
+                 -- if the user has given an annotation
+                 -- inferred type must be a subtype of the user annotation
+                 dτd <- createDMType dτ
+                 addConstraint (Solvable (IsLessEqual (τ, dτd) ))
+                 return τ
+
+
+checkSen' (Lam xτs body) scope =
   -- the body is checked in the toplevel scope, not the current variable scope.
   -- this reflects the julia behaviour
   Later $ \scope -> do

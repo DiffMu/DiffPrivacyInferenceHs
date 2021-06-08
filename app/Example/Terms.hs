@@ -22,6 +22,8 @@ t4 = Op (IsBinary DMOpAdd) [t3 "x", t3 "x"]
 
 t5 a b = Op (IsBinary DMOpAdd) [a, b]
 
+simplelam = Lam [Symbol "x" :- (JTNumInt), Symbol "y" :- (JTAny)] (t3 "y")
+
 t6 = Lam [Symbol "y" :- (JTAny)] (SLet (Symbol "x" :- (JTAny)) (Sng 3 JTNumInt) (Op (IsBinary DMOpMul) [(var "x"), (var "y")]))
 
 t7 = Lam [Symbol "x" :- (JTNumInt), Symbol "y" :- (JTAny)] (t5 t4 t2)
