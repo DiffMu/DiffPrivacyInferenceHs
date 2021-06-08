@@ -24,8 +24,8 @@ t5 a b = Op (IsBinary DMOpAdd) [a, b]
 
 simplelam = Lam [Symbol "x" :- (JTNumInt), Symbol "y" :- (JTAny)] (t3 "y")
 simplelam2 = Lam [Symbol "y" :- (JTAny)] (t3 "y")
-
 simpleflet =  FLet (Symbol "f") [JTNumInt, (JTAny)] simplelam (FLet (Symbol "f") [JTNumInt] simplelam2 (var "f"))
+simpleapply = Lam [Symbol "z" :- (JTAny)] (Apply simpleflet [(t3 "z")])
 
 t6 = Lam [Symbol "y" :- (JTAny)] (SLet (Symbol "x" :- (JTAny)) (Sng 3 JTNumInt) (Op (IsBinary DMOpMul) [(var "x"), (var "y")]))
 

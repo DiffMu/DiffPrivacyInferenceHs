@@ -9,5 +9,5 @@ import Example.Terms
 import Debug.Trace
 
 main :: IO ()
-main = typecheckFromDMTerm simpleflet --t23
+main = typecheckFromDMTerm simpleapply --t23
 

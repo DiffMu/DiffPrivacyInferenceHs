@@ -56,19 +56,6 @@ pushChoice name ma scope =
   in setValue name newval scope
 
 
-returnFun ::  Maybe [JuliaType] -> TC DMFun -> Delayed DMScope (TC DMMain)
-returnFun sign mτ = let
-   computation = do
-      τ <- mτ
-      a <- newVar
-      mscale a
-      frees <- getActuallyFreeVars τ
-      return (Fun [(ForAll frees τ :@ (sign))])
-   in
-      Done (computation)
-  {-
--}
-
 type DMDelayed = Delayed DMScope (TC DMMain)
 data Delayed x a = Done (a) | Later (x -> (Delayed x a))
 
@@ -185,11 +172,13 @@ checkSens t scope = do
   return (beforeCheck >> res >>= afterCheck)
 
 
-  {-
 -- TODO: Here we assume that η really has type τ, and do not check it. Should maybe do that.
-checkSen' (Sng η τ) scope  = do
+checkSen' (Sng η τ) scope = Done $ do
   res <- Numeric <$> (Const (constCoeff (Fin η)) <$> (createDMTypeNum τ))
-  returnNoFun res
+  return (NoFun res)
+
+  {-
+
 
 -- a special term for function argument variables.
 -- those get sensitivity 1, all other variables are var terms
@@ -445,33 +434,9 @@ checkSen' (Choice d) scope = do
       let combined = foldl (:∧:) (Fun []) choices
       return combined
 
-
-
 {-
 
   {-
-checkSen' (Choice d) scope = do
-  return $ Later $ \newscope -> do
-    -- check the terms of the choices and sum their context.
-    -- We ignore here the key (julia signature), since it is also given in the lambda term
-    choices <- msumS (map (\t -> checkSens t scope >>= getDelayed newscope) (snd <$> H.toList d))
-
-    -- combine the choices using (:∧:)
-    let combined = foldl (:∧:) (Fun []) choices
-    return (Done combined)
-
-  -- let
-      -- checkChoice :: ([JuliaType], DMTerm) -> TC (DMType :& (Maybe [JuliaType], Sensitivity))
-      -- checkChoice (sign, t) = do
-      --    τ <- checkSens t scope
-      --    flag <- newSVar "chflag"
-      --    _ <- mscale (svar flag)
-      --    return (τ :@ (Just sign, svar flag))
-      -- in do
-
-      --    dd <- mapM checkChoice (H.toList d)
-      --    return (DMChoice dd)
-
 {-
 
 checkSen' (Tup ts) scope = do
