@@ -320,21 +320,26 @@ checkSen' (LamStar xτs body) scope = do
   returnFun (Just sign) (xrτs :->*: τr)
 -}
 
+-}
 checkSen' (SLet (x :- dτ) term body) scope = do
 
-  -- TODO this requires saving the annotation in the dict.
-  case dτ of
-     JTAny -> return dτ
-     dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
+  -- put the computation to check the term into the scope
+   let scope' = setValue x (checkSens term scope) scope
 
-  -- we're very lazy, only adding the new term for v to its scope entry
-  termτ <- checkSens term scope
-  let scope' = setValue x termτ scope
+   -- check body with that new scope
+   result <- checkSens body scope'
 
-  --check body, this will put the seinsitivity it has in the arguments in the monad context.
-  τ <- checkSens body scope'
-  return τ
--}
+   return $ do
+     -- TODO
+     case dτ of
+        JTAny -> return dτ
+        dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
+
+     result' <- result
+     removeVar @SensitivityK x
+     return result'
+
+
 checkSen' (Apply f args) scope =
   let
     -- check the argument in the given scope,
