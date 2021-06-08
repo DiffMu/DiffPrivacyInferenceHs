@@ -398,7 +398,7 @@ instance Cast (Either Sensitivity Privacy) Privacy where
   cast (Left e) = error $ "Expected a privacy but got a sensitivity (" <> show e <> ")."
   cast (Right e) = return e
 
-instance Typeable x => Cast (Either (DMTypeOf (AnnotatedKind SensitivityK)) (DMTypeOf (AnnotatedKind PrivacyK))) (DMTypeOf (AnnotatedKind x)) where
+instance Typeable x => Cast (Either (DMTypeOf MainKind :& Annotation SensitivityK) (DMTypeOf MainKind :& Annotation PrivacyK)) (DMTypeOf MainKind :& Annotation SensitivityK) where
   cast e =
     let case1 = testEquality (typeRep @x) (typeRep @SensitivityK)
         case2 = testEquality (typeRep @x) (typeRep @PrivacyK)
@@ -413,8 +413,8 @@ instance Typeable x => Cast (Either (DMTypeOf (AnnotatedKind SensitivityK)) (DMT
 -- instance Cast (Either (DMTypeOf (AnnotatedKind SensitivityK)) (DMTypeOf (AnnotatedKind PrivacyK))) (DMTypeOf (AnnotatedKind x)) where
 
 instance Typeable x => Cast (Either (WithRelev SensitivityK) (WithRelev PrivacyK)) (WithRelev x) where
-  cast (Left (WithRelev i x)) = WithRelev i <$> cast @(Either (DMTypeOf (AnnotatedKind SensitivityK)) (DMTypeOf (AnnotatedKind PrivacyK))) (Left x)
-  cast (Right (WithRelev i x)) = WithRelev i <$> cast @(Either (DMTypeOf (AnnotatedKind SensitivityK)) (DMTypeOf (AnnotatedKind PrivacyK))) (Right x)
+  cast (Left (WithRelev i x)) = WithRelev i <$> cast @ (Either (DMTypeOf MainKind :& Annotation SensitivityK) (DMTypeOf MainKind :& Annotation PrivacyK)) (Left x)
+  cast (Right (WithRelev i x)) = WithRelev i <$> cast @(Either (DMTypeOf MainKind :& Annotation SensitivityK) (DMTypeOf MainKind :& Annotation PrivacyK))  (Right x)
   -- cast (Left (WithRelev i (x :@ e))) = WithRelev i <$> (x :@) <$> cast @(Either (Annotation a) (Annotation b)) (Left e)
   -- cast (Right (WithRelev i (x :@ e))) = WithRelev i <$> (x :@) <$> cast @(Either (Annotation a) (Annotation b)) (Right e)
 
