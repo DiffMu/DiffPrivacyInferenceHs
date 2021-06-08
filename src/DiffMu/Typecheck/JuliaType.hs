@@ -41,8 +41,6 @@ juliatypes (DMTup xs) =
   in f <$> jss'
 juliatypes (Fun _) = [JuliaType "Function"]
 juliatypes (NoFun τ) = juliatypes (fstAnn τ)
-juliatypes (Trunc _ τ) = juliatypes τ
-juliatypes (_ :↷: τ) = juliatypes τ
 juliatypes τ = error $ "juliatypes(" <> show τ <> ") not implemented."
 
 global_callback_issubtype :: IORef (DMEnv)
