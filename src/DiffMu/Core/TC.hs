@@ -398,7 +398,8 @@ instance Cast (Either Sensitivity Privacy) Privacy where
   cast (Left e) = error $ "Expected a privacy but got a sensitivity (" <> show e <> ")."
   cast (Right e) = return e
 
-instance Typeable x => Cast (Either (DMTypeOf MainKind :& Annotation SensitivityK) (DMTypeOf MainKind :& Annotation PrivacyK)) (DMTypeOf MainKind :& Annotation x) where
+
+instance Typeable x => Cast (Either (Annotation SensitivityK) (Annotation PrivacyK)) (Annotation x) where
   cast e =
     let case1 = testEquality (typeRep @x) (typeRep @SensitivityK)
         case2 = testEquality (typeRep @x) (typeRep @PrivacyK)
@@ -410,17 +411,11 @@ instance Typeable x => Cast (Either (DMTypeOf MainKind :& Annotation Sensitivity
                           Right e -> return e
                           Left _ -> error "Expected a privacy but got a sensitivity."
       _    -> impossible "Found an AnnotatedKind which was neither SensitivityK nor PrivacyK."
--- instance Cast (Either (DMTypeOf (AnnotatedKind SensitivityK)) (DMTypeOf (AnnotatedKind PrivacyK))) (DMTypeOf (AnnotatedKind x)) where
 
 instance Typeable x => Cast (Either (WithRelev SensitivityK) (WithRelev PrivacyK)) (WithRelev x) where
   cast (Left (WithRelev i x)) = WithRelev i <$> cast @ (Either (DMTypeOf MainKind :& Annotation SensitivityK) (DMTypeOf MainKind :& Annotation PrivacyK)) (Left x)
   cast (Right (WithRelev i x)) = WithRelev i <$> cast @(Either (DMTypeOf MainKind :& Annotation SensitivityK) (DMTypeOf MainKind :& Annotation PrivacyK))  (Right x)
-  -- cast (Left (WithRelev i (x :@ e))) = WithRelev i <$> (x :@) <$> cast @(Either (Annotation a) (Annotation b)) (Left e)
-  -- cast (Right (WithRelev i (x :@ e))) = WithRelev i <$> (x :@) <$> cast @(Either (Annotation a) (Annotation b)) (Right e)
 
--- instance (Cast (Either a b) x) => Cast (Either (WithRelev a) (WithRelev b)) (WithRelev x) where
---   cast (Left (WithRelev i (x :@ e))) = WithRelev i <$> (x :@) <$> cast @(Either a b) (Left e)
---   cast (Right (WithRelev i (x :@ e))) = WithRelev i <$> (x :@) <$> cast @(Either a b) (Right e)
 
 
 instance (Cast (Either a b) x) => Cast (Either (z :& a) (z :& b)) (z :& x) where
@@ -431,25 +426,10 @@ instance (Cast a b) => Cast (Maybe a) (Maybe b) where
   cast Nothing = pure Nothing
   cast (Just a) = Just <$> cast a
 
--- instance Cast (Either (DMType :& Sensitivity) (DMType :& Privacy)) (DMType :& Sensitivity) where
---   cast (Left e) = return e
---   cast (Right e) = internalError "Expected a sensitivity but got a privacy."
-
--- instance Cast (Either (DMType :& Sensitivity) (DMType :& Privacy)) (DMType :& Privacy) where
---   cast (Left e) = internalError "Expected a privacy but got a sensitivity."
---   cast (Right e) = return e
-
--- instance (Cast a b, Cast c d) => Cast (a :& c) (b :& d) where
---   cast (a :@ b) = (:@) <$> cast a <*> cast b
-
--- instance Cast DMType DMType where
---   cast t = pure t
 
 instance (MonadDMTC t) => Normalize t (WithRelev e) where
   normalize (WithRelev i x) = WithRelev i <$> normalize x
 
--- instance (MonadDMTC t, Normalize t e) => Normalize t (WithRelev e) where
---   normalize (WithRelev i x) = WithRelev i <$> normalize x
 
 
 type TypeCtx extra = Ctx Symbol (WithRelev extra)
