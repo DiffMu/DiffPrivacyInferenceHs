@@ -28,7 +28,7 @@ instance DictLike Symbol (DMDelayed) (DMScope) where
 
 instance Default (DMScope) where
 
-throwDelayedError e = Done $ (throwError e, throwError e)
+throwDelayedError e = Done $ (throwError e)
 
 -- pushChoice :: Symbol -> (DMDelayed) -> DMScope -> DMScope
 -- pushChoice name value scope =
@@ -45,30 +45,27 @@ throwDelayedError e = Done $ (throwError e, throwError e)
 --   mscale a
 --   return ((NoFun (τ :@ SensitivityAnnotation a)))
 
-returnFun ::  Maybe [JuliaType] -> TC DMFun -> Delayed DMScope (TC DMSensitivity, TC DMPrivacy)
+returnFun ::  Maybe [JuliaType] -> TC DMFun -> Delayed DMScope (TC DMMain)
 returnFun sign mτ = let
-   sbranch = do
+   computation = do
       τ <- mτ
       a <- newVar
       mscale a
       frees <- getActuallyFreeVars τ
-      return (Fun [(ForAll frees τ :@ (sign , SensitivityAnnotation a))])
-   pbranch = do
-      τ <- mτ
-      p <- newPVar
-      mtruncateP p
-      frees <- getActuallyFreeVars τ
-      return (Fun [(ForAll frees τ :@ (sign , PrivacyAnnotation p))])
+      return (Fun [(ForAll frees τ :@ (sign))])
    in
-      Done (sbranch, pbranch)
+      Done (computation)
+  {-
+-}
 
-type DMDelayed = Delayed DMScope (TC DMSensitivity, TC DMPrivacy)
+type DMDelayed = Delayed DMScope (TC DMMain)
 data Delayed x a = Done (a) | Later (x -> (Delayed x a))
+
 -- type DelayedS = (Delayed TC (DMScope SensitivityK) DMSensitivity)
 -- type DelayedP = (Delayed TC (DMScope PrivacyK) DMPrivacy)
 
-type DMSensitivity = DMTypeOf (AnnotatedKind SensitivityK)
-type DMPrivacy = DMTypeOf (AnnotatedKind PrivacyK)
+-- type DMSensitivity = DMTypeOf (AnnotatedKind SensitivityK)
+-- type DMPrivacy = DMTypeOf (AnnotatedKind PrivacyK)
 
 -- getDelayed :: x -> Delayed x a -> a
 -- getDelayed arg (Done a) = a
@@ -231,13 +228,13 @@ checkSen' (Lam xτs body) scope =
     -- because we're interested in their sensitivity
     let scope' = foldl (\sc -> (\(x :- τ) -> setValue x (checkSens (Arg x τ IsRelevant) scope) sc)) scope xτs
 
-
-    τr <- fst <$> checkSens body scope'
+    τr <- checkSens body scope'
     let sign = (sndA <$> xτs)
     returnFun (Just sign) $ do
       restype <- τr
-      xrτs <- getArgList xτs
-      return (xrτs :->: restype)
+      xrτs <- getArgList @_ @SensitivityK xτs
+      let xrτs' = [x :@ s | (x :@ SensitivityAnnotation s) <- xrτs]
+      return (xrτs' :->: restype)
 
 {-
 {-
@@ -277,8 +274,40 @@ checkSen' (SLet (x :- dτ) term body) scope = do
   --check body, this will put the seinsitivity it has in the arguments in the monad context.
   τ <- checkSens body scope'
   return τ
+-}
+checkSen' (Apply f args) scope =
+  let
+    -- check the argument in the given scope,
+    -- and scale scope by new variable, return both
+    checkArg :: DMTerm -> DMScope -> Delayed DMScope (TC (DMMain :& Sensitivity))
+    checkArg arg scope = do
+      τ <- checkSens arg scope
+      let scaleContext = do
+          s <- newVar
+          mscale s
+          return (τ :@ s)
+      return (scaleContext)
 
-checkSen' (Apply f args) scope = do
+
+    sbranch_check mf margs = do
+        -- τ_lam <- mf
+        -- τargs <- margs
+        (τ_sum, argτs) <- msumTup (mf , msumS margs) -- sum args and f's context
+        τ_ret <- newVar -- a type var for the function return type
+        addConstraint (Solvable (IsFunctionArgument (τ_sum, Fun [(ForAll [] (argτs :->: τ_ret)) :@ Nothing])))
+        return τ_ret
+
+
+    margs = (\arg -> (checkArg arg scope)) <$> args
+    mf = checkSens f scope
+
+    -- ms = sbranch_check (mf) margs
+    -- mp = pbranch_check (snd <$> mf) margs
+  in undefined
+  -- Done (ms)
+
+
+{-
   let checkFArg :: DMTerm -> TC (DMSensitivity)
       checkFArg arg = do
           τ <- checkSens arg scope >>= getDelayed scope

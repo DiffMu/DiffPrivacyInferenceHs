@@ -126,6 +126,7 @@ instance Show DMKind where
 -- Now we can define our actual DMTypes.
 -- We call the general case of a type of some kind k, `DMTypeOf k`.
 -- The specific case of a type of "main" kind, we simply call `DMType`, i.e.:
+type DMMain = DMTypeOf MainKind
 type DMType = DMTypeOf NoFunKind
 type DMFun = DMTypeOf FunKind
 
