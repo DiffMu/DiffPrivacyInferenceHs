@@ -177,58 +177,31 @@ checkSen' (Sng η τ) scope = Done $ do
   res <- Numeric <$> (Const (constCoeff (Fin η)) <$> (createDMTypeNum τ))
   return (NoFun res)
 
-  {-
-
-
--- a special term for function argument variables.
--- those get sensitivity 1, all other variables are var terms
-
--- TODO!!!! Get interestingness flag!
-checkSen' (Arg x dτ i) scope = do τ <- createDMType dτ -- TODO subtype!
-                                  setVarS x (WithRelev i τ)
-                                  return (Done τ)
-                                  -- setVarS x (WithRelev i (NoFun (undefined :@ constCoeff (Fin 1)))) --(τ :@ constCoeff (Fin 1)))
-                                  -- returnNoFun τ
-
-checkSen' (Var x dτ) scope = do -- get the term that corresponds to this variable from the scope dict
-                                let (τ) = getValue x scope
-                                case τ of
-                                  Nothing -> throwError (VariableNotInScope x)
-                                  Just τ ->
-
-                                -- check the term in the new, smaller scope'
-                                -- τ <- checkSens vt scope'
-
-                                    insideDelayed τ $ \τ ->
-                                      case dτ of
-                                        JTAny -> return τ
-                                        dτ -> do
-                                          -- if the user has given an annotation
-                                          -- inferred type must be a subtype of the user annotation
-                                          dτd <- createDMType dτ
-                                          addConstraint (Solvable (IsLessEqual (τ, dτd) ))
-                                          return ( τ)
 
 -- typechecking an op
-checkSen' (Op op args) scope =
-  -- We create a helper function, which infers the type of arg, unifies it with the given τ
-  -- and scales the current context by s.
-  let checkOpArg (arg,(τ,s)) = do
-        τ_arg <- checkSens arg scope >>= onlyDone
-        unify (NoFun (Numeric τ :@ SensitivityAnnotation (svar s))) τ_arg
-        -- mscale (svar s)
-  in do
-    -- We get create a new typeop constraint for op
-    (res,arg_sens) <- makeTypeOp op (length args)
+checkSen' (Op op args) scope = do
+  argsdel :: [TC DMMain] <- mapM (\t -> checkSens t scope) args -- check all the args in the delayed monad
+  Done $ do
+     let handleOpArg (marg, (τ, s)) = do
+                                     τ_arg <- marg
+                                     unify (NoFun (Numeric τ)) τ_arg
+                                     mscale (svar s)
+                                     return τ_arg
 
-    -- We call our helper function `checkOpArg` on the argument-terms, zipped with the
-    -- type(variables), sensitivities returned by `makeTypeOp`
-    _ <- msumS ((checkOpArg <$> (zip args arg_sens)))
+     -- create a new typeop constraint for op
+     -- res is resulting type of the operation when used on types in arg_sens
+     -- arg_sens :: [(SMType, Sensitivity)]
+     -- types are to be unified with the actual types of the args
+     -- Sensitivities are scalars for the argument's context
+     (res, arg_sens) <- makeTypeOp op (length args)
 
-    -- We return the `res` type given by `makeTypeOp`
-    returnNoFun (Numeric res)
+     -- make the appropriate unification and scaling, then sum the contexts.
+     msumS (map handleOpArg (zip argsdel arg_sens))
 
+     -- return the `res` type given by `makeTypeOp`
+     return (NoFun (Numeric res))
 
+  {-
 checkSen' (Phi cond ifbr elsebr) scope =
    let mcond = do
         τ_cond <- checkSens cond scope >>= onlyDone
@@ -245,7 +218,10 @@ checkSen' (Phi cond ifbr elsebr) scope =
 
 -}
 
-checkSen' (Arg x dτ i) scope = Done $ do τ <- createDMType dτ -- TODO subtype!
+
+-- a special term for function argument variables.
+-- those get sensitivity 1, all other variables are var terms
+checkSen' (Arg x dτ i) scope = Done $ do τ <- createDMType dτ -- TODO it's actually a subtype of dτ!
                                          setVarS x (WithRelev i (τ :@ SensitivityAnnotation oneId))
                                          return τ
 
@@ -286,7 +262,6 @@ checkSen' (Lam xτs body) scope =
       return (Fun [(ForAll frees τ :@ (Just sign))])
 
 {-
-{-
 checkSen' (LamStar xτs body) scope = do
 
   -- put a special term to mark x as a function argument. those get special tratment
@@ -309,7 +284,6 @@ checkSen' (LamStar xτs body) scope = do
   returnFun (Just sign) (xrτs :->*: τr)
 -}
 
--}
 checkSen' (SLet (x :- dτ) term body) scope = do
 
   -- put the computation to check the term into the scope
