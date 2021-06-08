@@ -58,9 +58,7 @@ instance Unify MonadDMTC (DMTypeOf k) where
      DMMat <$> unify nrm1 nrm2 <*> unify clp1 clp2 <*> unify n1 n2 <*> unify m1 m2 <*> unify τ1 τ2
   unify_ (NoFun x) (NoFun y)              = NoFun <$> unify x y
   unify_ (Fun xs) (Fun ys)                = Fun <$> unify xs ys
-  unify_ (a :↷: x) (b :↷: y)              = undefined
   unify_ (x :∧: y) (v :∧: w)              = undefined
-  unify_ (Trunc a x) (Trunc b y)          = undefined
   unify_ t s                              = throwError (UnificationError t s)
 
 -- Above we implictly use unification of terms of the type (a :& b).
@@ -90,8 +88,8 @@ instance Solve MonadDMTC IsLoopResult ((Sensitivity, Sensitivity, Sensitivity), 
   solve_ Dict _ _ (IsLoopResult ((s1, s2, s3), s, τ_iter)) = pure ()
 
 
-instance Solve MonadDMTC HasSensitivity (DMTypeOf (AnnotatedKind SensitivityK), Sensitivity) where
-  solve_ Dict _ name (HasSensitivity a) = solveHasSensitivity name a
+-- instance Solve MonadDMTC HasSensitivity (DMTypeOf (AnnotatedKind SensitivityK), Sensitivity) where
+--   solve_ Dict _ name (HasSensitivity a) = solveHasSensitivity name a
 
 solveHasSensitivity :: forall t. IsT MonadDMTC t => Symbol -> (DMTypeOf (AnnotatedKind SensitivityK), Sensitivity) -> t ()
 solveHasSensitivity name (τ, s) = do
