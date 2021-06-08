@@ -97,7 +97,6 @@ data DMKind =
   | NormKind
   | FunKind
   | NoFunKind
-  | AnnotatedKind AnnotationKind
   | ForAllKind
   deriving (Typeable)
 
@@ -115,7 +114,6 @@ instance Show DMKind where
   show NormKind = "Norm"
   show FunKind = "Fun"
   show NoFunKind = "NoFun"
-  show (AnnotatedKind a) = "Ann"
   show ForAllKind = "ForAll"
 
 --------------------
@@ -153,12 +151,10 @@ data DMTypeOf (k :: DMKind) where
   TVar :: IsKind k => SymbolOf k -> DMTypeOf k
 
   -- the arrow type
-  (:->:) :: [DMTypeOf (AnnotatedKind SensitivityK)] -> DMTypeOf (AnnotatedKind SensitivityK) -> DMFun
-  -- (:->:) :: [DMType :& Sensitivity] -> DMTypeOf (AnnotatedKind SensitivityK) -> DMFun
+  (:->:) :: [DMTypeOf MainKind] -> DMTypeOf MainKind -> DMFun
 
   -- the privacy-arrow type
-  (:->*:) :: [DMTypeOf (AnnotatedKind PrivacyK)] -> DMTypeOf (AnnotatedKind PrivacyK) -> DMFun
-  -- (:->*:) :: [DMType :& Privacy] -> DMTypeOf (AnnotatedKind PrivacyK) -> DMFun
+  (:->*:) :: [DMTypeOf MainKind] -> DMTypeOf MainKind -> DMFun
 
   -- tuples
   DMTup :: [DMType] -> DMType
@@ -182,12 +178,9 @@ data DMTypeOf (k :: DMKind) where
   ForAll :: [SomeK TVarOf] -> DMTypeOf FunKind -> DMTypeOf ForAllKind
 
   -- annotations
-  Return :: DMTypeOf (AnnotatedKind SensitivityK) -> DMTypeOf (AnnotatedKind PrivacyK) -- we need this so we can remember what the annotation was befor return
-  NoFun :: DMExtra a => (DMTypeOf NoFunKind :& Annotation a) -> DMTypeOf (AnnotatedKind a)
-  Fun :: DMExtra a => [DMTypeOf ForAllKind :& (Maybe [JuliaType], Annotation a)] -> DMTypeOf (AnnotatedKind a)
-  (:∧:) :: (DMExtra a) => DMTypeOf (AnnotatedKind a) -> DMTypeOf (AnnotatedKind a) -> DMTypeOf (AnnotatedKind a) -- infimum
-  (:↷:) :: Sensitivity -> DMTypeOf (AnnotatedKind a) -> DMTypeOf (AnnotatedKind a) -- scale
-  Trunc :: (DMExtra a, DMExtra b) => Annotation a -> DMTypeOf (AnnotatedKind b) -> DMTypeOf (AnnotatedKind a)
+  NoFun :: DMTypeOf NoFunKind -> DMTypeOf MainKind
+  Fun :: [DMTypeOf ForAllKind :& Maybe [JuliaType]] -> DMTypeOf MainKind
+  (:∧:) :: DMTypeOf MainKind -> DMTypeOf MainKind -> DMTypeOf MainKind -- infimum
 
 type DMExtra e = (Typeable e, SingI e)
 --                   Eq (Annotation e), Show (Annotation e),
@@ -225,10 +218,7 @@ instance Show (DMTypeOf k) where
      _ -> "ForAll {" <> show vs <> "}. " <> show f
   show (NoFun x) = show x --"NoFun(" <> show x <> ")"
   show (Fun xs) = "Fun(" <> show xs <> ")"
-  show (a :↷: x) = show a <> " ↷ " <> show x
   show (x :∧: y) = "(" <> show x <> "∧" <> show y <> ")"
-  show (Trunc a x) = "|" <> show x <> "|_" <> show a
-  show (Return x) = "Ret( " <> show x <> ")"
 
 
 instance Eq (DMTypeOf NormKind) where
@@ -608,7 +598,8 @@ instance Show Relevance where
    show IsRelevant = "interesting"
    show NotRelevant = "uninteresting"
 
-data WithRelev extra = WithRelev Relevance (DMTypeOf (AnnotatedKind extra))
+data WithRelev extra = WithRelev Relevance (DMTypeOf MainKind :& Annotation extra)
+
 
 instance Semigroup Relevance where
   (<>) IsRelevant b = IsRelevant
@@ -619,9 +610,8 @@ instance Show (WithRelev e) where
   show (WithRelev IsRelevant  x) = show x
   show (WithRelev NotRelevant x) = "{" <> show x <> "}"
 
-makeRelev :: (DMTypeOf (AnnotatedKind e)) -> WithRelev e
+makeRelev :: (DMTypeOf MainKind :& Annotation e) -> WithRelev e
 makeRelev = WithRelev IsRelevant
 
-makeNotRelev :: (DMTypeOf (AnnotatedKind e)) -> WithRelev e
+makeNotRelev :: (DMTypeOf MainKind :& Annotation e) -> WithRelev e
 makeNotRelev = WithRelev NotRelevant
-
