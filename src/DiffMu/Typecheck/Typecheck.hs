@@ -288,11 +288,13 @@ checkSen' (Lam xτs body) scope =
 
     τr <- checkSens body scope'
     let sign = (sndA <$> xτs)
-    returnFun (Just sign) $ do
+    Done $ do
       restype <- τr
       xrτs <- getArgList @_ @SensitivityK xτs
       let xrτs' = [x :@ s | (x :@ SensitivityAnnotation s) <- xrτs]
-      return (xrτs' :->: restype)
+      let τ = (xrτs' :->: restype)
+      frees <- getActuallyFreeVars τ
+      return (Fun [(ForAll frees τ :@ (Just sign))])
 
 {-
 {-
