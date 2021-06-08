@@ -418,13 +418,16 @@ checkSen' (Apply f args) scope =
 checkSen' (FLet fname sign term body) scope = do
 
   -- make a Choice term to put in the scope
-   let scope' = pushChoice fname (checkSens body scope) scope
+   let scope' = pushChoice fname (checkSens term scope) scope
    -- sign term
 
    -- check body with that new scope. Choice terms will result in IsChoice constraints upon ivocation of fname
    result <- checkSens body scope'
 
-   return $ result <* removeVar @SensitivityK fname
+   return $ do
+     result' <- result
+     removeVar @SensitivityK fname
+     return result'
 
 {-
 
