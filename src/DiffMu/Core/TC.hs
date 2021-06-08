@@ -114,10 +114,7 @@ instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs (DMChoice xs) = DMChoice <$> substitute σs xs
   substitute σs (NoFun (x :@ a)) = (\x -> NoFun (x :@ a)) <$> substitute σs x
   substitute σs (Fun xs) = Fun <$> substitute σs xs
-  substitute σs (a :↷: x) = (a :↷:) <$> substitute σs x
   substitute σs (x :∧: y) = (:∧:) <$> substitute σs x <*> substitute σs y
-  substitute σs (Trunc a x) = Trunc a <$> substitute σs x
-  substitute σs (Return τ) = Return <$> substitute σs τ
 
 
 instance Substitute SVarOf SensitivityOf (Annotation a) where
@@ -146,10 +143,7 @@ instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
   substitute σs (DMChoice xs) = DMChoice <$> substitute σs xs
   substitute σs (NoFun x) = NoFun <$> substitute σs x
   substitute σs (Fun xs) = Fun <$> substitute σs xs
-  substitute σs (a :↷: x) = (:↷:) <$> substitute σs a <*> substitute σs x
   substitute σs (x :∧: y) = (:∧:) <$> substitute σs x <*> substitute σs y
-  substitute σs (Trunc a x) = Trunc <$> substitute σs a <*> substitute σs x
-  substitute σs (Return τ) = Return <$> substitute σs τ
 
 
 instance Term TVarOf DMTypeOf where
@@ -209,12 +203,7 @@ instance Typeable k => FreeVars TVarOf (DMTypeOf k) where
   freeVars (DMChoice choices) = freeVars choices
   freeVars (NoFun x) = freeVars x
   freeVars (Fun xs) = freeVars xs
-  freeVars (a :↷: x) = freeVars x
   freeVars (x :∧: y) = freeVars x <> freeVars y
-  freeVars (Trunc a x) = freeVars x
-  freeVars (Return x) = freeVars x
-
-
 
 
 -- Given a list of "multi substitutions", i.e. substitutions of the form
@@ -1006,18 +995,6 @@ normalizeAnn (Fun as) = do
   let normalizeInside (f :@ annot) = (:@ annot) <$> normalizeAnn f
   Fun <$> mapM normalizeInside as
 normalizeAnn (NoFun fs) = pure $ NoFun fs
-normalizeAnn (Trunc η a) = do
-  a' <- normalizeAnn a
-  case a' of
-    NoFun (x :@ η_old) -> pure $ NoFun (x :@ truncateExtra η η_old)
-    Fun xs             -> pure $ Fun [(τf :@ (sf, truncateExtra η ηf)) | (τf :@ (sf, ηf)) <- xs]
-    other              -> pure $ Trunc η other
-normalizeAnn (η :↷: a) = do
-  a' <- normalizeAnn a
-  case a' of
-    NoFun (x :@ η_old) -> pure $ NoFun (x :@ scaleExtra η η_old)
-    Fun xs             -> pure $ Fun ((\(x :@ (jt , a)) -> (x :@ (jt , scaleExtra η a))) <$> xs)
-    other              -> pure $ (η :↷: other)
 normalizeAnn (a :∧: b) = do
   a' <- normalizeAnn a
   b' <- normalizeAnn b
@@ -1028,13 +1005,6 @@ normalizeAnn (a :∧: b) = do
                                              addConstraint (Solvable (IsInfimum (x, y, z)))
                                              return (NoFun (z :@ (ηx ⋆! ηy)))
     (_ , _) -> return (a' :∧: b')
-normalizeAnn (Return x) = do
-   x' <- normalizeAnn x
-   case x' of
-      NoFun (xτ :@ xs) -> do
-         xτ' <- normalizeAnn xτ
-         return (NoFun (xτ' :@ PrivacyAnnotation inftyP))
-      _ -> pure $ Return x' -- TODO maybe we can do something for Fun?
 normalizeAnn (xs :->: y) = (:->:) <$> mapM normalizeAnn xs <*> normalizeAnn y
 normalizeAnn (xs :->*: y) = (:->*:) <$> mapM normalizeAnn xs <*> normalizeAnn y
 normalizeAnn x = pure x
