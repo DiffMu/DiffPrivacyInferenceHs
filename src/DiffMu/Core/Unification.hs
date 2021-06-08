@@ -91,6 +91,7 @@ instance Solve MonadDMTC IsLoopResult ((Sensitivity, Sensitivity, Sensitivity), 
 -- instance Solve MonadDMTC HasSensitivity (DMTypeOf (AnnotatedKind SensitivityK), Sensitivity) where
 --   solve_ Dict _ name (HasSensitivity a) = solveHasSensitivity name a
 
+{-
 solveHasSensitivity :: forall t. IsT MonadDMTC t => Symbol -> (DMTypeOf (AnnotatedKind SensitivityK), Sensitivity) -> t ()
 solveHasSensitivity name (τ, s) = do
   case τ of
@@ -121,7 +122,7 @@ solveSetMultiplier name (τ, s) = do
          dischargeConstraint name
          return ()
       _ -> return () -- TODO can we do more?
-
+-}
 
 -------------------------------------------------------------------
 -- Monadic monoid structure on dmtypes
@@ -129,10 +130,10 @@ solveSetMultiplier name (τ, s) = do
 
 -- new monoid structure using infimum
 
-instance (DMExtra a, IsT MonadDMTC t) => SemigroupM (t) (DMTypeOf (AnnotatedKind a)) where
+instance (IsT MonadDMTC t) => SemigroupM (t) (DMTypeOf MainKind) where
   (⋆) x y = return (x :∧: y)
 
-instance (Typeable a, SingI a, IsT MonadDMTC t) => MonoidM (t) (DMTypeOf (AnnotatedKind a)) where
+instance (IsT MonadDMTC t) => MonoidM (t) (DMTypeOf MainKind) where
   neutral = newVar
 
 
