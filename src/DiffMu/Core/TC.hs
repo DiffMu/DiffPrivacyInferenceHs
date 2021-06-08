@@ -112,7 +112,7 @@ instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs (DMTup τs) = DMTup <$> substitute σs τs
   substitute σs (DMMat nrm clp n m τ) = DMMat nrm clp <$> substitute σs n <*> substitute σs m <*> substitute σs τ
   substitute σs (DMChoice xs) = DMChoice <$> substitute σs xs
-  substitute σs (NoFun (x :@ a)) = (\x -> NoFun (x :@ a)) <$> substitute σs x
+  substitute σs (NoFun (x)) = NoFun <$> substitute σs x
   substitute σs (Fun xs) = Fun <$> substitute σs xs
   substitute σs (x :∧: y) = (:∧:) <$> substitute σs x <*> substitute σs y
 
@@ -398,7 +398,7 @@ instance Cast (Either Sensitivity Privacy) Privacy where
   cast (Left e) = error $ "Expected a privacy but got a sensitivity (" <> show e <> ")."
   cast (Right e) = return e
 
-instance Typeable x => Cast (Either (DMTypeOf MainKind :& Annotation SensitivityK) (DMTypeOf MainKind :& Annotation PrivacyK)) (DMTypeOf MainKind :& Annotation SensitivityK) where
+instance Typeable x => Cast (Either (DMTypeOf MainKind :& Annotation SensitivityK) (DMTypeOf MainKind :& Annotation PrivacyK)) (DMTypeOf MainKind :& Annotation x) where
   cast e =
     let case1 = testEquality (typeRep @x) (typeRep @SensitivityK)
         case2 = testEquality (typeRep @x) (typeRep @PrivacyK)
@@ -949,14 +949,12 @@ createDMTypeNum (JuliaType str)  = throwError (TypeMismatchError $ "expected " <
 -- -- TODO: is it correct to create tvars for anything else?
 -- createDMType _ = TVar <$> newTVar "any"
 
-createDMType :: MonadDMTC t => JuliaType -> t (DMTypeOf (AnnotatedKind SensitivityK))
+createDMType :: MonadDMTC t => JuliaType -> t (DMTypeOf MainKind)
  -- NOTE: defaulting to non-const might or might not be what we want to do here.
 createDMType (JuliaType "Integer") = do
-  s <- newVar
-  return (NoFun (Numeric (NonConst DMInt) :@ SensitivityAnnotation s))
+  return (NoFun (Numeric (NonConst DMInt)))
 createDMType (JuliaType "Real") = do
-  s <- newVar
-  return (NoFun (Numeric (NonConst DMReal) :@ SensitivityAnnotation s))
+  return (NoFun (Numeric (NonConst DMReal)))
 -- TODO: is it correct to create tvars for anything else?
 createDMType _ = TVar <$> newTVar "any"
 
