@@ -998,10 +998,10 @@ normalizeAnn (a :∧: b) = do
   b' <- normalizeAnn b
   case (a', b') of
     (Fun xs, Fun ys) -> pure $ Fun (xs <> ys)
-    (NoFun (x :@ ηx), NoFun (y :@ ηy)) -> do -- z <- infimum @MonadDMTC @t x y
+    (NoFun x, NoFun y) -> do -- z <- infimum @MonadDMTC @t x y
                                              z <- newVar
                                              addConstraint (Solvable (IsInfimum (x, y, z)))
-                                             return (NoFun (z :@ (ηx ⋆! ηy)))
+                                             return (NoFun z)
     (_ , _) -> return (a' :∧: b')
 normalizeAnn (xs :->: y) = (:->:) <$> mapM normalizeAnn xs <*> normalizeAnn y
 normalizeAnn (xs :->*: y) = (:->*:) <$> mapM normalizeAnn xs <*> normalizeAnn y
