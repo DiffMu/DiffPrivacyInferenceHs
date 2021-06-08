@@ -40,7 +40,7 @@ juliatypes (DMTup xs) =
       f js = JuliaType $ "Tuple{" <> intercalate ", " js <> "}"
   in f <$> jss'
 juliatypes (Fun _) = [JuliaType "Function"]
-juliatypes (NoFun τ) = juliatypes (fstAnn τ)
+juliatypes (NoFun τ) = juliatypes τ
 juliatypes τ = error $ "juliatypes(" <> show τ <> ") not implemented."
 
 global_callback_issubtype :: IORef (DMEnv)
