@@ -259,7 +259,7 @@ getActuallyFreeVars τ = do
   γ <- use types
   let τfree = freeVars @_ @TVarOf τ
   let γfree = freeVars @_ @TVarOf γ
-  return (τfree \\ γfree)
+  return (nub (τfree \\ γfree))
 
 ---------------------------------------------------------------------------
 -- Algebraic instances for annot
