@@ -983,8 +983,12 @@ normalizeAnn (a :∧: b) = do
                                              addConstraint (Solvable (IsInfimum (x, y, z)))
                                              return (NoFun z)
     (_ , _) -> return (a' :∧: b')
-normalizeAnn (xs :->: y) = (:->:) <$> mapM normalizeAnn xs <*> normalizeAnn y
-normalizeAnn (xs :->*: y) = (:->*:) <$> mapM normalizeAnn xs <*> normalizeAnn y
+normalizeAnn (xs :->: y) = do
+  let normalizeInside (x :@ annot) = (:@ annot) <$> normalizeAnn x
+  (:->:) <$> mapM normalizeInside xs <*> normalizeAnn y
+normalizeAnn (xs :->*: y) = do
+  let normalizeInside (x :@ annot) = (:@ annot) <$> normalizeAnn x
+  (:->*:) <$> mapM normalizeInside xs <*> normalizeAnn y
 normalizeAnn x = pure x
 
 -- normalizeInsideAnn :: MonadDMTC t => DMTypeOf (AnnotatedKind a) -> t (DMTypeOf (AnnotatedKind a))

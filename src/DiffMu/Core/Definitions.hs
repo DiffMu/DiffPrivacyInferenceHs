@@ -151,10 +151,10 @@ data DMTypeOf (k :: DMKind) where
   TVar :: IsKind k => SymbolOf k -> DMTypeOf k
 
   -- the arrow type
-  (:->:) :: [DMTypeOf MainKind] -> DMTypeOf MainKind -> DMFun
+  (:->:) :: [DMTypeOf MainKind :& Sensitivity] -> DMTypeOf MainKind -> DMFun
 
   -- the privacy-arrow type
-  (:->*:) :: [DMTypeOf MainKind] -> DMTypeOf MainKind -> DMFun
+  (:->*:) :: [DMTypeOf MainKind :& Privacy] -> DMTypeOf MainKind -> DMFun
 
   -- tuples
   DMTup :: [DMType] -> DMType
