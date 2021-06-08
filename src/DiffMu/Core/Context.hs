@@ -21,12 +21,10 @@ import Debug.Trace
 -- A helper function which scale any type context with a given sensitivity `η`.
 scale :: Sensitivity -> TypeCtxSP -> TypeCtxSP
 scale η (Left γ) = Left (f <$> γ)
-  where f (WithRelev i x) = WithRelev i (η :↷: x)
+  where f (WithRelev i (τ :@ SensitivityAnnotation x)) = WithRelev i (τ :@ SensitivityAnnotation (η ⋅! x))
   -- where f (WithRelev i (τ :@ s)) = WithRelev i (τ :@ (η ⋅! s))
 scale η (Right γ) = Right (f <$> γ)
-  where f (WithRelev i x) = WithRelev i (η :↷: x)
-  -- where f :: WithRelev PrivacyK -> WithRelev PrivacyK
-  --       f (WithRelev i (τ :@ (δ,ε))) = WithRelev i (τ :@ (η ⋅! δ, η ⋅! ε))
+  where f (WithRelev i (τ :@ PrivacyAnnotation (ε,δ))) = WithRelev i (τ :@ PrivacyAnnotation (η ⋅! ε, η ⋅! δ))
 
 -- Scales the current type context living in our typechecking-state monad by a given `η`.
 mscale :: MonadDMTC t => Sensitivity -> t ()
@@ -49,7 +47,7 @@ truncate_impl :: forall f e. (DMExtra e, DMExtra f) => Annotation f -> TypeCtx e
 truncate_impl η γ = truncate_annotation <$> γ
    where
       truncate_annotation :: (WithRelev e) -> (WithRelev f)
-      truncate_annotation (WithRelev i x) = WithRelev i (Trunc η x)
+      truncate_annotation (WithRelev i (τ :@ _)) = WithRelev i (τ :@ η)
       -- truncate_annotation (WithRelev i (τ :@ annotation)) =
       --   (case annotation == zeroId of
       --       True -> WithRelev i (τ :@ zeroId)
@@ -156,6 +154,9 @@ setVarP k v = types %=~ setValueM k (Right v :: Either (WithRelev SensitivityK) 
 
 -- add constraints that make sure all current context entries have sensitivity <= s.
 restrictAll :: Sensitivity -> TC ()
+restrictAll = undefined
+
+  {-
 restrictAll s = let
    addC :: DMTypeOf (AnnotatedKind SensitivityK) -> TC ()
    addC τ = do
@@ -170,10 +171,12 @@ restrictAll s = let
          Right _ -> throwError (ImpossibleError "restrictAll called on privacy context.")
          Left (Ctx (MonCom h)) -> mapM (\(WithRelev _ τ) -> addC τ) h -- restrict sensitivities of all γ entries
       return ()
-
+-}
 
 -- add constraints that make sure all interesting context entries have sensitivity <= s.
 restrictInteresting :: Sensitivity -> TC ()
+restrictInteresting = undefined
+{-
 restrictInteresting s = let
    addC :: DMTypeOf (AnnotatedKind SensitivityK) -> TC ()
    addC τ = do
@@ -188,17 +191,17 @@ restrictInteresting s = let
          Right _ -> throwError (ImpossibleError "restrictAll called on privacy context.")
          Left (Ctx (MonCom h)) -> mapM (\(WithRelev IsRelevant τ) -> addC τ) h -- restrict sensitivities of relevant γ entries
       return ()
-
+-}
 
 -- Look up the types and sensitivities/privacies of the variables in `xτs` from the current context.
 -- If a variable is not present in Σ (this means it was not used in the lambda body),
 -- create a new type/typevar according to type hint given in `xτs` and give it zero annotation.
 -- The result is the signature of the lambda the checking of whose body returned the current context.
-getArgList :: forall t e. (MonadDMTC t, DMExtra e) => [Asgmt JuliaType] -> t [DMTypeOf (AnnotatedKind e)]
+getArgList :: forall t e. (MonadDMTC t, DMExtra e) => [Asgmt JuliaType] -> t [DMTypeOf MainKind :& Annotation e]
 getArgList xτs = do
   (γ :: TypeCtxSP) <- use types
 
-  let f :: Asgmt JuliaType -> t (DMTypeOf (AnnotatedKind e))
+  let f :: Asgmt JuliaType -> t (DMTypeOf MainKind :& Annotation e)
       f (x :- τ) = do
         val <- getValueM x γ
         case val of
@@ -209,7 +212,7 @@ getArgList xτs = do
           -- else just return a variable with 0 annotation, as this means it was not used in the body.
           Nothing -> do
              τv <- newVar
-             return (zeroId :↷: τv) -- scale with 0
+             return (τv :@ zeroId) -- scale with 0
 
   xτs' <- mapM f xτs
 
@@ -230,7 +233,7 @@ removeVar x =  do
   v <- getValueM x γ
   vr <- case v of
      Just vv -> cast vv
-     Nothing -> WithRelev IsRelevant <$> ((zeroId :↷:) <$> newVar) -- ((:@) <$> newVar <*> return zeroId)
+     Nothing -> WithRelev IsRelevant <$> ((:@ zeroId) <$> newVar) -- ((:@) <$> newVar <*> return zeroId)
   γ' <- deleteValueM x γ
   types .= γ'
   return vr
@@ -241,13 +244,13 @@ lookupVar x =  do
   v <- getValueM x γ
   cast v
 
-getInteresting :: MonadDMTC t => t ([Symbol],[DMTypeOf (AnnotatedKind PrivacyK)])
+getInteresting :: MonadDMTC t => t ([Symbol],[DMTypeOf MainKind :& (Annotation PrivacyK)])
 getInteresting = do
    γ <- use types
    h <- case γ of
            Left _ -> throwError (ImpossibleError "getInteresting called on sensitivity context.")
            Right (Ctx (MonCom h')) -> return (H.toList h')
-   let f :: [(Symbol, WithRelev PrivacyK)] -> ([(Symbol, DMTypeOf (AnnotatedKind PrivacyK))])
+   let f :: [(Symbol, WithRelev PrivacyK)] -> ([(Symbol, DMTypeOf MainKind :& (Annotation PrivacyK))])
        f xs = [ (x , τ) | (x , WithRelev IsRelevant τ) <- xs ]
    return (unzip (f h))
 
@@ -267,8 +270,12 @@ instance (Typeable e, SingI e, IsT MonadDMTC t) => SemigroupM t (WithRelev e) wh
   (⋆) (WithRelev i e) (WithRelev j f) = WithRelev (i <> j) <$> (e ⋆ f)
 
 instance (IsT MonadDMTC t, DMExtra e) => MonoidM t (WithRelev e) where
-  neutral = WithRelev IsRelevant <$> neutral
+  neutral = WithRelev IsRelevant <$> (:@ zeroId ) <$> neutral
 
 instance (IsT MonadDMTC t, DMExtra e) => CheckNeutral t (WithRelev e) where
-  checkNeutral (WithRelev i a) = checkNeutral a
+  checkNeutral (WithRelev i (τ :@ s)) =
+    do
+      b1 <- checkNeutral τ
+      b2 <- checkNeutral s
+      return $ and [b1,b2]
 
