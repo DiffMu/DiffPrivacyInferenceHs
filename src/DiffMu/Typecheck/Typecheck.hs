@@ -30,20 +30,31 @@ instance Default (DMScope) where
 
 throwDelayedError e = Done $ (throwError e)
 
--- pushChoice :: Symbol -> (DMDelayed) -> DMScope -> DMScope
--- pushChoice name value scope =
---   let oldval = getValue name scope
---       newval = case oldval of
---         Nothing -> undefined
---         Just v -> onlyLater v $ \old -> undefined
---   in undefined
+-- pushChoice :: (MonadDMTC t) => DMScopes -> Symbol -> [JuliaType] -> DMTerm -> t DMScopes
+-- pushChoice scope fname sign term = do
+--    let (_, DMScope varscope) = scope
+--    scope' <- case (H.lookup fname varscope) of
+--                   Nothing -> pushDefinition scope fname (Choice (H.singleton sign term)) -- if there are no other methods just push
+--                   Just (Choice d, _) -> do -- else append the method to the Choice term
+--                                         (_, scope'') <- popDefinition scope fname
+--                                         pushDefinition scope'' fname (Choice (H.insert sign term d))
+--                   _ -> throwError (ImpossibleError "Invalid scope entry.")
+--    return scope'
 
+pushChoice :: Symbol -> (DMDelayed) -> DMScope -> DMScope
+pushChoice name ma scope =
+  let oldval = getValue name scope
+      newval = case oldval of
+        Nothing -> ma
+        Just mb -> do
+          a <- ma
+          b <- mb
+          return $ do
+            a' <- a
+            b' <- b
+            return (a' :∧: b')
+  in setValue name newval scope
 
--- returnNoFun :: DMType -> DMDelayed
--- returnNoFun τ = Done $ do
---   a <- newVar
---   mscale a
---   return ((NoFun (τ :@ SensitivityAnnotation a)))
 
 returnFun ::  Maybe [JuliaType] -> TC DMFun -> Delayed DMScope (TC DMMain)
 returnFun sign mτ = let
@@ -403,16 +414,19 @@ checkSen' (Apply f args) scope =
 
 -}
 
+-}
 checkSen' (FLet fname sign term body) scope = do
 
   -- make a Choice term to put in the scope
-   scope' <- pushChoice scope fname sign term
+   let scope' = pushChoice fname (checkSens body scope) scope
+   -- sign term
 
    -- check body with that new scope. Choice terms will result in IsChoice constraints upon ivocation of fname
    result <- checkSens body scope'
-   _ <- removeVar @SensitivityK fname
-   return result
 
+   return $ result <* removeVar @SensitivityK fname
+
+{-
 
   {-
 checkSen' (Choice d) scope = do
