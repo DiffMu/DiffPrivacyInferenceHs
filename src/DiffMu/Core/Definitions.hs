@@ -77,6 +77,10 @@ instance Monad t => SemigroupM t (Annotation a) where
   (SensitivityAnnotation a) ⋆ (SensitivityAnnotation b) = SensitivityAnnotation <$> (a ⋆ b)
   (PrivacyAnnotation a) ⋆ (PrivacyAnnotation b) = PrivacyAnnotation <$> (a ⋆ b)
 
+instance Monad t => CheckNeutral t (Annotation a) where
+  checkNeutral (SensitivityAnnotation s) = checkNeutral s
+  checkNeutral (PrivacyAnnotation s) = checkNeutral s
+
 instance Typeable a => MonoidM Identity (Annotation a) where
   neutral = let case1 = testEquality (typeRep @a) (typeRep @SensitivityK)
                 case2 = testEquality (typeRep @a) (typeRep @PrivacyK)
