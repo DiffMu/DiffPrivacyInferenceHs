@@ -429,6 +429,17 @@ checkSen' (FLet fname sign term body) scope = do
      removeVar @SensitivityK fname
      return result'
 
+
+
+checkSen' (Choice d) scope = do
+   delCs <- mapM (\t -> checkSens t scope) (snd <$> H.toList d)
+   Done $ do
+      choices <- msumS delCs
+      let combined = foldl (:∧:) (Fun []) choices
+      return combined
+
+
+
 {-
 
   {-
