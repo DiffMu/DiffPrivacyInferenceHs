@@ -40,10 +40,10 @@ typecheckFromDMTerm term = do
 
         traceM $ "Checking term   : " <> show term
         -- typecheck the term t5
-        tres <- checkSens term def
-        tres' <- getDelayed def tres
+        let tres = checkSens term def
+        tres' <- extractDelayed def tres
         solveAllConstraints SolveExact
-        tres' <- normalize tres
+        tres'' <- normalize tres'
         return tres'
 
         -- a <- newVar

@@ -72,6 +72,14 @@ data Delayed x a = Done (a) | Later (x -> (Delayed x a))
 -- -- getDelayed arg (Later f) = f arg
 -- getDelayed arg (Later f) = (f arg) >>= getDelayed arg
 
+extractDelayed :: x -> Delayed x a -> a
+extractDelayed x (Done a) = a
+extractDelayed x (Later f) = extractDelayed x (f x)
+
+applyDelayedLayer :: x -> Delayed x a -> Delayed x a
+applyDelayedLayer x (Done a) = Done a
+applyDelayedLayer x (Later f) = f x
+
 instance Functor (Delayed x) where
   fmap f (Done a) = Done (f a)
   fmap f (Later g) = Later (\x -> fmap f (g x))
@@ -116,37 +124,55 @@ insideDelayed (Later g) f = Later (\x -> insideDelayed (g x) f)
 checkSen' :: DMTerm -> DMScope -> DMDelayed
 
 checkPriv :: DMTerm -> DMScope -> DMDelayed
-checkPriv t scope = undefined
-  -- do
-  --  γ <- use types
-  --  case γ of -- TODO prettify.
-  --     Left (Ctx (MonCom c)) | H.null c -> return ()
-  --     Right (Ctx (MonCom c)) | H.null c -> return ()
-  --     _   -> throwError (ImpossibleError "Input context for checking must be empty.")
-  --  types .= Right def -- cast to privacy context.
+checkPriv t scope = do
+  -- Define the computation to do before checking
+  let beforeCheck = do
+       γ <- use types
+       case γ of -- TODO prettify.
+           Left (Ctx (MonCom c)) | H.null c -> return ()
+           Right (Ctx (MonCom c)) | H.null c -> return ()
+           _   -> throwError (ImpossibleError "Input context for checking must be empty.")
+       types .= Right def -- cast to privacy context.
 
-  --  res <- checkPri' t scope
+  -- Define the computation to do after checking
+  let afterCheck = \res -> do
+       γ <- use types
+       case γ of
+           Right γ -> return res
+           Left γ -> error $ "checkPriv returned a sensitivity context!\n" <> "It is:\n" <> show γ <> "\nThe input term was:\n" <> show t
 
-  --  γ <- use types
-  --  case γ of
-  --     Right γ -> return res
-  --     Left γ -> error $ "checkPriv returned a sensitivity context!\n" <> "It is:\n" <> show γ <> "\nThe input term was:\n" <> show t
+  -- get the delayed value of the sensititivty checking
+  res <- checkPri' t scope
+
+  -- combine with the pre/post compututations
+  return (beforeCheck >> res >>= afterCheck)
+
+
 
 checkSens :: DMTerm -> DMScope -> DMDelayed
-checkSens t scope = undefined -- do
-   -- γ <- use types
-   -- case γ of -- TODO prettify.
-   --    Left (Ctx (MonCom c)) | H.null c -> return ()
-   --    Right (Ctx (MonCom c)) | H.null c -> return ()
-   --    _   -> throwError (ImpossibleError "Input context for checking must be empty.")
-   -- types .= Left def -- cast to sensitivity context.
+checkSens t scope = do
+  -- Define the computation to do before checking
+  let beforeCheck = do
+       γ <- use types
+       case γ of -- TODO prettify.
+           Left (Ctx (MonCom c)) | H.null c -> return ()
+           Right (Ctx (MonCom c)) | H.null c -> return ()
+           _   -> throwError (ImpossibleError "Input context for checking must be empty.")
+       types .= Left def -- cast to sensitivity context.
 
-   -- res <- checkSen' t scope
+  -- Define the computation to do after checking
+  let afterCheck = \res -> do
+       γ <- use types
+       case γ of
+           Left γ -> return res
+           Right γ -> error $ "checkSens returned a privacy context!\n" <> "It is:\n" <> show γ <> "\nThe input term was:\n" <> show t
 
-   -- γ <- use types
-   -- case γ of
-   --    Left γ -> return res
-   --    Right γ -> error $ "checkSens returned a privacy context!\n" <> "It is:\n" <> show γ <> "\nThe input term was:\n" <> show t
+  -- get the delayed value of the sensititivty checking
+  res <- checkSen' t scope
+
+  -- combine with the pre/post compututations
+  return (beforeCheck >> res >>= afterCheck)
+
 
   {-
 -- TODO: Here we assume that η really has type τ, and do not check it. Should maybe do that.
@@ -282,29 +308,33 @@ checkSen' (Apply f args) scope =
     checkArg :: DMTerm -> DMScope -> Delayed DMScope (TC (DMMain :& Sensitivity))
     checkArg arg scope = do
       τ <- checkSens arg scope
-      let scaleContext = do
-          s <- newVar
-          mscale s
-          return (τ :@ s)
+      let scaleContext :: TC (DMMain :& Sensitivity)
+          scaleContext =
+            do τ' <- τ
+               s <- newVar
+               mscale s
+               return (τ' :@ s)
       return (scaleContext)
 
-
     sbranch_check mf margs = do
-        -- τ_lam <- mf
-        -- τargs <- margs
-        (τ_sum, argτs) <- msumTup (mf , msumS margs) -- sum args and f's context
+        (τ_sum :: DMMain, argτs) <- msumTup (mf , msumS margs) -- sum args and f's context
         τ_ret <- newVar -- a type var for the function return type
         addConstraint (Solvable (IsFunctionArgument (τ_sum, Fun [(ForAll [] (argτs :->: τ_ret)) :@ Nothing])))
         return τ_ret
 
-
     margs = (\arg -> (checkArg arg scope)) <$> args
     mf = checkSens f scope
 
-    -- ms = sbranch_check (mf) margs
-    -- mp = pbranch_check (snd <$> mf) margs
-  in undefined
-  -- Done (ms)
+  in do
+    -- we typecheck the function, but `apply` our current layer on the Later computation
+    -- i.e. "typecheck" means here "extracting" the result of the later computation
+    res <- (applyDelayedLayer scope mf)
+
+    -- we extract the result of the args computations
+    args <- sequence margs
+
+    -- we merge the different TC's into a single result TC
+    return (sbranch_check res args)
 
 
 {-
