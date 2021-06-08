@@ -23,7 +23,6 @@ import Data.POSet (POSet)
 import Debug.Trace
 import qualified Data.HashMap.Strict as H
 
-  {-
 
 ---------------------------------------------------------------------
 -- "Strict subtyping" of function calls
@@ -261,4 +260,3 @@ choiceCouldMatch args cs =
 -- return False if this type would become a "Function" if converted to a julia type
 noJuliaFunction :: DMTypeOf MainKind -> Bool
 noJuliaFunction τ = (juliatypes τ == [JuliaType "Function"])
--}
