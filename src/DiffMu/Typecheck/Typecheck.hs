@@ -115,12 +115,6 @@ insideDelayed (Later g) f = Later (\x -> insideDelayed (g x) (\a -> applyDelayed
 
 ------------------------------------------------------------------------
 -- The typechecking function
-
---------------------
--- Sensitivity terms
-
-checkSen' :: DMTerm -> DMScope -> DMDelayed
-
 checkPriv :: DMTerm -> DMScope -> DMDelayed
 checkPriv t scope = do
   -- Define the computation to do before checking
@@ -172,6 +166,12 @@ checkSens t scope = do
   return (beforeCheck >> res >>= afterCheck)
 
 
+--------------------
+-- Sensitivity terms
+
+
+checkSen' :: DMTerm -> DMScope -> DMDelayed
+
 -- TODO: Here we assume that η really has type τ, and do not check it. Should maybe do that.
 checkSen' (Sng η τ) scope = Done $ do
   res <- Numeric <$> (Const (constCoeff (Fin η)) <$> (createDMTypeNum τ))
@@ -200,23 +200,6 @@ checkSen' (Op op args) scope = do
 
      -- return the `res` type given by `makeTypeOp`
      return (NoFun (Numeric res))
-
-  {-
-checkSen' (Phi cond ifbr elsebr) scope =
-   let mcond = do
-        τ_cond <- checkSens cond scope >>= onlyDone
-        mscale inftyS
-        return τ_cond
-   in do
-      τ_sum <- msumS [(checkSens ifbr scope >>= onlyDone), (checkSens elsebr scope >>= onlyDone), mcond]
-      (τif, τelse) <- case τ_sum of
-                           (τ1 : τ2 : _) -> return (τ1, τ2)
-                           _ -> throwError (ImpossibleError "Sum cannot return empty.")
-      τ <- newVar
-      addConstraint (Solvable (IsSupremum (τ, τif, τelse)))
-      return (Done τ)
-
--}
 
 
 -- a special term for function argument variables.
@@ -261,28 +244,32 @@ checkSen' (Lam xτs body) scope =
       frees <- getActuallyFreeVars τ
       return (Fun [(ForAll frees τ :@ (Just sign))])
 
-{-
-checkSen' (LamStar xτs body) scope = do
 
-  -- put a special term to mark x as a function argument. those get special tratment
-  -- because we're interested in their sensitivity
-  scope' <- foldM (\sc -> (\((x :- τ), i) -> pushDefinition sc x (Arg x τ i))) scope xτs
-
+checkSen' (LamStar xτs body) scope =
   -- the body is checked in the toplevel scope, not the current variable scope.
   -- this reflects the julia behaviour
-  let (topscope, _) = scope'
-  τr <- checkPriv body (topscope, topscope)
+  Later $ \scope -> do
+    -- put a special term to mark x as a function argument. those get special tratment
+    -- because we're interested in their privacy. put the relevance given in the function signature, too.
+    let scope' = foldl (\sc -> (\((x :- τ), rel) -> setValue x (checkSens (Arg x τ rel) scope) sc)) scope xτs
 
+    -- check the function body
+    τr <- checkPriv body scope'
+    -- extract julia signature
+    let sign = (sndA <$> fst <$> xτs)
+    Done $ do
+      restype <- τr
+      -- get inferred types and privacies for the arguments
+      xrτs <- getArgList @_ @PrivacyK (fst <$> xτs)
+      -- truncate function context to infinity sensitivity
+      mtruncateS inftyS
+      -- build the type signature and proper ->* type
+      let xrτs' = [x :@ p | (x :@ PrivacyAnnotation p) <- xrτs]
+      let τ = (xrτs' :->*: restype)
+      -- include free variables in a ForAll
+      frees <- getActuallyFreeVars τ
+      return (Fun [(ForAll frees τ :@ (Just sign))])
 
-  xrτs <- getArgList (map fst xτs)
-
-  -- TODO: As it currently stands the context which is returned here is something like 's ↷ | Γ |_∞', not wrong, but unnecessary?
-  mtruncateS inftyS
-
-  -- get the julia signature from xτs
-  let sign = ((sndA . fst) <$> xτs)
-  returnFun (Just sign) (xrτs :->*: τr)
--}
 
 checkSen' (SLet (x :- dτ) term body) scope = do
 
@@ -339,52 +326,6 @@ checkSen' (Apply f args) scope =
     return (sbranch_check res args)
 
 
-{-
-  let checkFArg :: DMTerm -> TC (DMSensitivity)
-      checkFArg arg = do
-          τ <- checkSens arg scope >>= getDelayed scope
-          return τ
-  let margs = checkFArg <$> args
-  let mf = checkSens f scope >>= getDelayed scope
-  τ_sum <- msumS (mf : margs) -- sum args and f's context
-  (τ_lam, argτs) <- case τ_sum of
-                          (τ : τs) -> return (τ, τs)
-                          [] -> throwError (ImpossibleError "Sum cannot return empty list.")
-  τ_ret <- newVar -- a type var for the function return type
-
-  -- addConstraint (Solvable (IsLessEqual (τ_lam, Fun [(argτs :->: τ_ret) :@ (Nothing, oneId)])))
-
-  addConstraint (Solvable (IsFunctionArgument (τ_lam, Fun [(ForAll [] (argτs :->: τ_ret)) :@ (Nothing, oneId)])))
-  return (Done τ_ret)
-
-  {-
-  let
-   -- check a single argument, scale its context with the corresponding sensitivity variable
-   checkFArg :: DMTerm -> Sensitivity -> TC DMType
-   checkFArg arg s = do
-      τ <- checkSens arg scope
-      mscale s
-      return τ
-   in do
-      svars :: [Sensitivity] <- mapM (\x -> newVar) args -- create an svar for each argument
-      let margs = zipWith checkFArg args svars -- check args and scale with their respective svar
-
-      let mf = checkSens f scope -- check function term
-
-      τ_sum <- msumS (mf : margs) -- sum args and f's context
-      (τ_lam, argτs) <- case τ_sum of
-                             (τ : τs) -> return (τ, (zipWith (:@) τs svars))
-                             [] -> throwError (ImpossibleError "Sum cannot return empty list.")
-
-      τ_ret <- newVar -- a type var for the function return type
-
-      -- f's type must be subtype of a choice arrow with matching arg types.
-      addConstraint (Solvable (IsLessEqual (τ_lam, DMChoice [(argτs :->: τ_ret) :@ (Nothing, oneId)])))
-      return τ_ret
-
--}
-
--}
 checkSen' (FLet fname sign term body) scope = do
 
   -- make a Choice term to put in the scope
@@ -410,8 +351,20 @@ checkSen' (Choice d) scope = do
 
 {-
 
-  {-
-{-
+checkSen' (Phi cond ifbr elsebr) scope =
+   let mcond = do
+        τ_cond <- checkSens cond scope >>= onlyDone
+        mscale inftyS
+        return τ_cond
+   in do
+      τ_sum <- msumS [(checkSens ifbr scope >>= onlyDone), (checkSens elsebr scope >>= onlyDone), mcond]
+      (τif, τelse) <- case τ_sum of
+                           (τ1 : τ2 : _) -> return (τ1, τ2)
+                           _ -> throwError (ImpossibleError "Sum cannot return empty.")
+      τ <- newVar
+      addConstraint (Solvable (IsSupremum (τ, τif, τelse)))
+      return (Done τ)
+
 
 checkSen' (Tup ts) scope = do
   undefined
@@ -421,7 +374,6 @@ checkSen' (Tup ts) scope = do
 checkSen' (TLet xs tu body) scope = do
           undefined
           -- TODO: NEWANNOT
-         {-
    --TODO chekc uniqueness
    maxs <- newVar
 
@@ -479,9 +431,6 @@ checkSen' (Loop it cs (xi, xc) b) scope = do
    addConstraint (Solvable (IsLoopResult ((sit, scs, sb), sbcs, τit))) -- compute the right scalars once we know if τ_iter is const or not.
 
    return τb
-
-          -}
-
 
 checkSen' (MCreate n m body) scope =
    let setDim :: DMTerm -> Sensitivity -> TC (DMSensitivity)
@@ -542,8 +491,6 @@ checkSen' (ClipM c m) scope = do
    return (NoFun (DMMat nrm c n m (Numeric DMData) :@ SensitivityAnnotation η))
 -}
 
--}
--}
 -- Everything else is currently not supported.
 checkSen' t scope = (throwDelayedError (UnsupportedTermError t))
 
@@ -552,14 +499,16 @@ checkSen' t scope = (throwDelayedError (UnsupportedTermError t))
 -- Privacy terms
 
 checkPri' :: DMTerm -> DMScope -> DMDelayed
-checkPri' = undefined
 
-  {-
 checkPri' (Ret t) scope = do
-   τ <- checkSens t scope
-   mtruncateP inftyP
-   return (Return τ)
+   mτ <- checkSens t scope
+   Done $ do
+      τ <- mτ
+      mtruncateP inftyP
+      return τ
 
+checkPri' t scope = checkPriv (Ret t) scope -- secretly return if the term has the wrong color.
+  {-
 checkPri' (Gauss rp εp δp f) scope =
   let
    setParam :: DMTerm -> Sensitivity -> TC ()
