@@ -507,8 +507,104 @@ checkPri' (Ret t) scope = do
       mtruncateP inftyP
       return τ
 
+-- TODO it is ambiguous if this is an application of a LamStar or an application of a Lam followed by Return.
+-- we probably should resolve IsFunctionArgument ( T -> T, S ->* S) by setting S's privacies to infinity.
+checkPri' (Apply f args) scope =
+  let
+    -- check the argument in the given scope,
+    -- and scale scope by new variable, return both
+    checkArg :: DMTerm -> DMScope -> Delayed DMScope (TC (DMMain :& Privacy))
+    checkArg arg scope = do
+      τ <- checkSens arg scope
+      let restrictTruncateContext :: TC (DMMain :& Privacy)
+          restrictTruncateContext =
+            do τ' <- τ
+               restrictAll oneId -- sensitivity of everything in context must be <= 1
+               p <- newPVar
+               mtruncateP p
+               return (τ' :@ p)
+      return (restrictTruncateContext)
+
+    sbranch_check mf margs = do
+        (τ_sum :: DMMain, argτs) <- msumTup (mf , msumP margs) -- sum args and f's context
+        τ_ret <- newVar -- a type var for the function return type
+        addConstraint (Solvable (IsFunctionArgument (τ_sum, Fun [(ForAll [] (argτs :->*: τ_ret)) :@ Nothing])))
+        return τ_ret
+
+    margs = (\arg -> (checkArg arg scope)) <$> args
+
+    f_check :: Delayed DMScope (TC DMMain) = do
+       -- we typecheck the function, but `apply` our current layer on the Later computation
+       -- i.e. "typecheck" means here "extracting" the result of the later computation
+       res <- (applyDelayedLayer scope (checkSens f scope))
+       Done $ do
+                r <- res
+                mtruncateP inftyP -- truncate f's context to ∞
+                return r
+
+  in do
+    -- extract result of f typechecking
+    ff <- f_check
+
+    -- we extract the result of the args computations
+    args <- sequence margs
+
+    -- we merge the different TC's into a single result TC
+    return (sbranch_check ff args)
+
+
+checkPri' (FLet fname sign term body) scope = do
+
+  -- make a Choice term to put in the scope
+  -- TODO checkPriv or checkSens?
+   let scope' = pushChoice fname (checkSens term scope) scope
+
+   -- check body with that new scope. Choice terms will result in IsChoice constraints upon ivocation of fname
+   result <- checkPriv body scope'
+
+   return $ do
+     result' <- result
+     removeVar @PrivacyK fname
+     return result'
+
+
+
 checkPri' t scope = checkPriv (Ret t) scope -- secretly return if the term has the wrong color.
-  {-
+
+{-
+checkPri' (SLet (x :- dτ) term body) scope = do
+  -- put the computation to check the term into the scope
+  -- TODO checkSens???!
+   let scope' = setValue x (checkSens term scope) scope
+
+   -- check body with that new scope
+   result <- checkPriv body scope'
+
+   return $ do
+     -- TODO
+     case dτ of
+        JTAny -> return dτ
+        dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
+
+     result' <- result
+     removeVar @PrivacyK x
+     return result'
+
+
+checkPri' (FLet fname sign term body) scope = do
+
+  -- make a Choice term to put in the scope
+  -- TODO checkPriv or checkSens?
+   let scope' = pushChoice fname (checkSens term scope) scope
+
+   -- check body with that new scope. Choice terms will result in IsChoice constraints upon ivocation of fname
+   result <- checkPriv body scope'
+
+   return $ do
+     result' <- result
+     removeVar @PrivacyK fname
+     return result'
+
 checkPri' (Gauss rp εp δp f) scope =
   let
    setParam :: DMTerm -> Sensitivity -> TC ()
@@ -551,37 +647,8 @@ checkPri' (Gauss rp εp δp f) scope =
 
 
   {-
-checkPri' (SLet (x :- dτ) term body) scope =
-  -- push x to scope, check body, and discard x from the result context.
-  -- this is the bind rule; as we expect the body to be a privacy term we don't need to worry about x's sensitivity
-  let mbody = do
-         scope' <- pushDefinition scope x (Arg x dτ IsRelevant)
-         τ <- checkPriv body scope'
-         _ <- removeVar @PrivacyK x
-         return τ
-  in do
-     -- TODO this requires saving the annotation in the dict.
-     case dτ of
-          JTAny -> return dτ
-          dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
 
-     sum <- msumP [mbody, (checkPriv term scope)]
-     res <- case sum of
-                    [τ::DMType,_] -> return τ
-                    _ -> throwError (ImpossibleError "?!")
-
-     return res
 -}
-
-checkPri' (FLet fname sign term body) scope = do -- this is the same as with checkSens
-  -- make a Choice term to put in the scope
-   scope' <- pushChoice scope fname sign term
-
-   -- check body with that new scope. Choice terms will result in IsChoice constraints upon ivocation of fname
-   result <- checkPriv body scope'
-   _ <- removeVar @PrivacyK fname
-   return result
-
 
 {-
 
@@ -601,33 +668,6 @@ checkPri' (Phi cond ifbr elsebr) scope = -- this is the same as with checkSens
 
 -}
 
-checkPri' (Apply f args) scope = let
-   -- check a single argument, scale its context with the corresponding sensitivity variable
-   checkFArg :: DMTerm -> Privacy -> TC (DMTypeOf (AnnotatedKind PrivacyK))
-   checkFArg arg p = do
-      τ <- checkSens arg scope
-      addConstraint (Solvable (SetMultiplier (τ, oneId::Sensitivity)))
-      restrictAll oneId -- sensitivity of everything in context must be <= 1
-      mtruncateP p -- truncate it's context to p
-      return (Trunc (PrivacyAnnotation p) τ) -- also set it's type's annotation to p for putting it into the signature below
-
-   checkF :: TC (DMSensitivity)
-   checkF = do
-      τ <- checkSens f scope
-      mtruncateP inftyP
-      return τ
-
-   in do
-      εvars :: [Sensitivity] <- mapM (\x -> newVar) args -- create privacy variables for all arguments
-      δvars :: [Sensitivity] <- mapM (\x -> newVar) args
-      let margs = zipWith checkFArg args (zip εvars δvars) -- check f and args and truncate with their respective pvar
-
-      (τ_lam, argτs) <- msumTup (checkF, (msumP margs)) -- sum args and f's context
-
-      τ_ret <- newVar -- a type var for the function return type
-
-      addConstraint (Solvable (IsFunctionArgument (τ_lam, Fun [(ForAll [] (argτs :->*: τ_ret)) :@ (Nothing, oneId)])))
-      return τ_ret
 {-
 checkPri' (Loop it cs (xi, xc) b) scope = do
   undefined

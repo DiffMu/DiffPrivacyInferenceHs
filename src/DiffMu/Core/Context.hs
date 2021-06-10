@@ -154,24 +154,18 @@ setVarP k v = types %=~ setValueM k (Right v :: Either (WithRelev SensitivityK) 
 
 -- add constraints that make sure all current context entries have sensitivity <= s.
 restrictAll :: Sensitivity -> TC ()
-restrictAll = undefined
-
-  {-
 restrictAll s = let
-   addC :: DMTypeOf (AnnotatedKind SensitivityK) -> TC ()
-   addC τ = do
+   addC :: Sensitivity -> TC ()
+   addC sv = do
       -- make constraints that say sv <= s and sv is the sensitivity of τ
-      sv :: Sensitivity <- newVar
       addConstraint (Solvable (IsLessEqual (sv, s)))
-      addConstraint (Solvable (HasSensitivity (τ, sv)))
       return ()
    in do
       γ <- use types
       case γ of
          Right _ -> throwError (ImpossibleError "restrictAll called on privacy context.")
-         Left (Ctx (MonCom h)) -> mapM (\(WithRelev _ τ) -> addC τ) h -- restrict sensitivities of all γ entries
+         Left (Ctx (MonCom h)) -> mapM (\(WithRelev _ (_ :@ SensitivityAnnotation sv)) -> addC sv) h -- restrict sensitivities of all γ entries
       return ()
--}
 
 -- add constraints that make sure all interesting context entries have sensitivity <= s.
 restrictInteresting :: Sensitivity -> TC ()
