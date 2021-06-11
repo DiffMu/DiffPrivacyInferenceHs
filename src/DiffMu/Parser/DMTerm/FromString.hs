@@ -107,7 +107,7 @@ pDMTerm =
   <|> try ("lam_star"  `with` (LamStar <$> pArray "Tuple{Tuple{Symbol, DataType}, Bool}" pAsgmtWithRel <*､> pDMTerm ))
   <|> try ("apply"     `with` (Apply   <$> pDMTerm <*､> pArray "DMTerm" pDMTerm))
   <|> try ("iter"      `with` (Iter    <$> pDMTerm <*､> pDMTerm <*､> pDMTerm))
-  <|> try ("flet"      `with` (FLet    <$> pSymbol <*､> pArray "DataType" pJuliaType <*､> pDMTerm <*､> pDMTerm))
+  <|> try ("flet"      `with` (FLet    <$> pSymbol <*､> pDMTerm <*､> pDMTerm))
   -- no choice
   <|> try ("slet"      `with` (SLet    <$> (pAsgmt (:-)) <*､> pDMTerm <*､> pDMTerm))
   <|> try ("tup"       `with` (Tup     <$> pArray "DMTerm" pDMTerm))
