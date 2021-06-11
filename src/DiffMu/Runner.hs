@@ -44,7 +44,7 @@ typecheckFromDMTerm term = do
         tres' <- extractDelayed def tres
         solveAllConstraints SolveExact
         tres'' <- normalize tres'
-        return tres'
+        return tres''
 
         -- a <- newVar
         -- b <- newVar
