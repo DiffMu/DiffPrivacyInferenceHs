@@ -24,14 +24,14 @@ t5 a b = Op (IsBinary DMOpAdd) [a, b]
 
 simplelam = Lam [Symbol "x" :- (JTNumInt), Symbol "y" :- (JTAny)] (t3 "y")
 simplelam2 = Lam [Symbol "y" :- (JTAny)] (t3 "y")
-simpleflet =  FLet (Symbol "f") [JTNumInt, (JTAny)] simplelam (FLet (Symbol "f") [JTNumInt] simplelam2 (var "f"))
+simpleflet =  FLet (Symbol "f") simplelam (FLet (Symbol "f") simplelam2 (var "f"))
 simpleapply = Lam [Symbol "z" :- (JTAny)] (Apply simpleflet [(t3 "z")])
 
 t6 = Lam [Symbol "y" :- (JTAny)] (SLet (Symbol "x" :- (JTAny)) (Sng 3 JTNumInt) (Op (IsBinary DMOpMul) [(var "x"), (var "y")]))
 
 t7 = Lam [Symbol "x" :- (JTNumInt), Symbol "y" :- (JTAny)] (t5 t4 t2)
 
-t8 = FLet (Symbol "f") [JTNumInt, (JTAny)] t7 (FLet (Symbol "f") [JTNumInt, (JTAny)] t6 (FLet (Symbol "f") [(JTAny), (JTAny)] t6 (var "f") ))
+t8 = FLet (Symbol "f") t7 (FLet (Symbol "f") t6 (FLet (Symbol "f") t6 (var "f") ))
 
 t9 = Apply t8 [t2, t2]
 
@@ -63,7 +63,7 @@ t20 = (Tup [t5 t2 t2, (var "x"), t5 (var "x") (var "x")])
 
 t21 = Lam [Symbol "x" :- (JTNumInt)] (TLet [arg "x", arg "y", arg "z"] t20 (Op (IsBinary DMOpAdd) [t3 "y", t5 (t3 "y") (t3 "z")]))
 
-t22 = Lam [] (FLet (Symbol "app") [(JTAny)] (Lam [arg "f"] (Lam [arg "x"] (Apply (var "f") [var "x"]))) (SLet (arg "a") (sng 3) (SLet (arg "g") (Apply (var "app") [Lam [arg "x"] (times (var "x") (var "c"))]) (SLet (arg "c") (plus (var "a") (sng 1)) (SLet (arg "a") (sng 100) (Apply (var "g") [sng 1]))))))
+t22 = Lam [] (FLet (Symbol "app") (Lam [arg "f"] (Lam [arg "x"] (Apply (var "f") [var "x"]))) (SLet (arg "a") (sng 3) (SLet (arg "g") (Apply (var "app") [Lam [arg "x"] (times (var "x") (var "c"))]) (SLet (arg "c") (plus (var "a") (sng 1)) (SLet (arg "a") (sng 100) (Apply (var "g") [sng 1]))))))
 
-t23 = Lam [] (FLet (Symbol "app") [(JTAny)] (Lam [arg "f"] (Lam [arg "x"] (Apply (var "f") [Apply (var "f") [var "x"]]))) (SLet (arg "c") (sng 10) (SLet (arg "g") (Apply (var "app") [Lam [arg "x"] (times (var "x") (var "c"))]) (SLet (arg "c") (sng 5) (Apply (var "g") [sng 1])))))
+t23 = Lam [] (FLet (Symbol "app") (Lam [arg "f"] (Lam [arg "x"] (Apply (var "f") [Apply (var "f") [var "x"]]))) (SLet (arg "c") (sng 10) (SLet (arg "g") (Apply (var "app") [Lam [arg "x"] (times (var "x") (var "c"))]) (SLet (arg "c") (sng 5) (Apply (var "g") [sng 1])))))
 

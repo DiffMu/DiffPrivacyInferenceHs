@@ -131,7 +131,7 @@ rename olds news term =
          Ret t -> re t
          Op op ts -> Op op (re <$> ts)
          Phi tc ti te -> Phi (re tc) (re tc) (re tc)
-         FLet fname jτs ft body -> FLet fname jτs (re ft) (re body)
+         FLet fname ft body -> FLet fname (re ft) (re body)
          Choice cs -> Choice (H.map re cs)
          Apply t ts -> Apply (re t) (re <$> ts)
          Tup ts -> Tup (re <$> ts)

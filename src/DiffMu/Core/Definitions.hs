@@ -529,7 +529,7 @@ data DMTerm =
   | Lam     [Asgmt JuliaType] DMTerm
   | LamStar [(Asgmt JuliaType, Relevance)] DMTerm
   | Apply DMTerm [DMTerm]
-  | FLet Symbol [JuliaType] DMTerm DMTerm
+  | FLet Symbol DMTerm DMTerm
   | Choice (HashMap [JuliaType] DMTerm)
   | SLet (Asgmt JuliaType) DMTerm DMTerm
   | Tup [DMTerm]
