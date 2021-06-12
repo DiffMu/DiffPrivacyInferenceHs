@@ -560,6 +560,11 @@ checkPri' (SLet (x :- dτ) term body) scope = do
 
    -- check body with that new scope
    dbody <- checkPriv body scope'
+   mbody <- Done $ do
+                   τ <- dbody
+                   -- discard x from the context, never mind it's inferred annotation
+                   removeVar @PrivacyK x
+                   return τ
 
    -- check term with old scope
    dterm <- checkPriv term scope
@@ -570,8 +575,8 @@ checkPri' (SLet (x :- dτ) term body) scope = do
         JTAny -> return dτ
         dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
 
-     (_, τbody) <- msumTup (dbody, dterm)
-     removeVar @PrivacyK x
+     -- sum contexts
+     (_, τbody) <- msumTup (mbody, dterm)
      return τbody
 
 
@@ -641,7 +646,6 @@ checkPri' (Gauss rp εp δp f) scope =
 
 checkPri' t scope = checkPriv (Ret t) scope -- secretly return if the term has the wrong color.
 
-{-
 
 
 {-
@@ -718,7 +722,4 @@ checkPri' (Loop it cs (xi, xc) b) scope = do
    return τb
    -}
 
--}
-
-checkPri' t scope = checkPriv (Ret t) scope -- secretly return if the term has the wrong color.
 -}
