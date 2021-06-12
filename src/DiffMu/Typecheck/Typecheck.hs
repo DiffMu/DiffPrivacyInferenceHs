@@ -552,6 +552,30 @@ checkPri' (Apply f args) scope =
     return (sbranch_check ff args)
 
 
+checkPri' (SLet (x :- dτ) term body) scope = do
+  -- this is the bind rule.
+  -- as it does not matter what sensitivity/privacy x has in the body, we put an Arg term in the scope
+  -- and later discard its annotation.
+   let scope' = setValue x (checkSens (Arg x dτ NotRelevant) scope) scope
+
+   -- check body with that new scope
+   dbody <- checkPriv body scope'
+
+   -- check term with old scope
+   dterm <- checkPriv term scope
+
+   return $ do
+     -- TODO
+     case dτ of
+        JTAny -> return dτ
+        dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
+
+     (_, τbody) <- msumTup (dbody, dterm)
+     removeVar @PrivacyK x
+     return τbody
+
+
+
 checkPri' (FLet fname term body) scope = do
 
   -- make a Choice term to put in the scope
@@ -618,46 +642,7 @@ checkPri' (Gauss rp εp δp f) scope =
 checkPri' t scope = checkPriv (Ret t) scope -- secretly return if the term has the wrong color.
 
 {-
-checkPri' (SLet (x :- dτ) term body) scope = do
-  -- put the computation to check the term into the scope
-  -- TODO checkSens???!
-   let scope' = setValue x (checkSens term scope) scope
 
-   -- check body with that new scope
-   result <- checkPriv body scope'
-
-   return $ do
-     -- TODO
-     case dτ of
-        JTAny -> return dτ
-        dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
-
-     result' <- result
-     removeVar @PrivacyK x
-     return result'
-
-
-checkPri' (FLet fname sign term body) scope = do
-
-  -- make a Choice term to put in the scope
-  -- TODO checkPriv or checkSens?
-   let scope' = pushChoice fname (checkSens term scope) scope
-
-   -- check body with that new scope. Choice terms will result in IsChoice constraints upon ivocation of fname
-   result <- checkPriv body scope'
-
-   return $ do
-     result' <- result
-     removeVar @PrivacyK fname
-     return result'
-
-
-
-
-
-  {-
-
--}
 
 {-
 
