@@ -69,10 +69,10 @@ mtruncateS η = types %= truncateS η
 mtruncateP :: MonadDMTC t => Privacy -> t ()
 mtruncateP η = types %= truncateP η
 
-instance (MonadInternalError t, SemigroupM t a, SemigroupM t b, Show a, Show b) => SemigroupM t (Either a b) where
+instance (MonadError DMException t, SemigroupM t a, SemigroupM t b, Show a, Show b) => SemigroupM t (Either a b) where
   (⋆) (Left a) (Left b) = Left <$> (a ⋆ b)
   (⋆) (Right a) (Right b) = Right <$> (a ⋆ b)
-  (⋆) ea eb = error $ "Could not match left and right. (Probably a sensitivity / privacy context mismatch between " <> show ea <> " and " <> show eb
+  (⋆) ea eb =  throwError (ImpossibleError ("Could not match left and right. (Probably a sensitivity / privacy context mismatch between " <> show ea <> " and " <> show eb))
 --  (⋆) _ _ = internalError "Could not match left and right. (Probably a sensitivity / privacy context mismatch.)"
 -- instance (MonoidM t a, MonoidM t b) => MonoidM t (Either a b) where
 

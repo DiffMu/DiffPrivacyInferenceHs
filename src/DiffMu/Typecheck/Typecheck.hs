@@ -348,22 +348,27 @@ checkSen' (Choice d) scope = do
       let combined = foldl (:∧:) (Fun []) choices
       return combined
 
-{-
 
-checkSen' (Phi cond ifbr elsebr) scope =
-   let mcond = do
-        τ_cond <- checkSens cond scope >>= onlyDone
+checkSen' (Phi cond ifbr elsebr) scope = do
+   ifd <- checkSens ifbr scope
+   elsed <- checkSens elsebr scope
+   condd <- checkSens cond scope
+
+   mcond <- Done $ do
+        τ_cond <- condd
         mscale inftyS
         return τ_cond
-   in do
-      τ_sum <- msumS [(checkSens ifbr scope >>= onlyDone), (checkSens elsebr scope >>= onlyDone), mcond]
+
+   Done $ do
+      τ_sum <- msumS [ifd, elsed, mcond]
       (τif, τelse) <- case τ_sum of
                            (τ1 : τ2 : _) -> return (τ1, τ2)
                            _ -> throwError (ImpossibleError "Sum cannot return empty.")
       τ <- newVar
-      addConstraint (Solvable (IsSupremum (τ, τif, τelse)))
-      return (Done τ)
+      addConstraint (Solvable (IsSupremum (τif, τelse, τ)))
+      return τ
 
+{-
 
 checkSen' (Tup ts) scope = do
   undefined
@@ -643,28 +648,7 @@ checkPri' (Gauss rp εp δp f) scope =
 
          return τgauss
 
-
 checkPri' t scope = checkPriv (Ret t) scope -- secretly return if the term has the wrong color.
-
-
-
-{-
-
-checkPri' (Phi cond ifbr elsebr) scope = -- this is the same as with checkSens
-   let mcond = do
-        τ_cond <- checkSens cond scope -- this one must be a sensitivity term.
-        mscale inftyS
-        return τ_cond
-   in do
-      τ_sum <- msumP [(checkPriv ifbr scope), (checkPriv elsebr scope), mcond]
-      (τif, τelse) <- case τ_sum of
-                           (τ1 : τ2 : _) -> return (τ1, τ2)
-                           _ -> throwError (ImpossibleError "Sum cannot return empty.")
-      τ <- newVar
-      addConstraint (Solvable (IsSupremum (τ, τif, τelse)))
-      return τ
-
--}
 
 {-
 checkPri' (Loop it cs (xi, xc) b) scope = do
