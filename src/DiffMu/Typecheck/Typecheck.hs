@@ -566,6 +566,53 @@ checkPri' (FLet fname term body) scope = do
      removeVar @PrivacyK fname
      return result'
 
+checkPri' (Gauss rp εp δp f) scope =
+  let
+   setParam :: TC DMMain -> Sensitivity -> TC ()
+   setParam dt v = do -- parameters must be const numbers.
+      τ <- dt
+      τv <- newVar
+      unify τ (NoFun (Numeric (Const v τv)))
+      mtruncateP zeroId
+      return ()
+
+   setBody df (ε, δ) r = do
+      -- extract f's type from the TC monad
+      τf <- df
+      -- interesting input variables must have sensitivity <= r
+      restrictInteresting r
+      -- interesting output variables are set to (ε, δ), the rest is truncated to ∞
+      mtruncateP inftyP
+      (ivars, itypes) <- getInteresting
+      mapM (\(x, (τ :@ _)) -> setVarP x (WithRelev IsRelevant (τ :@ PrivacyAnnotation (ε, δ)))) (zip ivars itypes)
+      -- return type is a privacy type.
+      return τf
+   in do
+      -- check all the parameters and f, extract the TC monad from the Delayed monad.
+      drp <- checkSens rp scope
+      dεp <- checkSens εp scope
+      dδp <- checkSens δp scope
+      df <- checkSens f scope
+
+      Done $ do
+         -- create variables for the parameters
+         v_ε :: Sensitivity <- newVar
+         v_δ :: Sensitivity <- newVar
+         v_r :: Sensitivity <- newVar
+
+         -- restrict interesting variables in f's context to v_r
+         let mf = setBody df (v_ε, v_δ) v_r
+
+         let mr = setParam drp v_r
+         let mε = setParam dεp v_ε
+         let mδ = setParam dδp v_δ
+
+         (τf, _) <- msumTup (mf, msum3Tup (mr, mε, mδ))
+
+         τgauss <- newVar
+         addConstraint (Solvable (IsGaussResult (τgauss, τf))) -- we decide later if its gauss or mgauss according to return type
+
+         return τgauss
 
 
 checkPri' t scope = checkPriv (Ret t) scope -- secretly return if the term has the wrong color.
@@ -604,44 +651,7 @@ checkPri' (FLet fname sign term body) scope = do
      removeVar @PrivacyK fname
      return result'
 
-checkPri' (Gauss rp εp δp f) scope =
-  let
-   setParam :: DMTerm -> Sensitivity -> TC ()
-   setParam t v = do -- parameters must be const numbers.
-      τ <- checkSens t scope
-      sv :: Sensitivity <- newVar
-      τv <- newVar
-      unify τ (NoFun (Numeric (Const v τv) :@ SensitivityAnnotation sv))
-      mtruncateP zeroId
-      return ()
-   checkBody (ε, δ) r = do
-      τf <- checkSens f scope
-      -- interesting input variables must have sensitivity <= r
-      restrictInteresting r
-      -- interesting output variables are set to (ε, δ), the rest is truncated to ∞
-      mtruncateP inftyP
-      (ivars, itypes) <- getInteresting
-      mapM (\(x, τ) -> setVarP x (WithRelev IsRelevant (Trunc (PrivacyAnnotation (ε, δ)) τ))) (zip ivars itypes)
-      -- return type is a privacy type.
-      pv <- newPVar
-      return (Trunc (PrivacyAnnotation (pv)) τf)
-   in do
-      v_ε :: Sensitivity <- newVar
-      v_δ :: Sensitivity <- newVar
-      v_r :: Sensitivity <- newVar
 
-      let mf = checkBody (v_ε, v_δ) v_r
-
-      let mr = setParam rp v_r
-      let mε = setParam εp v_ε
-      let mδ = setParam δp v_δ
-
-      (τf, _) <- msumTup (mf, msum3Tup (mr, mε, mδ))
-
-      τgauss <- newVar
-      addConstraint (Solvable (IsGaussResult (τgauss, τf))) -- we decide later if its gauss or mgauss according to return type
-
-      return τgauss
 
 
 

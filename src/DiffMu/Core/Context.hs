@@ -169,23 +169,21 @@ restrictAll s = let
 
 -- add constraints that make sure all interesting context entries have sensitivity <= s.
 restrictInteresting :: Sensitivity -> TC ()
-restrictInteresting = undefined
-{-
 restrictInteresting s = let
-   addC :: DMTypeOf (AnnotatedKind SensitivityK) -> TC ()
-   addC τ = do
-      -- make constraints that say sv <= s and sv is the sensitivity of τ
-      sv :: Sensitivity <- newVar
-      addConstraint (Solvable (IsLessEqual (sv, s)))
-      addConstraint (Solvable (HasSensitivity (τ, sv)))
-      return ()
+   addC :: WithRelev SensitivityK -> TC ()
+   addC (WithRelev rel (_ :@ SensitivityAnnotation sv)) = do
+      case rel of
+         IsRelevant -> do
+            -- make constraints that say sv <= s and sv is the sensitivity of τ
+            addConstraint (Solvable (IsLessEqual (sv, s)))
+            return ()
+         _ -> return ()
    in do
       γ <- use types
       case γ of
          Right _ -> throwError (ImpossibleError "restrictAll called on privacy context.")
-         Left (Ctx (MonCom h)) -> mapM (\(WithRelev IsRelevant τ) -> addC τ) h -- restrict sensitivities of relevant γ entries
+         Left (Ctx (MonCom h)) -> mapM addC h -- restrict sensitivities of all γ entries
       return ()
--}
 
 -- Look up the types and sensitivities/privacies of the variables in `xτs` from the current context.
 -- If a variable is not present in Σ (this means it was not used in the lambda body),
