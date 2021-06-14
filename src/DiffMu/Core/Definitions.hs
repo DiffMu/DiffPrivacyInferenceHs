@@ -535,7 +535,7 @@ data DMTerm =
   | Tup [DMTerm]
   | TLet [(Asgmt JuliaType)] DMTerm DMTerm
   | Gauss DMTerm DMTerm DMTerm DMTerm
-  | MCreate DMTerm DMTerm DMTerm
+  | MCreate DMTerm DMTerm (Symbol, Symbol) DMTerm
   | ClipM Clip DMTerm
   | Iter DMTerm DMTerm DMTerm
   | Loop DMTerm DMTerm (Symbol, Symbol) DMTerm

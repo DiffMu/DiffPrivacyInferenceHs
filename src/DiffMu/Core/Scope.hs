@@ -1,4 +1,3 @@
-
 module DiffMu.Core.Scope where
 
 import DiffMu.Prelude
@@ -11,6 +10,7 @@ import qualified Data.HashMap.Strict as H
 
 import Debug.Trace
 
+{-
 -- Definition of the typechecking scope
 
 -- A scope with variables of type `v`, and contents of type `a` is simply a hashmap.
@@ -156,3 +156,6 @@ rename olds news term =
          TLet vs t body -> case olds `elem` (map fstA vs) of
                                 True -> TLet vs (re t) body
                                 False -> TLet vs (re t) (re body)
+
+
+-}

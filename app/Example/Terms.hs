@@ -52,9 +52,9 @@ t16 = Gauss t2 t2 t2 t4
 
 t16s = LamStar [((Symbol "x" :- (JTNumInt)), IsRelevant), ((Symbol "y" :- (JTAny)), IsRelevant)] t16
 
-t17 = MCreate (Sng 1 JTNumInt) (Sng 1 JTNumInt) (Lam [Symbol "x1" :- JTNumInt, Symbol "x2" :- (JTAny)] (var "y"))
+t17 = MCreate (Sng 1 JTNumInt) (Sng 1 JTNumInt) (Symbol "x1", Symbol "x2") (var "y")
 
-t18 = Gauss t2 t2 t2 (Lam [Symbol "y" :- (JTAny)] t17)
+t18 = LamStar [(Symbol "y" :- (JTAny), IsRelevant)] (Gauss t2 t2 t2 t17)
 
 t19 = ClipM (Clip L1) (Apply t18 [t2])
 

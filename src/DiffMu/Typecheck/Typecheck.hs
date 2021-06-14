@@ -436,64 +436,68 @@ checkSen' (Loop it cs (xi, xc) b) scope = do
 
    return τb
 
-checkSen' (MCreate n m body) scope =
-   let setDim :: DMTerm -> Sensitivity -> TC (DMSensitivity)
-       setDim t s = do
-          τ <- checkSens t scope -- check dimension term
-          unify τ (NoFun (Numeric (Const s DMInt) :@ zeroId)) -- dimension must be integral
-          -- mscale zeroId
+-}
+
+checkSen' (MCreate n m (x1, x2) body) scope =
+   let setDim :: TC DMMain -> Sensitivity -> TC DMMain
+       setDim tm s = do
+          τ <- tm -- check dimension term
+          unify τ (NoFun (Numeric (Const s DMInt))) -- dimension must be const integral
+          mscale zeroId
           return τ
 
-       checkBody :: Sensitivity -> Sensitivity -> TC (DMType)
-       checkBody nv mv = do
-          τ <- checkSens body scope -- check body lambda
+       checkBody :: TC DMMain -> Sensitivity -> Sensitivity -> TC DMMain
+       checkBody bm nv mv = do
+          τ <- bm -- check body lambda
 
-          -- unify with expected type to set sensitivity (dimension penalty) and extract return type
-          τbody <- newVar
-          let τ_expected = Fun [(ForAll [] ([NoFun (Numeric (NonConst DMInt) :@ SensitivityAnnotation inftyS) , NoFun (Numeric (NonConst DMInt) :@ SensitivityAnnotation inftyS)] :->: (NoFun (τbody :@ SensitivityAnnotation oneId))) :@ (Nothing , (nv ⋅! mv)))]
-          τ_expected ==! τ
-          return τbody
+          mscale (nv ⋅! mv) -- scale with dimension penalty
 
-          -- mscale (nv ⋅! mv) -- scale with dimension penalty
+          -- remove index variables from the scope, ignore their sensitivity
+          WithRelev _ (x1τ :@ _) <- removeVar @SensitivityK x1
+          WithRelev _ (x2τ :@ _) <- removeVar @SensitivityK x2
 
-          -- τbody <- case τ of -- extract body lambda return type
-          --               (Fun [xss :->: τret]) -> return τret
-          --               _ -> throwError (ImpossibleError "MCreate term must have Arr argument.")
+          -- input vars must be integer
+          addConstraint (Solvable (IsLessEqual (x1τ, NoFun (Numeric (NonConst DMInt)))))
+          addConstraint (Solvable (IsLessEqual (x2τ, NoFun (Numeric (NonConst DMInt)))))
 
-          -- -- body lambda input vars must be integer
-          -- addConstraint (Solvable (IsLessEqual (τ, [((Numeric (NonConst DMInt)) :@ inftyS), ((Numeric (NonConst DMInt)) :@ inftyS)] :->: τbody)))
-
-          -- return τbody
+          return τ
    in do
-       -- variables for matrix dimension
-       nv <- newVar
-       mv <- newVar
 
-       (τbody, _, _) <- msum3Tup (checkBody nv mv, setDim n nv, setDim m mv)
+       mn <- checkSens n scope
+       mm <- checkSens m scope
+       mbody <- checkSens body scope
 
-       -- τbody <- case sum of -- extract element type from constructing lambda
-       --            (τ : _) -> return τ
-       --            _ -> throwError (ImpossibleError "?!")
+       Done $ do
+          -- variables for matrix dimension
+          nv <- newVar
+          mv <- newVar
 
-       nrm <- newVar -- variable for norm
-       returnNoFun (DMMat nrm U nv mv τbody)
+          (τbody, _, _) <- msum3Tup (checkBody mbody nv mv, setDim mn nv, setDim mm mv)
+
+          -- matrix entries cannot be functions.
+          τ <- newVar
+          unify τbody (NoFun τ)
+
+          nrm <- newVar -- variable for norm
+          return (NoFun (DMMat nrm U nv mv τ))
+
 
 checkSen' (ClipM c m) scope = do
-   τb <- checkSens m scope -- check the matrix
+   mb <- checkSens m scope -- check the matrix
+   Done $ do
+      τb <- mb
 
-   -- variables for norm and clip parameters and dimension
-   nrm <- newVar
-   clp <- newVar
-   n <- newVar
-   m <- newVar
+      -- variables for norm and clip parameters and dimension
+      nrm <- newVar
+      clp <- newVar
+      n <- newVar
+      m <- newVar
 
-   -- set correct matrix type
-   η <- newVar
-   unify τb (NoFun (DMMat nrm clp n m (Numeric DMData) :@ SensitivityAnnotation η))
+      -- set correct matrix type
+      unify τb (NoFun (DMMat nrm clp n m (Numeric DMData)))
 
-   -- change clip parameter to input
-   return (NoFun (DMMat nrm c n m (Numeric DMData) :@ SensitivityAnnotation η))
--}
+      -- change clip parameter to input
+      return (NoFun (DMMat nrm c n m (Numeric DMData)))
 
 -- Everything else is currently not supported.
 checkSen' t scope = (throwDelayedError (UnsupportedTermError t))
