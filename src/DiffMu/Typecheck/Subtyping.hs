@@ -31,13 +31,28 @@ getArrowLength _         = Nothing
 -- The subtyping graph for our type system.
 subtypingGraph :: forall e t k. (SingI k, Typeable k, MonadDMTC t) => EdgeType -> [Edge t (DMTypeOf k)]
 subtypingGraph =
-  let case1 = testEquality (typeRep @k) (typeRep @FunKind)
+  let case0 = testEquality (typeRep @k) (typeRep @MainKind)
+      case1 = testEquality (typeRep @k) (typeRep @FunKind)
       case2 = testEquality (typeRep @k) (typeRep @NoFunKind)
       case3 = testEquality (typeRep @k) (typeRep @NumKind)
       case4 = testEquality (typeRep @k) (typeRep @BaseNumKind)
-  in case (case1,case2,case3,case4) of
+  in case (case0,case1,case2,case3,case4) of
     -- Main Kind
-    (Just Refl, _, _, _) ->
+    (Just Refl, _, _, _, _) ->
+      \case { IsReflexive NotStructural
+              -> []
+            ; IsReflexive IsStructural
+              -> [ SingleEdge $ do
+                     a0 <- newVar
+                     a1 <- newVar
+                     a0 ⊑! a1
+                     return (NoFun a0, NoFun a1)
+                 ]
+            ; NotReflexive
+              -> []
+            }
+
+    (_,Just Refl, _, _, _) ->
       \case { IsReflexive IsStructural -> []
             ; _ -> []}
               -- -> [ MultiEdge getArrowLength $
@@ -56,7 +71,7 @@ subtypingGraph =
               --        return (args₀ :->: r₀,  args₁ :->: r₁)
               --    ]}
 
-    (_, Just Refl, _, _) ->
+    (_,_, Just Refl, _, _) ->
       \case { IsReflexive IsStructural
             -> [
                  SingleEdge $
@@ -85,7 +100,7 @@ subtypingGraph =
             }
 
     -- Num Kind
-    (_, _, Just Refl, _) ->
+    (_,_, _, Just Refl, _) ->
       \case { IsReflexive IsStructural
               -> []
             ; IsReflexive NotStructural
@@ -112,7 +127,7 @@ subtypingGraph =
             }
 
     -- BaseNum Kind
-    (_, _, _, Just Refl) ->
+    (_,_, _, _, Just Refl) ->
       \case { IsReflexive NotStructural
               -> [ SingleEdge $ return (DMInt, DMInt)
                  , SingleEdge $ return (DMReal, DMReal)
@@ -123,7 +138,7 @@ subtypingGraph =
               -> [ SingleEdge $ return (DMInt, DMReal)
                  ]
             }
-    (_, _, _, _) -> \_ -> []
+    (_,_, _, _, _) -> \_ -> []
 
 
 convertSubtypingToSupremum :: forall k t. (SingI k, Typeable k, IsT MonadDMTC t) => Symbol -> (DMTypeOf k, DMTypeOf k) -> t ()
