@@ -181,6 +181,24 @@ solveIsChoice name (provided, required) = do
 
 resolveChoiceHash :: forall t. IsT MonadDMTC t => (DMTypeOf ForAllKind, [DMTypeOf FunKind]) -> t ()
 resolveChoiceHash ((ForAll freevs method), matches) = do
+   let resolveChoice :: (DMTypeOf FunKind) -> (DMTypeOf FunKind) -> t ()
+       resolveChoice match mmethod = do
+                                       case (match, mmethod) of
+                                          -- this is the case where checkPriv was called on the application of a -> arrow.
+                                          -- the privacy variables in match signature must hence be set to ∞ because what actually
+                                          -- happened is application of a -> arrow followed by Return.
+                                          (matchxs :->*: τmatch, methxs :->: τmeth) -> do
+                                             -- unify input types
+                                             zipWithM unify [τ1 | (τ1 :@ _) <- matchxs] [τ2 | (τ2 :@ _) <- methxs]
+                                             -- set privacies of the match to ∞
+                                             mapM (\p -> unify p inftyP) [p | (_ :@ p) <- matchxs]
+                                             -- unify return types
+                                             unify τmatch τmeth
+                                             return ()
+                                          -- in the regular cases the arrows can just be unified.
+                                          _ -> do
+                                             unify match mmethod
+                                             return ()
    -- before resolving, we create copies of the method's type where all free type variables
    -- are replaced by fresh type variables, so we can safely unify with the type of the matched function.
    let nvs :: forall k. IsKind k => t [DMTypeOf k]
@@ -195,13 +213,13 @@ resolveChoiceHash ((ForAll freevs method), matches) = do
    case duplicates' of
       Nothing -> do -- there are no free type variables in method.
          -- unify each match with the method
-         mapM (\match -> unify match method) matches
+         mapM (\match -> resolveChoice match method) matches
          return ()
       Just duplicates -> do
          -- duplicate the constraints that have the free vars, as well
          duplicateAllConstraints subs
          -- unify all matches with their corresponding duplicate.
-         zipWithM unify matches duplicates
+         zipWithM resolveChoice matches duplicates
          return ()
 
 resolveChoiceHash (_, matches) = impossible "invalid type for method"
