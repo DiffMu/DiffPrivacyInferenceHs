@@ -42,7 +42,7 @@ typecheckFromDMTerm term = do
         -- typecheck the term t5
         let tres = checkSens term def
         tres' <- extractDelayed def tres
-        solveAllConstraints SolveExact
+        solveAllConstraints SolveAssumeWorst
         tres'' <- normalize tres'
         return tres''
 

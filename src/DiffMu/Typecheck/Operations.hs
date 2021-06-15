@@ -81,10 +81,30 @@ solveBinaryNum op (τ1, τ2) = f op τ1 τ2
 
     f _ _ _ = undefined
 
+makeNonConstType :: (IsT MonadDMTC t) => DMNumType -> t DMNumType
+makeNonConstType (TVar a) = do
+  a' <- newVar
+  let t = (NonConst a')
+  addSub (a := t)
+  return t
+makeNonConstType (NonConst t) = pure $ NonConst t
+makeNonConstType (Const s t) = pure $ Const s t
+makeNonConstType (DMData) = pure $ DMData -- TODO: Check, we do nothing with DMData?
+makeNonConstType (Deleted) = internalError "A deleted value tried to escape. We catched it when it was about to become NonConst."
 
--- we can solve arbitrary dmtypeop constraints
-solveop :: (IsT MonadDMTC t) => SolvingMode -> Symbol -> IsTypeOpResult DMTypeOp -> t ()
-solveop mode name (IsTypeOpResult (UnaryNum op (τa :@ s) τr)) = do
+makeNonConstTypeOp :: (IsT MonadDMTC t) => DMTypeOp -> t DMTypeOp
+makeNonConstTypeOp (UnaryNum op (τ :@ s) ρ) = do
+  τ' <- makeNonConstType τ
+  pure (UnaryNum op (τ' :@ s) ρ)
+makeNonConstTypeOp (BinaryNum op ((τ₁ :@ s₁) , (τ₂ :@ s₂)) ρ) = do
+  τ1' <- makeNonConstType τ₁
+  τ2' <- makeNonConstType τ₂
+  pure (BinaryNum op ((τ1' :@ s₁) , (τ2' :@ s₂)) ρ)
+
+----------------------------------------
+-- Solving unary constraints (exactly)
+solveop :: (IsT MonadDMTC t) => Symbol -> IsTypeOpResult DMTypeOp -> t ()
+solveop name (IsTypeOpResult (UnaryNum op (τa :@ s) τr)) = do
   solveres <- solveUnaryNum op τa
   case solveres of
     Nothing -> return ()
@@ -93,7 +113,9 @@ solveop mode name (IsTypeOpResult (UnaryNum op (τa :@ s) τr)) = do
       unify τr val_τr
       dischargeConstraint @MonadDMTC name
 
-solveop mode name (IsTypeOpResult (BinaryNum op (τa1 :@ s1 , τa2 :@ s2) τr)) = do
+----------------------------------------
+-- Solving binary constraints (exactly)
+solveop name (IsTypeOpResult (BinaryNum op (τa1 :@ s1 , τa2 :@ s2) τr)) = do
   solveres <- solveBinaryNum op (τa1, τa2)
   case solveres of
     Nothing -> return ()
@@ -112,7 +134,16 @@ solveop mode name (IsTypeOpResult (BinaryNum op (τa1 :@ s1 , τa2 :@ s2) τr)) 
 -- An instance which says that the `IsTypeOpResult DMTypeOp` constraint is solvable
 -- in the `MonadDMTC` class of monads.
 instance Solve MonadDMTC (IsTypeOpResult) DMTypeOp where
-  solve_ Dict mode name constr = solveop mode name constr
+
+  -- If we are solving exact, then we simply call `solveop`
+  solve_ Dict SolveExact name constr = solveop name constr
+
+  -- If we are "losing generality" / "assuming worst case", then we make all operands in the op into `NonConst`s.
+  solve_ Dict SolveAssumeWorst name (IsTypeOpResult op) = do
+    op' <- makeNonConstTypeOp op
+    solveop name (IsTypeOpResult op')
+
+
 
 
 opAdd x y = Op (IsBinary DMOpAdd) [x,y]
