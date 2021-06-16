@@ -41,7 +41,10 @@ typecheckFromDMTerm term = do
         traceM $ "Checking term   : " <> show term
         -- typecheck the term t5
         let tres = checkSens term def
-        tres' <- extractDelayed def tres
+        tres' <- case extractDelayed def tres of
+          Left e -> throwError e
+          Right x -> x
+
         solveAllConstraints SolveAssumeWorst
         tres'' <- normalize tres'
         return tres''

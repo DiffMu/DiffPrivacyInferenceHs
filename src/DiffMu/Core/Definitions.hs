@@ -559,6 +559,7 @@ data DMException where
   UnsatisfiableConstraint :: String -> DMException
   TypeMismatchError       :: String -> DMException
   NoChoiceFoundError      :: String -> DMException
+  VariableMutationError   :: String -> DMException
 
 instance Show DMException where
   show (UnsupportedTermError t) = "The term '" <> show t <> "' is currently not supported."
@@ -571,6 +572,7 @@ instance Show DMException where
   show (UnsatisfiableConstraint c) = "The constraint " <> c <> " is not satisfiable."
   show (TypeMismatchError e) = "Type mismatch: " <> e
   show (NoChoiceFoundError e) = "No choice found: " <> e
+  show (VariableMutationError v) = "The variable " <> v <> " cannot be mutated here, because it has been locked."
 
 
 

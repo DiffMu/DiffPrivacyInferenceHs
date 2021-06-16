@@ -12,21 +12,57 @@ import DiffMu.Typecheck.JuliaType
 import DiffMu.Typecheck.Constraint.IsFunctionArgument
 
 import qualified Data.HashMap.Strict as H
+import qualified Prelude as P
 
 import Debug.Trace
 
-newtype DMScope = DMScope (Scope Symbol (DMDelayed))
+data Locked = IsLocked | NotLocked
+
+newtype DMScope = DMScope (Scope Symbol (Locked, DMDelayed))
   deriving Generic
 
-instance DictLike Symbol (DMDelayed) (DMScope) where
-  setValue v m (DMScope h) = DMScope (H.insert v m h)
-  deleteValue v (DMScope h) = DMScope (H.delete v h)
-  getValue k (DMScope h) = h H.!? k
-  emptyDict = DMScope H.empty
-  isEmptyDict (DMScope h) = isEmptyDict h
-  getAllKeys (DMScope h) = getAllKeys h
+getFromScope :: Symbol -> DMScope -> Maybe DMDelayed
+getFromScope k (DMScope h) = (snd <$> (h H.!? k))
+
+setInScope :: MonadError DMException t => Symbol -> DMDelayed -> DMScope -> t DMScope
+setInScope k v (DMScope h) = do
+    let old = (h H.!? k)
+    case old of
+      Just (IsLocked,_) -> throwError (VariableMutationError (show k))
+      _ -> pure ()
+    return $ DMScope (H.insert k (NotLocked, v) h)
+
+
+
+{-
+instance (MonadError DMException t) => DictLikeM t Symbol (DMDelayed) DMScope where
+  getValueM k (DMScope h) = pure $ (snd <$> (h H.!? k))
+  setValueM k v (DMScope h) = do
+    let old = (h H.!? k)
+    case old of
+      Just (IsLocked,_) -> throwError (VariableMutationError (show k))
+      _ -> pure ()
+    return $ DMScope (H.insert k (NotLocked, v) h)
+  deleteValueM k (DMScope h) = do
+    let old = (h H.!? k)
+    case old of
+      Just (IsLocked,_) -> throwError (VariableMutationError (show k))
+      _ -> pure ()
+    return $ DMScope (H.delete k h)
+-}
+
+-- instance DictLike Symbol (DMDelayed) (DMScope) where
+--   setValue v m (DMScope h) = DMScope (H.insert v m h)
+--   deleteValue v (DMScope h) = DMScope (H.delete v h)
+--   getValue k (DMScope h) = h H.!? k
+--   emptyDict = DMScope H.empty
+--   isEmptyDict (DMScope h) = isEmptyDict h
+--   getAllKeys (DMScope h) = getAllKeys h
+
 
 instance Default (DMScope) where
+instance Show (DMScope) where
+  show (DMScope h) = show $ fst <$> H.toList h
 
 throwDelayedError e = Done $ (throwError e)
 
@@ -41,10 +77,30 @@ throwDelayedError e = Done $ (throwError e)
 --                   _ -> throwError (ImpossibleError "Invalid scope entry.")
 --    return scope'
 
-pushChoice :: Symbol -> (DMDelayed) -> DMScope -> DMScope
-pushChoice name ma scope =
-  let oldval = getValue name scope
-      newval = case oldval of
+
+lockVars :: [Symbol] -> DMScope -> DMScope
+lockVars [] a = a
+lockVars (v:vs) a = lockVar v (lockVars vs a)
+  where
+    lockVar :: Symbol -> DMScope -> DMScope
+    lockVar k (DMScope h) = DMScope (H.insert k (IsLocked, err) h)
+      where err = Done $ internalError $ "Trying to execute a computation behind the locked variable '" <> show k <> "'."
+
+
+      -- let old = h H.!? k
+      -- in case old of
+      --   Nothing    -> undefined
+        -- Just (_,a) -> undefined
+
+--   setValue v m (DMScope h) = DMScope (H.insert v m h)
+--   deleteValue v (DMScope h) = DMScope (H.delete v h)
+--   getValue k (DMScope h) = h H.!? k
+
+
+pushChoice :: MonadError DMException t => Symbol -> (DMDelayed) -> DMScope -> t DMScope
+pushChoice name ma scope = do
+  let oldval = getFromScope name scope
+  let newval = case oldval of
         Nothing -> ma
         Just mb -> do
           a <- ma
@@ -53,11 +109,17 @@ pushChoice name ma scope =
             a' <- a
             b' <- b
             return (a' :∧: b')
-  in setValue name newval scope
+  setInScope name newval scope
 
 
-type DMDelayed = Delayed DMScope (TC DMMain)
-data Delayed x a = Done (a) | Later (x -> (Delayed x a))
+type DMDelayed = Delayed DMException DMScope (TC DMMain)
+data Delayed e x a = Done (a) | Later (x -> (Delayed e x a)) | Failed e
+
+-- instance MonadError e (Delayed e x) where
+--   throwError = Failed
+--   catchError (Done a) handler = (Done a)
+--   catchError (Later f) handler = Later f
+--   catchError (Failed e) handler = handler e
 
 -- type DelayedS = (Delayed TC (DMScope SensitivityK) DMSensitivity)
 -- type DelayedP = (Delayed TC (DMScope PrivacyK) DMPrivacy)
@@ -70,32 +132,38 @@ data Delayed x a = Done (a) | Later (x -> (Delayed x a))
 -- -- getDelayed arg (Later f) = f arg
 -- getDelayed arg (Later f) = (f arg) >>= getDelayed arg
 
-extractDelayed :: x -> Delayed x a -> a
-extractDelayed x (Done a) = a
+extractDelayed :: x -> Delayed e x a -> Either e a
+extractDelayed x (Done a) = Right a
 extractDelayed x (Later f) = extractDelayed x (f x)
+extractDelayed x (Failed e) = Left e
 
-applyDelayedLayer :: x -> Delayed x a -> Delayed x a
+applyDelayedLayer :: x -> Delayed e x a -> Delayed e x a
 applyDelayedLayer x (Done a) = Done a
 applyDelayedLayer x (Later f) = f x
+applyDelayedLayer x (Failed e) = Failed e
 
-instance Functor (Delayed x) where
+instance Functor (Delayed e x) where
   fmap f (Done a) = Done (f a)
   fmap f (Later g) = Later (\x -> fmap f (g x))
+  fmap f (Failed e) = Failed e
 
-instance Applicative (Delayed x) where
+instance Applicative (Delayed e x) where
   pure a = Done a
   (<*>) (Done g) (Done a) = Done (g a)    -- f (a -> b) -> f a -> f b
   (<*>) (Done g) (Later g') = Later (\x -> (Done g) <*> (g' x))
   (<*>) (Later g) (Done a) = Later (\x -> (g x) <*> (Done a))
   (<*>) (Later g) (Later g') = Later (\x -> (g x) <*> (g' x))
+  (<*>) (Failed e) _ = Failed e
+  (<*>) _ (Failed e) = Failed e
 
-instance Monad (Delayed x) where
+instance Monad (Delayed e x) where
   return = Done
   x >>= f = insideDelayed x f
 
-insideDelayed :: Delayed x a -> (a -> Delayed x b) -> (Delayed x b)
+insideDelayed :: Delayed e x a -> (a -> Delayed e x b) -> (Delayed e x b)
 insideDelayed (Done a) f = (f a)
 insideDelayed (Later g) f = Later (\x -> insideDelayed (g x) (\a -> applyDelayedLayer x (f a)))
+insideDelayed (Failed e) f = Failed e
 
 -- insideDelayed (Done a) g = pure $ Done (a >>= g)
 -- -- insideDelayed (Later f) g = pure $ Later (f >=> g)
@@ -112,6 +180,40 @@ insideDelayed (Later g) f = Later (\x -> insideDelayed (g x) (\a -> applyDelayed
 -- joinLater :: Delayed TC x DMSensitivity -> Delayed TC x DMSensitivity -> Delayed TC x DMSensitivity
 -- joinLater (Later f) (Later g) = Later (\x -> do
 --                                           (a,b) <- msumTup (f x, g x)
+
+
+
+------------------------------------------------------------------------
+-- Locking of variables
+
+-- computing free variables of dmterms
+--
+-- @delayedDepth: the number of Laters we are currently in
+-- => `Lam "x". Lam "y". t` (t is in delayedDepth 2)
+-- => `App f x` (f is in delayedDepth -1) (x is in delayedDepth 0)
+delayedVarsImpl :: Int -> DMTerm -> [Symbol]
+delayedVarsImpl d (Sng _ _) = []
+delayedVarsImpl d (Apply f args) = delayedVarsImpl (d - 1) f <> mconcat (delayedVarsImpl d <$> args)
+delayedVarsImpl d (Arg _ _ _) = error "Found an arg when searching for delayed vars in a user-given DMTerm."
+delayedVarsImpl d (Var x _) | d <= 0 = []
+delayedVarsImpl d (Var x _) | d > 0 = [x]
+delayedVarsImpl d (Lam args body) =
+  let delvars = delayedVarsImpl (d P.+ 1) body
+  in delvars \\ [a | (a :- _) <- args]
+delayedVarsImpl d (LamStar args body) =
+  let delvars = delayedVarsImpl (d P.+ 1) body
+  in delvars \\ [a | (a :- _, _) <- args]
+delayedVarsImpl d (FLet name fun body) =
+  let funvars  = delayedVarsImpl d fun
+      bodyvars = delayedVarsImpl d body \\ [name]
+  in funvars <> bodyvars
+delayedVarsImpl d (SLet (name :- _) term body) =
+  let termvars  = delayedVarsImpl d term
+      bodyvars = delayedVarsImpl d body \\ [name]
+  in termvars <> bodyvars
+
+
+
 
 ------------------------------------------------------------------------
 -- The typechecking function
@@ -208,9 +310,10 @@ checkSen' (Arg x dτ i) scope = Done $ do τ <- createDMType dτ -- TODO it's ac
                                          setVarS x (WithRelev i (τ :@ SensitivityAnnotation oneId))
                                          return τ
 
-checkSen' (Var x dτ) scope =  -- get the term that corresponds to this variable from the scope dict
-   let delτ = getValue x scope
-   in case delτ of
+checkSen' (Var x dτ) scope = do  -- get the term that corresponds to this variable from the scope dict
+   traceM ("My scope is: " <> show scope <> " and I want var: " <> show x)
+   let delτ = getFromScope x scope
+   case delτ of
      Nothing -> Done $ throwError (VariableNotInScope x)
      Just delτ ->
          case dτ of
@@ -232,17 +335,20 @@ checkSen' (Lam xτs body) scope =
   Later $ \scope -> do
     -- put a special term to mark x as a function argument. those get special tratment
     -- because we're interested in their sensitivity
-    let scope' = foldl (\sc -> (\(x :- τ) -> setValue x (checkSens (Arg x τ IsRelevant) scope) sc)) scope xτs
+    let scope' = foldM (\sc -> (\(x :- τ) -> setInScope x (checkSens (Arg x τ IsRelevant) scope) sc)) scope xτs
+    case runExcept scope' of
+      Left e -> Done $ throwError e
 
-    τr <- checkSens body scope'
-    let sign = (sndA <$> xτs)
-    Done $ do
-      restype <- τr
-      xrτs <- getArgList @_ @SensitivityK xτs
-      let xrτs' = [x :@ s | (x :@ SensitivityAnnotation s) <- xrτs]
-      let τ = (xrτs' :->: restype)
-      frees <- getActuallyFreeVars τ
-      return (Fun [(ForAll frees τ :@ (Just sign))])
+      Right scope' -> do
+        τr <- checkSens body scope'
+        let sign = (sndA <$> xτs)
+        Done $ do
+          restype <- τr
+          xrτs <- getArgList @_ @SensitivityK xτs
+          let xrτs' = [x :@ s | (x :@ SensitivityAnnotation s) <- xrτs]
+          let τ = (xrτs' :->: restype)
+          frees <- getActuallyFreeVars τ
+          return (Fun [(ForAll frees τ :@ (Just sign))])
 
 
 checkSen' (LamStar xτs body) scope =
@@ -251,50 +357,59 @@ checkSen' (LamStar xτs body) scope =
   Later $ \scope -> do
     -- put a special term to mark x as a function argument. those get special tratment
     -- because we're interested in their privacy. put the relevance given in the function signature, too.
-    let scope' = foldl (\sc -> (\((x :- τ), rel) -> setValue x (checkSens (Arg x τ rel) scope) sc)) scope xτs
+    let scope' = foldM (\sc -> (\((x :- τ), rel) -> setInScope x (checkSens (Arg x τ rel) scope) sc)) scope xτs
 
-    -- check the function body
-    τr <- checkPriv body scope'
-    -- extract julia signature
-    let sign = (sndA <$> fst <$> xτs)
-    Done $ do
-      restype <- τr
-      -- get inferred types and privacies for the arguments
-      xrτs <- getArgList @_ @PrivacyK (fst <$> xτs)
-      -- truncate function context to infinity sensitivity
-      mtruncateS inftyS
-      -- build the type signature and proper ->* type
-      let xrτs' = [x :@ p | (x :@ PrivacyAnnotation p) <- xrτs]
-      let τ = (xrτs' :->*: restype)
-      -- include free variables in a ForAll
-      frees <- getActuallyFreeVars τ
-      return (Fun [(ForAll frees τ :@ (Just sign))])
+    case runExcept scope' of
+      Left e -> Done $ throwError e
+
+      Right scope' -> do
+
+        -- check the function body
+        τr <- checkPriv body scope'
+        -- extract julia signature
+        let sign = (sndA <$> fst <$> xτs)
+        Done $ do
+          restype <- τr
+          -- get inferred types and privacies for the arguments
+          xrτs <- getArgList @_ @PrivacyK (fst <$> xτs)
+          -- truncate function context to infinity sensitivity
+          mtruncateS inftyS
+          -- build the type signature and proper ->* type
+          let xrτs' = [x :@ p | (x :@ PrivacyAnnotation p) <- xrτs]
+          let τ = (xrτs' :->*: restype)
+          -- include free variables in a ForAll
+          frees <- getActuallyFreeVars τ
+          return (Fun [(ForAll frees τ :@ (Just sign))])
 
 
 checkSen' (SLet (x :- dτ) term body) scope = do
 
   -- put the computation to check the term into the scope
-   let scope' = setValue x (checkSens term scope) scope
+   let scope' = setInScope x (checkSens term scope) scope
+   case runExcept scope' of
+     Left e -> Done $ throwError e
 
-   -- check body with that new scope
-   result <- checkSens body scope'
+     Right scope' -> do
 
-   return $ do
-     -- TODO
-     case dτ of
-        JTAny -> return dτ
-        dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
+        -- check body with that new scope
+        result <- checkSens body scope'
 
-     result' <- result
-     removeVar @SensitivityK x
-     return result'
+        return $ do
+          -- TODO
+          case dτ of
+              JTAny -> return dτ
+              dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
+
+          result' <- result
+          removeVar @SensitivityK x
+          return result'
 
 
 checkSen' (Apply f args) scope =
   let
     -- check the argument in the given scope,
     -- and scale scope by new variable, return both
-    checkArg :: DMTerm -> DMScope -> Delayed DMScope (TC (DMMain :& Sensitivity))
+    checkArg :: DMTerm -> DMScope -> Delayed DMException DMScope (TC (DMMain :& Sensitivity))
     checkArg arg scope = do
       τ <- checkSens arg scope
       let scaleContext :: TC (DMMain :& Sensitivity)
@@ -312,7 +427,12 @@ checkSen' (Apply f args) scope =
         return τ_ret
 
     margs = (\arg -> (checkArg arg scope)) <$> args
-    mf = checkSens f scope
+
+    -- we compute the variables which are delayed in the args
+    varsToLock = mconcat (delayedVarsImpl 0 <$> args)
+
+    -- these are locked in the scope while checking f
+    mf = checkSens f (lockVars varsToLock scope)
 
   in do
     -- we typecheck the function, but `apply` our current layer on the Later computation
@@ -331,13 +451,18 @@ checkSen' (FLet fname term body) scope = do
   -- make a Choice term to put in the scope
    let scope' = pushChoice fname (checkSens term scope) scope
 
-   -- check body with that new scope. Choice terms will result in IsChoice constraints upon ivocation of fname
-   result <- checkSens body scope'
+   case runExcept scope' of
+     Left e -> Done $ throwError e
 
-   return $ do
-     result' <- result
-     removeVar @SensitivityK fname
-     return result'
+     Right scope' -> do
+
+       -- check body with that new scope. Choice terms will result in IsChoice constraints upon ivocation of fname
+       result <- checkSens body scope'
+
+       return $ do
+         result' <- result
+         removeVar @SensitivityK fname
+         return result'
 
 
 
@@ -521,7 +646,7 @@ checkPri' (Apply f args) scope =
   let
     -- check the argument in the given scope,
     -- and scale scope by new variable, return both
-    checkArg :: DMTerm -> DMScope -> Delayed DMScope (TC (DMMain :& Privacy))
+    checkArg :: DMTerm -> DMScope -> Delayed DMException DMScope (TC (DMMain :& Privacy))
     checkArg arg scope = do
       τ <- checkSens arg scope
       let restrictTruncateContext :: TC (DMMain :& Privacy)
@@ -541,7 +666,7 @@ checkPri' (Apply f args) scope =
 
     margs = (\arg -> (checkArg arg scope)) <$> args
 
-    f_check :: Delayed DMScope (TC DMMain) = do
+    f_check :: Delayed DMException DMScope (TC DMMain) = do
        -- we typecheck the function, but `apply` our current layer on the Later computation
        -- i.e. "typecheck" means here "extracting" the result of the later computation
        res <- (applyDelayedLayer scope (checkSens f scope))
@@ -565,28 +690,33 @@ checkPri' (SLet (x :- dτ) term body) scope = do
   -- this is the bind rule.
   -- as it does not matter what sensitivity/privacy x has in the body, we put an Arg term in the scope
   -- and later discard its annotation.
-   let scope' = setValue x (checkSens (Arg x dτ NotRelevant) scope) scope
+   let scope' = setInScope x (checkSens (Arg x dτ NotRelevant) scope) scope
 
-   -- check body with that new scope
-   dbody <- checkPriv body scope'
-   mbody <- Done $ do
-                   τ <- dbody
-                   -- discard x from the context, never mind it's inferred annotation
-                   removeVar @PrivacyK x
-                   return τ
+   case runExcept scope' of
+     Left e -> Done $ throwError e
 
-   -- check term with old scope
-   dterm <- checkPriv term scope
+     Right scope' -> do
 
-   return $ do
-     -- TODO
-     case dτ of
-        JTAny -> return dτ
-        dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
+        -- check body with that new scope
+        dbody <- checkPriv body scope'
+        mbody <- Done $ do
+                        τ <- dbody
+                        -- discard x from the context, never mind it's inferred annotation
+                        removeVar @PrivacyK x
+                        return τ
 
-     -- sum contexts
-     (_, τbody) <- msumTup (mbody, dterm)
-     return τbody
+        -- check term with old scope
+        dterm <- checkPriv term scope
+
+        return $ do
+          -- TODO
+          case dτ of
+              JTAny -> return dτ
+              dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
+
+          -- sum contexts
+          (_, τbody) <- msumTup (mbody, dterm)
+          return τbody
 
 
 
@@ -596,13 +726,18 @@ checkPri' (FLet fname term body) scope = do
   -- TODO checkPriv or checkSens?
    let scope' = pushChoice fname (checkSens term scope) scope
 
-   -- check body with that new scope. Choice terms will result in IsChoice constraints upon ivocation of fname
-   result <- checkPriv body scope'
+   case runExcept scope' of
+     Left e -> Done $ throwError e
 
-   return $ do
-     result' <- result
-     removeVar @PrivacyK fname
-     return result'
+     Right scope' -> do
+
+        -- check body with that new scope. Choice terms will result in IsChoice constraints upon ivocation of fname
+        result <- checkPriv body scope'
+
+        return $ do
+          result' <- result
+          removeVar @PrivacyK fname
+          return result'
 
 checkPri' (Gauss rp εp δp f) scope =
   let
