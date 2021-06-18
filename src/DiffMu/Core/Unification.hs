@@ -56,8 +56,9 @@ instance Unify MonadDMTC (DMTypeOf k) where
   unify_ (Clip k) (Clip s)             = Clip <$> unify k s
   unify_ (DMMat nrm1 clp1 n1 m1 τ1) (DMMat nrm2 clp2 n2 m2 τ2) =
      DMMat <$> unify nrm1 nrm2 <*> unify clp1 clp2 <*> unify n1 n2 <*> unify m1 m2 <*> unify τ1 τ2
-  unify_ (NoFun x) (NoFun y)              = NoFun <$> unify x y
-  unify_ (Fun xs) (Fun ys)                = Fun <$> unify xs ys
+  unify_ (NoFun x) (NoFun y)              = NoFun <$> unify_ x y
+  unify_ (Fun (xs)) (Fun ys)                = Fun <$> unify_ xs ys
+  unify_ (ForAll [] t1) (ForAll [] t2)    = ForAll [] <$> unify_ t1 t2
   unify_ (x :∧: y) (v :∧: w)              = undefined
   unify_ t s                              = throwError (UnificationError t s)
 

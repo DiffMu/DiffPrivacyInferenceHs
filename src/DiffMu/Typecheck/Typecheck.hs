@@ -13,7 +13,7 @@ import DiffMu.Typecheck.Constraint.IsFunctionArgument
 
 import qualified Data.HashMap.Strict as H
 import qualified Prelude as P
-
+import qualified Data.Text as T
 import Debug.Trace
 
 data Locked = IsLocked | NotLocked
@@ -79,13 +79,12 @@ throwDelayedError e = Done $ (throwError e)
 
 
 lockVars :: [Symbol] -> DMScope -> DMScope
-lockVars [] a = a
+lockVars [] a = traceShow "Locking done" a
 lockVars (v:vs) a = lockVar v (lockVars vs a)
   where
     lockVar :: Symbol -> DMScope -> DMScope
-    lockVar k (DMScope h) = DMScope (H.insert k (IsLocked, err) h)
+    lockVar k (DMScope h) = traceShow ("Locking variable " <> show k) (DMScope (H.insert k (IsLocked, err) h))
       where err = Done $ internalError $ "Trying to execute a computation behind the locked variable '" <> show k <> "'."
-
 
       -- let old = h H.!? k
       -- in case old of
@@ -136,6 +135,11 @@ extractDelayed :: x -> Delayed e x a -> Either e a
 extractDelayed x (Done a) = Right a
 extractDelayed x (Later f) = extractDelayed x (f x)
 extractDelayed x (Failed e) = Left e
+
+applyDelayedLayerToAll :: x -> Delayed e x a -> Delayed e x a
+applyDelayedLayerToAll x d = case extractDelayed x d of
+  Left e -> Failed e
+  Right x -> Done x
 
 applyDelayedLayer :: x -> Delayed e x a -> Delayed e x a
 applyDelayedLayer x (Done a) = Done a
@@ -211,6 +215,10 @@ delayedVarsImpl d (SLet (name :- _) term body) =
   let termvars  = delayedVarsImpl d term
       bodyvars = delayedVarsImpl d body \\ [name]
   in termvars <> bodyvars
+
+delayedVars :: DMTerm -> [Symbol]
+delayedVars t = traceShow (Symbol $ ">>>>> computed delayed vars\n - for term: " <> T.pack (show t) <> "\n - res is: " <> T.pack (show res)) res
+  where res = delayedVarsImpl 0 t
 
 
 
@@ -429,7 +437,7 @@ checkSen' (Apply f args) scope =
     margs = (\arg -> (checkArg arg scope)) <$> args
 
     -- we compute the variables which are delayed in the args
-    varsToLock = mconcat (delayedVarsImpl 0 <$> args)
+    varsToLock = mconcat (delayedVars <$> args)
 
     -- these are locked in the scope while checking f
     mf = checkSens f (lockVars varsToLock scope)
@@ -439,8 +447,11 @@ checkSen' (Apply f args) scope =
     -- i.e. "typecheck" means here "extracting" the result of the later computation
     res <- (applyDelayedLayer scope mf)
 
+    -- We do not delay the args, but fully apply the current context to them.
+    -- that this gives the correct result should be guaranteed by the check
+    -- that delayed & captured variables (of the args) may not be mutated in the function body.
     -- we extract the result of the args computations
-    args <- sequence margs
+    args <- sequence (applyDelayedLayerToAll scope <$> margs)
 
     -- we merge the different TC's into a single result TC
     return (sbranch_check res args)

@@ -899,10 +899,19 @@ instance Unify MonadDMTC Sensitivity where
 instance (Unify t a, Unify t b) => Unify t (a,b) where
   unify_ (a1,b1) (a2,b2) = (,) <$> (unify_ a1 a2) <*> (unify_ b1 b2)
 
+
+
+-- TODO: This probably does not reflect how Maybe's should be unified
+-- actually...
+-- But this way (instead of strictly comparing Just==Just, Nothing==Nothing)
+-- seems to be neccessary when checking arguments which are themselves functions
+-- 2021-06-21, MxU, written when implementing locking of variables.
 instance (Show a, Unify MonadDMTC a) => Unify MonadDMTC (Maybe a) where
   unify_ Nothing Nothing = pure Nothing
   unify_ (Just a) (Just b) = Just <$> unify_ a b
-  unify_ t s = throwError (UnificationError t s)
+  unify_ (Just a) (Nothing) = pure (Just a)
+  unify_ (Nothing) (Just b) = pure (Just b)
+  -- unify_ t s = throwError (UnificationError t s)
 
 -- instance Unify MonadDMTC Privacy where
 --   unify_ (a1,b1) (a2,b2) = (,) <$> (unify_ a1 a2) <*> (unify_ b1 b2)
