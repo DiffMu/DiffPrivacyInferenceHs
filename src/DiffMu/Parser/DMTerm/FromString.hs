@@ -99,7 +99,7 @@ pDMTerm :: Parser DMTerm
 pDMTerm =
       try ("ret"       `with` (Ret     <$> pDMTerm))
   <|> try ("sng"       `with` (pSng))
-  <|> try ("var"       `with` (Var     <$> pSymbol <*､> pJuliaType))
+  -- <|> try ("var"       `with` (Var     <$> pSymbol <*､> pJuliaType))
   -- <|> try ("arg"       `with` (Arg     <$> pSymbol <*､> pJuliaType))
   <|> try ("op"        `with` (Op      <$> pDMTypeOp <*､> pArray "DMTerm" pDMTerm))
   <|> try ("phi"       `with` (Phi     <$> pDMTerm <*､> pDMTerm <*､> pDMTerm))

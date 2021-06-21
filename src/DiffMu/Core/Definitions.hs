@@ -156,7 +156,7 @@ data DMTypeOf (k :: DMKind) where
   TVar :: IsKind k => SymbolOf k -> DMTypeOf k
 
   -- the arrow type
-  (:->:) :: [DMTypeOf MainKind :& Sensitivity] -> DMTypeOf MainKind -> DMFun
+  (:->:) :: ([Asgmt (DMTypeOf MainKind :& Sensitivity)], [DMTypeOf MainKind :& Sensitivity]) -> DMTypeOf MainKind -> DMFun
 
   -- the privacy-arrow type
   (:->*:) :: [DMTypeOf MainKind :& Privacy] -> DMTypeOf MainKind -> DMFun
@@ -522,8 +522,7 @@ sndA (x :- τ) = τ
 data DMTerm =
   Ret DMTerm
   | Sng Float JuliaType
-  | Var Symbol JuliaType
-  | Arg Symbol JuliaType Relevance
+  | Var Symbol JuliaType Relevance
   | Op DMTypeOp_Some [DMTerm]
   | Phi DMTerm DMTerm DMTerm
   | Lam     [Asgmt JuliaType] DMTerm

@@ -42,6 +42,9 @@ instance (Substitute v x a, Substitute v x b, Substitute v x c) => Substitute v 
 instance (Substitute v x a, Substitute v x b) => Substitute v x (a :& b) where
   substitute σs (a :@ b) = (:@) <$> substitute σs a <*> substitute σs b
 
+instance Substitute v x a => Substitute v x (Asgmt a) where
+  substitute σs (xx :- a) = (xx :-) <$> substitute σs a
+
 instance Substitute v x a => Substitute v x [a] where
   substitute σs xs = mapM (substitute σs) xs
 
@@ -163,6 +166,9 @@ instance (FreeVars v a, FreeVars v b) => FreeVars v (Either a b) where
 
 instance (FreeVars v a, FreeVars v b) => FreeVars v (a :& b) where
   freeVars (a :@ b) = freeVars a <> freeVars b
+
+instance FreeVars v a => FreeVars v (Asgmt a) where
+  freeVars (x :- a) = freeVars a
 
 instance FreeVars TVarOf Sensitivity where
   freeVars _ = mempty
@@ -801,6 +807,10 @@ instance (MonadDMTC t) => Normalize t (DMTypeOf k) where
 instance (Normalize t a, Normalize t b) => Normalize t (a :& b) where
   normalize (a :@ b) = (:@) <$> normalize a <*> normalize b
 
+instance (Normalize t a) => Normalize t (Asgmt a) where
+  normalize (x :- a) = (x :-) <$> normalize a
+
+
 instance (Normalize t a) => Normalize t [a] where
   normalize as = mapM normalize as
 
@@ -992,9 +1002,13 @@ normalizeAnn (a :∧: b) = do
                                              addConstraint (Solvable (IsInfimum (x, y, z)))
                                              return (NoFun z)
     (_ , _) -> return (a' :∧: b')
-normalizeAnn (xs :->: y) = do
+normalizeAnn ((cs, xs) :->: y) = do
   let normalizeInside (x :@ annot) = (:@ annot) <$> normalizeAnn x
-  (:->:) <$> mapM normalizeInside xs <*> normalizeAnn y
+  let normalizeCaps (x :- τa) = (x :-) <$> normalizeInside τa
+  ncaps <- mapM normalizeCaps cs
+  nxs <- mapM normalizeInside xs
+  ny <- normalizeAnn y
+  return ((ncaps, nxs) :->: ny)
 normalizeAnn (xs :->*: y) = do
   let normalizeInside (x :@ annot) = (:@ annot) <$> normalizeAnn x
   (:->*:) <$> mapM normalizeInside xs <*> normalizeAnn y

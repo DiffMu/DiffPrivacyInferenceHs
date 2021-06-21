@@ -217,6 +217,13 @@ getArgList xτs = do
 
   return xτs'
 
+getAllVars = do
+  (γ :: TypeCtxSP) <- use types
+  h <- case γ of
+           Right _ -> throwError (ImpossibleError "getAllVars called on privacy context.")
+           Left (Ctx (MonCom h')) -> return (H.toList h')
+  return h
+
 
 removeVar :: forall e t. (DMExtra e, MonadDMTC t) => Symbol -> t (WithRelev e)
 removeVar x =  do

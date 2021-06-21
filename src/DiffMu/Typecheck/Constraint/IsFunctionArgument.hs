@@ -181,13 +181,16 @@ solveIsChoice name (provided, required) = do
 
 resolveChoiceHash :: forall t. IsT MonadDMTC t => (DMTypeOf ForAllKind, [DMTypeOf FunKind]) -> t ()
 resolveChoiceHash ((ForAll freevs method), matches) = do
+   -- we need to do something complicated here instead of simple unification because of the possibliy of implicit Return
    let resolveChoice :: (DMTypeOf FunKind) -> (DMTypeOf FunKind) -> t ()
        resolveChoice match mmethod = do
                                        case (match, mmethod) of
                                           -- this is the case where checkPriv was called on the application of a -> arrow.
                                           -- the privacy variables in match signature must hence be set to ∞ because what actually
-                                          -- happened is application of a -> arrow followed by Return.
-                                          (matchxs :->*: τmatch, methxs :->: τmeth) -> do
+                                          -- happened is application of a -> arrow followed by Return. we could not do that during
+                                          -- typechecking because we maybe did not know the type of the applicand and which method
+                                          -- was actually called.
+                                          (matchxs :->*: τmatch, (_,methxs) :->: τmeth) -> do -- TODO captures
                                              -- unify input types
                                              zipWithM unify [τ1 | (τ1 :@ _) <- matchxs] [τ2 | (τ2 :@ _) <- methxs]
                                              -- set privacies of the match to ∞
@@ -195,8 +198,8 @@ resolveChoiceHash ((ForAll freevs method), matches) = do
                                              -- unify return types
                                              unify τmatch τmeth
                                              return ()
-                                          -- in the regular cases the arrows can just be unified.
                                           _ -> do
+                                             -- in the regular cases the arrows can just be unified.
                                              unify match mmethod
                                              return ()
    -- before resolving, we create copies of the method's type where all free type variables
@@ -212,13 +215,13 @@ resolveChoiceHash ((ForAll freevs method), matches) = do
    duplicates' <- duplicateTerm subs method
    case duplicates' of
       Nothing -> do -- there are no free type variables in method.
-         -- unify each match with the method
+         -- resolve each match with the method
          mapM (\match -> resolveChoice match method) matches
          return ()
       Just duplicates -> do
          -- duplicate the constraints that have the free vars, as well
          duplicateAllConstraints subs
-         -- unify all matches with their corresponding duplicate.
+         -- resolve all matches with their corresponding duplicate.
          zipWithM resolveChoice matches duplicates
          return ()
 
@@ -244,7 +247,7 @@ keepLeastGeneral cs =
 getMatchCandidates :: forall t. IsT MonadDMTC t => DMTypeOf FunKind -> ChoiceHash -> t (ChoiceHash, Bool)
 getMatchCandidates τsτ provided = do
    (candidates, hasFreeVars) <- case τsτ of
-      (args :->: _)  -> do
+      ((_, args) :->: _)  -> do -- TODO captures
                         -- remove all methods that definitely don't match this signature
                         let cand = (H.filterWithKey (\s c -> choiceCouldMatch (fstAnn <$> args) s) provided)
                         -- filter all argument types that would be "Function" in julia...

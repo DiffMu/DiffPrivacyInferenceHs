@@ -67,6 +67,14 @@ instance Unify MonadDMTC (DMTypeOf k) where
 instance (Unify isT a, Unify isT b) => Unify isT (a :& b) where
   unify_ (a₁ :@ e₁) (a₂ :@ e₂) = (:@) <$> unify_ a₁ a₂ <*> unify_ e₁ e₂
 
+instance (Show a, Unify MonadDMTC a) => Unify MonadDMTC (Asgmt a) where
+  unify_ (a₁ :- e₁) (a₂ :- e₂) =
+     if a₁ == a₂ then do
+        τ <- unify_ e₁ e₂
+        return (a₂ :- τ)
+     else do
+        throwError (UnificationError (a₁ :- e₁) (a₂ :- e₂))
+
 -- Similarly, lists of terms are unified elements wise,
 -- but they only match if they are of the same lenght:
 instance (Show a, Unify MonadDMTC a) => Unify MonadDMTC [a] where
