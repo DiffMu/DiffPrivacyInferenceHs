@@ -374,36 +374,60 @@ checkSen' (Tup ts) scope = do
   undefined
    -- τs <- msumS (map (\t -> (checkSens t scope)) ts)
    -- return (DMTup τs)
+-}
 
-checkSen' (TLet xs tu body) scope = do
-          undefined
-          -- TODO: NEWANNOT
-   --TODO chekc uniqueness
-   maxs <- newVar
+checkSen' (TLet xs term body) original_scope = do
 
-   let mtup = do -- checn and scale
-          τ <- checkSens tu scope
-          mscale maxs
-          return τ
+  -- add all variables bound in the tuple let as args-checking-commands to the scope
+  -- TODO: do we need to make sure that we have unique names here?
+  let addarg scope (x :- τ) = setValue x (checkSens (Arg x τ NotRelevant) original_scope) scope
+  let scope_with_args = foldl addarg original_scope xs
 
-   let mbody = do
-          scope' <- foldM (\sc -> (\(x :- τ) -> pushDefinition sc x (Arg x τ IsRelevant))) scope xs
-          let xnames = map fstA xs
+  -- check the body in the scope with the new args
+  cbody <- checkSens body scope_with_args
 
-          τb <- checkSens body scope'
+  -- append the computation of removing the args from the context again, remembering their types
+  -- and sensitivities
+  let cbody' = do
+        τ <- cbody
+        xs_types_sens <- mapM (removeVar @SensitivityK) [x | (x :- _) <- xs]
+        let xs_types_sens' = [ (ty,sens) | WithRelev _ (ty :@ SensitivityAnnotation sens) <- xs_types_sens ]
+        return (τ,xs_types_sens')
 
-          sτs <- mapM (removeVar @SensitivityK) xnames -- get inference result for xs
+  -- the computation for checking the term
+  cterm <- checkSens term original_scope
 
-          let s = maxS (map sndAnnI sτs) -- set maxs to maximum of inferred sensitivites
-          s ==! maxs
+  -- merging the computations and matching inferred types and sensitivities
+  Done $ do
+    -- create a new var for scaling the term context
+    s <- newVar
 
-          return (τb, (map fstAnnI sτs))
+    -- extract both TC computations
+    -- (the computation for the term is scaled with s)
+    ((τbody,xs_types_sens), τterm) <- msumTup (cbody', (cterm <* mscale s))
 
-   ((τb, τs), τt) <- msumTup (mbody, mtup)
+    -- split the sens/type pairs of the arguments
+    let (xs_types , xs_sens) = unzip xs_types_sens
 
-   unify τt (DMTup τs) -- set correct tuple type
+    -- helper function for making sure that type is a nofun, returning the nofun component
+    let makeNoFun ty = do v <- newVar
+                          unify (NoFun v) ty
+                          return v
 
-   return τb
+    -- here we use `makeNoFun`
+    -- we make all tuple component types into nofuns
+    xs_types' <- mapM makeNoFun xs_types
+
+    -- and require that the type of the term is actually this tuple type
+    τterm ==! NoFun (DMTup xs_types')
+
+    -- finally we need make sure that our scaling factor `s` is the maximum of the tuple sensitivities
+    s ==! maxS xs_sens
+
+    -- and we return the type of the body
+    return τbody
+
+{-
 
 checkSen' (Loop it cs (xi, xc) b) scope = do
    niter <- case it of
