@@ -585,7 +585,18 @@ checkPri' (SLet (x :- dτ) term body) scope = do
         dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
 
      -- sum contexts
-     (_, τbody) <- msumTup (mbody, dterm)
+     (τbody, τterm) <- msumTup (mbody, dterm)
+
+     -- make sure that τterm is not a functiontype
+     -- this is necessary because elsewise it might be capturing variables
+     -- which we do not track here. (We can only track that if we put the
+     -- computation for checking the term itself into the scope, instead
+     -- of an arg representing it. But this would not work with the bind rule.)
+     -- See https://github.com/DiffMu/DiffPrivacyInferenceHs/issues/18
+     τnofun <- newVar
+     unify τbody (NoFun τnofun)
+
+     -- return the type of this bind expression
      return τbody
 
 
