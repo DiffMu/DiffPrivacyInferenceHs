@@ -368,13 +368,23 @@ checkSen' (Phi cond ifbr elsebr) scope = do
       addConstraint (Solvable (IsSupremum (τif, τelse, τ)))
       return τ
 
-{-
+
 
 checkSen' (Tup ts) scope = do
-  undefined
-   -- τs <- msumS (map (\t -> (checkSens t scope)) ts)
-   -- return (DMTup τs)
--}
+  τsd <- mapM (\t -> (checkSens t scope)) ts
+  Done $ do
+     -- check tuple entries and sum contexts
+     τsum <- msumS τsd
+
+     -- ensure nothing that is put in a tuple is a function
+     let makeNoFun ty = do v <- newVar
+                           unify (NoFun v) ty
+                           return v
+     τnf <- mapM makeNoFun τsum
+
+     -- return the tuple.
+     return (NoFun (DMTup τnf))
+
 
 checkSen' (TLet xs term body) original_scope = do
 
