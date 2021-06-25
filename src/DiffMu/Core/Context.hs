@@ -98,7 +98,7 @@ msum emptyΣ ms = do
         types .= initΣ
         a <- m
         mΣ <- use types
-        m_acc_Σ <- (traceShowId mΣ) ⋆ (traceShowId accΣ)
+        m_acc_Σ <- mΣ ⋆ accΣ
         as <- f initΣ ms (m_acc_Σ)
         return (a : as)
 
@@ -217,6 +217,13 @@ getArgList xτs = do
 
   return xτs'
 
+getAllVars = do
+  (γ :: TypeCtxSP) <- use types
+  h <- case γ of
+           Right _ -> throwError (ImpossibleError "getAllVars called on privacy context.")
+           Left (Ctx (MonCom h')) -> return (H.toList h')
+  return h
+
 
 removeVar :: forall e t. (DMExtra e, MonadDMTC t) => Symbol -> t (WithRelev e)
 removeVar x =  do
@@ -246,6 +253,7 @@ getInteresting = do
        f xs = [ (x , τ) | (x , WithRelev IsRelevant τ) <- xs ]
    return (unzip (f h))
 
+-- TODO this must also forbid the free variables that appear in constraints!!11!
 getActuallyFreeVars :: DMFun -> TC [SomeK TVarOf]
 getActuallyFreeVars τ = do
   γ <- use types

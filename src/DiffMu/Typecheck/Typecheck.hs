@@ -340,7 +340,6 @@ checkSen' (FLet fname term body) scope = do
      return result'
 
 
-
 checkSen' (Choice d) scope = do
    delCs <- mapM (\t -> checkSens t scope) (snd <$> H.toList d)
    Done $ do
@@ -437,40 +436,48 @@ checkSen' (TLet xs term body) original_scope = do
     -- and we return the type of the body
     return τbody
 
-{-
 
-checkSen' (Loop it cs (xi, xc) b) scope = do
+checkSen' (Loop it cs (xi, xc) body) scope = do
    niter <- case it of
                   Iter fs stp ls -> return (opCeil ((ls `opSub` (fs `opSub` (Sng 1 JTNumInt))) `opDiv` stp))
-                  _ -> throwError (ImpossibleError "Loop iterator must be an Iter term.")
+                  _ -> return (Arg xi JTNumInt NotRelevant) --throwDelayedError (ImpossibleError "Loop iterator must be an Iter term.") - TODO
 
-   let checkScale :: DMTerm -> TC (DMSensitivity, Sensitivity)
-       checkScale term = do
-          τ <- checkSens term scope
-          s <- newVar
-          mscale s
-          return (τ, s)
+   cniter <- checkSens niter scope
+   ccs <- checkSens cs scope
 
-   let mbody = do
-         scope' <- pushDefinition scope xi (Arg xi JTNumInt NotRelevant)
-         scope'' <- pushDefinition scope' xc (Arg xc JTAny IsRelevant)
-         τ <- checkSens b scope
-         xii <- removeVar @SensitivityK xi
-         xci <- removeVar @SensitivityK xc
-         s <- newVar
-         mscale s
-         return (τ, s, xii, xci)
+   -- add iteration and capture variables as args-checking-commands to the scope
+   -- TODO: do we need to make sure that we have unique names here?
+   let scope' = setValue xi (checkSens (Arg xi JTNumInt NotRelevant) scope) scope
+   let scope'' = setValue xc (checkSens (Arg xc JTAny IsRelevant) scope) scope'
 
-   ((τit, sit), (τcs, scs), (τb, sb, (WithRelev _ (τbit :@ sbit)), (WithRelev _ (τbcs :@ sbcs)))) <- msum3Tup (checkScale niter, checkScale cs, mbody)
+   -- check body term in that new scope
+   cbody <- checkSens body scope''
 
-   addConstraint (Solvable (IsLessEqual (τit, τbit))) -- number of iterations must match typer equested by body
-   addConstraint (Solvable (IsLessEqual (τcs, τbcs))) --  capture type must match type requested by body
-   addConstraint (Solvable (IsLessEqual (τb, τbcs))) -- body output type must match body capture input type
-   addConstraint (Solvable (IsLoopResult ((sit, scs, sb), sbcs, τit))) -- compute the right scalars once we know if τ_iter is const or not.
+   -- append the computation of removing the args from the context again, remembering their types
+   -- and sensitivities
+   let cbody' = do
+         τ <- cbody
+         WithRelev _ (τi :@ si) <- removeVar @SensitivityK xi
+         WithRelev _ (τc :@ sc) <- removeVar @SensitivityK xc
+         return (τ, (τi, si), (τc, sc))
 
-   return τb
+   Done $ do
+      -- add scalars for iterator, capture and body context
+      -- we compute their values once it is known if the number of iterations is const or not.
+      sit <- newVar
+      scs <- newVar
+      sb <- newVar
 
--}
+      -- scale and sum contexts
+      (τit, τcs, (τb, (τbit, sbit), (τbcs, sbcs))) <- msum3Tup (cniter <* mscale sit, ccs <* mscale scs, cbody' <* mscale sb)
+
+      addConstraint (Solvable (IsLessEqual (τit, τbit))) -- number of iterations must match type requested by body
+      addConstraint (Solvable (IsLessEqual (τcs, τbcs))) --  capture type must match type requested by body
+      addConstraint (Solvable (IsLessEqual (τb, τbcs))) -- body output type must match body capture input type
+      addConstraint (Solvable (IsLoopResult ((sit, scs, sb), sbcs, τit))) -- compute the right scalars once we know if τ_iter is const or not.
+
+      return τb
+
 
 checkSen' (MCreate n m (x1, x2) body) scope =
    let setDim :: TC DMMain -> Sensitivity -> TC DMMain

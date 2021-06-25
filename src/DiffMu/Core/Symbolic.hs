@@ -62,6 +62,7 @@ instance Monad t => SemiringM t (SymVal) where
 data SymVar (k :: SensKind) =
   HonestVar (SymbolOf k)
   | Ln (SymTerm MainSensKind)
+  | Exp (SymTerm MainSensKind, SymTerm MainSensKind)
   | Ceil (SymTerm MainSensKind)
   | Sqrt (SymTerm MainSensKind)
   | Max [SymTerm MainSensKind]
@@ -70,6 +71,7 @@ data SymVar (k :: SensKind) =
   deriving (Generic, Eq)
 
 ln s = injectVarId (Ln s)
+exp b e = injectVarId (Exp (b, e))
 ceil s = injectVarId (Ceil s)
 sqrt s = injectVarId (Sqrt s)
 maxS s = injectVarId (Max s)
@@ -79,6 +81,7 @@ divide s t = injectVarId (Div (s, t))
 instance Show (SymVar k) where
   show (HonestVar v) = show v
   show (Ln te) = "ln(" <> show te <> ")"
+  show (Exp (b, e)) = show b <> "^(" <> show e <> ")"
   show (Ceil te) = "ceil(" <> show te <> ")"
   show (Sqrt te) = "sqrt(" <> show te <> ")"
   show (Max te) = "max(" <> show te <> ")"
@@ -108,6 +111,7 @@ type SymTerm = CPolyM SymVal Int (SymVar MainSensKind)
 
 instance CheckContains (SymVar MainSensKind) (SymbolOf MainSensKind) where
   checkContains (Ln _) = Nothing
+  checkContains (Exp _) = Nothing
   checkContains (Ceil _) = Nothing
   checkContains (Sqrt _) = Nothing
   checkContains (Max _) = Nothing
@@ -144,6 +148,7 @@ instance (CheckNeutral m a, CheckNeutral m b) => CheckNeutral m (a,b) where
 instance (Substitute SymVar (CPolyM SymVal Int (SymVar MainSensKind)) (SymVar k2)) where
   substitute σ (HonestVar v) = pure (HonestVar v)
   substitute σ (Ln a) = Ln <$> substitute σ a
+  substitute σ (Exp (b,e)) = (\b e -> Exp (b,e)) <$> substitute σ b <*> substitute σ e
   substitute σ (Ceil a) = Ceil <$> substitute σ a
   substitute σ (Sqrt a) = Sqrt <$> substitute σ a
   substitute σ (Max as) = Max <$> mapM (substitute σ) as

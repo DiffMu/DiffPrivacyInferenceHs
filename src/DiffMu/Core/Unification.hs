@@ -6,6 +6,8 @@ import DiffMu.Abstract
 import DiffMu.Core.Definitions
 import DiffMu.Core.TC
 
+import DiffMu.Core.Symbolic
+
 -------------------------------------------------------------------
 -- Unification of dmtypes
 --
@@ -84,8 +86,22 @@ instance Solve MonadDMTC IsLessEqual (Sensitivity, Sensitivity) where
 
 
 -- TODO implement this
-instance Solve MonadDMTC IsLoopResult ((Sensitivity, Sensitivity, Sensitivity), Sensitivity, DMType) where
-  solve_ Dict _ _ (IsLoopResult ((s1, s2, s3), s, τ_iter)) = pure ()
+instance Solve MonadDMTC IsLoopResult ((Sensitivity, Sensitivity, Sensitivity), Annotation SensitivityK, DMMain) where
+  solve_ Dict _ name (IsLoopResult ((s1, s2, s3), sa, τ_iter)) = do
+     let SensitivityAnnotation s = sa
+     case τ_iter of
+        NoFun (Numeric (Const η _)) -> do
+           unify s1 zeroId
+           unify s2 (exp s η)
+           unify s3 η
+           dischargeConstraint name
+        NoFun (Numeric (NonConst _)) -> do
+           unify s oneId
+           unify s1 oneId
+           unify s2 oneId
+           unify s3 inftyS
+           dischargeConstraint name
+        _ -> return ()
 
 
 -- instance Solve MonadDMTC HasSensitivity (DMTypeOf (AnnotatedKind SensitivityK), Sensitivity) where
