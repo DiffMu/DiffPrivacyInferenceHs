@@ -183,6 +183,13 @@ solveSubtyping name path = do
                          <> "Got the following errors while search the subtyping graph:\n"
                          <> show e))
 
+instance Typeable k => FixedVars TVarOf (IsLessEqual (DMTypeOf k, DMTypeOf k)) where
+  fixedVars _ = mempty
+instance Typeable k => FixedVars TVarOf (IsSupremum (DMTypeOf k, DMTypeOf k, DMTypeOf k)) where
+  fixedVars (IsSupremum (_ , _ , a)) = freeVars a
+instance Typeable k => FixedVars TVarOf (IsInfimum (DMTypeOf k, DMTypeOf k, DMTypeOf k)) where
+  fixedVars (IsInfimum (_ , _ , a)) = freeVars a
+
 
 -- We can solve `IsLessEqual` constraints for DMTypes.
 -- NOTE: IsLessEqual is interpreted as a subtyping relation.
@@ -232,6 +239,9 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsInfimum (DMTypeOf k, DMTypeO
 ------------------------------------------------------------
 -- Solve supremum (TODO this should live somewhere else.)
 
+
+instance FixedVars TVarOf (IsGaussResult (DMTypeOf MainKind, DMTypeOf MainKind)) where
+  fixedVars (IsGaussResult (gauss,_)) = freeVars gauss
 
 -- is it gauss or mgauss?
 instance Solve MonadDMTC IsGaussResult (DMTypeOf MainKind, DMTypeOf MainKind) where

@@ -83,10 +83,17 @@ solveBinaryNum op (τ1, τ2) = f op τ1 τ2
 
 makeNonConstType :: (IsT MonadDMTC t) => DMNumType -> t DMNumType
 makeNonConstType (TVar a) = do
-  a' <- newVar
-  let t = (NonConst a')
-  addSub (a := t)
-  return t
+  -- first we check whether the var is a fixed variable
+  -- if it is, we do nothing
+  fixedVars <- getFixedVars (Proxy @DMTypeOf)
+  case (a `elem` fixedVars) of
+    True -> return (TVar a)
+
+    -- if a' is not fixed, we can make it non-const
+    False -> do a' <- newVar
+                let t = (NonConst a')
+                addSub (a := t)
+                return t
 makeNonConstType (NonConst t) = pure $ NonConst t
 makeNonConstType (Const s t) = pure $ Const s t
 makeNonConstType (DMData) = pure $ DMData -- TODO: Check, we do nothing with DMData?
@@ -130,6 +137,10 @@ solveop name (IsTypeOpResult (BinaryNum op (τa1 :@ s1 , τa2 :@ s2) τr)) = do
 
       unify τr val_τr
       dischargeConstraint @MonadDMTC name
+
+instance FixedVars TVarOf (IsTypeOpResult DMTypeOp) where
+  fixedVars (IsTypeOpResult (UnaryNum _ _ res)) = freeVars res
+  fixedVars (IsTypeOpResult (BinaryNum _ _ res)) = freeVars res
 
 -- An instance which says that the `IsTypeOpResult DMTypeOp` constraint is solvable
 -- in the `MonadDMTC` class of monads.

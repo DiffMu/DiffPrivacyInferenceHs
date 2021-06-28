@@ -70,8 +70,14 @@ class (Typeable v, Typeable a, forall k. Eq (v k)) => Substitute (v :: j -> *) (
   substitute :: (Monad t) => (forall k. (IsKind k) => v k -> t (a k)) -> (x -> t x)
 
 
+-- Fixed (free) vars are those which are already fully determined by being the target of a constraint
+class (Typeable v, Typeable a, forall k. Eq (v k)) => FixedVars (v :: j -> *) (a :: *) where
+  fixedVars :: a -> [SomeK v]
+
+
 class (Typeable v, Typeable a, forall k. Eq (v k)) => FreeVars (v :: j -> *) (a :: *) where
   freeVars :: a -> [SomeK v]
+
 
 instance FreeVars v a => FreeVars v [a] where
   freeVars [] = []
@@ -128,6 +134,15 @@ instance KEq v => Eq (SomeK v) where
   SomeK (a) == SomeK (b) = case testEquality (typeOf a) (typeOf b) of
     Nothing -> False
     Just Refl -> a == b
+
+filterSomeK :: forall v k2. (Typeable k2) => [(SomeK v)] -> [v k2]
+filterSomeK vs = [v | Just v <- (f <$> vs)]
+  where
+    f :: SomeK v -> Maybe (v k2)
+    f (SomeK (v :: v k)) = 
+      case testEquality (typeRep @k) (typeRep @k2) of
+        Nothing -> Nothing
+        Just Refl -> Just v
 
 
 data Subs v a where
@@ -223,6 +238,7 @@ class (Monad t, Term (VarFam a) a) => MonadTerm (a :: j -> *) t where
   newVar :: (IsKind k) => t (a k)
   addSub :: (IsKind k) => Sub (VarFam a) a k -> t ()
   getSubs :: t (Subs (VarFam a) a)
+  getFixedVars :: (IsKind k) => Proxy a -> t [VarFam a k]
 
 class (Monad t, Term (VarFam a) a, MonadTerm a t) => MonadTermDuplication a t where
   duplicateAllConstraints :: [SomeK (Sub (VarFam a) (ListK a))] -> t ()

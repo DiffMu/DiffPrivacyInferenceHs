@@ -14,6 +14,9 @@ data Full
 class (FreeVars TVarOf x, Substitute TVarOf DMTypeOf x) => GoodConstraintContent (x :: *) where
 instance (FreeVars TVarOf x, Substitute TVarOf DMTypeOf x) => GoodConstraintContent x where
 
+class (FixedVars TVarOf x) => GoodConstraint (x :: *) where
+instance (FixedVars TVarOf x) => GoodConstraint x where
+
 class (MonadImpossible (t), MonadWatch (t),
        MonadTerm DMTypeOf (t),
        MonadTermDuplication DMTypeOf (t),
@@ -25,7 +28,8 @@ class (MonadImpossible (t), MonadWatch (t),
        -- MonadConstraint Symbol (MonadDMTC) (t),
        MonadConstraint (MonadDMTC) (t),
        MonadNormalize t,
-       ConstraintOnSolvable t ~ GoodConstraintContent
+       ContentConstraintOnSolvable t ~ GoodConstraintContent,
+       ConstraintOnSolvable t ~ GoodConstraint
        -- LiftTC t
       ) => MonadDMTC (t :: * -> *) where
 

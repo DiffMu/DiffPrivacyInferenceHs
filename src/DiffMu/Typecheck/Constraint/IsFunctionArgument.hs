@@ -91,12 +91,24 @@ solveIsFunctionArgument name (TVar a, Fun xs) = addSub (a := Fun xs) >> discharg
 -- then we cannot do anything yet, since we do not know whether we have function terms inside, or not.
 solveIsFunctionArgument name (_, _) = return ()
 
+instance FixedVars TVarOf (IsFunctionArgument (DMTypeOf MainKind, DMTypeOf MainKind)) where
+  -- TODO: Is this calculation of fixed vars correct?
+  --       or should we only take those which are on the right hand
+  --       side of an arrow?
+  fixedVars (IsFunctionArgument (_, wantedFuns)) = (freeVars wantedFuns)
+
 instance Solve MonadDMTC IsFunctionArgument (DMTypeOf MainKind, DMTypeOf MainKind) where
   solve_ Dict _ name (IsFunctionArgument (a,b)) = solveIsFunctionArgument name (a,b)
 
 ------------------------------------------------------------------------------------------------------
 -- IsChoice constraints
 -- these are created from IsFunctionArgument constraints if both sides are actually functions.
+
+instance FixedVars TVarOf (IsChoice (ChoiceHash, [DMTypeOf FunKind])) where
+  -- TODO: Is this calculation of fixed vars correct?
+  --       or should we only take those which are on the right hand
+  --       side of an arrow?
+  fixedVars (IsChoice (_, wantedFuns)) = mconcat (freeVars <$> wantedFuns)
 
 -- map Julia signature to method and the list of function calls that went to this method.
 type ChoiceHash = HashMap [JuliaType] (DMTypeOf ForAllKind, [DMTypeOf FunKind])

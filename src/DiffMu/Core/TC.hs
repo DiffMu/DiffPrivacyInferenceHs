@@ -279,6 +279,8 @@ type SSubs = Subs SensitivityOf
 
 
 
+class (FixedVars TVarOf x) => GoodConstraint (x :: *) where
+instance (FixedVars TVarOf x) => GoodConstraint x where
 
 class (FreeVars TVarOf x, Substitute TVarOf DMTypeOf x) => GoodConstraintContent (x :: *) where
 instance (FreeVars TVarOf x, Substitute TVarOf DMTypeOf x) => GoodConstraintContent x where
@@ -295,7 +297,8 @@ class (MonadImpossible (t), MonadWatch (t),
        -- MonadConstraint Symbol (MonadDMTC) (t),
        MonadConstraint (MonadDMTC) (t),
        MonadNormalize t,
-       ConstraintOnSolvable t ~ GoodConstraintContent
+       ContentConstraintOnSolvable t ~ GoodConstraintContent,
+       ConstraintOnSolvable t ~ GoodConstraint
        -- LiftTC t
       ) => MonadDMTC (t :: * -> *) where
 
@@ -334,7 +337,7 @@ data CtxStack v a = CtxStack
     _topctx :: Ctx v a,
     _otherctxs :: [Ctx v a]
   }
-type ConstraintCtx = AnnNameCtx (CtxStack Symbol (Watched (Solvable GoodConstraintContent MonadDMTC)))
+type ConstraintCtx = AnnNameCtx (CtxStack Symbol (Watched (Solvable GoodConstraint GoodConstraintContent MonadDMTC)))
 instance DictKey v => DictLike v x (CtxStack v x) where
   setValue k v (CtxStack d other) = CtxStack (setValue k v d) other
   getValue k (CtxStack d _) = getValue k d
@@ -444,7 +447,9 @@ data MetaCtx = MetaCtx
     _typeVars :: KindedNameCtx TVarOf,
     _sensSubs :: Subs SVarOf SensitivityOf,
     _typeSubs :: Subs TVarOf DMTypeOf,
-    _constraints :: ConstraintCtx
+    _constraints :: ConstraintCtx,
+    -- cached state
+    _fixedTVars :: [SingSomeK TVarOf]
   }
   deriving (Generic)
 
@@ -490,12 +495,13 @@ $(makeLenses ''TCState)
 --                             <> "- types:       " <> show γ <> "\n"
 
 instance Show (MetaCtx) where
-  show (MetaCtx s t sσ tσ cs) =
+  show (MetaCtx s t sσ tσ cs fixedT) =
        "- sens vars: " <> show s <> "\n"
     <> "- type vars: " <> show t <> "\n"
     -- <> "- cnst vars: " <> show c <> "\n"
     <> "- sens subs:   " <> show sσ <> "\n"
     <> "- type subs:   " <> show tσ <> "\n"
+    <> "- fixed TVars: " <> show fixedT <> "\n"
     <> "- constraints:\n" <> show cs <> "\n"
     -- <> "- types:       " <> show γ <> "\n"
 
@@ -529,11 +535,11 @@ instance (MonoidM t a) => MonoidM t (Watched a) where
 instance (CheckNeutral t a) => CheckNeutral t (Watched a) where
   checkNeutral a = pure False
 
-instance Monad t => (SemigroupM t (Solvable eC a)) where
+instance Monad t => (SemigroupM t (Solvable eC eC2 a)) where
   (⋆) (Solvable a) (Solvable b) = error "Trying to combine two constraints with the same name."
-instance Monad t => (MonoidM t (Solvable eC a)) where
+instance Monad t => (MonoidM t (Solvable eC eC2 a)) where
   neutral = error "Trying to get neutral of solvable"
-instance Monad t => (CheckNeutral t (Solvable eC a)) where
+instance Monad t => (CheckNeutral t (Solvable eC eC2 a)) where
   checkNeutral a = pure False
 
 
@@ -547,7 +553,14 @@ instance Monad m => MonadTerm DMTypeOf (TCT m) where
     -- traceM ("\\ Type: I now have: " <> show σs')
     meta.typeSubs .= σs'
     meta.typeVars %= (removeNameBySubstitution σ)
+
+    -- remove fixed var
+    meta.fixedTVars %= removeKindedNameBySubstitution σ
   newVar = TVar <$> newTVar "τ"
+  getFixedVars _ = do
+    vars <- use (meta.fixedTVars)
+    let somes = [SomeK v | SingSomeK v <- vars]
+    return (filterSomeK somes)
 
 instance Monad m => MonadTerm SensitivityOf (TCT m) where
   type VarFam SensitivityOf = SVarOf
@@ -559,6 +572,7 @@ instance Monad m => MonadTerm SensitivityOf (TCT m) where
     meta.sensSubs .= σs'
     meta.sensVars %= (removeNameBySubstitution σ)
   newVar = coerce <$> svar <$> newSVar "s"
+  getFixedVars _ = return mempty
 
 instance Monad m => MonadTermDuplication DMTypeOf (TCT m) where
   duplicateAllConstraints subs = do
@@ -614,9 +628,18 @@ instance Monad m => MonadTermDuplication DMTypeOf (TCT m) where
 
 
 instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
-  type ConstraintBackup (TCT m) = (Ctx Symbol (Watched (Solvable GoodConstraintContent MonadDMTC)))
-  type ConstraintOnSolvable (TCT m) = GoodConstraintContent
-  addConstraint c = meta.constraints %%= (newAnnName "constr" (Watched IsChanged c))
+  type ConstraintBackup (TCT m) = (Ctx Symbol (Watched (Solvable GoodConstraint GoodConstraintContent MonadDMTC)))
+  type ContentConstraintOnSolvable (TCT m) = GoodConstraintContent
+  type ConstraintOnSolvable (TCT m) = GoodConstraint
+  addConstraint (Solvable c) = do
+      -- compute the fixed vars of this constraint
+      -- and add them to the cached list
+      let newFixed = fixedVars @_ @TVarOf c
+      meta.fixedTVars <>= [SingSomeK v | SomeK v <- newFixed]
+
+      -- add the constraint to the constraint list
+      meta.constraints %%= (newAnnName "constr" (Watched IsChanged (Solvable c)))
+
   getUnsolvedConstraintMarkNormal = do
     (Ctx (MonCom constrs)) <- use (meta.constraints.anncontent.topctx)
     let constrs2 = H.toList constrs
@@ -656,7 +679,7 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
 
   getConstraintsByType (Proxy :: Proxy (c a)) = do
     (Ctx (MonCom cs)) <- use (meta.constraints.anncontent.topctx)
-    let f :: (Watched (Solvable GoodConstraintContent MonadDMTC)) -> Maybe (c a)
+    let f :: (Watched (Solvable GoodConstraint GoodConstraintContent MonadDMTC)) -> Maybe (c a)
         f (Watched _ (Solvable (c :: c' a'))) = case testEquality (typeRep @(c a)) (typeRep @(c' a')) of
           Just Refl -> Just c
           Nothing -> Nothing
@@ -737,13 +760,13 @@ instance Monad m => MonadWatch (TCT m) where
 
 
 
-supremum :: (IsT isT t, HasNormalize isT (a k, a k, a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsSupremum (a k, a k, a k), SingI k, Typeable k, ConstraintOnSolvable t (a k, a k, a k)) => (a k) -> (a k) -> t (a k)
+supremum :: (IsT isT t, HasNormalize isT (a k, a k, a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsSupremum (a k, a k, a k), SingI k, Typeable k, ContentConstraintOnSolvable t (a k, a k, a k), ConstraintOnSolvable t (IsSupremum (a k, a k, a k))) => (a k) -> (a k) -> t (a k)
 supremum x y = do
   (z :: a k) <- newVar
   addConstraint (Solvable (IsSupremum (x, y, z)))
   return z
 
-infimum :: (IsT isT t, HasNormalize isT (a k, a k, a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsInfimum (a k, a k, a k), SingI k, Typeable k, ConstraintOnSolvable t (a k, a k, a k)) => (a k) -> (a k) -> t (a k)
+infimum :: (IsT isT t, HasNormalize isT (a k, a k, a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsInfimum (a k, a k, a k), SingI k, Typeable k, ContentConstraintOnSolvable t (a k, a k, a k), ConstraintOnSolvable t (IsInfimum (a k, a k, a k))) => (a k) -> (a k) -> t (a k)
 infimum x y = do
   (z :: a k) <- newVar
   addConstraint (Solvable (IsInfimum (x, y, z)))
@@ -884,6 +907,12 @@ newPVar = do
 
 ------------------------------------------------------------------------
 -- unification of sensitivities
+
+instance FixedVars (TVarOf) (IsEqual (Sensitivity,Sensitivity)) where
+  fixedVars = mempty
+
+instance FixedVars (TVarOf) (IsLessEqual (Sensitivity,Sensitivity)) where
+  fixedVars = mempty
 
 -- Before we can unify dmtypes, we have to proof that we can unify
 -- sensitivities.

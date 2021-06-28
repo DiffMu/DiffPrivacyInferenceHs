@@ -74,6 +74,9 @@ instance (Show a, Unify MonadDMTC a) => Unify MonadDMTC [a] where
   unify_ xs ys | length xs == length ys = mapM (uncurry unify_) (zip xs ys)
   unify_ xs ys = throwError (UnificationError xs ys)
 
+instance Typeable k => FixedVars TVarOf (IsEqual (DMTypeOf k, DMTypeOf k)) where
+  fixedVars _ = mempty
+
 -- Using the unification instance, we implement solving of the `IsEqual` constraint for DMTypes.
 instance Solve MonadDMTC IsEqual (DMTypeOf k, DMTypeOf k) where
   solve_ Dict _ name (IsEqual (a,b)) = unify_ a b >> dischargeConstraint name
@@ -83,6 +86,9 @@ instance Solve MonadDMTC IsEqual (DMTypeOf k, DMTypeOf k) where
 -- TODO implement this
 instance Solve MonadDMTC IsLessEqual (Sensitivity, Sensitivity) where
   solve_ Dict _ _ (IsLessEqual (s1, s2)) = pure ()
+
+instance FixedVars TVarOf (IsLoopResult ((Sensitivity, Sensitivity, Sensitivity), Annotation SensitivityK, DMMain)) where
+  fixedVars (IsLoopResult (_, _, res)) = freeVars res
 
 
 -- TODO implement this

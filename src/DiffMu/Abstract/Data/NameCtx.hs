@@ -54,9 +54,14 @@ newKindedName (hint) (KindedNameCtx names ctr) =
   let name = (fromSymbol (Symbol (hint <> "_" <> T.pack (show ctr))))
   in (name , KindedNameCtx (SingSomeK (name) : names) (ctr +! 1))
 
+-- makeSing :: forall j (v :: j -> *). (forall k. (Show (Demote (KindOf k)))) => SomeK v -> SingSomeK v
+-- makeSing (SomeK v) = SingSomeK v
 
-removeNameBySubstitution :: ((forall j. Eq (v j)), Typeable k) => Sub v a k -> KindedNameCtx v -> KindedNameCtx v
-removeNameBySubstitution ((x :: v k) := _) (KindedNameCtx names ctr) =
+-- addKindedNames :: [SomeK v] -> [SingSomeK v] -> [SingSomeK v]
+-- addKindedNames xs ys = ys <> [SingSomeK x | SomeK x <- xs]
+
+removeKindedNameBySubstitution :: ((forall j. Eq (v j)), Typeable k) => Sub v a k -> [SingSomeK v] -> [SingSomeK v]
+removeKindedNameBySubstitution ((x :: v k) := _) names =
   let f :: Typeable j => v j -> Maybe (v j)
       f (v :: v j) = case testEquality (typeRep @j) (typeRep @k) of
         Just Refl -> case v == x of
@@ -66,6 +71,22 @@ removeNameBySubstitution ((x :: v k) := _) (KindedNameCtx names ctr) =
       g :: SingSomeK v -> Maybe (SingSomeK v)
       g (SingSomeK x) = SingSomeK <$> (f x)
       names' = [n | (Just n) <- g <$> names]
-  in KindedNameCtx names' ctr
+  in names'
+
+
+removeNameBySubstitution :: ((forall j. Eq (v j)), Typeable k) => Sub v a k -> KindedNameCtx v -> KindedNameCtx v
+removeNameBySubstitution sub (KindedNameCtx names ctr) =
+  KindedNameCtx (removeKindedNameBySubstitution sub names) ctr
+
+  -- let f :: Typeable j => v j -> Maybe (v j)
+  --     f (v :: v j) = case testEquality (typeRep @j) (typeRep @k) of
+  --       Just Refl -> case v == x of
+  --         True -> Nothing
+  --         False -> Just v
+  --       Nothing -> Just v
+  --     g :: SingSomeK v -> Maybe (SingSomeK v)
+  --     g (SingSomeK x) = SingSomeK <$> (f x)
+  --     names' = [n | (Just n) <- g <$> names]
+  -- in KindedNameCtx names' ctr
 
 

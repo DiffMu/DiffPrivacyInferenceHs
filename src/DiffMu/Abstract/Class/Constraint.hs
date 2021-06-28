@@ -26,33 +26,34 @@ class TCConstraint c => Solve (isT :: (* -> *) -> Constraint) c a where
 class MonadNormalize t where
   normalizeState :: t ()
 
-data Solvable (extraConstr :: * -> Constraint) isT where
-  Solvable :: (Solve isT c a, (HasNormalize isT a), Show (c a), Typeable c, Typeable a, extraConstr a) => c a -> Solvable extraConstr isT
+data Solvable  (extraConstr :: * -> Constraint) (extraContentConstr :: * -> Constraint) isT where
+  Solvable :: (Solve isT c a, (HasNormalize isT a), Show (c a), Typeable c, Typeable a, extraContentConstr a, extraConstr (c a)) => c a -> Solvable extraConstr extraContentConstr isT
 
 -- solve' :: (Solve isT c a, IsT isT t, Normalize (t) a) => c a -> t ()
-solve :: (Monad (t), IsT isT t) => SolvingMode -> Symbol -> (Solvable eC isT) -> t ()
-solve mode name (Solvable (c :: c a) :: Solvable eC isT) = f Proxy
+solve :: (Monad (t), IsT isT t) => SolvingMode -> Symbol -> (Solvable eC eC2 isT) -> t ()
+solve mode name (Solvable (c :: c a) :: Solvable eC eC2 isT) = f Proxy
   where f :: (Monad (t), IsT isT t) => Proxy (t) -> t ()
         f (_ :: Proxy (t)) = (insideConstr normalize c >>= solve_ @isT Dict mode name)
 
 
-instance (isT t, Monad (t)) => Normalize (t) (Solvable eC isT) where
+instance (isT t, Monad (t)) => Normalize (t) (Solvable eC eC2 isT) where
   normalize (Solvable (c :: c a)) = (Solvable @isT <$> insideConstr (normalize @(t)) c)
 
-instance Show (Solvable eC isT) where
+instance Show (Solvable eC eC2 isT) where
   show (Solvable c) = show c
 
 data CloseConstraintSetResult = ConstraintSet_WasEmpty | ConstraintSet_WasNotEmpty
 
 class (Monad t) => MonadConstraint isT t | t -> isT where
 -- class (IsT isT t) => MonadConstraint v isT t e | t -> isT where
+  type ContentConstraintOnSolvable t :: * -> Constraint
   type ConstraintOnSolvable t :: * -> Constraint
   type ConstraintBackup t
-  addConstraint :: Solvable (ConstraintOnSolvable t) isT -> t Symbol
-  getUnsolvedConstraintMarkNormal :: t (Maybe (Symbol , Solvable (ConstraintOnSolvable t) isT))
+  addConstraint :: Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT -> t Symbol
+  getUnsolvedConstraintMarkNormal :: t (Maybe (Symbol , Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT))
   dischargeConstraint :: Symbol -> t ()
   failConstraint :: Symbol -> t ()
-  updateConstraint :: Symbol -> Solvable (ConstraintOnSolvable t) isT -> t ()
+  updateConstraint :: Symbol -> Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT -> t ()
   openNewConstraintSet :: t ()
   mergeTopConstraintSet :: t CloseConstraintSetResult
   tracePrintConstraints :: t ()
@@ -61,11 +62,11 @@ class (Monad t) => MonadConstraint isT t | t -> isT where
   -- restoreConstraints :: ConstraintBackup t -> t ()
 
 
-(==!) :: (MonadConstraint isT t, Solve isT IsEqual (a,a), (HasNormalize isT a), Show (a), Typeable a, IsT isT t, ConstraintOnSolvable t (a,a)) => a -> a -> t ()
+(==!) :: (MonadConstraint isT t, Solve isT IsEqual (a,a), (HasNormalize isT a), Show (a), Typeable a, IsT isT t, ContentConstraintOnSolvable t (a,a), ConstraintOnSolvable t (IsEqual (a,a))) => a -> a -> t ()
 (==!) a b = addConstraint (Solvable (IsEqual (a,b))) >> pure ()
 
 -- An abbreviation for adding a less equal constraint.
-(≤!) :: (MonadConstraint isT t, Solve isT IsLessEqual (a,a), (HasNormalize isT a), Show (a), Typeable a, IsT isT t, ConstraintOnSolvable t (a,a)) => a -> a -> t ()
+(≤!) :: (MonadConstraint isT t, Solve isT IsLessEqual (a,a), (HasNormalize isT a), Show (a), Typeable a, IsT isT t, ContentConstraintOnSolvable t (a,a), ConstraintOnSolvable t (IsLessEqual (a,a))) => a -> a -> t ()
 (≤!) a b = addConstraint (Solvable (IsLessEqual (a,b))) >> pure ()
 
 
