@@ -71,6 +71,7 @@ library
       DiffMu.Prelude.MonadicAlgebra
       DiffMu.Prelude.Polynomial
       DiffMu.Runner
+      DiffMu.Typecheck.Constraint.CheapConstraints
       DiffMu.Typecheck.Constraint.IsFunctionArgument
       DiffMu.Typecheck.Constraint.IsJuliaEqual
       DiffMu.Typecheck.JuliaType

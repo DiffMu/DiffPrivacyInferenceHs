@@ -27,17 +27,17 @@ import qualified Data.HashMap.Strict as H
 -- set the a type to a variable const, in case it's numeric or a tuple.
 --
 
-newtype IsConst a = IsConst a deriving Show
+newtype MakeConst a = MakeConst a deriving Show
 
-instance TCConstraint IsConst where
-  constr = IsConst
-  runConstr (IsConst c) = c
+instance TCConstraint MakeConst where
+  constr = MakeConst
+  runConstr (MakeConst c) = c
 
-instance Typeable k => FixedVars TVarOf (IsConst (DMTypeOf k)) where
-  fixedVars (IsConst _) = []
+instance Typeable k => FixedVars TVarOf (MakeConst (DMTypeOf k)) where
+  fixedVars (MakeConst _) = []
 
-instance Typeable k => Solve MonadDMTC IsConst (DMTypeOf k) where
-  solve_ Dict _ name (IsConst τ) = do
+instance Typeable k => Solve MonadDMTC MakeConst (DMTypeOf k) where
+  solve_ Dict _ name (MakeConst τ) = do
      let freev = freeVars @_ @TVarOf τ
          freev' = filterSomeK @TVarOf @NumKind freev
 
@@ -48,9 +48,44 @@ instance Typeable k => Solve MonadDMTC IsConst (DMTypeOf k) where
 
      mapM makeVarConst freev'
 
+     -- TODO: we should also allow Clip/Normkinds
      case (length freev == length freev') of
         True -> dischargeConstraint name
         False -> pure ()
+
+
+
+
+----------------------------------------------------------
+-- replacing all Numeric TVars by non-const
+
+
+newtype MakeNonConst a = MakeNonConst a deriving Show
+
+instance TCConstraint MakeNonConst where
+  constr = MakeNonConst
+  runConstr (MakeNonConst c) = c
+
+instance Typeable k => FixedVars TVarOf (MakeNonConst (DMTypeOf k)) where
+  fixedVars (MakeNonConst _) = []
+
+instance Typeable k => Solve MonadDMTC MakeNonConst (DMTypeOf k) where
+  solve_ Dict _ name (MakeNonConst τ) = do
+     let freev = freeVars @_ @TVarOf τ
+         freev' = filterSomeK @TVarOf @NumKind freev
+
+     let makeVarNonConst v = do
+                     -- k <- newVar
+                     τv <- newVar
+                     unify (TVar v) (NonConst τv)
+
+     mapM makeVarNonConst freev'
+
+     -- TODO: we should also allow Clip/Normkinds
+     case (length freev == length freev') of
+        True -> dischargeConstraint name
+        False -> pure ()
+
 
 {-
 
