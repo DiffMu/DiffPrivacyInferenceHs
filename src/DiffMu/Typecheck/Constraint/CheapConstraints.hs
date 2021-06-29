@@ -21,6 +21,7 @@ import Data.POSet (POSet)
 
 import Debug.Trace
 import qualified Data.HashMap.Strict as H
+import qualified Prelude as P
 
 
 -------------------------------------------------------------------
@@ -72,17 +73,25 @@ instance Typeable k => FixedVars TVarOf (MakeNonConst (DMTypeOf k)) where
 instance Typeable k => Solve MonadDMTC MakeNonConst (DMTypeOf k) where
   solve_ Dict _ name (MakeNonConst τ) = do
      let freev = freeVars @_ @TVarOf τ
-         freev' = filterSomeK @TVarOf @NumKind freev
+         freev0 = filterSomeK @TVarOf @BaseNumKind freev
+         freev1 = filterSomeK @TVarOf @NormKind freev
+         freev2 = filterSomeK @TVarOf @ClipKind freev
+         freev3 = filterSomeK @TVarOf @NumKind freev
 
      let makeVarNonConst v = do
                      -- k <- newVar
                      τv <- newVar
                      unify (TVar v) (NonConst τv)
 
-     mapM makeVarNonConst freev'
+     mapM makeVarNonConst freev3
 
-     -- TODO: we should also allow Clip/Normkinds
-     case (length freev == length freev') of
+
+     -- compare the length of `m` and `n`, that is, if all free variables
+     -- have the aforementioned kinds
+     let m = length freev
+         n = length freev0 P.+ length freev1 P.+ length freev2 P.+ length freev3
+
+     case (m == n) of
         True -> dischargeConstraint name
         False -> pure ()
 

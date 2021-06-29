@@ -506,8 +506,8 @@ checkSen' (Loop it cs (xi, xc) body) scope = do
 -- TODO make body non-const?
       τbnc <- newVar
       addConstraint (Solvable (IsNonConst (τb, τbnc)))
-      addConstraint (Solvable (MakeNonConst (τbcs)))
-      addConstraint (Solvable (IsJuliaEqual (τbnc, τbcs)))
+      -- addConstraint (Solvable (MakeNonConst (τbcs)))
+      addConstraint (Solvable (IsEqual (τbnc, τbcs)))
       addConstraint (Solvable (IsJuliaEqual (τcs, τbcs)))
       addConstraint (Solvable (IsLoopResult ((sit, scs, sb), sbcs, τit))) -- compute the right scalars once we know if τ_iter is const or not.
 
