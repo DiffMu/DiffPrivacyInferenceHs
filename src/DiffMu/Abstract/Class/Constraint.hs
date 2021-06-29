@@ -124,33 +124,6 @@ instance TCConstraint IsGaussResult where
   constr = IsGaussResult
   runConstr (IsGaussResult c) = c
 
----- Loop or SLoop
-newtype IsLoopResult a = IsLoopResult a deriving Show
-
-instance TCConstraint IsLoopResult where
-  constr = IsLoopResult
-  runConstr (IsLoopResult c) = c
-
--- "strict subtyping for function calls"
-newtype IsFunctionArgument a = IsFunctionArgument a deriving Show
-
-instance TCConstraint IsFunctionArgument where
-  constr = IsFunctionArgument
-  runConstr (IsFunctionArgument c) = c
-
--- set the type to a variable const, in case it's numeric or a tuple.
-newtype IsConst a = IsConst a deriving Show
-
-instance TCConstraint IsConst where
-  constr = IsConst
-  runConstr (IsConst c) = c
-
--- set sensitivity annotations on types
-newtype SetMultiplier a = SetMultiplier a deriving Show
-
-instance TCConstraint SetMultiplier where
-  constr = SetMultiplier
-  runConstr (SetMultiplier c) = c
 ----------------------------------------------------------
 -- functions for Constraint
 

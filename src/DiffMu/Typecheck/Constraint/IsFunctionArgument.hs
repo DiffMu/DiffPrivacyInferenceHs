@@ -26,6 +26,15 @@ import qualified Data.HashMap.Strict as H
 
 ---------------------------------------------------------------------
 -- "Strict subtyping" of function calls
+--
+newtype IsFunctionArgument a = IsFunctionArgument a deriving Show
+
+instance TCConstraint IsFunctionArgument where
+  constr = IsFunctionArgument
+  runConstr (IsFunctionArgument c) = c
+
+
+--
 {-
 -- if one side of the IsFunctionArgument constraint is NoFun, the other has to be NoFun as well.
 -- this can be carried on into operations on annotated types.

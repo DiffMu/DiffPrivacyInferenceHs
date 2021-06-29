@@ -82,3 +82,28 @@ instance FixedVars TVarOf (IsJuliaEqual (DMMain, DMMain)) where
   fixedVars _ = mempty
 
 
+-------------------------------------------------------------------
+-- set the a type to non-const, in case it's numeric or a tuple.
+--
+
+newtype IsNonConst a = IsNonConst a deriving Show
+
+instance TCConstraint IsNonConst where
+  constr = IsNonConst
+  runConstr (IsNonConst c) = c
+
+instance Typeable k => FixedVars TVarOf (IsNonConst (DMTypeOf k, DMTypeOf k)) where
+  fixedVars (IsNonConst _) = []
+
+instance Typeable k => Solve MonadDMTC IsNonConst (DMTypeOf k, DMTypeOf k) where
+  solve_ Dict _ name (IsNonConst (τ, τ_nonconst)) = do
+     let freev = freeVars @_ @TVarOf τ
+         freev' = filterSomeK @TVarOf @BaseNumKind freev
+
+     case (length freev == length freev') of
+       True -> do let a = makeNonConst_JuliaVersion τ
+                  unify τ_nonconst a
+                  dischargeConstraint name
+       False -> return ()
+
+

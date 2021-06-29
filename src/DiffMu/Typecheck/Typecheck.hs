@@ -11,6 +11,7 @@ import DiffMu.Core.Scope1
 import DiffMu.Typecheck.JuliaType
 import DiffMu.Typecheck.Constraint.IsFunctionArgument
 import DiffMu.Typecheck.Constraint.IsJuliaEqual
+import DiffMu.Typecheck.Constraint.CheapConstraints
 
 import qualified Data.HashMap.Strict as H
 
@@ -503,11 +504,13 @@ checkSen' (Loop it cs (xi, xc) body) scope = do
       unify (NoFun τcsnf) τcs -- functions cannot be captured.
 
 -- TODO make body non-const?
-      addConstraint (Solvable (IsJuliaEqual (τb, τbcs)))
+      τbnc <- newVar
+      addConstraint (Solvable (IsNonConst (τb, τbnc)))
+      addConstraint (Solvable (IsJuliaEqual (τbnc, τbcs)))
       addConstraint (Solvable (IsJuliaEqual (τcs, τbcs)))
       addConstraint (Solvable (IsLoopResult ((sit, scs, sb), sbcs, τit))) -- compute the right scalars once we know if τ_iter is const or not.
 
-      return τb
+      return τbnc
 
 
 checkSen' (MCreate n m (x1, x2) body) scope =
