@@ -58,7 +58,7 @@ solveJuliaEqual name (NoFun a) (NoFun b) = do
   -- these are the once which block this constraint, since they have
   -- to be resolved to Const/NonConst, before we can apply the `makeNonConst_JuliaVersion`
   -- on `a` and `b`
-  let freev = freeVars a <> freeVars b
+  let freev = freeVars @_ @TVarOf a <> freeVars b
       -- freev' = filterSomeK @TVarOf @NumKind freev
 
   case freev of
