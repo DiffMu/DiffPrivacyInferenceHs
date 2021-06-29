@@ -625,6 +625,22 @@ instance Monad m => MonadTermDuplication DMTypeOf (TCT m) where
     -- And we are done.
     return ()
 
+getFixedVarsOfSolvable :: Solvable GoodConstraint GoodConstraintContent MonadDMTC -> [SingSomeK TVarOf]
+getFixedVarsOfSolvable (Solvable c) =
+      -- compute the fixed vars of this constraint
+      -- and add them to the cached list
+      let newFixed = fixedVars @_ @TVarOf c
+      in [SingSomeK v | SomeK v <- newFixed]
+
+-- Recompute fixed vars
+-- NOTE: We only look at the topmost constraintctx in the ctxstack.
+recomputeFixedVars :: MonadDMTC t => t ()
+recomputeFixedVars = do
+  (Ctx (MonCom constrs)) <- use (meta.constraints.anncontent.topctx)
+  let constrs2 = H.toList constrs
+  let constrs3 = [c | (_ , Watched _ c) <- constrs2]
+  meta.fixedTVars %= (\_ -> constrs3 >>= getFixedVarsOfSolvable)
+  return ()
 
 
 instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
@@ -650,7 +666,10 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
         meta.constraints.anncontent.topctx %= (setValue name (Watched NotChanged constr))
         return (Just (name, constr))
 
-  dischargeConstraint name = meta.constraints.anncontent.topctx %= (deleteValue name)
+  dischargeConstraint name = do
+    meta.constraints.anncontent.topctx %= (deleteValue name)
+    recomputeFixedVars
+
   failConstraint name = do
     (AnnNameCtx n cs) <- use (meta.constraints)
     let c = getValue name cs
@@ -658,6 +677,7 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
 
   updateConstraint name c = do
     meta.constraints %= (\(AnnNameCtx n cs) -> AnnNameCtx n (setValue name (Watched IsChanged c) cs))
+    recomputeFixedVars
 
   openNewConstraintSet = do
     (CtxStack top other) <- use (meta.constraints.anncontent)
