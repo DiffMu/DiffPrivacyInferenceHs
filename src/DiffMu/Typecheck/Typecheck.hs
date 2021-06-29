@@ -205,6 +205,14 @@ checkSen' (Op op args) scope = do
 -- a special term for function argument variables.
 -- those get sensitivity 1, all other variables are var terms
 checkSen' (Arg x dτ i) scope = Done $ do τ <- createDMType dτ -- TODO it's actually a subtype of dτ!
+                                         τs <- case i of
+                                                  IsRelevant -> do
+                                                                   τsn <- newVar
+                                                                   return τsn
+                                                  NotRelevant -> do
+                                                                   k <- newVar
+                                                                   return (Const k) -- TODO add IsConst constraint
+                                         addConstraint (Solvable (IsLessEqual (τs, τ)))
                                          setVarS x (WithRelev i (τ :@ SensitivityAnnotation oneId))
                                          return τ
 
@@ -261,6 +269,7 @@ checkSen' (LamStar xτs body) scope =
       restype <- τr
       -- get inferred types and privacies for the arguments
       xrτs <- getArgList @_ @PrivacyK (fst <$> xτs)
+
       -- truncate function context to infinity sensitivity
       mtruncateS inftyS
       -- build the type signature and proper ->* type
@@ -440,7 +449,7 @@ checkSen' (TLet xs term body) original_scope = do
 checkSen' (Loop it cs (xi, xc) body) scope = do
    niter <- case it of
                   Iter fs stp ls -> return (opCeil ((ls `opSub` (fs `opSub` (Sng 1 JTNumInt))) `opDiv` stp))
-                  _ -> return (Arg xi JTNumInt NotRelevant) --throwDelayedError (ImpossibleError "Loop iterator must be an Iter term.") - TODO
+                  _ -> return (Arg xi JTNumInt NotRelevant) --throwDelayedError (ImpossibleError "Loop iterator must be an Iter term.") -- TODO
 
    cniter <- checkSens niter scope
    ccs <- checkSens cs scope
@@ -471,9 +480,14 @@ checkSen' (Loop it cs (xi, xc) body) scope = do
       -- scale and sum contexts
       (τit, τcs, (τb, (τbit, sbit), (τbcs, sbcs))) <- msum3Tup (cniter <* mscale sit, ccs <* mscale scs, cbody' <* mscale sb)
 
-      addConstraint (Solvable (IsLessEqual (τit, τbit))) -- number of iterations must match type requested by body
-      addConstraint (Solvable (IsLessEqual (τcs, τbcs))) --  capture type must match type requested by body
-      addConstraint (Solvable (IsLessEqual (τb, τbcs))) -- body output type must match body capture input type
+      unify (NoFun (Numeric (NonConst DMInt))) τbit -- number of iterations must match type requested by body
+
+      τcsnf <- newVar
+      unify (NoFun τcsnf) τcs -- functions cannot be captured.
+
+-- TODO make body non-const?
+      --addConstraint (Solvable (IsJuliaEqual (τb, τbcs)))
+      --addConstraint (Solvable (IsJuliaEqual (τcs, τbcs)))
       addConstraint (Solvable (IsLoopResult ((sit, scs, sb), sbcs, τit))) -- compute the right scalars once we know if τ_iter is const or not.
 
       return τb
