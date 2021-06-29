@@ -91,11 +91,19 @@ solveIsFunctionArgument name (TVar a, Fun xs) = addSub (a := Fun xs) >> discharg
 -- then we cannot do anything yet, since we do not know whether we have function terms inside, or not.
 solveIsFunctionArgument name (_, _) = return ()
 
+
+-- get the typevar which appears on the right hand side of the topmost arrow.
+getFunctionReturnVar :: DMTypeOf k -> [SomeK TVarOf]
+getFunctionReturnVar (Fun fs) = mconcat (getFunctionReturnVar . fstAnn <$> fs)
+getFunctionReturnVar (ForAll _ τ) = getFunctionReturnVar τ
+getFunctionReturnVar (as :->: (TVar a)) = [SomeK a]
+getFunctionReturnVar (as :->*: (TVar a)) = [SomeK a]
+getFunctionReturnVar _ = mempty
+
+
 instance FixedVars TVarOf (IsFunctionArgument (DMTypeOf MainKind, DMTypeOf MainKind)) where
   -- TODO: Is this calculation of fixed vars correct?
-  --       or should we only take those which are on the right hand
-  --       side of an arrow?
-  fixedVars (IsFunctionArgument (_, wantedFuns)) = (freeVars wantedFuns)
+  fixedVars (IsFunctionArgument (_, wantedFuns)) = getFunctionReturnVar wantedFuns
 
 instance Solve MonadDMTC IsFunctionArgument (DMTypeOf MainKind, DMTypeOf MainKind) where
   solve_ Dict _ name (IsFunctionArgument (a,b)) = solveIsFunctionArgument name (a,b)
@@ -106,9 +114,7 @@ instance Solve MonadDMTC IsFunctionArgument (DMTypeOf MainKind, DMTypeOf MainKin
 
 instance FixedVars TVarOf (IsChoice (ChoiceHash, [DMTypeOf FunKind])) where
   -- TODO: Is this calculation of fixed vars correct?
-  --       or should we only take those which are on the right hand
-  --       side of an arrow?
-  fixedVars (IsChoice (_, wantedFuns)) = mconcat (freeVars <$> wantedFuns)
+  fixedVars (IsChoice (_, wantedFuns)) = mconcat (getFunctionReturnVar <$> wantedFuns)
 
 -- map Julia signature to method and the list of function calls that went to this method.
 type ChoiceHash = HashMap [JuliaType] (DMTypeOf ForAllKind, [DMTypeOf FunKind])
