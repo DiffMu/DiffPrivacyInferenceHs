@@ -11,7 +11,16 @@ import DiffMu.Abstract.Class.Term
 import Debug.Trace
 
 data SolvingMode = SolveExact | SolveAssumeWorst
+  deriving (Eq)
 
+instance Show SolvingMode where
+  show SolveExact = "exact"
+  show SolveAssumeWorst = "worst"
+
+instance Ord SolvingMode where
+  SolveExact <= a = True
+  SolveAssumeWorst <= SolveExact = False
+  SolveAssumeWorst <= SolveAssumeWorst = True
 
 class TCConstraint c where
   constr :: a -> c a
@@ -50,7 +59,7 @@ class (Monad t) => MonadConstraint isT t | t -> isT where
   type ConstraintOnSolvable t :: * -> Constraint
   type ConstraintBackup t
   addConstraint :: Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT -> t Symbol
-  getUnsolvedConstraintMarkNormal :: t (Maybe (Symbol , Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT))
+  getUnsolvedConstraintMarkNormal :: SolvingMode -> t (Maybe (Symbol , Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT))
   dischargeConstraint :: Symbol -> t ()
   failConstraint :: Symbol -> t ()
   updateConstraint :: Symbol -> Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT -> t ()
@@ -153,7 +162,7 @@ instance TCConstraint SetMultiplier where
 solveAllConstraints :: forall isT t eC. (MonadConstraint isT t, MonadNormalize t, IsT isT t) => SolvingMode -> t ()
 solveAllConstraints mode = do
   normalizeState
-  openConstr <- getUnsolvedConstraintMarkNormal
+  openConstr <- getUnsolvedConstraintMarkNormal mode
 
   case openConstr of
     Nothing -> return ()
