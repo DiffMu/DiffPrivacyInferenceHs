@@ -78,10 +78,12 @@ library
       DiffMu.Typecheck.Subtyping
       DiffMu.Typecheck.Typecheck
       Lib
+      Spec
   other-modules:
       Paths_DiffPrivacyInferenceHs
   hs-source-dirs:
       src
+      test
   default-extensions:
       QuasiQuotes
       ConstraintKinds
@@ -119,12 +121,15 @@ library
       TypeFamilyDependencies
       RoleAnnotations
   build-depends:
-      base >=4.7 && <5
+      HUnit
+    , QuickCheck
+    , base >=4.7 && <5
     , bifunctors
     , constraints
     , containers
     , data-default
     , hashable
+    , hspec
     , lattices
     , lens
     , mtl
@@ -154,15 +159,18 @@ executable diffmu
     , base >=4.7 && <5
   default-language: Haskell2010
 
-test-suite DiffPrivacyInferenceHs-test
+test-suite diffmu-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
       Paths_DiffPrivacyInferenceHs
   hs-source-dirs:
-      test
+      test-native
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       DiffPrivacyInferenceHs
+    , HUnit
+    , QuickCheck
     , base >=4.7 && <5
+    , hspec
   default-language: Haskell2010
