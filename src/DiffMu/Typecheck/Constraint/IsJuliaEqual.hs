@@ -68,6 +68,8 @@ solveJuliaEqual name (NoFun a) (NoFun b) = do
              dischargeConstraint name
     _ -> return()
 
+solveJuliaEqual name (TVar _) _   = return ()
+solveJuliaEqual name (_) (TVar _) = return ()
 solveJuliaEqual name _ _ = failConstraint name
 
 
