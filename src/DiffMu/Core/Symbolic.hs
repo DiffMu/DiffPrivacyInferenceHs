@@ -20,6 +20,11 @@ instance Show SymVal where
     -- in if b == 1 then show a
     --              else show @Float (fromRational f)
 
+instance Ord SymVal where
+  _ <= Infty = True
+  Fin a <= Fin b = a <= b
+  Infty <= Fin _ = False
+
 instance Hashable SymVal
 
 instance Monad t => CheckNeutral t SymVal where

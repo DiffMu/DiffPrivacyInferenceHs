@@ -8,6 +8,8 @@ import DiffMu.Core.TC
 
 import DiffMu.Core.Symbolic
 
+import Data.HashMap.Strict as H
+
 -------------------------------------------------------------------
 -- Unification of dmtypes
 --
@@ -83,9 +85,19 @@ instance Solve MonadDMTC IsEqual (DMTypeOf k, DMTypeOf k) where
 
 
 
--- TODO implement this
+solveLessEqualSensitivity :: Sensitivity -> Sensitivity -> Maybe Bool
+solveLessEqualSensitivity (SingleKinded (LinCom (MonCom as))) (SingleKinded (LinCom (MonCom bs))) = case (H.toList as, H.toList bs) of
+  ([(MonCom a,av)],[(MonCom b, bv)]) -> case (H.toList a, H.toList b) of
+    ([],[]) -> Just (av <= bv)
+    _ -> Nothing
+  _ -> Nothing
+
 instance Solve MonadDMTC IsLessEqual (Sensitivity, Sensitivity) where
-  solve_ Dict _ _ (IsLessEqual (s1, s2)) = pure ()
+  solve_ Dict _ name (IsLessEqual (s1, s2)) = case solveLessEqualSensitivity s1 s2 of
+    Just True -> dischargeConstraint name
+    Just False -> failConstraint name
+    Nothing -> return ()
+
 
 instance FixedVars TVarOf (IsLoopResult ((Sensitivity, Sensitivity, Sensitivity), Annotation SensitivityK, DMMain)) where
   fixedVars (IsLoopResult (_, _, res)) = freeVars res
