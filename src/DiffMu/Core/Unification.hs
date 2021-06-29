@@ -99,6 +99,32 @@ instance Solve MonadDMTC IsLessEqual (Sensitivity, Sensitivity) where
     Nothing -> return ()
 
 
+instance Typeable k => FixedVars TVarOf (IsConst (DMTypeOf k)) where
+  fixedVars (IsConst _) = []
+
+instance Solve MonadDMTC IsConst (DMTypeOf k) where
+  solve_ Dict _ name (IsConst τ) = do
+     case τ of
+        TVar _ -> pure ()
+
+        Fun _ -> dischargeConstraint name
+        NoFun (Numeric (Const _ _)) -> dischargeConstraint name
+        NoFun (Numeric (NonConst _)) -> dischargeConstraint name
+        NoFun (DMChoice _) -> dischargeConstraint name
+        NoFun (DMMat _ _ _ _ _) -> dischargeConstraint name
+
+        NoFun (DMTup τs) -> do
+           mapM (\t -> addConstraint (Solvable (IsConst t))) τs
+           dischargeConstraint name
+        NoFun (Numeric τn) -> do
+           τv <- newVar
+           k <- newVar
+           unify τn (Const k τv)
+           dischargeConstraint name
+
+
+
+
 instance FixedVars TVarOf (IsLoopResult ((Sensitivity, Sensitivity, Sensitivity), Annotation SensitivityK, DMMain)) where
   fixedVars (IsLoopResult (_, _, res)) = freeVars res
 

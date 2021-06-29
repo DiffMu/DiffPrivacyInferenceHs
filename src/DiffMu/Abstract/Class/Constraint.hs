@@ -138,12 +138,12 @@ instance TCConstraint IsFunctionArgument where
   constr = IsFunctionArgument
   runConstr (IsFunctionArgument c) = c
 
--- set sensitivity annotations in a context
-newtype HasSensitivity a = HasSensitivity a deriving Show
+-- set the type to a variable const, in case it's numeric or a tuple.
+newtype IsConst a = IsConst a deriving Show
 
-instance TCConstraint HasSensitivity where
-  constr = HasSensitivity
-  runConstr (HasSensitivity c) = c
+instance TCConstraint IsConst where
+  constr = IsConst
+  runConstr (IsConst c) = c
 
 -- set sensitivity annotations on types
 newtype SetMultiplier a = SetMultiplier a deriving Show

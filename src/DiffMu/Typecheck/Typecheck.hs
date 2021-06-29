@@ -204,15 +204,25 @@ checkSen' (Op op args) scope = do
 
 -- a special term for function argument variables.
 -- those get sensitivity 1, all other variables are var terms
-checkSen' (Arg x dτ i) scope = Done $ do τ <- createDMType dτ -- TODO it's actually a subtype of dτ!
-                                         τs <- case i of
-                                                  IsRelevant -> do
-                                                                   τsn <- newVar
-                                                                   return τsn
-                                                  NotRelevant -> do
-                                                                   k <- newVar
-                                                                   return (Const k) -- TODO add IsConst constraint
-                                         addConstraint (Solvable (IsLessEqual (τs, τ)))
+checkSen' (Arg x dτ i) scope = Done $ do
+                                         -- the inferred type must be a subtype of the user annotation, if given.
+                                         τs <- newVar
+                                         τ <- case dτ of
+                                             JuliaType "Any" -> return τs
+                                             _ -> do τc <- createDMType dτ -- TODO it's actually a subtype of dτ!
+                                                     addConstraint (Solvable (IsLessEqual (τs, τc)))
+                                                     return τs
+
+                                         -- variables that are annotated irrelevant can be made const in case they are
+                                         -- numeric or tuples. that way we can express the result sensitivity/privacy
+                                         -- in terms of the nonrelevant input variables
+                                         _ <- case i of
+                                               IsRelevant -> pure ()
+                                               NotRelevant -> do
+                                                                 addConstraint (Solvable (IsConst τ))
+                                                                 return ()
+
+                                         -- put the variable in the Γ context with sensitivity 1
                                          setVarS x (WithRelev i (τ :@ SensitivityAnnotation oneId))
                                          return τ
 
@@ -230,7 +240,7 @@ checkSen' (Var x dτ) scope =  -- get the term that corresponds to this variable
                  -- if the user has given an annotation
                  -- inferred type must be a subtype of the user annotation
                  dτd <- createDMType dτ
-                 addConstraint (Solvable (IsLessEqual (τ, dτd) ))
+                 addConstraint (Solvable (IsLessEqual (τ, dτd)))
                  return τ
 
 
