@@ -79,7 +79,14 @@ solveBinaryNum op (τ1, τ2) = f op τ1 τ2
     f DMOpDiv (NonConst t1) (NonConst t2) = ret (constCoeff Infty) (constCoeff Infty) (return (NonConst DMReal))
     f DMOpDiv _ _                         = return Nothing
 
-    f _ _ _ = undefined
+    -- TODO: Don't we need to return a "Bool" type?
+    f DMOpEq (Const s1 t1) (Const s2 t2) = ret zeroId zeroId (pure $ NonConst DMInt)
+    f DMOpEq (Const s1 t1) (NonConst t2) = ret zeroId oneId  (pure $ NonConst DMInt)
+    f DMOpEq (NonConst t1) (Const s2 t2) = ret oneId  zeroId (pure $ NonConst DMInt)
+    f DMOpEq (NonConst t1) (NonConst t2) = ret oneId  oneId  (pure $ NonConst DMInt)
+    f DMOpEq _ _                         = return Nothing
+
+    f DMOpMod _ _ = return Nothing
 
 makeNonConstType :: (IsT MonadDMTC t) => DMNumType -> t DMNumType
 makeNonConstType (TVar a) = do
