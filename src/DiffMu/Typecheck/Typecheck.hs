@@ -213,14 +213,6 @@ checkSen' (Arg x dτ i) scope = Done $ do
                                                      addConstraint (Solvable (IsLessEqual (τs, τc)))
                                                      return τs
 
-                                         -- variables that are annotated irrelevant can be made const in case they are
-                                         -- numeric or tuples. that way we can express the result sensitivity/privacy
-                                         -- in terms of the nonrelevant input variables
-                                         _ <- case i of
-                                               IsRelevant -> pure ()
-                                               NotRelevant -> do
-                                                                 addConstraint (Solvable (IsConst τ))
-                                                                 return ()
 
                                          -- put the variable in the Γ context with sensitivity 1
                                          setVarS x (WithRelev i (τ :@ SensitivityAnnotation oneId))
@@ -271,6 +263,7 @@ checkSen' (LamStar xτs body) scope =
     -- because we're interested in their privacy. put the relevance given in the function signature, too.
     let scope' = foldl (\sc -> (\((x :- τ), rel) -> setValue x (checkSens (Arg x τ rel) scope) sc)) scope xτs
 
+
     -- check the function body
     τr <- checkPriv body scope'
     -- extract julia signature
@@ -279,6 +272,20 @@ checkSen' (LamStar xτs body) scope =
       restype <- τr
       -- get inferred types and privacies for the arguments
       xrτs <- getArgList @_ @PrivacyK (fst <$> xτs)
+
+      -- variables that are annotated irrelevant can be made const in case they are
+      -- numeric or tuples. that way we can express the result sensitivity/privacy
+      -- in terms of the nonrelevant input variables
+      let addC :: (DMMain :& b, (a, Relevance)) -> TCT Identity ()
+          addC ((τ :@ _), (_, i)) = do
+                 _ <- case i of
+                       IsRelevant -> pure ()
+                       NotRelevant -> do
+                                        addConstraint (Solvable (IsConst τ))
+                                        return ()
+                 return ()
+
+      mapM addC (zip xrτs xτs)
 
       -- truncate function context to infinity sensitivity
       mtruncateS inftyS
