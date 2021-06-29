@@ -72,6 +72,7 @@ library
       DiffMu.Prelude.Polynomial
       DiffMu.Runner
       DiffMu.Typecheck.Constraint.IsFunctionArgument
+      DiffMu.Typecheck.Constraint.IsJuliaEqual
       DiffMu.Typecheck.JuliaType
       DiffMu.Typecheck.Operations
       DiffMu.Typecheck.Subtyping
