@@ -312,7 +312,6 @@ checkSen' (SLet (x :- dτ) term body) scope = do
         dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
 
      result' <- result
-     removeVar @SensitivityK x
      return result'
 
 
