@@ -7,22 +7,9 @@ import DiffMu.Abstract
 import DiffMu.Core.Definitions
 import DiffMu.Core.Context
 import DiffMu.Core.TC
-import DiffMu.Core.Symbolic
 import DiffMu.Core.Unification
-import DiffMu.Typecheck.JuliaType
---import DiffMu.Typecheck.Subtyping
-import Algebra.PartialOrd
 
 import Debug.Trace
-
-import qualified Data.HashSet as HS
-import qualified Data.HashMap.Strict as H
-import Data.HashMap.Strict (HashMap)
-import qualified Data.POSet as PO
-import Data.POSet (POSet)
-
-import Debug.Trace
-import qualified Data.HashMap.Strict as H
 
 
 -----------------------------------------------------------------
