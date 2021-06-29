@@ -59,9 +59,9 @@ solveJuliaEqual name (NoFun a) (NoFun b) = do
   -- to be resolved to Const/NonConst, before we can apply the `makeNonConst_JuliaVersion`
   -- on `a` and `b`
   let freev = freeVars a <> freeVars b
-      freev' = filterSomeK @TVarOf @NumKind freev
+      -- freev' = filterSomeK @TVarOf @NumKind freev
 
-  case freev' of
+  case freev of
     [] -> do let a' = makeNonConst_JuliaVersion a
                  b' = makeNonConst_JuliaVersion b
              unify a' b'
