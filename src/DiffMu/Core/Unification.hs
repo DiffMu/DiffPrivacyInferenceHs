@@ -105,13 +105,7 @@ instance Typeable k => FixedVars TVarOf (IsConst (DMTypeOf k)) where
 instance Solve MonadDMTC IsConst (DMTypeOf k) where
   solve_ Dict _ name (IsConst τ) = do
      case τ of
-        TVar _ -> pure ()
-
-        Fun _ -> dischargeConstraint name
-        NoFun (Numeric (Const _ _)) -> dischargeConstraint name
-        NoFun (Numeric (NonConst _)) -> dischargeConstraint name
-        NoFun (DMChoice _) -> dischargeConstraint name
-        NoFun (DMMat _ _ _ _ _) -> dischargeConstraint name
+        NoFun (TVar _) -> pure ()
 
         NoFun (DMTup τs) -> do
            mapM (\t -> addConstraint (Solvable (IsConst t))) τs
@@ -122,7 +116,7 @@ instance Solve MonadDMTC IsConst (DMTypeOf k) where
            unify τn (Const k τv)
            dischargeConstraint name
 
-
+        _ -> dischargeConstraint name
 
 
 instance FixedVars TVarOf (IsLoopResult ((Sensitivity, Sensitivity, Sensitivity), Annotation SensitivityK, DMMain)) where
