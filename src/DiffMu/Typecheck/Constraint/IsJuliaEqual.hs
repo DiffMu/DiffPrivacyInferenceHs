@@ -7,22 +7,11 @@ import DiffMu.Abstract
 import DiffMu.Core.Definitions
 import DiffMu.Core.Context
 import DiffMu.Core.TC
-import DiffMu.Core.Symbolic
 import DiffMu.Core.Unification
-import DiffMu.Typecheck.JuliaType
---import DiffMu.Typecheck.Subtyping
-import Algebra.PartialOrd
 
 import Debug.Trace
 
-import qualified Data.HashSet as HS
-import qualified Data.HashMap.Strict as H
-import Data.HashMap.Strict (HashMap)
-import qualified Data.POSet as PO
-import Data.POSet (POSet)
-
-import Debug.Trace
-import qualified Data.HashMap.Strict as H
+import Prelude as P
 
 
 -----------------------------------------------------------------
@@ -59,9 +48,16 @@ solveJuliaEqual name (NoFun a) (NoFun b) = do
   -- to be resolved to Const/NonConst, before we can apply the `makeNonConst_JuliaVersion`
   -- on `a` and `b`
   let freev = freeVars @_ @TVarOf a <> freeVars b
-      freev' = filterSomeK @TVarOf @NumKind freev
+      freev0 = (filterSomeK @TVarOf @BaseNumKind freev)
+      freev1 = filterSomeK @TVarOf @NormKind freev
+      freev2 = filterSomeK @TVarOf @ClipKind freev
 
-  case (length freev == length freev') of
+      -- compare the length of `m` and `n`, that is, if all free variables
+      -- have the aforementioned kinds
+      m = length freev
+      n = length freev0 P.+ length freev1 P.+ length freev2
+
+  case (m == n) of
     True -> do let a' = makeNonConst_JuliaVersion a
                    b' = makeNonConst_JuliaVersion b
                unify a' b'
