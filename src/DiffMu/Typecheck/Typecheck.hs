@@ -489,6 +489,7 @@ checkSen' (Loop it cs (xi, xc) body) scope = do
          return (τ, (τi, si), (τc, sc))
 
    Done $ do
+
       -- add scalars for iterator, capture and body context
       -- we compute their values once it is known if the number of iterations is const or not.
       sit <- newVar
@@ -739,30 +740,17 @@ checkPri' (Gauss rp εp δp f) scope =
 
          return τgauss
 
-checkPri' t scope = checkPriv (Ret t) scope -- secretly return if the term has the wrong color.
 
-{-
-checkPri' (Loop it cs (xi, xc) b) scope = do
-  undefined
-  -- TODO: NEWANNOT
-  {-
-   niter <- case it of
-                  Iter fs stp ls -> return (opCeil ((ls `opSub` (fs `opSub` (Sng 1 JTNumInt))) `opDiv` stp))
-                  _ -> throwError (ImpossibleError "Loop iterator must be an Iter term.")
+checkPri' (Loop it cs (xi, xc) body) scope =
+   --let setInteresting :: ([Symbol],[DMMain :& PrivacyAnnotation]) -> Sensitivity -> TC ()
+   let setInteresting (xs, τps) n = do
+          traceM $ ("setting interesting " <> show xs)
 
-   let miter = do
-          τ <- checkSens niter scope
-          mtruncateP zeroId
-          return τ
-   let mcaps = do
-          τ <- checkSens cs scope
-          mtruncateP inftyP
-          return τ
+          let τs = map fstAnn τps
+          let ps = map sndAnn τps
 
-   let setInteresting :: ([Symbol],[DMType],[Privacy]) -> Sensitivity -> TC ()
-       setInteresting (xs, τs, ps) n = do
-          let ε = maxS (map fst ps)
-          let δ = maxS (map snd ps)
+          let ε = maxS (map (\(PrivacyAnnotation (εs, _)) -> εs) ps)
+          let δ = maxS (map (\(PrivacyAnnotation (_, δs)) -> δs) ps)
 
           δn :: Sensitivity <- newVar -- we can choose this freely!
           addConstraint (Solvable (IsLessEqual (δn, oneId :: Sensitivity))) -- otherwise we get a negative ε...
@@ -771,30 +759,69 @@ checkPri' (Loop it cs (xi, xc) b) scope = do
           let two = oneId ⋆! oneId
           let newp = (two ⋅! (ε ⋅! (sqrt (two ⋅! (n ⋅! (minus (ln oneId) (ln δn)))))), δn ⋆! (n ⋅! δ)) -- TODO
 
-          mapM (\(x, τ) -> setVarP x (WithRelev IsRelevant (τ :@ newp))) (zip xs τs)
+          mapM (\(x, τ) -> setVarP x (WithRelev IsRelevant (τ :@ PrivacyAnnotation newp))) (zip xs τs)
           return ()
 
-   let mbody = do
-         scope' <- pushDefinition scope xi (Arg xi JTNumInt NotRelevant)
-         scope'' <- pushDefinition scope' xc (Arg xc JTAny IsRelevant)
-         τ <- checkPriv b scope''
-         _ <- removeVar @PrivacyK xi -- TODO do something?
-         _ <- removeVar @PrivacyK xc -- TODO unify with caps type?
+   in do
+      niter <- case it of
+                     Iter fs stp ls -> return (opCeil ((ls `opSub` (fs `opSub` (Sng 1 JTNumInt))) `opDiv` stp))
+                     _ -> return (Arg xi JTNumInt NotRelevant) --throwDelayedError (ImpossibleError "Loop iterator must be an Iter term.") -- TODO
 
-         interesting <- getInteresting
-         mtruncateP inftyP
 
-         n <- newVar
-         setInteresting interesting n
-         return (τ, n)
+      cniter <- checkSens niter scope
 
-   (τit, τcs, (τb, n)) <- msum3Tup (miter, mcaps, mbody)
+      let cniter' = do
+                   τ <- cniter
+                   mtruncateP zeroId
+                   return τ
 
-   unify τit (Numeric (Const n DMInt)) -- number of iterations must be constant integer
+      mcaps <- checkSens cs  scope
+      let mcaps' = do
+                   τ <- mcaps
+                   mtruncateP inftyP
+                   return τ
 
-   addConstraint (Solvable (IsLessEqual (τb, τcs))) -- body output type must match body capture input type
 
-   return τb
-   -}
+      -- add iteration and capture variables as args-checking-commands to the scope
+      -- TODO: do we need to make sure that we have unique names here?
+      let scope' = setValue xi (checkSens (Arg xi JTNumInt NotRelevant) scope) scope
+      let scope'' = setValue xc (checkSens (Arg xc JTAny IsRelevant) scope) scope'
 
--}
+      -- check body term in that new scope
+      cbody <- checkPriv body scope''
+
+      -- append the computation of removing the args from the context again, remembering their types
+      -- and sensitivities
+      let cbody' = do
+            τ <- cbody
+            WithRelev _ (τi :@ _) <- removeVar @PrivacyK xi
+            WithRelev _ (τc :@ _) <- removeVar @PrivacyK xc -- unify with caps type?
+
+            interesting <- getInteresting
+            mtruncateP inftyP
+
+            n <- newVar
+            setInteresting interesting n
+
+            return (τ, n, τi, τc)
+
+      Done $ do
+         -- scale and sum contexts
+         (τit, τcs, (τb, n, τbit, τbcs)) <- msum3Tup (cniter', mcaps', cbody')
+
+         unify τit (NoFun (Numeric (Const n DMInt))) -- number of iterations must be constant integer
+         unify (NoFun (Numeric (NonConst DMInt))) τbit -- number of iterations must match type requested by body
+
+         τcsnf <- newVar
+         unify (NoFun τcsnf) τcs -- functions cannot be captured.
+
+   -- TODO make body non-const?
+         τbnc <- newVar
+         addConstraint (Solvable (IsNonConst (τb, τbnc)))
+         -- addConstraint (Solvable (MakeNonConst (τbcs)))
+         addConstraint (Solvable (IsEqual (τbnc, τbcs)))
+         addConstraint (Solvable (IsJuliaEqual (τcs, τbcs)))
+
+         return τbnc
+
+checkPri' t scope = checkPriv (Ret t) scope -- secretly return if the term has the wrong color.

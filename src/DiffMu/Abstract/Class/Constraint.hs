@@ -141,7 +141,7 @@ solveAllConstraints mode = do
     Nothing -> return ()
     Just (name, (constr)) -> do
       traceM $ "[Solver]: currently solving " <> show name <> " : " <> show constr
-      tracePrintConstraints
+--      tracePrintConstraints
       solve mode name constr
       solveAllConstraints mode
 
