@@ -48,6 +48,7 @@ library:
     - lattices
     # For testing
     - hspec
+    - hspec-core
     - QuickCheck
     - HUnit
   default-extensions:

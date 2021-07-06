@@ -23,11 +23,21 @@ import Debug.Trace
 
 
 import Test.Hspec
+import Test.Hspec.Core.Runner
 import Test.QuickCheck
+
+defaultspec spec = do
+  summary <- runSpec spec defaultConfig
+  evaluateSummary summary
+  --     getArgs
+  -- >>= readConfig defaultConfig
+  -- >>= withArgs [] . runSpec spec
+  -- >>= evaluateSummary
+
 
 
 runAllTests :: IO ()
-runAllTests = hspec $ do
+runAllTests = defaultspec $ do
   describe "Prelude.head" $ do
     it "returns the first element of a list" $ do
       head [23 ..] `shouldBe` (23 :: Int)

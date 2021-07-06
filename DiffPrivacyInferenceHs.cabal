@@ -131,6 +131,7 @@ library
     , data-default
     , hashable
     , hspec
+    , hspec-core
     , lattices
     , lens
     , mtl

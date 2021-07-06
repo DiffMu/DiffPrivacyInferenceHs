@@ -95,6 +95,7 @@ instance (DictKey k) => DictLike k v (H.HashMap k v) where
   deleteValue v (h) = (H.delete v h)
   getValue k (h) = h H.!? k
   emptyDict = H.empty
+  getAllKeys = H.keys
 
 
 uniqueName :: (MonadDMTC t) => Symbol -> t Symbol
