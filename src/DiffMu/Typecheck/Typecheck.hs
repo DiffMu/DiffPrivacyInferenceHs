@@ -649,8 +649,8 @@ checkPri' (SLet (x :- dτ) term body) scope = do
    mbody <- Done $ do
                    τ <- dbody
                    -- discard x from the context, never mind it's inferred annotation
-                   removeVar @PrivacyK x
-                   return τ
+                   WithRelev _ (τx :@ _) <- removeVar @PrivacyK x
+                   return (τ, τx)
 
    -- check term with old scope
    dterm <- checkPriv term scope
@@ -662,7 +662,10 @@ checkPri' (SLet (x :- dτ) term body) scope = do
         dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
 
      -- sum contexts
-     (τbody, τterm) <- msumTup (mbody, dterm)
+     ((τbody, τx), τterm) <- msumTup (mbody, dterm)
+
+     -- unify type of x in the body with inferred type of the assignee term
+     unify τx τterm
 
      -- make sure that τterm is not a functiontype
      -- this is necessary because elsewise it might be capturing variables
