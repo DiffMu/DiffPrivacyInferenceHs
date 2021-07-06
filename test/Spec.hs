@@ -68,10 +68,21 @@ testSupremum = do
     testsup (Const (oneId ⋆! oneId) DMInt) (Const (oneId) DMInt) (NonConst DMInt)
 
 
+testCheck_Rules = do
+  describe "rules-privacy-slet" $ do
+    it "forwards inner type correctly" $ do
+      let term = SLet (Symbol "x" :- JTAny) (Sng 1.0 (JuliaType "Real")) (Var (Symbol "x") JTAny)
+      let f = do
+            let tres = checkPriv term def
+            extractDelayed def tres
+      (tc $ sn $ f) `shouldBe` (Right $ NoFun (Numeric (Const (oneId) DMReal)))
+
+
 runAllTests :: IO ()
 runAllTests = defaultspec $ do
   testUnification
   testSupremum
+  testCheck_Rules
 
 
 

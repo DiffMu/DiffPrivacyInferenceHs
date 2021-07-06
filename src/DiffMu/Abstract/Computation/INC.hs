@@ -35,8 +35,8 @@ evalINC (steps) start = do
         f (INC xs) (acc <> [(state₁, res)])
   results <- f steps []
 
-  traceM " - Got the following results after first application:"
-  traceM $ show (snd <$> results)
+  -- traceM " - Got the following results after first application:"
+  -- traceM $ show (snd <$> results)
 
   let finished = [(s,a) | (s, Finished a) <- results]
   let partial  = [(s,a) | (s, Partial a) <- results]

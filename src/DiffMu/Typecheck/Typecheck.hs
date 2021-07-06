@@ -176,6 +176,7 @@ checkSen' :: DMTerm -> DMScope -> DMDelayed
 
 -- TODO: Here we assume that η really has type τ, and do not check it. Should maybe do that.
 checkSen' (Sng η τ) scope = Done $ do
+  dmlog $ "Singleton " <> show (Sng η τ)
   res <- Numeric <$> (Const (constCoeff (Fin η)) <$> (createDMTypeNum τ))
   return (NoFun res)
 
@@ -207,6 +208,7 @@ checkSen' (Op op args) scope = do
 -- a special term for function argument variables.
 -- those get sensitivity 1, all other variables are var terms
 checkSen' (Arg x dτ i) scope = Done $ do
+                                         dmlog $ "Arg " <> show x
                                          -- the inferred type must be a subtype of the user annotation, if given.
                                          τs <- newVar
                                          τ <- case dτ of
@@ -469,7 +471,12 @@ checkSen' (Loop it cs (xi, xc) body) scope = do
                   Iter fs stp ls -> return (opCeil ((ls `opSub` (fs `opSub` (Sng 1 JTNumInt))) `opDiv` stp))
                   _ -> return (Arg xi JTNumInt NotRelevant) --throwDelayedError (ImpossibleError "Loop iterator must be an Iter term.") -- TODO
 
+
+
    cniter <- checkSens niter scope
+
+   let scope_vars = getAllKeys scope
+   traceM $ "Checking captures in scope with vars: " <> show scope_vars
    ccs <- checkSens cs scope
 
    -- add iteration and capture variables as args-checking-commands to the scope
@@ -496,8 +503,17 @@ checkSen' (Loop it cs (xi, xc) body) scope = do
       scs <- newVar
       sb <- newVar
 
+      let ccs_debug = do
+              dmlogSetEnabled True
+              res <- ccs <* mscale scs
+              dmlogSetEnabled False
+              return res
+
+
       -- scale and sum contexts
-      (τit, τcs, (τb, (τbit, sbit), (τbcs, sbcs))) <- msum3Tup (cniter <* mscale sit, ccs <* mscale scs, cbody' <* mscale sb)
+      (τit, τcs, (τb, (τbit, sbit), (τbcs, sbcs))) <- msum3Tup (cniter <* mscale sit, ccs_debug, cbody' <* mscale sb)
+
+      traceM $ "τcs (captures) have type: " <> show τcs
 
       unify (NoFun (Numeric (NonConst DMInt))) τbit -- number of iterations must match type requested by body
 

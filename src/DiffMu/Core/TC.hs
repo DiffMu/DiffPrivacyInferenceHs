@@ -446,6 +446,16 @@ instance (MonadDMTC t) => Normalize t (WithRelev e) where
 type TypeCtx extra = Ctx Symbol (WithRelev extra)
 type TypeCtxSP = Either (TypeCtx SensitivityK) (TypeCtx PrivacyK)
 
+instance Show DMLogger where
+  show (DMLogger _ m) = intercalate "\n\t" m
+
+data DMLogger = DMLogger
+  {
+    _loggerEnabled :: Bool,
+    _loggerMessages :: [String]
+  }
+  deriving (Generic)
+
 data Watcher = Watcher Changed
   deriving (Generic)
 
@@ -463,7 +473,8 @@ data MetaCtx = MetaCtx
 
 data TCState = TCState
   {
-    _watcher :: Watcher
+    _watcher :: Watcher,
+    _logger :: DMLogger
   }
   deriving (Generic)
 
@@ -489,7 +500,18 @@ $(makeLenses ''CtxStack)
 $(makeLenses ''MetaCtx)
 $(makeLenses ''Full)
 $(makeLenses ''TCState)
+$(makeLenses ''DMLogger)
 
+
+dmlogSetEnabled :: MonadDMTC t => Bool ->  t ()
+dmlogSetEnabled val = (tcstate.logger.loggerEnabled) %= (\_ -> val)
+
+dmlog :: MonadDMTC t => String -> t ()
+dmlog text = do
+  en <- use (tcstate.logger.loggerEnabled)
+  case en of
+    True -> tcstate.logger.loggerMessages %= (<> [text])
+    False -> return ()
 
 -- instance Show Meta1Ctx where
 --   show (Meta1Ctx s t c) =  "- sens vars: " <> show s <> "\n"
@@ -517,13 +539,15 @@ instance Show Watcher where
   show (Watcher changed) = show changed
 
 instance Show (TCState) where
-  show (TCState w) = "- watcher: " <> show w <> "\n"
+  show (TCState w l) = "- watcher: " <> show w <> "\n"
+                       <> "- messages: " <> show l <> "\n"
 
 instance Show (Full) where
   show (Full tcs m γ) = "\nState:\n" <> show tcs <> "\nMeta:\n" <> show m <> "\nTypes:\n" <> show γ <> "\n"
 
 
-
+instance Default DMLogger where
+  def = DMLogger False []
 instance Default (CtxStack v a) where
   def = CtxStack def []
 instance Default (Watcher) where
