@@ -226,18 +226,67 @@ instance Show (DMTypeOf k) where
   show (x :∧: y) = "(" <> show x <> "∧" <> show y <> ")"
 
 
-instance Eq (DMTypeOf NormKind) where
+-- instance Eq (DMTypeOf NormKind) where
+--   _ == _ = False
+
+-- instance Eq (DMTypeOf ClipKind) where
+
+instance Eq (DMTypeOf k) where
+  -- special
+  TVar a == TVar b = a == b
+  Deleted == Deleted = True
+
+  -- ClipKind
+  U == U = True
+  Clip c == Clip d = c == d
+
+  -- NormKind
   L1 == L1 = True
   L2 == L2 = True
   LInf == LInf = True
-  TVar a == TVar b = a == b
+
+  -- the base numeric constructors
+  DMInt    == DMInt = True
+  DMReal   == DMReal = True
+
+  -- a base numeric type can be either constant or non constant or data
+  Const s t == Const s2 t2 = and [s == s2, t == t2]
+  NonConst t == NonConst t2 = t == t2
+  DMData   == DMData = True
+
+  -- we include numeric types into main types using this constructor
+  Numeric t1 == Numeric t2 = t1 == t2
+
+
+  -- the arrow type
+  (xs :->: x) == (ys :->: y) = and [xs == ys, x == y]
+
+  -- the privacy-arrow type
+  (xs :->*: x) == (ys :->*: y) = and [xs == ys, x == y]
+
+  -- tuples
+  DMTup xs == DMTup ys = xs == ys
+
+  -- matrices
+  DMMat a b c d e == DMMat a2 b2 c2 d2 e2 = and [a == a2, b == b2, c == c2, d == d2, e == e2]
+
+  -- choices
+  DMChoice xs == DMChoice ys = xs == ys
+
+  -- foralls
+  ForAll xs t == ForAll ys s = and [xs == ys, t == s]
+
+  -- annotations
+  NoFun t == NoFun s = t == s
+  Fun ts == Fun ss = ts == ss
+  (a :∧: b) == (a2 :∧: b2) = and [a == a2, b == b2]
+
+
+  -- Error case
   _ == _ = False
 
-instance Eq (DMTypeOf ClipKind) where
-  U == U = True
-  Clip c == Clip d = c == d
-  TVar a == TVar b = a == b
-  _ == _ = False
+
+
 
 -- instance Ord (DMTypeOf ClipKind) where
 
@@ -251,7 +300,7 @@ instance Eq (DMTypeOf ClipKind) where
 
 infix 3 :@
 data (:&) a b = (:@) a b
-  deriving (Generic)
+  deriving (Generic, Eq)
 
 instance (Show a, Show b) => Show (a :& b) where
   show (a :@ b) = show a <> " @ " <> show b
@@ -571,6 +620,23 @@ instance Show DMException where
   show (UnsatisfiableConstraint c) = "The constraint " <> c <> " is not satisfiable."
   show (TypeMismatchError e) = "Type mismatch: " <> e
   show (NoChoiceFoundError e) = "No choice found: " <> e
+
+instance Eq DMException where
+  UnsupportedTermError    a    == UnsupportedTermError    b    = True
+  UnificationError        a a2 == UnificationError        b b2 = True
+  WrongNumberOfArgs       a a2 == WrongNumberOfArgs       b b2 = True
+  WrongNumberOfArgsOp     a a2 == WrongNumberOfArgsOp     b b2 = True
+  ImpossibleError         a    == ImpossibleError         b    = True
+  InternalError           a    == InternalError           b    = True
+  VariableNotInScope      a    == VariableNotInScope      b    = True
+  UnsatisfiableConstraint a    == UnsatisfiableConstraint b    = True
+  TypeMismatchError       a    == TypeMismatchError       b    = True
+  NoChoiceFoundError      a    == NoChoiceFoundError      b    = True
+  _ == _ = False
+
+
+
+
 
 
 

@@ -18,6 +18,7 @@ import           Foreign.Marshal.Unsafe
 
 -- import           Control.DeepSeq
 import           Control.Lens
+import           Control.Exception
 import           Data.Int          (Int32)
 import           GHC.Generics      (Generic)
 
@@ -44,16 +45,22 @@ typecheckFromCString_DMTerm fun str = do
 
   writeIORef global_callback_issubtype (makeDMEnv (fun))
   str' <- peekCString str
-  typecheckFromString_DMTerm str'
+  typecheckFromString_DMTerm str' `catchAny` \e -> do
+    putStrLn "======================================="
+    putStrLn "Call to haskell resulted in exception."
 
 foreign export ccall typecheckFromCString_DMTerm :: FunPtr (CString -> CString -> Bool) -> CString -> IO ()
 
+catchAny :: IO a -> (SomeException -> IO a) -> IO a
+catchAny = Control.Exception.catch
 
 runHaskellTests :: FunPtr (CString -> CString -> Bool) -> IO ()
 runHaskellTests fun = do
   putStrLn "We are testing now!"
   writeIORef global_callback_issubtype (makeDMEnv (fun))
-  runAllTests
+  runAllTests `catchAny` \e -> do
+    putStrLn "======================================="
+    putStrLn "Call to haskell resulted in exception."
 
 foreign export ccall runHaskellTests :: FunPtr (CString -> CString -> Bool) -> IO ()
 

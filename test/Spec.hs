@@ -36,11 +36,43 @@ defaultspec spec = do
 
 
 
+tc :: TC a -> Either DMException a
+tc r = fst <$>
+  runExcept (runStateT (runTCT r) (Full def def (Right def)))
+
+
+sn :: Normalize TC a => TC a -> TC a
+sn x = do
+  x' <- x
+  solveAllConstraints SolveExact
+  solveAllConstraints SolveAssumeWorst
+  normalize x'
+
+
+  -- TODO: Use quickcheck
+testUnification = do
+  describe "unify" $ do
+    it "unifies equal types" $ do
+      (tc $ unify (DMInt) (DMInt)) `shouldBe` ((Right DMInt))
+
+
+testSupremum = do
+  describe "supremum" $ do
+    let testsup (a :: DMTypeOf k) b c = do
+          it ("computes sup{" <> show a <> ", " <> show b <> "} = " <> show c) $ do
+            (tc $ sn $ supremum a b) `shouldBe` (Right c)
+
+    testsup (NonConst DMInt) (NonConst DMInt) (NonConst DMInt)
+    testsup (NonConst DMInt) (NonConst DMReal) (NonConst DMReal)
+
+    testsup (Const (oneId ⋆! oneId) DMInt) (Const (oneId) DMInt) (NonConst DMInt)
+
+
 runAllTests :: IO ()
 runAllTests = defaultspec $ do
-  describe "Prelude.head" $ do
-    it "returns the first element of a list" $ do
-      head [23 ..] `shouldBe` (23 :: Int)
+  testUnification
+  testSupremum
+
 
 
 
