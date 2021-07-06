@@ -8,6 +8,7 @@ import DiffMu.Core.TC
 import DiffMu.Core.Definitions
 import DiffMu.Core.Symbolic
 import DiffMu.Core.Context
+import DiffMu.Core.Logging
 import DiffMu.Typecheck.Operations
 import DiffMu.Typecheck.Subtyping
 import DiffMu.Typecheck.Typecheck
@@ -38,12 +39,12 @@ typecheckFromDMTerm term = do
 
   let r = do
 
-        traceM $ "Checking term   : " <> show term
+        log $ "Checking term   : " <> show term
         -- typecheck the term t5
         let tres = checkSens term def
         tres' <- extractDelayed def tres
-        traceM $ "solving constraints:"
-        tracePrintConstraints
+        log $ "solving constraints:"
+        logPrintConstraints
         solveAllConstraints SolveExact
         solveAllConstraints SolveAssumeWorst
         tres'' <- normalize tres'
@@ -74,7 +75,20 @@ typecheckFromDMTerm term = do
   let x = runExcept (runStateT (runTCT r) (Full def def (Right def)))
   case x of
     Left err -> putStrLn $ "Encountered error: " <> show err
-    Right x -> putStrLn $ "Result: " <> show x
+    Right x -> do
+      let logs = view (tcstate.logger) (snd x)
+      -- we do log a message if
+      -- 1. its severity is higher/equal than this one
+      --   OR
+      -- 2. it was logged below one of the given locations
+      let severity = Force
+      let locations = []
+      let realLogs = getLogMessages logs severity locations
+      putStrLn "======================== LOG ========================="
+      putStrLn realLogs
+      putStrLn "======================== End LOG ====================="
+      putStrLn ""
+      putStrLn $ "Result: " <> show x
   return ()
 
 

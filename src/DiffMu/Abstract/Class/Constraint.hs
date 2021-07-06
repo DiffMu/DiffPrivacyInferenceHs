@@ -6,6 +6,7 @@ module DiffMu.Abstract.Class.Constraint where
 
 import DiffMu.Prelude
 import DiffMu.Abstract.Class.IsT
+import DiffMu.Abstract.Class.Log
 import DiffMu.Abstract.Class.Term
 -- import DiffMu.Abstract.Class.MonadTerm
 import Debug.Trace
@@ -65,7 +66,7 @@ class (Monad t) => MonadConstraint isT t | t -> isT where
   updateConstraint :: Symbol -> Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT -> t ()
   openNewConstraintSet :: t ()
   mergeTopConstraintSet :: t CloseConstraintSetResult
-  tracePrintConstraints :: t ()
+  logPrintConstraints :: t ()
   getConstraintsByType :: (Typeable c, Typeable a) => Proxy (c a) -> t [(Symbol, c a)]
   -- clearConstraints :: t (ConstraintBackup t)
   -- restoreConstraints :: ConstraintBackup t -> t ()
@@ -132,33 +133,35 @@ instance TCConstraint IsGaussResult where
 -- Returns if no "changed" constraints remains.
 -- An unchanged constraint is marked "changed", if it is affected by a new substitution.
 -- A changed constraint is marked "unchanged" if it is read by a call to `getUnsolvedConstraintMarkNormal`.
-solveAllConstraints :: forall isT t eC. (MonadConstraint isT t, MonadNormalize t, IsT isT t) => SolvingMode -> t ()
-solveAllConstraints mode = do
+solveAllConstraints :: forall isT t eC. (MonadLog t, MonadConstraint isT t, MonadNormalize t, IsT isT t) => SolvingMode -> t ()
+solveAllConstraints mode = withLogLocation "Constr" $ do
   normalizeState
   openConstr <- getUnsolvedConstraintMarkNormal mode
 
   case openConstr of
     Nothing -> return ()
     Just (name, (constr)) -> do
-      -- traceM $ "[Solver]: currently solving " <> show name <> " : " <> show constr
---      tracePrintConstraints
+      log $ "[Solver]: currently solving " <> show name <> " : " <> show constr
+      logPrintConstraints
       solve mode name constr
       solveAllConstraints mode
 
-solvingAllNewConstraints :: (MonadConstraint isT t, MonadNormalize t, IsT isT t) => SolvingMode -> t a -> t (CloseConstraintSetResult, a)
-solvingAllNewConstraints mode f = do
-  traceM ""
-  traceM "============ BEGIN solve all new constraints >>>>>>>>>>>>>>>>"
+solvingAllNewConstraints :: (MonadLog t, MonadConstraint isT t, MonadNormalize t, IsT isT t) => SolvingMode -> t a -> t (CloseConstraintSetResult, a)
+solvingAllNewConstraints mode f = withLogLocation "Constr" $ do
+  log ""
+  log "============ BEGIN solve all new constraints >>>>>>>>>>>>>>>>"
   openNewConstraintSet
-  tracePrintConstraints
+  logPrintConstraints
   res <- f
   solveAllConstraints mode
-  traceM "============ AFTER solving all new constraints >>>>>>>>>>>>>>>>"
-  tracePrintConstraints
+  log "============ AFTER solving all new constraints >>>>>>>>>>>>>>>>"
+  logPrintConstraints
   closeRes <- mergeTopConstraintSet
-  traceM "============ AFTER merging constraint sets >>>>>>>>>>>>>>>>"
-  tracePrintConstraints
-  traceM "============ END solve all new constraints <<<<<<<<<<<<<<<<"
+  log "============ AFTER merging constraint sets >>>>>>>>>>>>>>>>"
+  logPrintConstraints
+  log "============ END solve all new constraints <<<<<<<<<<<<<<<<"
   return (closeRes, res)
+
+
 
 

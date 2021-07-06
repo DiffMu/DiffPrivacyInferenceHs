@@ -5,6 +5,7 @@ import DiffMu.Prelude
 import DiffMu.Abstract.Computation.INC
 import DiffMu.Abstract.Class.Constraint
 import DiffMu.Abstract.Class.IsT
+import DiffMu.Abstract.Class.Log
 import DiffMu.Abstract.Class.Unify
 
 import Debug.Trace
@@ -46,7 +47,7 @@ oppositeGraph (GraphM graph) = GraphM (opp graph)
         opp f ty = oppositeEdge <$> f ty
 
 -- findPathM :: forall s m e a. (Show e, Show a, MonadError e m, MonadState s m, MonoidM m a, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> (a,a) -> m (INCRes e (a,a))
-findPathM :: forall s m isT e a. (Show e, Show a, MonadConstraint isT m, IsT isT m, Normalize m a, MonadNormalize m, MonadError e m, MonadState s m, Unify isT a, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> (a,a) -> m (INCRes e (a,a))
+findPathM :: forall s m isT e a. (Show e, Show a, MonadConstraint isT m, IsT isT m, Normalize m a, MonadNormalize m, MonadError e m, MonadState s m, MonadLog m, Unify isT a, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> (a,a) -> m (INCRes e (a,a))
 findPathM relevance (GraphM g) path =
   let both (Just a) (Just b) | a == b = Just a
       both _ _                          = Nothing
@@ -130,7 +131,7 @@ findPathM relevance (GraphM g) path =
   in evalINC (INC computations) path
 
 
-findSupremumM :: forall s m isT e a. (Show e, Show a, MonadError e m, MonadConstraint isT m, IsT isT m, Unify isT (a), Normalize m a, MonadNormalize m, MonadState s m, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> (a,a,a) -> m (INCRes e (a,a,a))
+findSupremumM :: forall s m isT e a. (Show e, Show a, MonadError e m, MonadConstraint isT m, IsT isT m, Unify isT (a), Normalize m a, MonadNormalize m, MonadState s m, MonadLog m, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> (a,a,a) -> m (INCRes e (a,a,a))
 findSupremumM relevance (GraphM graph) (a,b,x) =
   let
     -------------
@@ -187,8 +188,8 @@ findSupremumM relevance (GraphM graph) (a,b,x) =
           n₀'' <- unify start₀ n₀
           (rpath) <- findPathM relevance (GraphM graph) (start₁,n₁)
           solveAllConstraints SolveExact
-          traceM "============ AFTER solving all new constraints >>>>>>>>>>>>>>>>"
-          tracePrintConstraints
+          log "============ AFTER solving all new constraints >>>>>>>>>>>>>>>>"
+          logPrintConstraints
           closedRes <- mergeTopConstraintSet
           case closedRes of
             ConstraintSet_WasNotEmpty -> return Wait
@@ -211,8 +212,8 @@ findSupremumM relevance (GraphM graph) (a,b,x) =
           n₀'' <- unify start₁ n₀
           (rpath) <- findPathM relevance (GraphM graph) (start₀,n₁)
           solveAllConstraints SolveExact
-          traceM "============ AFTER solving all new constraints >>>>>>>>>>>>>>>>"
-          tracePrintConstraints
+          log "============ AFTER solving all new constraints >>>>>>>>>>>>>>>>"
+          logPrintConstraints
           closedRes <- mergeTopConstraintSet
           case closedRes of
             ConstraintSet_WasNotEmpty -> return Wait
@@ -222,7 +223,9 @@ findSupremumM relevance (GraphM graph) (a,b,x) =
                           -- If have a reflexive edge, and failed, then we do not continue
                           True  -> return $ Fail e
                           -- If we mereley had a non-reflexive edge, we try again with the target of that edge
-                          False -> traceShow ("=> [Right] Finding path " <> show (start₀,n₁) <> " failed. Now computing sup " <> show (start₀, n₁, goal)) (findSupremumM relevance (GraphM graph) (start₀, n₁, goal))
+                          False -> do
+                            log ("=> [Right] Finding path " <> show (start₀,n₁) <> " failed. Now computing sup " <> show (start₀, n₁, goal))
+                            (findSupremumM relevance (GraphM graph) (start₀, n₁, goal))
               Partial x -> return Wait
               Finished (a₀,a₁) -> do goal' <- unify goal a₁
                                      return $ Finished (a₀ , n₀'' , goal')
@@ -237,8 +240,8 @@ findSupremumM relevance (GraphM graph) (a,b,x) =
                      <> [catchRelevant (withFamily (fromRight False) a)  | a <- graph (NotReflexive)]
 
 
-  in evalINC (INC computations) (a,b,x)
+  in withLogLocation "INC" $ evalINC (INC computations) (a,b,x)
 
-findInfimumM :: forall s m isT e a. (Show e, Show a, MonadError e m, MonadConstraint isT m, IsT isT m, Unify isT (a), Normalize m a, MonadNormalize m, MonadState s m, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> (a,a,a) -> m (INCRes e (a,a,a))
+findInfimumM :: forall s m isT e a. (Show e, Show a, MonadError e m, MonadConstraint isT m, IsT isT m, Unify isT (a), Normalize m a, MonadNormalize m, MonadState s m, MonadLog m, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> (a,a,a) -> m (INCRes e (a,a,a))
 findInfimumM relevance graph z = findSupremumM relevance (oppositeGraph graph) z
 

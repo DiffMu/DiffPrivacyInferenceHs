@@ -17,7 +17,7 @@ instance (FreeVars TVarOf x, Substitute TVarOf DMTypeOf x) => GoodConstraintCont
 class (FixedVars TVarOf x) => GoodConstraint (x :: *) where
 instance (FixedVars TVarOf x) => GoodConstraint x where
 
-class (MonadImpossible (t), MonadWatch (t),
+class (MonadImpossible (t), MonadWatch (t), MonadLog t,
        MonadTerm DMTypeOf (t),
        MonadTermDuplication DMTypeOf (t),
        MonadTerm SymTerm (t),

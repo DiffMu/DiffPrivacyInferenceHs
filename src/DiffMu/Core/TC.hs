@@ -9,6 +9,7 @@ import DiffMu.Prelude
 import DiffMu.Abstract
 import DiffMu.Core.Definitions
 import DiffMu.Core.Symbolic
+import DiffMu.Core.Logging
 import {-# SOURCE #-} DiffMu.Typecheck.Subtyping
 
 import qualified Data.HashMap.Strict as H
@@ -286,7 +287,7 @@ class (FreeVars TVarOf x, Substitute TVarOf DMTypeOf x) => GoodConstraintContent
 instance (FreeVars TVarOf x, Substitute TVarOf DMTypeOf x) => GoodConstraintContent x where
 
 
-class (MonadImpossible (t), MonadWatch (t),
+class (MonadImpossible (t), MonadWatch (t), MonadLog t,
        MonadTerm DMTypeOf (t),
        MonadTermDuplication DMTypeOf (t),
        MonadTerm SensitivityOf (t),
@@ -446,15 +447,7 @@ instance (MonadDMTC t) => Normalize t (WithRelev e) where
 type TypeCtx extra = Ctx Symbol (WithRelev extra)
 type TypeCtxSP = Either (TypeCtx SensitivityK) (TypeCtx PrivacyK)
 
-instance Show DMLogger where
-  show (DMLogger _ m) = intercalate "\n\t" m
 
-data DMLogger = DMLogger
-  {
-    _loggerEnabled :: Bool,
-    _loggerMessages :: [String]
-  }
-  deriving (Generic)
 
 data Watcher = Watcher Changed
   deriving (Generic)
@@ -500,18 +493,49 @@ $(makeLenses ''CtxStack)
 $(makeLenses ''MetaCtx)
 $(makeLenses ''Full)
 $(makeLenses ''TCState)
-$(makeLenses ''DMLogger)
 
 
-dmlogSetEnabled :: MonadDMTC t => Bool ->  t ()
-dmlogSetEnabled val = (tcstate.logger.loggerEnabled) %= (\_ -> val)
+
+forceLogStart :: MonadDMTC t => t ()
+forceLogStart = do
+  old <- (tcstate.logger.loggerCurrentSeverity) %%= (\old -> (old,Force))
+  (tcstate.logger.loggerBackupSeverity) %= (\_ -> old)
+
+forceLogEnd :: MonadDMTC t => t ()
+forceLogEnd = do
+  old <- use (tcstate.logger.loggerBackupSeverity)
+  (tcstate.logger.loggerCurrentSeverity) %= (\_ -> old)
+
+
+dmWithLogLocation :: MonadDMTC t => DMLogLocation -> t a -> t a
+dmWithLogLocation l action = do
+  oldloc <- use (tcstate.logger.loggerCurrentLocation)
+  (tcstate.logger.loggerCurrentLocation) %= (\_ -> l)
+  res <- action
+  (tcstate.logger.loggerCurrentLocation) %= (\_ -> oldloc)
+  return res
+
+forceLog :: MonadDMTC t => String -> t ()
+forceLog text = do
+  loc <- use (tcstate.logger.loggerCurrentLocation)
+  -- here we split the messages at line breaks (using `lines`)
+  -- in order to get consistent looking output (every line has a header)
+  let messages = DMLogMessage Force loc <$> lines text
+  tcstate.logger.loggerMessages %= (messages <>)
 
 dmlog :: MonadDMTC t => String -> t ()
 dmlog text = do
-  en <- use (tcstate.logger.loggerEnabled)
-  case en of
-    True -> tcstate.logger.loggerMessages %= (<> [text])
-    False -> return ()
+  loc <- use (tcstate.logger.loggerCurrentLocation)
+  sev <- use (tcstate.logger.loggerCurrentSeverity)
+  -- here we split the messages at line breaks (using `lines`)
+  -- in order to get consistent looking output (every line has a header)
+  let messages = DMLogMessage sev loc <$> lines text
+  tcstate.logger.loggerMessages %= (messages <>)
+
+instance Monad m => MonadLog (TCT m) where
+  log = dmlog
+  withLogLocation loc action = dmWithLogLocation (fromString_DMLogLocation loc) action
+
 
 -- instance Show Meta1Ctx where
 --   show (Meta1Ctx s t c) =  "- sens vars: " <> show s <> "\n"
@@ -546,8 +570,6 @@ instance Show (Full) where
   show (Full tcs m γ) = "\nState:\n" <> show tcs <> "\nMeta:\n" <> show m <> "\nTypes:\n" <> show γ <> "\n"
 
 
-instance Default DMLogger where
-  def = DMLogger False []
 instance Default (CtxStack v a) where
   def = CtxStack def []
 instance Default (Watcher) where
@@ -752,11 +774,11 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
         cs'' = second f <$> cs'
     return [(name,c) | (name, Just c) <- cs'' ]
 
-  tracePrintConstraints = do
+  logPrintConstraints = do
     ctrs <- use (meta.constraints.anncontent)
-    traceM $ "## Constraints ##"
-    traceM $ show ctrs
-    traceM $ "## ----------- ##"
+    log $ "## Constraints ##"
+    log $ show ctrs
+    log $ "## ----------- ##"
 
     -- case null top of
     --   True  -> 

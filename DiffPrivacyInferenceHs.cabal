@@ -47,6 +47,7 @@ library
       DiffMu.Abstract
       DiffMu.Abstract.Class.Constraint
       DiffMu.Abstract.Class.IsT
+      DiffMu.Abstract.Class.Log
       DiffMu.Abstract.Class.Term
       DiffMu.Abstract.Class.Unify
       DiffMu.Abstract.Computation.INC
@@ -58,6 +59,7 @@ library
       DiffMu.Core
       DiffMu.Core.Context
       DiffMu.Core.Definitions
+      DiffMu.Core.Logging
       DiffMu.Core.Scope
       DiffMu.Core.Scope1
       DiffMu.Core.SimpleScope

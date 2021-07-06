@@ -2,6 +2,7 @@
 module DiffMu.Abstract.Computation.INC where
 
 import DiffMu.Prelude
+import DiffMu.Abstract.Class.Log
 
 import Debug.Trace
 
@@ -18,11 +19,11 @@ data INCRes e a = Finished a | Partial a | Wait | Fail (INCError e)
 -- incremental, nondeterministic computation
 newtype INC m e a = INC [(a -> m (INCRes e a))]
 
-evalINC :: forall s m e a. (MonadState s m, Show a, Show e) => INC m e a -> a -> m (INCRes e a)
-evalINC (steps) start = do
-  traceM "-----"
-  traceM "Beginning incremental computation"
-  let logsteps (INC steps) = traceM $ "I have " <> show (length steps) <> " candidates."
+evalINC :: forall s m e a. (MonadLog m, MonadState s m, Show a, Show e) => INC m e a -> a -> m (INCRes e a)
+evalINC (steps) start = withLogLocation "INC" $ do
+  log "-----"
+  log "Beginning incremental computation"
+  let logsteps (INC steps) = log $ "I have " <> show (length steps) <> " candidates."
   logsteps steps
 
   state₀ <- get
