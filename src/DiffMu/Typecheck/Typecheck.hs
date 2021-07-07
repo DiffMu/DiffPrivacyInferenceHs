@@ -464,13 +464,7 @@ checkSen' (TLet xs term body) original_scope = do
     return τbody
 
 
-checkSen' (Loop it cs (xi, xc) body) scope = do
-   niter <- case it of
-                  Iter fs stp ls -> return (opCeil ((ls `opSub` (fs `opSub` (Sng 1 JTNumInt))) `opDiv` stp))
-                  _ -> return (Arg xi JTNumInt NotRelevant) --throwDelayedError (ImpossibleError "Loop iterator must be an Iter term.") -- TODO
-
-
-
+checkSen' (Loop niter cs (xi, xc) body) scope = do
    cniter <- checkSens niter scope
 
    let scope_vars = getAllKeys scope
@@ -748,7 +742,7 @@ checkPri' (Gauss rp εp δp f) scope =
          return τgauss
 
 
-checkPri' (Loop it cs (xi, xc) body) scope =
+checkPri' (Loop niter cs (xi, xc) body) scope =
    --let setInteresting :: ([Symbol],[DMMain :& PrivacyAnnotation]) -> Sensitivity -> TC ()
    let setInteresting (xs, τps) n = do
           traceM $ ("setting interesting " <> show xs)
@@ -770,11 +764,6 @@ checkPri' (Loop it cs (xi, xc) body) scope =
           return ()
 
    in do
-      niter <- case it of
-                     Iter fs stp ls -> return (opCeil ((ls `opSub` (fs `opSub` (Sng 1 JTNumInt))) `opDiv` stp))
-                     _ -> return (Arg xi JTNumInt NotRelevant) --throwDelayedError (ImpossibleError "Loop iterator must be an Iter term.") -- TODO
-
-
       cniter <- checkSens niter scope
 
       let cniter' = do

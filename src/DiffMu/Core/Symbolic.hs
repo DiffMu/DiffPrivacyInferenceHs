@@ -90,8 +90,8 @@ instance Show (SymVar k) where
   show (Ceil te) = "ceil(" <> show te <> ")"
   show (Sqrt te) = "sqrt(" <> show te <> ")"
   show (Max te) = "max(" <> show te <> ")"
-  show (Minus (t1, t2)) = "(" <> show t1 <> " - " <> show t2
-  show (Div (t1, t2)) = "(" <> show t1 <> " / " <> show t2
+  show (Minus (t1, t2)) = "(" <> show t1 <> " - " <> show t2 <> ")"
+  show (Div (t1, t2)) = "(" <> show t1 <> " / " <> show t2 <> ")"
 
 instance Hashable (SymVar k)
 

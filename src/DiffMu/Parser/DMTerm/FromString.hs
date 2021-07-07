@@ -93,6 +93,7 @@ pDMTypeOp =
   <|> try (string ":/" >> pure (IsBinary DMOpDiv))
   <|> try (string ":%" >> pure (IsBinary DMOpMod))
   <|> try (string ":(==)" >> pure (IsBinary DMOpEq))
+  <|> try (string ":ceil" >> pure (IsUnary DMOpCeil))
 
 with :: String -> Parser a -> Parser a
 with name content = string name >> between (char '(') (char ')') content
