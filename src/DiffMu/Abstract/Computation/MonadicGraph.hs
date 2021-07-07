@@ -24,11 +24,11 @@ data EdgeType = IsReflexive Structurality | NotReflexive
 -- should be used.
 data Structurality = IsStructural | NotStructural
 
-newtype EdgeFamily m a b = EdgeFamily (a -> m (Maybe b), b -> m (a,a))
+newtype EdgeFamily m a b = EdgeFamily (a -> m (INCRes () b), b -> m (a,a))
 
 data Edge m a where
   SingleEdge :: m (a,a) -> Edge m a
-  MultiEdge :: Eq b => (a -> Maybe b) -> (b -> m (a,a)) -> Edge m a
+  MultiEdge :: Eq b => (a -> INCRes () b) -> (b -> m (a,a)) -> Edge m a
 
 
 newtype GraphM m a = GraphM (EdgeType -> [Edge m a])
@@ -50,19 +50,25 @@ oppositeGraph (GraphM graph) = GraphM (opp graph)
 -- findPathM :: forall s m e a. (Show e, Show a, MonadError e m, MonadState s m, MonoidM m a, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> (a,a) -> m (INCRes e (a,a))
 findPathM :: forall s m isT e a. (Show e, Show a, MonadConstraint isT m, IsT isT m, Normalize m a, MonadNormalize m, MonadError e m, MonadState s m, MonadLog m, Unify isT a, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> (a,a) -> m (INCRes e (a,a))
 findPathM relevance (GraphM g) path =
-  let both (Just a) (Just b) | a == b = Just a
-      both _ _                          = Nothing
+  let both (Finished a) (Finished b) | a == b = Finished a
+      both (Fail e) _                         = Fail e
+      both _ (Fail e)                         = Fail e
+      both _ _                                = Wait
 
-      atLeastOne (Just a) Nothing = Just a
-      atLeastOne Nothing (Just b) = Just b
-      atLeastOne (Just a) (Just b) | a == b = Just a
-      atLeastOne _ _ = Nothing
+      atLeastOne (Finished a) Wait = Finished a
+      atLeastOne Wait (Finished b) = Finished b
+      atLeastOne (Finished a) (Finished b) | a == b = Finished a
+      atLeastOne (Fail e) _                         = Fail e
+      atLeastOne _ (Fail e)                         = Fail e
+      atLeastOne _ _                                = Wait
 
       checkSingle getIdx a x =
         do ia <- getIdx a
            case ia of
-             Just c -> x c
-             Nothing -> return Wait
+             Finished c -> x c
+             Fail _ -> return (Fail MultiEdgeIndexFailed)
+             Wait -> return Wait
+             Partial _ -> return Wait
 
       -- we check the neutrality of a and b
       -- And wait either - only if both are not neutral
@@ -71,8 +77,10 @@ findPathM relevance (GraphM g) path =
         ia <- getIdx a
         ib <- getIdx b
         case (op ia ib) of
-          Just c -> x c
-          Nothing -> return Wait
+          Finished c -> x c
+          Fail _ -> return (Fail MultiEdgeIndexFailed)
+          Wait -> return Wait
+          Partial _ -> return Wait
 
 
       checkByStructurality IsStructural  getIdx a b x = checkPair atLeastOne getIdx a b x
@@ -114,13 +122,13 @@ findPathM relevance (GraphM g) path =
       checkNeutrality a = do
         na <- checkNeutral a
         case na of
-          True -> return Nothing
-          False -> return $ Just ()
+          True -> return Wait
+          False -> return $ Finished ()
 
       checkNeutrality' getIdx a = do
         na <- checkNeutral a
         case na of
-          True -> return Nothing
+          True -> return Wait
           False -> return (getIdx a)
 
       withFamily :: forall x. (forall b. Eq b => EdgeFamily m a b -> x) -> Edge m a -> x
@@ -141,23 +149,33 @@ findSupremumM relevance (GraphM graph) (a,b,x) =
     -------------
     -- This is copy paste from above
 
-      both (Just a) (Just b) | a == b = Just a
-      both _ _                          = Nothing
+      both (Finished a) (Finished b) | a == b = Finished a
+      both (Fail e) _                         = Fail e
+      both _ (Fail e)                         = Fail e
+      both _ _                                = Wait
 
-      atLeastOne (Just a) Nothing = Just a
-      atLeastOne Nothing (Just b) = Just b
-      atLeastOne (Just a) (Just b) | a == b = Just a
-      atLeastOne _ _ = Nothing
+      atLeastOne (Finished a) Wait = Finished a
+      atLeastOne Wait (Finished b) = Finished b
+      atLeastOne (Finished a) (Finished b) | a == b = Finished a
+      atLeastOne (Fail e) _                         = Fail e
+      atLeastOne _ (Fail e)                         = Fail e
+      atLeastOne _ _                                = Wait
 
       checkPair op getIdx a b x = withLogLocation "MndGraph" $ do
         ia <- getIdx a
         ib <- getIdx b
         case (op ia ib) of
-          Just c -> do
-            debug $ "Checkpair on " <> show (a,b) <> " successfull. => Continuing supremum computation."
+          Finished c -> do
+            debug $ "Checkpair[supremum] on " <> show (a,b) <> " successfull. => Continuing supremum computation."
             x c
-          Nothing -> do
-            debug $ "Checkpair on " <> show (a,b) <> " failed. => We are waiting"
+          Fail _ -> do
+            debug $ "Checkpair[supremum] on " <> show (a,b) <> " failed. => We are failing as well."
+            return (Fail MultiEdgeIndexFailed)
+          Wait -> do
+            debug $ "Checkpair[supremum] on " <> show (a,b) <> " returned Wait."
+            return Wait
+          Partial _ -> do
+            debug $ "Checkpair[supremum] on " <> show (a,b) <> " returned a Partial. => We wait"
             return Wait
 
 
@@ -175,13 +193,13 @@ findSupremumM relevance (GraphM graph) (a,b,x) =
       checkNeutrality a = do
         na <- checkNeutral a
         case na of
-          True -> return Nothing
-          False -> return $ Just ()
+          True -> return Wait
+          False -> return $ Finished ()
 
       checkNeutrality' getIdx a = do
         na <- checkNeutral a
         case na of
-          True -> return Nothing
+          True -> return Wait
           False -> return (getIdx a)
 
       withFamily :: forall x. (forall b. Eq b => EdgeFamily m a b -> x) -> Edge m a -> x

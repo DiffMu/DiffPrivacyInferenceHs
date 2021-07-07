@@ -82,9 +82,9 @@ testSupremum = do
     testsup (Const (twoId) DMInt) (Const (twoId) DMInt) (Right $ Const (twoId) DMInt)
     testsup (Const (twoId) DMInt) (Const (oneId) DMInt) (Right $ NonConst DMInt)
 
-    testsupl (NoFun (Numeric (NonConst DMInt)))
+    testsup (NoFun (Numeric (NonConst DMInt)))
             (Fun [ForAll [] ([NoFun (Numeric (NonConst DMInt)) :@ oneId] :->: (NoFun (Numeric (NonConst DMInt)))) :@ Nothing])
-            (Left (UnsatisfiableConstraint ""))
+            (Left (UnsatisfiableConstraint "[test]"))
 
 
 testCheck_Rules = do
