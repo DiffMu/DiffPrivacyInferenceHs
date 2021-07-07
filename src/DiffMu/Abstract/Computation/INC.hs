@@ -9,6 +9,7 @@ import Debug.Trace
 -- data INCStep = Continue | Finish
 data INCError e =
   UserError e
+  | MultiEdgeIndexFailed
   | AllBranchesFailed [INCError e]
   deriving Show
 

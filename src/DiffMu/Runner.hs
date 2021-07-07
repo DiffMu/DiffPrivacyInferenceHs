@@ -34,12 +34,11 @@ typecheckFromString_DMTerm term = do
 
 data DoShowLog = DoShowLog DMLogSeverity [DMLogLocation] | DontShowLog
 
-executeTC l r =
-  let x = runExcept ((runStateT (runWriterT (runTCT r)) (Full def def (Right def))))
-  in case (l,x) of
-      (_, Left err) -> return (Left err)
-      (DoShowLog s ls, Right (((x,logs),(a)))) -> do
-        -- let logs = view (tcstate.logger) (snd x)
+executeTC l r = do
+  let (x,logs) = runWriter (runExceptT ((runStateT ((runTCT r)) (Full def def (Right def)))))
+
+  case l of
+    (DoShowLog s ls) -> do
         -- we do log a message if
         -- 1. its severity is higher/equal than this one
         --   OR
@@ -51,10 +50,9 @@ executeTC l r =
         putStrLn realLogs
         putStrLn "======================== End LOG ====================="
         putStrLn ""
-        return (Right (x,a))
+    (DontShowLog) -> return ()
 
-      (DontShowLog, Right ((x,logs),a)) -> return (Right (x,a))
-
+  return x
 
 typecheckFromDMTerm :: DMTerm -> IO ()
 typecheckFromDMTerm term = do

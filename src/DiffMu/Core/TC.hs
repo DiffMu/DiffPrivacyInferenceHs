@@ -478,7 +478,7 @@ data Full = Full
   }
   deriving (Generic)
 
-newtype TCT m a = TCT {runTCT :: (WriterT DMLogMessages (StateT Full (ExceptT DMException m)) a)}
+newtype TCT m a = TCT {runTCT :: ((StateT Full (ExceptT DMException (WriterT DMLogMessages (m)))) a)}
   deriving (Functor, Applicative, Monad, MonadState Full, MonadError DMException, MonadWriter DMLogMessages)
 
 class LiftTC t where

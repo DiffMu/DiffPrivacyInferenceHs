@@ -28,9 +28,10 @@ getArrowLength :: DMFun -> Maybe Int
 getArrowLength (a :->: _) = Just (length a)
 getArrowLength _         = Nothing
 
-getFun :: DMMain -> Maybe [DMTypeOf ForAllKind :& Maybe [JuliaType]]
-getFun (Fun xs) = Just xs
-getFun _ = Nothing
+getFun :: DMMain -> INCRes () [DMTypeOf ForAllKind :& Maybe [JuliaType]]
+getFun (Fun xs) = Finished xs
+getFun (TVar _) = Wait
+getFun _ = Fail (UserError ())
 
 -- The subtyping graph for our type system.
 subtypingGraph :: forall e t k. (SingI k, Typeable k, MonadDMTC t) => EdgeType -> [Edge t (DMTypeOf k)]
