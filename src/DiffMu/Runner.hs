@@ -95,7 +95,16 @@ typecheckFromDMTerm term = do
         normalize aa
         -}
 
-  x <- executeTC (DoShowLog Force []) r
+
+  -- these are the locations from which the logs will be shown
+  let logging_locations = [
+        Location_Constraint
+        -- Location_INC,
+        -- Location_MonadicGraph,
+        -- Location_All
+        ]
+
+  x <- executeTC (DoShowLog Force logging_locations) r
 
   case x of
     Left err -> putStrLn $ "Encountered error: " <> show err
