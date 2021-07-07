@@ -63,6 +63,13 @@ instance Unify MonadDMTC (DMTypeOf k) where
   unify_ (NoFun x) (NoFun y)              = NoFun <$> unify x y
   unify_ (Fun xs) (Fun ys)                = Fun <$> unify xs ys
   unify_ (x :∧: y) (v :∧: w)              = undefined
+  unify_ (ForAll xs t) (ForAll ys s)      =
+    -- NOTE: we actually have to remove all variables which were substituted
+    --       from the merged list (xs <> ys). But luckily this is done
+    --       automatically by the definition of substitution, and will happen
+    --       when the returned type is being normalized
+    --
+    ForAll (xs <> ys) <$> unify t s
   unify_ t s                              = throwError (UnificationError t s)
 
 -- Above we implictly use unification of terms of the type (a :& b).

@@ -279,19 +279,18 @@ type SSubs = Subs SensitivityOf
 
 
 
-
 class (FixedVars TVarOf x) => GoodConstraint (x :: *) where
 instance (FixedVars TVarOf x) => GoodConstraint x where
 
 class (FreeVars TVarOf x, Substitute TVarOf DMTypeOf x) => GoodConstraintContent (x :: *) where
 instance (FreeVars TVarOf x, Substitute TVarOf DMTypeOf x) => GoodConstraintContent x where
 
-
 class (MonadImpossible (t), MonadWatch (t), MonadLog t,
        MonadTerm DMTypeOf (t),
        MonadTermDuplication DMTypeOf (t),
        MonadTerm SensitivityOf (t),
        MonadState (Full) (t),
+       MonadWriter DMLogMessages (t),
        MonadError DMException (t),
        MonadInternalError t,
        -- MonadConstraint' Symbol (TC) (t),
@@ -479,8 +478,8 @@ data Full = Full
   }
   deriving (Generic)
 
-newtype TCT m a = TCT {runTCT :: (StateT Full (ExceptT DMException m) a)}
-  deriving (Functor, Applicative, Monad, MonadState Full, MonadError DMException)
+newtype TCT m a = TCT {runTCT :: (WriterT DMLogMessages (StateT Full (ExceptT DMException m)) a)}
+  deriving (Functor, Applicative, Monad, MonadState Full, MonadError DMException, MonadWriter DMLogMessages)
 
 class LiftTC t where
   liftTC :: TC a -> t a
@@ -515,13 +514,18 @@ dmWithLogLocation l action = do
   (tcstate.logger.loggerCurrentLocation) %= (\_ -> oldloc)
   return res
 
-forceLog :: MonadDMTC t => String -> t ()
-forceLog text = do
+-- logForce = logWithSeverity Force
+-- debug = logWithSeverity Debug
+-- info = logWithSeverity Info
+
+logWithSeverity :: MonadDMTC t => DMLogSeverity -> String -> t ()
+logWithSeverity sev text = do
   loc <- use (tcstate.logger.loggerCurrentLocation)
   -- here we split the messages at line breaks (using `lines`)
   -- in order to get consistent looking output (every line has a header)
-  let messages = DMLogMessage Force loc <$> lines text
-  tcstate.logger.loggerMessages %= (messages <>)
+  let messages = DMLogMessage sev loc <$> (reverse $ lines text)
+  tell (DMLogMessages messages)
+  -- tcstate.logger.loggerMessages %= (messages <>)
 
 dmlog :: MonadDMTC t => String -> t ()
 dmlog text = do
@@ -529,11 +533,15 @@ dmlog text = do
   sev <- use (tcstate.logger.loggerCurrentSeverity)
   -- here we split the messages at line breaks (using `lines`)
   -- in order to get consistent looking output (every line has a header)
-  let messages = DMLogMessage sev loc <$> lines text
-  tcstate.logger.loggerMessages %= (messages <>)
+  let messages = DMLogMessage sev loc <$> (reverse $ lines text)
+  tell (DMLogMessages messages)
+  -- tcstate.logger.loggerMessages %= ( <>)
 
 instance Monad m => MonadLog (TCT m) where
   log = dmlog
+  debug = logWithSeverity Debug
+  info = logWithSeverity Info
+  logForce = logWithSeverity Force
   withLogLocation loc action = dmWithLogLocation (fromString_DMLogLocation loc) action
 
 
@@ -778,7 +786,7 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
     ctrs <- use (meta.constraints.anncontent)
     log $ "## Constraints ##"
     log $ show ctrs
-    log $ "## ----------- ##"
+    log $ ""
 
     -- case null top of
     --   True  -> 
@@ -884,9 +892,9 @@ instance Monad m => MonadDMTC (TCT m) where
 --   normalize solv = liftTC (normalize solv)
 
 instance Monad m => LiftTC (TCT m) where
-  liftTC (TCT v) = -- TCT (v >>= (lift . lift . return))
-    let x = StateT (\s -> ExceptT (return $ runExcept (runStateT v s)))
-    in TCT (x) -- TCT (return v)
+  liftTC (TCT v) = undefined -- TCT (v >>= (lift . lift . return))
+    -- let x = StateT (\s -> ExceptT (return $ runExcept (runStateT v s)))
+    -- in TCT (x) -- TCT (return v)
 
   {-
 -}

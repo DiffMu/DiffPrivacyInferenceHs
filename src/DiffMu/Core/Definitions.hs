@@ -219,9 +219,11 @@ instance Show (DMTypeOf k) where
   show (DMMat nrm clp n m τ) = "Matrix<n: "<> show nrm <> ", c: " <> show clp <> ">[" <> show n <> " × " <> show m <> "](" <> show τ <> ")"
   show (DMChoice cs) = "Choice{" <> show cs <> "}"
   show (ForAll vs f) = case vs of
-     [] -> show f
+     -- [] -> show f
+     [] -> "ForAll{}." <> show f
      _ -> "ForAll {" <> show vs <> "}. " <> show f
-  show (NoFun x) = show x --"NoFun(" <> show x <> ")"
+  -- show (NoFun x) = show x --"NoFun(" <> show x <> ")"
+  show (NoFun x) = "NoFun(" <> show x <> ")"
   show (Fun xs) = "Fun(" <> show xs <> ")"
   show (x :∧: y) = "(" <> show x <> "∧" <> show y <> ")"
 

@@ -21,9 +21,8 @@ newtype INC m e a = INC [(a -> m (INCRes e a))]
 
 evalINC :: forall s m e a. (MonadLog m, MonadState s m, Show a, Show e) => INC m e a -> a -> m (INCRes e a)
 evalINC (steps) start = withLogLocation "INC" $ do
-  log "-----"
-  log "Beginning incremental computation"
-  let logsteps (INC steps) = log $ "I have " <> show (length steps) <> " candidates."
+  info $ "Beginning incremental computation on:\n  " <> show start
+  let logsteps (INC steps) = debug $ "I have " <> show (length steps) <> " candidates."
   logsteps steps
 
   state₀ <- get
@@ -36,8 +35,8 @@ evalINC (steps) start = withLogLocation "INC" $ do
         f (INC xs) (acc <> [(state₁, res)])
   results <- f steps []
 
-  -- traceM " - Got the following results after first application:"
-  -- traceM $ show (snd <$> results)
+  debug "Got the following results after first application:"
+  debug $ show (snd <$> results)
 
   let finished = [(s,a) | (s, Finished a) <- results]
   let partial  = [(s,a) | (s, Partial a) <- results]

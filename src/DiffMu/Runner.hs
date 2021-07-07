@@ -32,6 +32,29 @@ typecheckFromString_DMTerm term = do
    Left err -> putStrLn $ "Error while parsing DMTerm from string: " <> show err
    Right term -> typecheckFromDMTerm term
 
+data DoShowLog = DoShowLog DMLogSeverity [DMLogLocation] | DontShowLog
+
+executeTC l r =
+  let x = runExcept ((runStateT (runWriterT (runTCT r)) (Full def def (Right def))))
+  in case (l,x) of
+      (_, Left err) -> return (Left err)
+      (DoShowLog s ls, Right (((x,logs),(a)))) -> do
+        -- let logs = view (tcstate.logger) (snd x)
+        -- we do log a message if
+        -- 1. its severity is higher/equal than this one
+        --   OR
+        -- 2. it was logged below one of the given locations
+        let severity = s
+        let locations = ls
+        let realLogs = getLogMessages logs severity locations
+        putStrLn "======================== LOG ========================="
+        putStrLn realLogs
+        putStrLn "======================== End LOG ====================="
+        putStrLn ""
+        return (Right (x,a))
+
+      (DontShowLog, Right ((x,logs),a)) -> return (Right (x,a))
+
 
 typecheckFromDMTerm :: DMTerm -> IO ()
 typecheckFromDMTerm term = do
@@ -72,6 +95,13 @@ typecheckFromDMTerm term = do
         normalize aa
         -}
 
+  x <- executeTC (DoShowLog Force []) r
+
+  case x of
+    Left err -> putStrLn $ "Encountered error: " <> show err
+    Right x -> putStrLn $ "Result: " <> show x
+
+  {-
   let x = runExcept (runStateT (runTCT r) (Full def def (Right def)))
   case x of
     Left err -> putStrLn $ "Encountered error: " <> show err
@@ -90,6 +120,7 @@ typecheckFromDMTerm term = do
       putStrLn ""
       putStrLn $ "Result: " <> show x
   return ()
+-}
 
 
 

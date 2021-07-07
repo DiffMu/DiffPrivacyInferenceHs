@@ -7,10 +7,18 @@ import DiffMu.Prelude
 import DiffMu.Abstract
 
 instance Show (DMLogger) where
-  show (DMLogger _ _ _ _) = "(hidden)"
+  show (DMLogger _ _ _) = "(hidden)"
     -- intercalate "\n\t" m
 
-data DMLogLocation = Location_INC | Location_Constraint | Location_Check | Location_All | Location_Unknown String
+newtype DMLogMessages = DMLogMessages [DMLogMessage]
+
+instance Semigroup DMLogMessages where
+  (<>) (DMLogMessages xs) (DMLogMessages ys) = DMLogMessages (ys <> xs)
+
+instance Monoid DMLogMessages where
+  mempty = DMLogMessages []
+
+data DMLogLocation = Location_INC | Location_Constraint | Location_Check | Location_MonadicGraph | Location_All | Location_Unknown String
   deriving (Eq)
 
 instance Show DMLogLocation where
@@ -18,6 +26,7 @@ instance Show DMLogLocation where
   show Location_Constraint = "Constr"
   show Location_All = "All"
   show Location_Check = "Check"
+  show Location_MonadicGraph = "MndGraph"
   show (Location_Unknown s) = red ("Unknown Location (" <> s <> ")")
 
 fromString_DMLogLocation :: String -> DMLogLocation
@@ -25,6 +34,7 @@ fromString_DMLogLocation "INC" = Location_INC
 fromString_DMLogLocation "Constr" = Location_Constraint
 fromString_DMLogLocation "Check" = Location_Check
 fromString_DMLogLocation "All" = Location_All
+fromString_DMLogLocation "MndGraph" = Location_MonadicGraph
 fromString_DMLogLocation s = Location_Unknown s
 
 instance Ord (DMLogLocation) where
@@ -33,7 +43,7 @@ instance Ord (DMLogLocation) where
   _ <= _ = False
 
 instance Default (DMLogger) where
-  def = DMLogger Debug Debug Location_All []
+  def = DMLogger Debug Debug Location_All
 
 data DMLogSeverity = Debug | Info | Force
   deriving (Eq,Ord)
@@ -58,17 +68,17 @@ data DMLogger = DMLogger
   {
     _loggerBackupSeverity :: DMLogSeverity,
     _loggerCurrentSeverity :: DMLogSeverity,
-    _loggerCurrentLocation :: DMLogLocation,
-    _loggerMessages :: [DMLogMessage]
+    _loggerCurrentLocation :: DMLogLocation
+    -- _loggerMessages :: [DMLogMessage]
   }
   deriving (Generic)
 
 $(makeLenses ''DMLogger)
 
-getLogMessages :: DMLogger -> DMLogSeverity -> [DMLogLocation] -> String
-getLogMessages logger sevR locsR =
-  let messages = view loggerMessages logger
-      filtered = [DMLogMessage s l m | DMLogMessage s l m <- messages, or [sevR <= s, or ((l <=) <$> locsR)]]
+
+getLogMessages :: DMLogMessages -> DMLogSeverity -> [DMLogLocation] -> String
+getLogMessages (DMLogMessages messages) sevR locsR =
+  let filtered = [DMLogMessage s l m | DMLogMessage s l m <- messages, or [sevR <= s, or ((l <=) <$> locsR)]]
       reversed = reverse filtered
   in intercalate "\n" (show <$> reversed)
 

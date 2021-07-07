@@ -6,6 +6,7 @@ module DiffMu.Core.TC where
 import DiffMu.Prelude
 import DiffMu.Abstract
 import DiffMu.Core.Symbolic
+import DiffMu.Core.Logging
 import {-# SOURCE #-} DiffMu.Core.Definitions
 
 data Full
@@ -22,6 +23,7 @@ class (MonadImpossible (t), MonadWatch (t), MonadLog t,
        MonadTermDuplication DMTypeOf (t),
        MonadTerm SymTerm (t),
        MonadState (Full) (t),
+       MonadWriter DMLogMessages (t),
        MonadError DMException (t),
        MonadInternalError t,
        -- MonadConstraint' Symbol (TC) (t),

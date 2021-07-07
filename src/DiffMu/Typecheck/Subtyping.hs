@@ -28,6 +28,10 @@ getArrowLength :: DMFun -> Maybe Int
 getArrowLength (a :->: _) = Just (length a)
 getArrowLength _         = Nothing
 
+getFun :: DMMain -> Maybe [DMTypeOf ForAllKind :& Maybe [JuliaType]]
+getFun (Fun xs) = Just xs
+getFun _ = Nothing
+
 -- The subtyping graph for our type system.
 subtypingGraph :: forall e t k. (SingI k, Typeable k, MonadDMTC t) => EdgeType -> [Edge t (DMTypeOf k)]
 subtypingGraph =
@@ -46,7 +50,14 @@ subtypingGraph =
                      a0 <- newVar
                      a1 <- newVar
                      a0 ⊑! a1
-                     return (NoFun a0, NoFun a1)
+                     return (NoFun a0, NoFun a1),
+
+                   -- we do not have subtyping for arrows
+                   MultiEdge getFun $ \a -> do
+                     -- a0 <- newVar
+                     -- a1 <- newVar
+                     -- a0 ⊑! a1
+                     return (Fun a, Fun a)
                  ]
             ; NotReflexive
               -> []

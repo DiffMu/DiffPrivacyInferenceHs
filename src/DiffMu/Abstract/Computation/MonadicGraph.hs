@@ -34,6 +34,7 @@ data Edge m a where
 newtype GraphM m a = GraphM (EdgeType -> [Edge m a])
 
 data ErrorRelevance = IsGraphRelevant | NotGraphRelevant
+  deriving (Show)
 
 
 
@@ -102,9 +103,12 @@ findPathM relevance (GraphM g) path =
 
       catchRelevant :: forall a b. (a -> m (INCRes e a)) -> (a -> m (INCRes e a))
       catchRelevant f a =
-        catchError (f a) $ \e -> case relevance e of
-                                   IsGraphRelevant -> return (Fail (UserError e))
-                                   NotGraphRelevant -> throwError e
+        catchError (f a) $ \e -> do
+          -- log $ "caught error: " <> show e
+          -- log $ "  => relevance: " <> show (relevance e)
+          case relevance e of
+            IsGraphRelevant -> return (Fail (UserError e))
+            NotGraphRelevant -> throwError e
 
 
       checkNeutrality a = do
@@ -145,12 +149,16 @@ findSupremumM relevance (GraphM graph) (a,b,x) =
       atLeastOne (Just a) (Just b) | a == b = Just a
       atLeastOne _ _ = Nothing
 
-      checkPair op getIdx a b x = do
+      checkPair op getIdx a b x = withLogLocation "MndGraph" $ do
         ia <- getIdx a
         ib <- getIdx b
         case (op ia ib) of
-          Just c -> x c
-          Nothing -> return Wait
+          Just c -> do
+            debug $ "Checkpair on " <> show (a,b) <> " successfull. => Continuing supremum computation."
+            x c
+          Nothing -> do
+            debug $ "Checkpair on " <> show (a,b) <> " failed. => We are waiting"
+            return Wait
 
 
       checkByStructurality IsStructural  getIdx a b x = checkPair atLeastOne getIdx a b x
@@ -158,9 +166,12 @@ findSupremumM relevance (GraphM graph) (a,b,x) =
 
       catchRelevant :: forall a b. (a -> m (INCRes e a)) -> (a -> m (INCRes e a))
       catchRelevant f a =
-        catchError (f a) $ \e -> case relevance e of
-                                   IsGraphRelevant -> return (Fail (UserError e))
-                                   NotGraphRelevant -> throwError e
+        catchError (f a) $ \e -> do
+          -- log $ "caught error: " <> show e
+          -- log $ "  => relevance: " <> show (relevance e)
+          case relevance e of
+            IsGraphRelevant -> return (Fail (UserError e))
+            NotGraphRelevant -> throwError e
       checkNeutrality a = do
         na <- checkNeutral a
         case na of
@@ -187,22 +198,31 @@ findSupremumM relevance (GraphM graph) (a,b,x) =
           ((n₀, n₁)) <- edge idx
           n₀'' <- unify start₀ n₀
           (rpath) <- findPathM relevance (GraphM graph) (start₁,n₁)
-          solveAllConstraints SolveExact
-          log "============ AFTER solving all new constraints >>>>>>>>>>>>>>>>"
-          logPrintConstraints
-          closedRes <- mergeTopConstraintSet
-          case closedRes of
-            ConstraintSet_WasNotEmpty -> return Wait
-            ConstraintSet_WasEmpty -> case rpath of
-              Wait -> return Wait
-              Fail e -> case failhere of
-                          -- If have a reflexive edge, and failed, then we do not continue
-                          True  -> return $ Fail e
-                          -- If we mereley had a non-reflexive edge, we try again with the target of that edge
-                          False -> traceShow ("=> [Left] Finding path " <> show (start₁,n₁) <> " failed. Now computing sup " <> show (n₁, start₁, goal)) (findSupremumM relevance (GraphM graph) (n₁, start₁, goal))
-              Partial x -> return Wait
-              Finished (a₀,a₁) -> do goal' <- unify goal a₁
-                                     return $ Finished (n₀'' , a₀ , goal')
+          debug $ "fromLeft: trying to solve sup" <> show (start₀,start₁) <> " = " <> show goal
+          debug $ "for that, find path: " <> show (start₁,n₁) <> "\nGot: " <> show rpath
+          case rpath of
+            Wait -> return Wait
+            Fail e -> case failhere of
+                        -- If have a reflexive edge, and failed, then we do not continue
+                        True  -> return $ Fail e
+                        -- If we mereley had a non-reflexive edge, we try again with the target of that edge
+                        False -> traceShow ("=> [Left] Finding path " <> show (start₁,n₁) <> " failed. Now computing sup " <> show (n₁, start₁, goal)) (findSupremumM relevance (GraphM graph) (n₁, start₁, goal))
+            Partial x -> logForce ("Waiting because got partial:\n" <> show x) >> return Wait
+            Finished (a₀,a₁) -> do
+              debug "Since finding path successfull, solving leftover constraints."
+              debug "============ BEFORE solving all new constraints >>>>>>>>>>>>>>>>"
+              solveAllConstraints SolveExact
+              debug "============ AFTER solving all new constraints >>>>>>>>>>>>>>>>"
+              logPrintConstraints
+              closedRes <- mergeTopConstraintSet
+              case closedRes of
+                ConstraintSet_WasNotEmpty -> logForce "Waiting because constraint set not empty!" >> return Wait
+                ConstraintSet_WasEmpty -> do
+                  debug "Constraint set was empty! Thus we found the supremum."
+                  debug $ "After unification with the goal" <> show goal <> " =! " <> show a₁
+                  goal' <- unify goal a₁
+                  debug $ " we have:\nsup(" <> show (n₀'', a₀) <> " = " <> show goal'
+                  return $ Finished (n₀'' , a₀ , goal')
 
       fromRight :: Eq b => Bool -> EdgeFamily m a b -> (a,a,a) -> m (INCRes e (a,a,a))
       fromRight failhere (EdgeFamily (getIdx,edge)) (start₀,start₁,goal) =
@@ -211,24 +231,33 @@ findSupremumM relevance (GraphM graph) (a,b,x) =
           (n₀, n₁) <- edge idx
           n₀'' <- unify start₁ n₀
           (rpath) <- findPathM relevance (GraphM graph) (start₀,n₁)
-          solveAllConstraints SolveExact
-          log "============ AFTER solving all new constraints >>>>>>>>>>>>>>>>"
-          logPrintConstraints
-          closedRes <- mergeTopConstraintSet
-          case closedRes of
-            ConstraintSet_WasNotEmpty -> return Wait
-            ConstraintSet_WasEmpty -> case rpath of
-              Wait -> return Wait
-              Fail e -> case failhere of
-                          -- If have a reflexive edge, and failed, then we do not continue
-                          True  -> return $ Fail e
-                          -- If we mereley had a non-reflexive edge, we try again with the target of that edge
-                          False -> do
-                            log ("=> [Right] Finding path " <> show (start₀,n₁) <> " failed. Now computing sup " <> show (start₀, n₁, goal))
-                            (findSupremumM relevance (GraphM graph) (start₀, n₁, goal))
-              Partial x -> return Wait
-              Finished (a₀,a₁) -> do goal' <- unify goal a₁
-                                     return $ Finished (a₀ , n₀'' , goal')
+          debug $ "fromRight: trying to solve sup" <> show (start₀,start₁) <> " = " <> show goal
+          debug $ "for that, find path: " <> show (start₀,n₁) <> "\nGot: " <> show rpath
+          case rpath of
+            Wait -> return Wait
+            Fail e -> case failhere of
+                        -- If have a reflexive edge, and failed, then we do not continue
+                        True  -> return $ Fail e
+                        -- If we mereley had a non-reflexive edge, we try again with the target of that edge
+                        False -> do
+                          log ("=> [Right] Finding path " <> show (start₀,n₁) <> " failed. Now computing sup " <> show (start₀, n₁, goal))
+                          (findSupremumM relevance (GraphM graph) (start₀, n₁, goal))
+            Partial x -> return Wait
+            Finished (a₀,a₁) -> do
+              debug "Since finding path successfull, solving leftover constraints."
+              debug "============ BEFORE solving all new constraints >>>>>>>>>>>>>>>>"
+              solveAllConstraints SolveExact
+              debug "============ AFTER solving all new constraints >>>>>>>>>>>>>>>>"
+              logPrintConstraints
+              closedRes <- mergeTopConstraintSet
+              case closedRes of
+                ConstraintSet_WasNotEmpty -> debug "Constraint set not empty! Thus waiting." >> return Wait
+                ConstraintSet_WasEmpty -> do
+                  debug "Constraint set was empty! Thus we found the supremum."
+                  debug $ "After unification with the goal" <> show goal <> " =! " <> show a₁
+                  goal' <- unify goal a₁
+                  debug $ " we have:\nsup(" <> show (a₀ , n₀'') <> " = " <> show goal'
+                  return $ Finished (a₀ , n₀'' , goal')
 
 
       computations =  [catchRelevant (withFamily (fromLeft True) a)  | a <- graph (IsReflexive IsStructural)]
@@ -240,7 +269,8 @@ findSupremumM relevance (GraphM graph) (a,b,x) =
                      <> [catchRelevant (withFamily (fromRight False) a)  | a <- graph (NotReflexive)]
 
 
-  in withLogLocation "INC" $ evalINC (INC computations) (a,b,x)
+  in withLogLocation "MndGraph" $ do
+    evalINC (INC computations) (a,b,x)
 
 findInfimumM :: forall s m isT e a. (Show e, Show a, MonadError e m, MonadConstraint isT m, IsT isT m, Unify isT (a), Normalize m a, MonadNormalize m, MonadState s m, MonadLog m, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> (a,a,a) -> m (INCRes e (a,a,a))
 findInfimumM relevance graph z = findSupremumM relevance (oppositeGraph graph) z
