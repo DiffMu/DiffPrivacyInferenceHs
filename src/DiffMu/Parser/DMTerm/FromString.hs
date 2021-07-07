@@ -13,6 +13,8 @@ import Text.Parsec.Number
 -- import Text.Parsec.String.Combinator (many1)
 import qualified Data.Text as T
 
+import Data.HashMap.Strict as H
+
 import           Foreign.C.String
 
 -- newtype JuliaType' = JuliaType' String
@@ -98,6 +100,10 @@ with name content = string name >> between (char '(') (char ')') content
 pGauss = f <$> pTuple3 pDMTerm pDMTerm pDMTerm <*､> pDMTerm
   where f (a,b,c) d = Gauss a b c d
 
+pSingleChoiceHash :: Parser (HashMap [JuliaType] DMTerm)
+pSingleChoiceHash = f <$> pTuple2 (pArray "DataType" pJuliaType) pDMTerm
+  where f (sig, term) = H.fromList [(sig,term)]
+
 pDMTerm :: Parser DMTerm
 pDMTerm =
       try ("ret"       `with` (Ret     <$> pDMTerm))
@@ -117,6 +123,7 @@ pDMTerm =
   <|> try ("tlet"      `with` (TLet    <$> pArray "Tuple{Symbol, DataType}" (pAsgmt (:-)) <*､> pDMTerm <*､> pDMTerm))
   <|> try ("loop"      `with` (Loop    <$> pDMTerm <*､> pDMTerm <*､> pTuple2 pSymbol pSymbol <*､> pDMTerm))
   <|> try ("gauss"     `with` (pGauss))
+  <|> try ("chce"      `with` (Choice  <$> pSingleChoiceHash))
 
 
 -- flet(:f, DataType[Any, Any], lam(Tuple{Symbol, DataType}[(:a, Any), (:b, Any)], op(:+, DMTerm[var(:a, Any), op(:+, DMTerm[op(:*, DMTerm[var(:b, Any), var(:b, Any)]), var(:a, Any)])])), var(:f, Any))
