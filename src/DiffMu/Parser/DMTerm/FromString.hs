@@ -98,12 +98,16 @@ pDMTypeOp =
 with :: String -> Parser a -> Parser a
 with name content = string name >> between (char '(') (char ')') content
 
-pGauss = f <$> pTuple3 pDMTerm pDMTerm pDMTerm <*､> pDMTerm
-  where f (a,b,c) d = Gauss a b c d
 
 pSingleChoiceHash :: Parser (HashMap [JuliaType] DMTerm)
 pSingleChoiceHash = f <$> pTuple2 (pArray "DataType" pJuliaType) pDMTerm
   where f (sig, term) = H.fromList [(sig,term)]
+
+pGauss = f <$> pTuple3 pDMTerm pDMTerm pDMTerm <*､> pDMTerm
+  where f (a,b,c) d = Gauss a b c d
+
+pLoop = f <$> pDMTerm <*､> pDMTerm <*､> pDMTerm <*､> pTuple2 pSymbol pSymbol <*､> pDMTerm
+  where f _ a b c d = Loop a b c d
 
 pDMTerm :: Parser DMTerm
 pDMTerm =
@@ -116,13 +120,13 @@ pDMTerm =
   <|> try ("lam"       `with` (Lam     <$> pArray "Tuple{Symbol, DataType}" (pAsgmt (:-)) <*､> pDMTerm ))
   <|> try ("lam_star"  `with` (LamStar <$> pArray "Tuple{Tuple{Symbol, DataType}, Bool}" pAsgmtWithRel <*､> pDMTerm ))
   <|> try ("apply"     `with` (Apply   <$> pDMTerm <*､> pArray "DMTerm" pDMTerm))
-  <|> try ("iter"      `with` (Iter    <$> pDMTerm <*､> pDMTerm <*､> pDMTerm))
+  <|> try ("iter"      `with` (Iter    <$> pDMTerm <*､> pDMTerm <*､> pDMTerm)) -- NOTE: iter should be deprecated
   <|> try ("flet"      `with` (FLet    <$> pSymbol <*､> pDMTerm <*､> pDMTerm))
   -- no choice
   <|> try ("slet"      `with` (SLet    <$> (pAsgmt (:-)) <*､> pDMTerm <*､> pDMTerm))
   <|> try ("tup"       `with` (Tup     <$> pArray "DMTerm" pDMTerm))
   <|> try ("tlet"      `with` (TLet    <$> pArray "Tuple{Symbol, DataType}" (pAsgmt (:-)) <*､> pDMTerm <*､> pDMTerm))
-  <|> try ("loop"      `with` (Loop    <$> pDMTerm <*､> pDMTerm <*､> pTuple2 pSymbol pSymbol <*､> pDMTerm))
+  <|> try ("loop"      `with` (pLoop))
   <|> try ("gauss"     `with` (pGauss))
   <|> try ("chce"      `with` (Choice  <$> pSingleChoiceHash))
 
