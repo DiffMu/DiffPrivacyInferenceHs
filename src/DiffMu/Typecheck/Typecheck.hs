@@ -7,7 +7,7 @@ import DiffMu.Core
 import DiffMu.Core.Symbolic
 import DiffMu.Core.TC
 import DiffMu.Typecheck.Operations
-import DiffMu.Core.Scope1
+import DiffMu.Core.DelayedScope
 import DiffMu.Typecheck.JuliaType
 import DiffMu.Typecheck.Constraint.IsFunctionArgument
 import DiffMu.Typecheck.Constraint.IsJuliaEqual
@@ -16,104 +16,6 @@ import DiffMu.Typecheck.Constraint.CheapConstraints
 import qualified Data.HashMap.Strict as H
 
 import Debug.Trace
-
-newtype DMScope = DMScope (Scope Symbol (DMDelayed))
-  deriving Generic
-
-instance DictLike Symbol (DMDelayed) (DMScope) where
-  setValue v m (DMScope h) = DMScope (H.insert v m h)
-  deleteValue v (DMScope h) = DMScope (H.delete v h)
-  getValue k (DMScope h) = h H.!? k
-  emptyDict = DMScope H.empty
-  isEmptyDict (DMScope h) = isEmptyDict h
-  getAllKeys (DMScope h) = getAllKeys h
-
-instance Default (DMScope) where
-
-throwDelayedError e = Done $ (throwError e)
-
--- pushChoice :: (MonadDMTC t) => DMScopes -> Symbol -> [JuliaType] -> DMTerm -> t DMScopes
--- pushChoice scope fname sign term = do
---    let (_, DMScope varscope) = scope
---    scope' <- case (H.lookup fname varscope) of
---                   Nothing -> pushDefinition scope fname (Choice (H.singleton sign term)) -- if there are no other methods just push
---                   Just (Choice d, _) -> do -- else append the method to the Choice term
---                                         (_, scope'') <- popDefinition scope fname
---                                         pushDefinition scope'' fname (Choice (H.insert sign term d))
---                   _ -> throwError (ImpossibleError "Invalid scope entry.")
---    return scope'
-
-pushChoice :: Symbol -> (DMDelayed) -> DMScope -> DMScope
-pushChoice name ma scope =
-  let oldval = getValue name scope
-      newval = case oldval of
-        Nothing -> ma
-        Just mb -> do
-          a <- ma
-          b <- mb
-          return $ do
-            a' <- a
-            b' <- b
-            return (a' :∧: b')
-  in setValue name newval scope
-
-
-type DMDelayed = Delayed DMScope (TC DMMain)
-data Delayed x a = Done (a) | Later (x -> (Delayed x a))
-
--- type DelayedS = (Delayed TC (DMScope SensitivityK) DMSensitivity)
--- type DelayedP = (Delayed TC (DMScope PrivacyK) DMPrivacy)
-
--- type DMSensitivity = DMTypeOf (AnnotatedKind SensitivityK)
--- type DMPrivacy = DMTypeOf (AnnotatedKind PrivacyK)
-
--- getDelayed :: x -> Delayed x a -> a
--- getDelayed arg (Done a) = a
--- -- getDelayed arg (Later f) = f arg
--- getDelayed arg (Later f) = (f arg) >>= getDelayed arg
-
-extractDelayed :: x -> Delayed x a -> a
-extractDelayed x (Done a) = a
-extractDelayed x (Later f) = extractDelayed x (f x)
-
-applyDelayedLayer :: x -> Delayed x a -> Delayed x a
-applyDelayedLayer x (Done a) = Done a
-applyDelayedLayer x (Later f) = f x
-
-instance Functor (Delayed x) where
-  fmap f (Done a) = Done (f a)
-  fmap f (Later g) = Later (\x -> fmap f (g x))
-
-instance Applicative (Delayed x) where
-  pure a = Done a
-  (<*>) (Done g) (Done a) = Done (g a)    -- f (a -> b) -> f a -> f b
-  (<*>) (Done g) (Later g') = Later (\x -> (Done g) <*> (g' x))
-  (<*>) (Later g) (Done a) = Later (\x -> (g x) <*> (Done a))
-  (<*>) (Later g) (Later g') = Later (\x -> (g x) <*> (g' x))
-
-instance Monad (Delayed x) where
-  return = Done
-  x >>= f = insideDelayed x f
-
-insideDelayed :: Delayed x a -> (a -> Delayed x b) -> (Delayed x b)
-insideDelayed (Done a) f = (f a)
-insideDelayed (Later g) f = Later (\x -> insideDelayed (g x) (\a -> applyDelayedLayer x (f a)))
-
--- insideDelayed (Done a) g = pure $ Done (a >>= g)
--- -- insideDelayed (Later f) g = pure $ Later (f >=> g)
--- insideDelayed (Later f) g = pure $ Later (\x -> f x >>= \y -> insideDelayed y g)
-
--- onlyDone :: Delayed TC x a -> TC a
--- onlyDone (Done a) = a
--- onlyDone (Later _) = error "Expected Done, but wasn't."
-
--- onlyLater :: Delayed TC x a -> (a -> TC b) -> Delayed TC x b
--- onlyLater (Done a) g = Later (\_ -> internalError "Expected Later, but wasn't.")
--- onlyLater (Later f) g = Later (\x -> f x >>= \y -> insideDelayed y g)
-
--- joinLater :: Delayed TC x DMSensitivity -> Delayed TC x DMSensitivity -> Delayed TC x DMSensitivity
--- joinLater (Later f) (Later g) = Later (\x -> do
---                                           (a,b) <- msumTup (f x, g x)
 
 ------------------------------------------------------------------------
 -- The typechecking function

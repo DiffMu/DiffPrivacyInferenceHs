@@ -9,6 +9,7 @@ import DiffMu.Core.Logging
 import DiffMu.Core.Definitions
 import DiffMu.Core.Symbolic
 import DiffMu.Core.Context
+import DiffMu.Core.DelayedScope
 import DiffMu.Typecheck.Operations
 import DiffMu.Typecheck.Subtyping
 import DiffMu.Typecheck.Typecheck
