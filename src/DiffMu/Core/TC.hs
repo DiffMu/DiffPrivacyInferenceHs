@@ -44,6 +44,9 @@ instance (Substitute v x a, Substitute v x b, Substitute v x c) => Substitute v 
 instance (Substitute v x a, Substitute v x b) => Substitute v x (a :& b) where
   substitute σs (a :@ b) = (:@) <$> substitute σs a <*> substitute σs b
 
+instance (Substitute v x a, Substitute v x b) => Substitute v x (a :=: b) where
+  substitute σs (a :=: b) = (:=:) <$> substitute σs a <*> substitute σs b
+
 instance Substitute v x a => Substitute v x [a] where
   substitute σs xs = mapM (substitute σs) xs
 
@@ -165,6 +168,9 @@ instance (FreeVars v a, FreeVars v b) => FreeVars v (Either a b) where
 
 instance (FreeVars v a, FreeVars v b) => FreeVars v (a :& b) where
   freeVars (a :@ b) = freeVars a <> freeVars b
+
+instance (FreeVars v a, FreeVars v b) => FreeVars v (a :=: b) where
+  freeVars (a :=: b) = freeVars a <> freeVars b
 
 instance FreeVars TVarOf Sensitivity where
   freeVars _ = mempty
@@ -851,7 +857,7 @@ instance Monad m => MonadWatch (TCT m) where
 
 
 
-
+instance (Normalize t a, Normalize t b) => Normalize t (a :=: b) where
 
 
 
@@ -1128,6 +1134,7 @@ normalizeAnn (xs :->*: y) = do
   let normalizeInside (x :@ annot) = (:@ annot) <$> normalizeAnn x
   (:->*:) <$> mapM normalizeInside xs <*> normalizeAnn y
 normalizeAnn x = pure x
+
 
 -- normalizeInsideAnn :: MonadDMTC t => DMTypeOf (AnnotatedKind a) -> t (DMTypeOf (AnnotatedKind a))
 -- normalizeInsideAnn (TVar a) = undefined
