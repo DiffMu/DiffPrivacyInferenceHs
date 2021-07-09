@@ -156,10 +156,10 @@ data DMTypeOf (k :: DMKind) where
   TVar :: IsKind k => SymbolOf k -> DMTypeOf k
 
   -- the arrow type
-  (:->:) :: [DMTypeOf MainKind :& Sensitivity] -> DMTypeOf MainKind -> DMFun
+  (:->:) :: [DMTypeOf MainKind :@ Sensitivity] -> DMTypeOf MainKind -> DMFun
 
   -- the privacy-arrow type
-  (:->*:) :: [DMTypeOf MainKind :& Privacy] -> DMTypeOf MainKind -> DMFun
+  (:->*:) :: [DMTypeOf MainKind :@ Privacy] -> DMTypeOf MainKind -> DMFun
 
   -- tuples
   DMTup :: [DMType] -> DMType
@@ -177,14 +177,14 @@ data DMTypeOf (k :: DMKind) where
   DMMat :: (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> Sensitivity -> DMType -> DMType
 
   -- choices
-  DMChoice :: [DMType :& (Maybe [JuliaType], Sensitivity)] -> DMType
+  DMChoice :: [DMType :@ (Maybe [JuliaType], Sensitivity)] -> DMType
 
   -- foralls
   ForAll :: [SomeK TVarOf] -> DMTypeOf FunKind -> DMTypeOf ForAllKind
 
   -- annotations
   NoFun :: DMTypeOf NoFunKind -> DMTypeOf MainKind
-  Fun :: [DMTypeOf ForAllKind :& Maybe [JuliaType]] -> DMTypeOf MainKind
+  Fun :: [DMTypeOf ForAllKind :@ Maybe [JuliaType]] -> DMTypeOf MainKind
   (:∧:) :: DMTypeOf MainKind -> DMTypeOf MainKind -> DMTypeOf MainKind -- infimum
 
 type DMExtra e = (Typeable e, SingI e)
@@ -296,12 +296,12 @@ instance Eq (DMTypeOf k) where
 -- 3. Additional Notation
 --
 -- We sometimes want to pair a type with a sensitivity, just as in the arrow
--- type constructor in DMType. For this we define the type (a :& b), which is
+-- type constructor in DMType. For this we define the type (a :@ b), which is
 -- effectively just a tuple (a,b). But this gives us this new notation, and
--- terms (x :@ y) :: (a :& b) are pretty printed with an "@".
+-- terms (x :@ y) :: (a :@ b) are pretty printed with an "@".
 
 infix 3 :@
-data (:&) a b = (:@) a b
+data (:@) a b = (:@) a b
   deriving (Generic, Eq)
 
 data (:=:) a b = (:=:) a b
@@ -309,36 +309,36 @@ data (:=:) a b = (:=:) a b
 instance (Show a, Show b) => Show (a :=: b) where
   show (a :=: b) = show a <> " :=: " <> show b
 
-instance (Show a, Show b) => Show (a :& b) where
+instance (Show a, Show b) => Show (a :@ b) where
   show (a :@ b) = show a <> " @ " <> show b
 
--- Since we want to use (monadic-)algebraic operations on terms of type `(a :& b)`,
+-- Since we want to use (monadic-)algebraic operations on terms of type `(a :@ b)`,
 -- we declare these instances here. That is, if `a` and `b` have such instances,
--- then (a :& b) has them as well:
+-- then (a :@ b) has them as well:
 
--- (a :& b) is a monadic semigroup.
-instance (SemigroupM t a, SemigroupM t b) => SemigroupM t (a :& b) where
+-- (a :@ b) is a monadic semigroup.
+instance (SemigroupM t a, SemigroupM t b) => SemigroupM t (a :@ b) where
   (⋆) (a₁ :@ b₁) (a₂ :@ b₂) = (:@) <$> (a₁ ⋆ a₂) <*> (b₁ ⋆ b₂)
 
--- (a :& b) is a monadic monoid.
-instance (MonoidM t a, MonoidM t b) => MonoidM t (a :& b) where
+-- (a :@ b) is a monadic monoid.
+instance (MonoidM t a, MonoidM t b) => MonoidM t (a :@ b) where
   neutral = (:@) <$> neutral <*> neutral
 
--- (a :& b) is a monadic monoid in which an explicit equality check with the neutral element
+-- (a :@ b) is a monadic monoid in which an explicit equality check with the neutral element
 -- is possible.
-instance (CheckNeutral m a, CheckNeutral m b) => CheckNeutral m (a :& b) where
+instance (CheckNeutral m a, CheckNeutral m b) => CheckNeutral m (a :@ b) where
   checkNeutral (a :@ b) = (\a b -> and [a,b]) <$> checkNeutral a <*> checkNeutral b
 
 -- NOTE: The monoidal operation for sensitivities is addition.
 --       The operation for DMTypes is unification.
---       That means, given `(x :@ s), (y :@ t) :: (DMType :& Sensitivity)`,
+--       That means, given `(x :@ s), (y :@ t) :: (DMType :@ Sensitivity)`,
 --       computing `(x :@ s) ⋆ (y :@ t)` unifies `x` and `y`, and sums `s` and `t`.
 --       The result lives in a monad.
 
-fstAnn :: (a :& b) -> a
+fstAnn :: (a :@ b) -> a
 fstAnn (a :@ b) = a
 
-sndAnn :: (a :& b) -> b
+sndAnn :: (a :@ b) -> b
 sndAnn (a :@ b) = b
 
 
@@ -465,8 +465,8 @@ instance Show DMTypeOps_Binary where
 
 -- An application of a type operation to an appropriate number of type arguments
 data DMTypeOp =
-     UnaryNum DMTypeOps_Unary   (DMTypeOf NumKind :& SVar) (DMTypeOf NumKind)
-   | BinaryNum DMTypeOps_Binary (DMTypeOf NumKind :& SVar , DMTypeOf NumKind :& SVar) (DMTypeOf NumKind)
+     UnaryNum DMTypeOps_Unary   (DMTypeOf NumKind :@ SVar) (DMTypeOf NumKind)
+   | BinaryNum DMTypeOps_Binary (DMTypeOf NumKind :@ SVar , DMTypeOf NumKind :@ SVar) (DMTypeOf NumKind)
   deriving (Show)
 
 
@@ -679,7 +679,7 @@ instance Show Relevance where
    show IsRelevant = "interesting"
    show NotRelevant = "uninteresting"
 
-data WithRelev extra = WithRelev Relevance (DMTypeOf MainKind :& Annotation extra)
+data WithRelev extra = WithRelev Relevance (DMTypeOf MainKind :@ Annotation extra)
 
 
 instance Semigroup Relevance where
@@ -691,8 +691,8 @@ instance Show (WithRelev e) where
   show (WithRelev IsRelevant  x) = show x
   show (WithRelev NotRelevant x) = "{" <> show x <> "}"
 
-makeRelev :: (DMTypeOf MainKind :& Annotation e) -> WithRelev e
+makeRelev :: (DMTypeOf MainKind :@ Annotation e) -> WithRelev e
 makeRelev = WithRelev IsRelevant
 
-makeNotRelev :: (DMTypeOf MainKind :& Annotation e) -> WithRelev e
+makeNotRelev :: (DMTypeOf MainKind :@ Annotation e) -> WithRelev e
 makeNotRelev = WithRelev NotRelevant

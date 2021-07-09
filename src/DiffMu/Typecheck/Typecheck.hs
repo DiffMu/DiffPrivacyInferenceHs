@@ -180,7 +180,7 @@ checkSen' (LamStar xτs body) scope =
       -- variables that are annotated irrelevant can be made const in case they are
       -- numeric or tuples. that way we can express the result sensitivity/privacy
       -- in terms of the nonrelevant input variables
-      let addC :: (DMMain :& b, (a, Relevance)) -> TCT Identity ()
+      let addC :: (DMMain :@ b, (a, Relevance)) -> TCT Identity ()
           addC ((τ :@ _), (_, i)) = do
                  _ <- case i of
                        IsRelevant -> pure ()
@@ -223,10 +223,10 @@ checkSen' (Apply f args) scope =
   let
     -- check the argument in the given scope,
     -- and scale scope by new variable, return both
-    checkArg :: DMTerm -> DMScope -> Delayed DMScope (TC (DMMain :& Sensitivity))
+    checkArg :: DMTerm -> DMScope -> Delayed DMScope (TC (DMMain :@ Sensitivity))
     checkArg arg scope = do
       τ <- checkSens arg scope
-      let scaleContext :: TC (DMMain :& Sensitivity)
+      let scaleContext :: TC (DMMain :@ Sensitivity)
           scaleContext =
             do τ' <- τ
                s <- newVar
@@ -498,10 +498,10 @@ checkPri' (Apply f args) scope =
   let
     -- check the argument in the given scope,
     -- and scale scope by new variable, return both
-    checkArg :: DMTerm -> DMScope -> Delayed DMScope (TC (DMMain :& Privacy))
+    checkArg :: DMTerm -> DMScope -> Delayed DMScope (TC (DMMain :@ Privacy))
     checkArg arg scope = do
       τ <- checkSens arg scope
-      let restrictTruncateContext :: TC (DMMain :& Privacy)
+      let restrictTruncateContext :: TC (DMMain :@ Privacy)
           restrictTruncateContext =
             do τ' <- τ
                restrictAll oneId -- sensitivity of everything in context must be <= 1
@@ -645,7 +645,7 @@ checkPri' (Gauss rp εp δp f) scope =
 
 
 checkPri' (Loop niter cs (xi, xc) body) scope =
-   --let setInteresting :: ([Symbol],[DMMain :& PrivacyAnnotation]) -> Sensitivity -> TC ()
+   --let setInteresting :: ([Symbol],[DMMain :@ PrivacyAnnotation]) -> Sensitivity -> TC ()
    let setInteresting (xs, τps) n = do
           let τs = map fstAnn τps
           let ps = map sndAnn τps

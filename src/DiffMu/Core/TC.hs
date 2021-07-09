@@ -41,7 +41,7 @@ inftyP = (constCoeff Infty, constCoeff Infty)
 instance (Substitute v x a, Substitute v x b, Substitute v x c) => Substitute v x (a, b, c) where
   substitute σs (a, b, c) = (,,) <$> substitute σs a <*> substitute σs b <*> substitute σs c
 
-instance (Substitute v x a, Substitute v x b) => Substitute v x (a :& b) where
+instance (Substitute v x a, Substitute v x b) => Substitute v x (a :@ b) where
   substitute σs (a :@ b) = (:@) <$> substitute σs a <*> substitute σs b
 
 instance (Substitute v x a, Substitute v x b) => Substitute v x (a :=: b) where
@@ -166,7 +166,7 @@ instance (FreeVars v a, FreeVars v b) => FreeVars v (Either a b) where
   freeVars (Left aa) = freeVars aa
   freeVars (Right bb) = freeVars bb
 
-instance (FreeVars v a, FreeVars v b) => FreeVars v (a :& b) where
+instance (FreeVars v a, FreeVars v b) => FreeVars v (a :@ b) where
   freeVars (a :@ b) = freeVars a <> freeVars b
 
 instance (FreeVars v a, FreeVars v b) => FreeVars v (a :=: b) where
@@ -431,12 +431,12 @@ instance Typeable x => Cast (Either (Annotation SensitivityK) (Annotation Privac
       _    -> impossible "Found an AnnotatedKind which was neither SensitivityK nor PrivacyK."
 
 instance Typeable x => Cast (Either (WithRelev SensitivityK) (WithRelev PrivacyK)) (WithRelev x) where
-  cast (Left (WithRelev i x)) = WithRelev i <$> cast @ (Either (DMTypeOf MainKind :& Annotation SensitivityK) (DMTypeOf MainKind :& Annotation PrivacyK)) (Left x)
-  cast (Right (WithRelev i x)) = WithRelev i <$> cast @(Either (DMTypeOf MainKind :& Annotation SensitivityK) (DMTypeOf MainKind :& Annotation PrivacyK))  (Right x)
+  cast (Left (WithRelev i x)) = WithRelev i <$> cast @ (Either (DMTypeOf MainKind :@ Annotation SensitivityK) (DMTypeOf MainKind :@ Annotation PrivacyK)) (Left x)
+  cast (Right (WithRelev i x)) = WithRelev i <$> cast @(Either (DMTypeOf MainKind :@ Annotation SensitivityK) (DMTypeOf MainKind :@ Annotation PrivacyK))  (Right x)
 
 
 
-instance (Cast (Either a b) x) => Cast (Either (z :& a) (z :& b)) (z :& x) where
+instance (Cast (Either a b) x) => Cast (Either (z :@ a) (z :@ b)) (z :@ x) where
   cast (Left (x :@ e)) = (x :@) <$> cast @(Either a b) (Left e)
   cast (Right (x :@ e)) = (x :@) <$> cast @(Either a b) (Right e)
 
@@ -922,7 +922,7 @@ instance (MonadDMTC t) => Normalize t (DMTypeOf k) where
        -- , i.e., compute {↷,∧,Trunc}-terms
        normalizeAnn n₃
 
-instance (Normalize t a, Normalize t b) => Normalize t (a :& b) where
+instance (Normalize t a, Normalize t b) => Normalize t (a :@ b) where
   normalize (a :@ b) = (:@) <$> normalize a <*> normalize b
 
 instance (Normalize t a) => Normalize t [a] where

@@ -189,11 +189,11 @@ restrictInteresting s = let
 -- If a variable is not present in Σ (this means it was not used in the lambda body),
 -- create a new type/typevar according to type hint given in `xτs` and give it zero annotation.
 -- The result is the signature of the lambda the checking of whose body returned the current context.
-getArgList :: forall t e. (MonadDMTC t, DMExtra e) => [Asgmt JuliaType] -> t [DMTypeOf MainKind :& Annotation e]
+getArgList :: forall t e. (MonadDMTC t, DMExtra e) => [Asgmt JuliaType] -> t [DMTypeOf MainKind :@ Annotation e]
 getArgList xτs = do
   (γ :: TypeCtxSP) <- use types
 
-  let f :: Asgmt JuliaType -> t (DMTypeOf MainKind :& Annotation e)
+  let f :: Asgmt JuliaType -> t (DMTypeOf MainKind :@ Annotation e)
       f (x :- τ) = do
         val <- getValueM x γ
         case val of
@@ -227,7 +227,7 @@ getAllVars = do
 
 removeVar :: forall e t. (DMExtra e, MonadDMTC t) => Symbol -> t (WithRelev e)
 removeVar x =  do
-  -- (γ :: Ctx Symbol (DMType :& e)) <- use types
+  -- (γ :: Ctx Symbol (DMType :@ e)) <- use types
   γ <- use types
   v <- getValueM x γ
   vr <- case v of
@@ -243,13 +243,13 @@ lookupVar x =  do
   v <- getValueM x γ
   cast v
 
-getInteresting :: MonadDMTC t => t ([Symbol],[DMTypeOf MainKind :& (Annotation PrivacyK)])
+getInteresting :: MonadDMTC t => t ([Symbol],[DMTypeOf MainKind :@ (Annotation PrivacyK)])
 getInteresting = do
    γ <- use types
    h <- case γ of
            Left _ -> throwError (ImpossibleError "getInteresting called on sensitivity context.")
            Right (Ctx (MonCom h')) -> return (H.toList h')
-   let f :: [(Symbol, WithRelev PrivacyK)] -> ([(Symbol, DMTypeOf MainKind :& (Annotation PrivacyK))])
+   let f :: [(Symbol, WithRelev PrivacyK)] -> ([(Symbol, DMTypeOf MainKind :@ (Annotation PrivacyK))])
        f xs = [ (x , τ) | (x , WithRelev IsRelevant τ) <- xs ]
    return (unzip (f h))
 

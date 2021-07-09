@@ -73,9 +73,9 @@ instance Unify MonadDMTC (DMTypeOf k) where
     ForAll (xs <> ys) <$> unify t s
   unify_ t s                              = throwError (UnificationError t s)
 
--- Above we implictly use unification of terms of the type (a :& b).
+-- Above we implictly use unification of terms of the type (a :@ b).
 -- These are unified entry-wise:
-instance (Unify isT a, Unify isT b) => Unify isT (a :& b) where
+instance (Unify isT a, Unify isT b) => Unify isT (a :@ b) where
   unify_ (a₁ :@ e₁) (a₂ :@ e₂) = (:@) <$> unify_ a₁ a₂ <*> unify_ e₁ e₂
 
 -- Similarly, lists of terms are unified elements wise,

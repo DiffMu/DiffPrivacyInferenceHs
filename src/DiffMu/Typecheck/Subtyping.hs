@@ -28,7 +28,7 @@ getArrowLength :: DMFun -> Maybe Int
 getArrowLength (a :->: _) = Just (length a)
 getArrowLength _         = Nothing
 
-getFun :: DMMain -> INCRes () [DMTypeOf ForAllKind :& Maybe [JuliaType]]
+getFun :: DMMain -> INCRes () [DMTypeOf ForAllKind :@ Maybe [JuliaType]]
 getFun (Fun xs) = Finished xs
 getFun (TVar _) = Wait
 getFun _ = Fail (UserError ())
