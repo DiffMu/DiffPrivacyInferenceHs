@@ -11,6 +11,7 @@ import DiffMu.Core.Definitions
 import DiffMu.Core.Symbolic
 import DiffMu.Core.Logging
 import {-# SOURCE #-} DiffMu.Typecheck.Subtyping
+-- import {-# SOURCE #-} DiffMu.Core.Unification
 
 import qualified Data.HashMap.Strict as H
 
@@ -1099,12 +1100,26 @@ normalizeAnn (NoFun fs) = pure $ NoFun fs
 normalizeAnn (a :∧: b) = do
   a' <- normalizeAnn a
   b' <- normalizeAnn b
+
+  let makeNoFunInf :: DMTypeOf NoFunKind -> DMTypeOf NoFunKind -> t (DMMain)
+      makeNoFunInf x y = do -- z <- infimum @MonadDMTC @t x y
+        z <- newVar
+        addConstraint (Solvable (IsInfimum (x, y, z)))
+        return (NoFun z)
+
   case (a', b') of
     (Fun xs, Fun ys) -> pure $ Fun (xs <> ys)
-    (NoFun x, NoFun y) -> do -- z <- infimum @MonadDMTC @t x y
-                                             z <- newVar
-                                             addConstraint (Solvable (IsInfimum (x, y, z)))
-                                             return (NoFun z)
+    (NoFun x, NoFun y) -> makeNoFunInf x y
+    (NoFun x, TVar y) -> do
+      y' <- newVar
+      addSub (y := NoFun y')
+      makeNoFunInf x y'
+    (TVar x, NoFun y) -> do
+      x' <- newVar
+      addSub (x := NoFun x')
+      makeNoFunInf x' y
+    (NoFun x, Fun y) -> throwError (UnificationError (NoFun x) (Fun y))
+    (Fun x, NoFun y) -> throwError (UnificationError (Fun x) (NoFun y))
     (_ , _) -> return (a' :∧: b')
 normalizeAnn (xs :->: y) = do
   let normalizeInside (x :@ annot) = (:@ annot) <$> normalizeAnn x
