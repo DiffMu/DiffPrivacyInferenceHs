@@ -855,7 +855,8 @@ instance Monad m => MonadWatch (TCT m) where
 
 
 
-
+instance Monad t => (Normalize t ()) where
+  normalize () = pure ()
 
 instance (Normalize t a, Normalize t b) => Normalize t (a :=: b) where
   normalize (a :=: b) =  (:=:) <$> normalize a <*> normalize b

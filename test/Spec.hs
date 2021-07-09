@@ -50,6 +50,10 @@ tcl r = do
   return (fst <$> x)
 
 
+tcb :: Bool -> TC a -> IO (Either DMException a)
+tcb True = tcl
+tcb False = tc
+
 sn :: Normalize TC a => TC a -> TC a
 sn x = do
   x' <- x
@@ -64,6 +68,30 @@ testUnification = do
     it "unifies equal types" $ do
       (tc $ unify (DMInt) (DMInt)) `shouldReturn` ((Right DMInt))
 
+testSubtyping = do
+  let testsub x (a :: DMTypeOf k) b c = do
+        it ("computes " <> show a <> " ≤ " <> show b <> " as [" <> show c <> "]") $ do
+          (tcb x $ do
+              sn (a ≤! b)
+              res <- (getUnsolvedConstraintMarkNormal SolveExact)
+              return (fmap (\_ -> ()) res)
+            )
+            `shouldReturn` (c)
+
+  describe "subtyping of BaseNumKind/NumKind" $ do
+    testsub False DMInt DMReal (Right Nothing)
+    testsub False DMReal DMInt (Left (UnsatisfiableConstraint "[test]"))
+
+  describe "subtyping of tuples" $ do
+    let nci1 = (Numeric (Const oneId DMInt))
+        nci2 = (Numeric (Const (constCoeff (Fin 2)) DMInt))
+        nnr  = Numeric (NonConst DMReal)
+
+    testsub False (NoFun nci1) (NoFun nnr) (Right Nothing)
+    testsub False (DMTup [nci1,nci2]) (DMTup [nci1,nnr]) (Right Nothing)
+    testsub False (DMTup [nci1,nci2]) (DMTup [nci2,nnr]) (Left (UnsatisfiableConstraint "[test]"))
+    testsub False (DMTup [nnr,nci2]) (DMTup [nci2,nnr]) (Left (UnsatisfiableConstraint "[test]"))
+    testsub False (DMTup [nnr,nci2]) (nnr) (Left (UnsatisfiableConstraint "[test]"))
 
 testSupremum = do
   describe "supremum" $ do
@@ -100,7 +128,7 @@ testCheck_Rules = do
 parseEvalSimple p term expected =
   parseEval p ("Checks '" <> term <> "' correctly") term expected
 
-parseEval parse desc term expected =
+parseEval parse desc term (expected :: TC DMMain) =
   it desc $ do
     term' <- parse term
 
@@ -108,37 +136,37 @@ parseEval parse desc term expected =
     term'' <- case res of
       Left err -> error $ "Error while parsing DMTerm from string: " <> show err
       Right res ->
-        do let tres = checkPriv res def
+        do let tres = (do
+                          inferredT_Delayed <- checkSens res def
+                          return $ do
+                            inferredT <- inferredT_Delayed
+                            expectedT <- expected
+                            unify inferredT expectedT
+                            return ()
+                      )
            pure $ extractDelayed def tres
 
-    (tc $ sn $ term'') `shouldReturn` expected
+    (tc $ sn $ term'') `shouldReturn` (Right ())
 
 testCheckSens parse = do
   describe "checkSens" $ do
-    parseEvalSimple parse "3 + 7 * 9" (Right $ NoFun (Numeric (Const (constCoeff (Fin 66)) DMInt)))
-    parseEvalSimple parse "2.2 * 3"   (Right $ NoFun (Numeric (Const (constCoeff (Fin 6.6000004)) DMReal)))
+    parseEvalSimple parse "3 + 7 * 9" (pure $ NoFun (Numeric (Const (constCoeff (Fin 66)) DMInt)))
+    parseEvalSimple parse "2.2 * 3"   (pure $ NoFun (Numeric (Const (constCoeff (Fin 6.6000004)) DMReal)))
 
     let test = "function test(a)\n"
             <> "  a\n"
             <> "end"
-    parseEval parse "Checks the identity function" test (Right $ NoFun (Numeric (Const (constCoeff (Fin 66)) DMInt)))
+    let ty   = do
+          τ <- newTVar ""
+          return $ Fun([ForAll [SomeK τ] ([TVar τ :@ oneId] :->: TVar τ) :@ Just [JuliaType "Any"]])
+    parseEval parse "Checks the identity function" test ty
 
-      -- let term = "3 + 7 * 9"
-      -- term' <- parse term
-
-      -- let res = pDMTermFromString term'
-      -- term'' <- case res of
-      --   Left err -> error $ "Error while parsing DMTerm from string: " <> show err
-      --   Right res ->
-      --     do let tres = checkPriv res def
-      --        pure $ extractDelayed def tres
-
-      -- (tc $ sn $ term'') `shouldReturn` (Right $ NoFun (Numeric (Const (constCoeff (Fin 66)) DMInt)))
 
 
 runAllTests :: (String -> IO String) -> IO ()
 runAllTests parse = defaultspec $ do
   testUnification
+  testSubtyping
   testSupremum
   testCheck_Rules
   testCheckSens parse

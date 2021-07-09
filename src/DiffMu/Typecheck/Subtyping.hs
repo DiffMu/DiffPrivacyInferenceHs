@@ -33,6 +33,11 @@ getFun (Fun xs) = Finished xs
 getFun (TVar _) = Wait
 getFun _ = Fail (UserError ())
 
+getTupSize :: DMTypeOf NoFunKind -> INCRes () Int
+getTupSize (DMTup xs) = Finished (length xs)
+getTupSize (TVar a) = Wait
+getTupSize _ = Fail (UserError ())
+
 -- The subtyping graph for our type system.
 subtypingGraph :: forall e t k. (SingI k, Typeable k, MonadDMTC t) => EdgeType -> [Edge t (DMTypeOf k)]
 subtypingGraph =
@@ -86,11 +91,22 @@ subtypingGraph =
     (_,_, Just Refl, _, _) ->
       \case { IsReflexive IsStructural
             -> [
-                 SingleEdge $
+                 (SingleEdge $
                    do a₀ <- newVar
                       a₁ <- newVar
                       a₀ ⊑! a₁
-                      return (Numeric a₀, Numeric a₁)
+                      return (Numeric a₀, Numeric a₁))
+                 , (MultiEdge getTupSize $ \n ->
+                   do
+                     let f () = do a <- newVar
+                                   b <- newVar
+                                   a ⊑! b
+                                   return (a, b)
+
+                     args <- mapM f (take n $ repeat ())
+                     let (args₀, args₁) = unzip args
+                     return (DMTup args₀, DMTup args₁)
+                     )
                  ]
             ; IsReflexive NotStructural -> [ SingleEdge $
                    do nrm <- newVar
@@ -190,9 +206,9 @@ solveSubtyping name path = do
   case res of
     Finished a -> dischargeConstraint @MonadDMTC name
     Partial a  -> updateConstraint name (Solvable (IsLessEqual a))
-    Wait       -> convertSubtypingToSupremum name path -- in this case we try to change this one into a sup
+    Wait       -> logForce "Something very suspicious is happening, at least make sure that this is really the correct approach." >> logForce ("What happens is that we convert the subtyping constraint of " <> show path <> " into a supremum...\nWhyever that is supposed to be correct...") >> convertSubtypingToSupremum name path -- in this case we try to change this one into a sup
     Fail e     -> throwError (UnsatisfiableConstraint (show (fst path) <> " ⊑ " <> show (snd path) <> "\n\n"
-                         <> "Got the following errors while search the subtyping graph:\n"
+                         <> "Got the following errors while searching the subtyping graph:\n"
                          <> show e))
 
 instance Typeable k => FixedVars TVarOf (IsLessEqual (DMTypeOf k, DMTypeOf k)) where
