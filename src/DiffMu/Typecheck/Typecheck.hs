@@ -647,8 +647,6 @@ checkPri' (Gauss rp εp δp f) scope =
 checkPri' (Loop niter cs (xi, xc) body) scope =
    --let setInteresting :: ([Symbol],[DMMain :& PrivacyAnnotation]) -> Sensitivity -> TC ()
    let setInteresting (xs, τps) n = do
-          traceM $ ("setting interesting " <> show xs)
-
           let τs = map fstAnn τps
           let ps = map sndAnn τps
 

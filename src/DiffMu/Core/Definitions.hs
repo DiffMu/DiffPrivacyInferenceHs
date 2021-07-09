@@ -610,6 +610,7 @@ data DMException where
   UnsatisfiableConstraint :: String -> DMException
   TypeMismatchError       :: String -> DMException
   NoChoiceFoundError      :: String -> DMException
+  UnificationShouldWaitError :: DMException
 
 instance Show DMException where
   show (UnsupportedTermError t) = "The term '" <> show t <> "' is currently not supported."
@@ -622,6 +623,7 @@ instance Show DMException where
   show (UnsatisfiableConstraint c) = "The constraint " <> c <> " is not satisfiable."
   show (TypeMismatchError e) = "Type mismatch: " <> e
   show (NoChoiceFoundError e) = "No choice found: " <> e
+  show (UnificationShouldWaitError) = "Trying to unify types with unresolved infimum (∧)."
 
 instance Eq DMException where
   UnsupportedTermError    a    == UnsupportedTermError    b    = True
@@ -634,6 +636,7 @@ instance Eq DMException where
   UnsatisfiableConstraint a    == UnsatisfiableConstraint b    = True
   TypeMismatchError       a    == TypeMismatchError       b    = True
   NoChoiceFoundError      a    == NoChoiceFoundError      b    = True
+  UnificationShouldWaitError   == UnificationShouldWaitError   = True
   _ == _ = False
 
 

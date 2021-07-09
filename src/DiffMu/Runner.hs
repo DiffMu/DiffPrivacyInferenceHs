@@ -65,6 +65,7 @@ typecheckFromDMTerm term = do
         -- typecheck the term t5
         let tres = checkSens term def
         tres' <- extractDelayed def tres
+        log $ "Type before constraint resolving: " <> show tres'
         log $ "solving constraints:"
         logPrintConstraints
         solveAllConstraints SolveExact
@@ -97,10 +98,10 @@ typecheckFromDMTerm term = do
 
   -- these are the locations from which the logs will be shown
   let logging_locations = [
-        Location_Constraint
+        --Location_Constraint
         -- Location_INC,
         -- Location_MonadicGraph,
-        -- Location_All
+         Location_All
         ]
 
   x <- executeTC (DoShowLog Force logging_locations) r

@@ -66,6 +66,8 @@ solveJuliaEqual name (NoFun a) (NoFun b) = do
 
 solveJuliaEqual name (TVar _) _   = return ()
 solveJuliaEqual name (_) (TVar _) = return ()
+solveJuliaEqual name (_) (_ :∧: _) = return ()
+solveJuliaEqual name (_ :∧: _) (_) = return ()
 solveJuliaEqual name _ _ = failConstraint name
 
 
