@@ -33,13 +33,15 @@ import Spec
 foreign import ccall "dynamic" mkFun :: FunPtr (CInt -> CInt) -> (CInt -> CInt)
 
 
+type SubtypingCallbackFun = CString -> CString -> Bool
+type TermParserCallbackFun = CString -> IO CString
 
-callWithCString :: FunPtr (CString -> CString -> Bool) -> String -> String -> Bool
+callWithCString :: FunPtr SubtypingCallbackFun -> String -> String -> Bool
 callWithCString f a b = unsafeLocalState $ do
   withCString a (\ca -> withCString b (\cb -> return $ call_StringStringBool f ca cb))
 
 
-typecheckFromCString_DMTerm :: FunPtr (CString -> CString -> Bool) -> CString -> IO ()
+typecheckFromCString_DMTerm :: FunPtr SubtypingCallbackFun -> CString -> IO ()
 typecheckFromCString_DMTerm fun str = do
   putStrLn "hello!"
 
@@ -49,19 +51,27 @@ typecheckFromCString_DMTerm fun str = do
     putStrLn "======================================="
     putStrLn "Call to haskell resulted in exception."
 
-foreign export ccall typecheckFromCString_DMTerm :: FunPtr (CString -> CString -> Bool) -> CString -> IO ()
+foreign export ccall typecheckFromCString_DMTerm :: FunPtr SubtypingCallbackFun -> CString -> IO ()
 
 catchAny :: IO a -> (SomeException -> IO a) -> IO a
 catchAny = Control.Exception.catch
 
-runHaskellTests :: FunPtr (CString -> CString -> Bool) -> IO ()
-runHaskellTests fun = do
+callTermParserCallback :: FunPtr TermParserCallbackFun -> String -> IO String
+callTermParserCallback parse input = do
+  withCString input (\input -> do
+                        res <- call_StringString parse input
+                        peekCString res)
+
+runHaskellTests :: FunPtr SubtypingCallbackFun -> FunPtr TermParserCallbackFun -> IO ()
+runHaskellTests sub parse = do
   putStrLn "We are testing now!"
-  writeIORef global_callback_issubtype (makeDMEnv (fun))
-  runAllTests `catchAny` \e -> do
+  writeIORef global_callback_issubtype (makeDMEnv (sub))
+  runAllTests (callTermParserCallback parse) `catchAny` \e -> do
     putStrLn "======================================="
     putStrLn "Call to haskell resulted in exception."
 
-foreign export ccall runHaskellTests :: FunPtr (CString -> CString -> Bool) -> IO ()
+foreign export ccall runHaskellTests :: FunPtr SubtypingCallbackFun -> FunPtr TermParserCallbackFun -> IO ()
+
+foreign import ccall "dynamic" call_StringString :: FunPtr (CString -> IO CString) -> CString -> IO CString
 
 

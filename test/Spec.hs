@@ -97,12 +97,51 @@ testCheck_Rules = do
             extractDelayed def tres
       (tc $ sn $ f) `shouldReturn` (Right $ NoFun (Numeric (Const (oneId) DMReal)))
 
+parseEvalSimple p term expected =
+  parseEval p ("Checks '" <> term <> "' correctly") term expected
 
-runAllTests :: IO ()
-runAllTests = defaultspec $ do
+parseEval parse desc term expected =
+  it desc $ do
+    term' <- parse term
+
+    let res = pDMTermFromString term'
+    term'' <- case res of
+      Left err -> error $ "Error while parsing DMTerm from string: " <> show err
+      Right res ->
+        do let tres = checkPriv res def
+           pure $ extractDelayed def tres
+
+    (tc $ sn $ term'') `shouldReturn` expected
+
+testCheckSens parse = do
+  describe "checkSens" $ do
+    parseEvalSimple parse "3 + 7 * 9" (Right $ NoFun (Numeric (Const (constCoeff (Fin 66)) DMInt)))
+    parseEvalSimple parse "2.2 * 3"   (Right $ NoFun (Numeric (Const (constCoeff (Fin 6.6000004)) DMReal)))
+
+    let test = "function test(a)\n"
+            <> "  a\n"
+            <> "end"
+    parseEval parse "Checks the identity function" test (Right $ NoFun (Numeric (Const (constCoeff (Fin 66)) DMInt)))
+
+      -- let term = "3 + 7 * 9"
+      -- term' <- parse term
+
+      -- let res = pDMTermFromString term'
+      -- term'' <- case res of
+      --   Left err -> error $ "Error while parsing DMTerm from string: " <> show err
+      --   Right res ->
+      --     do let tres = checkPriv res def
+      --        pure $ extractDelayed def tres
+
+      -- (tc $ sn $ term'') `shouldReturn` (Right $ NoFun (Numeric (Const (constCoeff (Fin 66)) DMInt)))
+
+
+runAllTests :: (String -> IO String) -> IO ()
+runAllTests parse = defaultspec $ do
   testUnification
   testSupremum
   testCheck_Rules
+  testCheckSens parse
 
 
 
