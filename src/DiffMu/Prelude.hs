@@ -15,6 +15,7 @@ module DiffMu.Prelude
   , composeFunM
   , MonadImpossible (..)
   , MonadInternalError (..)
+  , (:=:) (..)
   )
   where
 
@@ -92,6 +93,12 @@ class Monad t => MonadImpossible t where
 
 class Monad t => MonadInternalError t where
   internalError :: String -> t a
+
+data (:=:) a b = (:=:) a b
+
+instance (Show a, Show b) => Show (a :=: b) where
+  show (a :=: b) = show a <> " :=: " <> show b
+
 
 -- import           Prelude                                 hiding
 --                                                           (Fractional (..),

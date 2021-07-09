@@ -215,8 +215,8 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsLessEqual (DMTypeOf k, DMTyp
 
 -- The actual solving is done here.
 -- this simply uses the `findSupremumM` function from Abstract.Computation.MonadicGraph
-solveSupremum :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> Symbol -> ((DMTypeOf k, DMTypeOf k), DMTypeOf k) -> t ()
-solveSupremum graph name ((a,b),x) = do
+solveSupremum :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> Symbol -> ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) -> t ()
+solveSupremum graph name ((a,b) :=: x) = do
   -- Here we define which errors should be caught while doing our hypothetical computation.
   let relevance (UnificationError _ _)      = IsGraphRelevant
       relevance (UnsatisfiableConstraint _) = IsGraphRelevant
@@ -227,7 +227,7 @@ solveSupremum graph name ((a,b),x) = do
   -- traceM $ "I have " <> show (length (graph (IsReflexive NotStructural))) <> " candidates."
 
   -- Executing the computation
-  res <- findSupremumM @(Full) relevance (graph) (a,b,x)
+  res <- findSupremumM @(Full) relevance (graph) ((a,b) :=: x)
 
   -- We look at the result and if necessary throw errors.
   case res of
