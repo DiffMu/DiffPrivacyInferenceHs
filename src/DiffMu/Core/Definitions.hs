@@ -304,6 +304,11 @@ infix 3 :@
 data (:&) a b = (:@) a b
   deriving (Generic, Eq)
 
+data (:=:) a b = (:=:) a b
+
+instance (Show a, Show b) => Show (a :=: b) where
+  show (a :=: b) = show a <> " :=: " <> show b
+
 instance (Show a, Show b) => Show (a :& b) where
   show (a :@ b) = show a <> " @ " <> show b
 
