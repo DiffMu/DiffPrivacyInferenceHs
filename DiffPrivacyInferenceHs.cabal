@@ -59,10 +59,8 @@ library
       DiffMu.Core
       DiffMu.Core.Context
       DiffMu.Core.Definitions
+      DiffMu.Core.DelayedScope
       DiffMu.Core.Logging
-      DiffMu.Core.Scope
-      DiffMu.Core.Scope1
-      DiffMu.Core.SimpleScope
       DiffMu.Core.Symbolic
       DiffMu.Core.TC
       DiffMu.Core.Unification
