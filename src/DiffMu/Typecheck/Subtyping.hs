@@ -165,7 +165,7 @@ convertSubtypingToSupremum name (lower, TVar upper) = do
     ((name',lower'):[]) -> do
       dischargeConstraint name'
       dischargeConstraint name
-      addConstraint (Solvable (IsSupremum (lower, lower', TVar upper)))
+      addConstraint (Solvable (IsSupremum ((lower, lower') :=: TVar upper)))
       return ()
     ((name',lower'):xs) -> error "Not implemented yet: When more than two subtyping constrs are merged to a single supremum. Don't worry, this case shouldn't be hard!"
 convertSubtypingToSupremum name _                   = pure ()
@@ -197,10 +197,10 @@ solveSubtyping name path = do
 
 instance Typeable k => FixedVars TVarOf (IsLessEqual (DMTypeOf k, DMTypeOf k)) where
   fixedVars _ = mempty
-instance Typeable k => FixedVars TVarOf (IsSupremum (DMTypeOf k, DMTypeOf k, DMTypeOf k)) where
-  fixedVars (IsSupremum (_ , _ , a)) = freeVars a
-instance Typeable k => FixedVars TVarOf (IsInfimum (DMTypeOf k, DMTypeOf k, DMTypeOf k)) where
-  fixedVars (IsInfimum (_ , _ , a)) = freeVars a
+instance Typeable k => FixedVars TVarOf (IsSupremum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k)) where
+  fixedVars (IsSupremum (_ :=: a)) = freeVars a
+instance Typeable k => FixedVars TVarOf (IsInfimum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k)) where
+  fixedVars (IsInfimum (_ :=: a)) = freeVars a
 
 
 -- We can solve `IsLessEqual` constraints for DMTypes.
@@ -215,8 +215,8 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsLessEqual (DMTypeOf k, DMTyp
 
 -- The actual solving is done here.
 -- this simply uses the `findSupremumM` function from Abstract.Computation.MonadicGraph
-solveSupremum :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> Symbol -> (DMTypeOf k, DMTypeOf k, DMTypeOf k) -> t ()
-solveSupremum graph name (a,b,x) = do
+solveSupremum :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> Symbol -> ((DMTypeOf k, DMTypeOf k), DMTypeOf k) -> t ()
+solveSupremum graph name ((a,b),x) = do
   -- Here we define which errors should be caught while doing our hypothetical computation.
   let relevance (UnificationError _ _)      = IsGraphRelevant
       relevance (UnsatisfiableConstraint _) = IsGraphRelevant
@@ -240,12 +240,12 @@ solveSupremum graph name (a,b,x) = do
 
 
 -- TODO: Check whether this does the correct thing.
-instance (SingI k, Typeable k) => Solve MonadDMTC IsSupremum (DMTypeOf k, DMTypeOf k, DMTypeOf k) where
+instance (SingI k, Typeable k) => Solve MonadDMTC IsSupremum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) where
   solve_ Dict _ name (IsSupremum a) = solveSupremum (GraphM subtypingGraph) name a
 
 
 -- TODO: Check whether this does the correct thing.
-instance (SingI k, Typeable k) => Solve MonadDMTC IsInfimum (DMTypeOf k, DMTypeOf k, DMTypeOf k) where
+instance (SingI k, Typeable k) => Solve MonadDMTC IsInfimum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) where
   solve_ Dict _ name (IsInfimum a) = solveSupremum (oppositeGraph (GraphM subtypingGraph)) name a
 
 ------------------------------------------------------------

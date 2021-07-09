@@ -293,7 +293,7 @@ checkSen' (Phi cond ifbr elsebr) scope = do
                            (τ1 : τ2 : _) -> return (τ1, τ2)
                            _ -> throwError (ImpossibleError "Sum cannot return empty.")
       τ <- newVar
-      addConstraint (Solvable (IsSupremum (τif, τelse, τ)))
+      addConstraint (Solvable (IsSupremum ((τif, τelse) :=: τ)))
       return τ
 
 

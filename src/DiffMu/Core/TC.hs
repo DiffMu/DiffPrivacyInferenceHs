@@ -855,16 +855,16 @@ instance Monad m => MonadWatch (TCT m) where
 
 
 
-supremum :: (IsT isT t, HasNormalize isT (a k, a k, a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsSupremum (a k, a k, a k), SingI k, Typeable k, ContentConstraintOnSolvable t (a k, a k, a k), ConstraintOnSolvable t (IsSupremum (a k, a k, a k))) => (a k) -> (a k) -> t (a k)
+supremum :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsSupremum ((a k, a k) :=: a k), SingI k, Typeable k, ContentConstraintOnSolvable t (a k, a k, a k), ConstraintOnSolvable t (IsSupremum ((a k, a k) :=: a k))) => (a k) -> (a k) -> t (a k)
 supremum x y = do
   (z :: a k) <- newVar
-  addConstraint (Solvable (IsSupremum (x, y, z)))
+  addConstraint (Solvable (IsSupremum ((x, y) :=: z)))
   return z
 
-infimum :: (IsT isT t, HasNormalize isT (a k, a k, a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsInfimum (a k, a k, a k), SingI k, Typeable k, ContentConstraintOnSolvable t (a k, a k, a k), ConstraintOnSolvable t (IsInfimum (a k, a k, a k))) => (a k) -> (a k) -> t (a k)
+infimum :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsInfimum ((a k, a k) :=: a k), SingI k, Typeable k, ContentConstraintOnSolvable t ((a k, a k), a k), ConstraintOnSolvable t (IsInfimum ((a k, a k) :=: a k))) => (a k) -> (a k) -> t (a k)
 infimum x y = do
   (z :: a k) <- newVar
-  addConstraint (Solvable (IsInfimum (x, y, z)))
+  addConstraint (Solvable (IsInfimum ((x, y) :=: z)))
   return z
 
 
@@ -1104,7 +1104,7 @@ normalizeAnn (a :∧: b) = do
   let makeNoFunInf :: DMTypeOf NoFunKind -> DMTypeOf NoFunKind -> t (DMMain)
       makeNoFunInf x y = do -- z <- infimum @MonadDMTC @t x y
         z <- newVar
-        addConstraint (Solvable (IsInfimum (x, y, z)))
+        addConstraint (Solvable (IsInfimum ((x, y) :=: z)))
         return (NoFun z)
 
   case (a', b') of
