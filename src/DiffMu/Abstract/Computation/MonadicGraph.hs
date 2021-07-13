@@ -48,8 +48,9 @@ oppositeGraph (GraphM graph) = GraphM (opp graph)
         opp f ty = oppositeEdge <$> f ty
 
 -- findPathM :: forall s m e a. (Show e, Show a, MonadError e m, MonadState s m, MonoidM m a, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> (a,a) -> m (INCRes e (a,a))
-findPathM :: forall s m isT e a. (Show e, Show a, MonadConstraint isT m, IsT isT m, Normalize m a, MonadNormalize m, MonadError e m, MonadState s m, MonadLog m, Unify isT a, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> (a,a) -> m (INCRes e (a,a))
-findPathM relevance (GraphM g) path =
+findPathM :: forall s m isT e a. (Show e, Show a, Eq a, MonadConstraint isT m, IsT isT m, Normalize m a, MonadNormalize m, MonadError e m, MonadState s m, MonadLog m, Unify isT a, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> (a,a) -> m (INCRes e (a,a))
+findPathM relevance (GraphM g) (start,goal) | start == goal = return $ Finished (start,goal)
+findPathM relevance (GraphM g) (start,goal) | otherwise     =
   let both (Finished a) (Finished b) | a == b = Finished a
       both (Fail e) _                         = Fail e
       both _ (Fail e)                         = Fail e
@@ -140,10 +141,10 @@ findPathM relevance (GraphM g) path =
                   <> [catchRelevant (withFamily fromLeft a)   | a <- g NotReflexive]
                   <> [catchRelevant (withFamily fromRight a)  | a <- g NotReflexive]
 
-  in evalINC (INC computations) path
+  in evalINC (INC computations) (start,goal)
 
 
-findSupremumM :: forall s m isT e a. (Show e, Show a, MonadError e m, MonadConstraint isT m, IsT isT m, Unify isT (a), Normalize m a, MonadNormalize m, MonadState s m, MonadLog m, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> ((a,a) :=: a) -> m (INCRes e ((a,a) :=: a))
+findSupremumM :: forall s m isT e a. (Show e, Show a, Eq a, MonadError e m, MonadConstraint isT m, IsT isT m, Unify isT (a), Normalize m a, MonadNormalize m, MonadState s m, MonadLog m, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> ((a,a) :=: a) -> m (INCRes e ((a,a) :=: a))
 findSupremumM relevance (GraphM graph) ((a,b) :=: x) =
   let
     -------------
@@ -290,6 +291,6 @@ findSupremumM relevance (GraphM graph) ((a,b) :=: x) =
   in withLogLocation "MndGraph" $ do
     evalINC (INC computations) ((a,b) :=: x)
 
-findInfimumM :: forall s m isT e a. (Show e, Show a, MonadError e m, MonadConstraint isT m, IsT isT m, Unify isT (a), Normalize m a, MonadNormalize m, MonadState s m, MonadLog m, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> ((a,a) :=: a) -> m (INCRes e ((a,a) :=: a))
+findInfimumM :: forall s m isT e a. (Show e, Show a, Eq a, MonadError e m, MonadConstraint isT m, IsT isT m, Unify isT (a), Normalize m a, MonadNormalize m, MonadState s m, MonadLog m, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> ((a,a) :=: a) -> m (INCRes e ((a,a) :=: a))
 findInfimumM relevance graph z = findSupremumM relevance (oppositeGraph graph) z
 

@@ -49,7 +49,7 @@ typecheckFromCString_DMTerm fun str = do
   str' <- peekCString str
   typecheckFromString_DMTerm str' `catchAny` \e -> do
     putStrLn "======================================="
-    putStrLn "Call to haskell resulted in exception."
+    putStrLn $ "Call to haskell resulted in exception (" <> displayException e <> ")."
 
 foreign export ccall typecheckFromCString_DMTerm :: FunPtr SubtypingCallbackFun -> CString -> IO ()
 
@@ -68,7 +68,7 @@ runHaskellTests sub parse = do
   writeIORef global_callback_issubtype (makeDMEnv (sub))
   runAllTests (callTermParserCallback parse) `catchAny` \e -> do
     putStrLn "======================================="
-    putStrLn "Call to haskell resulted in exception."
+    putStrLn $ "Call to haskell resulted in exception (" <> displayException e <> ")."
 
 foreign export ccall runHaskellTests :: FunPtr SubtypingCallbackFun -> FunPtr TermParserCallbackFun -> IO ()
 

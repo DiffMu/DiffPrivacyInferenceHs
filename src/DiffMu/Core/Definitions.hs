@@ -187,6 +187,64 @@ data DMTypeOf (k :: DMKind) where
   Fun :: [DMTypeOf ForAllKind :@ Maybe [JuliaType]] -> DMTypeOf MainKind
   (:∧:) :: DMTypeOf MainKind -> DMTypeOf MainKind -> DMTypeOf MainKind -- infimum
 
+
+-- instance Hashable (DMTypeOf k) where
+--   hashWithSalt s (Deleted) = s
+--   hashWithSalt s (DMInt) = s +! 1
+--   hashWithSalt s (DMReal) = s +! 1
+--   hashWithSalt s (DMData) = s +! 1
+--   hashWithSalt s (Const n t) = s `hashWithSalt` n `hashWithSalt` t
+--   hashWithSalt s (NonConst t) = s `hashWithSalt` t
+
+  -- a base numeric type can be either constant or non constant or data
+  -- Const    :: Sensitivity -> DMTypeOf BaseNumKind -> DMTypeOf NumKind
+  -- NonConst :: DMTypeOf BaseNumKind -> DMTypeOf NumKind
+
+  -- a base numeric type can be either constant or non constant or data
+  -- Const    :: Sensitivity -> DMTypeOf BaseNumKind -> DMTypeOf NumKind
+  -- NonConst :: DMTypeOf BaseNumKind -> DMTypeOf NumKind
+  -- DMData   :: DMTypeOf NumKind
+
+  -- -- we include numeric types into main types using this constructor
+  -- Numeric  :: DMTypeOf NumKind -> DMType
+
+  -- -- type vars can be of any kind (k :: DMKind). But we require the constraint that
+  -- -- k be typeable, because it is needed in cases where we want to compare different k's.
+  -- TVar :: IsKind k => SymbolOf k -> DMTypeOf k
+
+  -- -- the arrow type
+  -- (:->:) :: [DMTypeOf MainKind :@ Sensitivity] -> DMTypeOf MainKind -> DMFun
+
+  -- -- the privacy-arrow type
+  -- (:->*:) :: [DMTypeOf MainKind :@ Privacy] -> DMTypeOf MainKind -> DMFun
+
+  -- -- tuples
+  -- DMTup :: [DMType] -> DMType
+
+  --  --- matrix norms
+  -- L1 :: DMTypeOf NormKind
+  -- L2 :: DMTypeOf NormKind
+  -- LInf :: DMTypeOf NormKind
+
+  -- -- embed norms into ClipKind
+  -- U :: DMTypeOf ClipKind
+  -- Clip :: DMTypeOf NormKind -> DMTypeOf ClipKind
+
+  -- -- matrices
+  -- DMMat :: (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> Sensitivity -> DMType -> DMType
+
+  -- -- choices
+  -- DMChoice :: [DMType :@ (Maybe [JuliaType], Sensitivity)] -> DMType
+
+  -- -- foralls
+  -- ForAll :: [SomeK TVarOf] -> DMTypeOf FunKind -> DMTypeOf ForAllKind
+
+  -- -- annotations
+  -- NoFun :: DMTypeOf NoFunKind -> DMTypeOf MainKind
+  -- Fun :: [DMTypeOf ForAllKind :@ Maybe [JuliaType]] -> DMTypeOf MainKind
+  -- (:∧:) :: DMTypeOf MainKind -> DMTypeOf MainKind -> DMTypeOf MainKind -- infimum
+
+
 type DMExtra e = (Typeable e, SingI e)
 --                   Eq (Annotation e), Show (Annotation e),
 --                   CMonoidM Identity (Annotation e),

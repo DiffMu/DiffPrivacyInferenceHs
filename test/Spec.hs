@@ -47,7 +47,8 @@ tc r = do
 
 tcl :: TC a -> IO (Either DMException a)
 tcl r = do
-  x <- executeTC (DoShowLog Force [Location_Constraint , Location_INC, Location_MonadicGraph]) r
+  -- x <- executeTC (DoShowLog Force [Location_Constraint , Location_INC, Location_MonadicGraph]) r
+  x <- executeTC (DoShowLog Force [Location_Constraint]) r
   return (fst <$> x)
 
 
@@ -118,7 +119,7 @@ testSupremum = do
 
 
 testSubtyping_ContractEdge = do
-  describe "subtyping (contracting edges)" $ do
+  describe "subtyping (contracting edges - only subtyping constraints)" $ do
     it "contracts a single edge" $ do
       let test0 = do
             (a :: DMMain) <- newVar
@@ -142,7 +143,8 @@ testSubtyping_ContractEdge = do
 
             -- we are interested in how `a` and `b` turn out
             return (a,b)
-      (tc $ (sn test1 >>= (\(a,b) -> return (a == b)))) `shouldReturn` (Right True)
+      let checkres (a,b) = a == b
+      (tc $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right True)
 
     it "does NOT contract edge if left variable is bounded from above" $ do
       let test1 = do
@@ -179,6 +181,63 @@ testSubtyping_ContractEdge = do
             addConstraint (Solvable (IsJuliaEqual (y, a)))
             return (a,b)
       (tc $ (sn test1 >>= (\(a,b) -> return (a == b)))) `shouldReturn` (Right False)
+
+    it "does ONLY contract those edges which are allowed to be contracted" $ do
+      let test1 = do
+            -- the interesting variables a ≤ b
+            (a :: DMMain) <- newVar
+            b <- newVar
+            a ⊑! b
+
+            -- the additional variables x ≤ a ≤ b ≤ y
+            x <- newVar
+            y <- newVar
+            x ⊑! a
+            b ⊑! y
+
+            -- blocking constraints for x and y
+            (y' :: DMMain) <- newVar
+            (x' :: DMMain) <- newVar
+            addConstraint (Solvable (IsJuliaEqual (x, x')))
+            addConstraint (Solvable (IsJuliaEqual (y, y')))
+
+            -- we are interested in how `a`, `b`, `x`, `y` turn out
+            return (x,a,b,y)
+      let checkres (x,a,b,y) = and [ a == b
+                                   , x /= a
+                                   , y /= b ]
+      (tc $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right True)
+
+  describe "subtyping (contracting edges - subtyping and sup/inf constraints)" $ do
+    it "does contract edge given by supremum" $ do
+      let test1 :: TC (DMMain,DMMain,DMMain,DMMain)
+          test1 = do
+            -- the interesting variables a ≤ b
+            (a :: DMMain) <- newVar
+            (b :: DMMain) <- newVar
+            (c :: DMMain) <- supremum a b
+            (d :: DMMain) <- infimum a b
+
+            return (d,a,b,c)
+      let checkres (d,a,b,c) = (a == c, b == c, a == d, b == d)
+      (tcl $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right (True,True,True,True))
+    -- it "does contract edge if left variable is only bounded from below and right from above" $ do
+    --   let test1 = do
+    --         -- the interesting variables a ≤ b
+    --         (a :: DMMain) <- newVar
+    --         b <- newVar
+    --         a ⊑! b
+
+    --         -- the additional variables x ≤ a ≤ b ≤ y
+    --         x <- newVar
+    --         y <- newVar
+    --         x ⊑! a
+    --         b ⊑! y
+
+    --         -- we are interested in how `a` and `b` turn out
+    --         return (a,b)
+    --   let checkres (a,b) = a == b
+    --   (tc $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right True)
 
 testCheck_Rules = do
   describe "rules-privacy-slet" $ do

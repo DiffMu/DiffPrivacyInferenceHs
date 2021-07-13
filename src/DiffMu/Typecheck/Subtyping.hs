@@ -11,6 +11,7 @@ import DiffMu.Core.Unification
 
 import Debug.Trace
 
+import qualified Prelude as P
 
 
 
@@ -169,6 +170,9 @@ subtypingGraph =
     (_,_, _, _, _) -> \_ -> []
 
 
+-- If we have a bunch of subtyping constraints {β ≤ α, γ ≤ α, δ ≤ α} then it
+-- /should/ be allowed to turn this into a supremum constraint, i.e. "sup{β,γ,δ} = α"
+-- in the case that [... when exactly? ...]
 convertSubtypingToSupremum :: forall k t. (SingI k, Typeable k, IsT MonadDMTC t) => Symbol -> (DMTypeOf k, DMTypeOf k) -> t ()
 convertSubtypingToSupremum name (lower, TVar upper) = do
   allSubtypings <- getConstraintsByType (Proxy @(IsLessEqual (DMTypeOf k, DMTypeOf k)))
@@ -193,7 +197,7 @@ convertSubtypingToSupremum name _                   = pure ()
 -- this simply uses the `findPathM` function from Abstract.Computation.MonadicGraph
 -- We return True if we could do something about the constraint
 --    return False if nothing could be done
-solveSubtyping :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => Symbol -> (DMTypeOf k, DMTypeOf k) -> t Bool
+solveSubtyping :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => Symbol -> (DMTypeOf k, DMTypeOf k) -> t ()
 solveSubtyping name path = do
   -- Here we define which errors should be caught while doing our hypothetical computation.
   let relevance (UnificationError _ _)      = IsGraphRelevant
@@ -209,9 +213,9 @@ solveSubtyping name path = do
 
   -- We look at the result and if necessary throw errors.
   case res of
-    Finished a -> dischargeConstraint @MonadDMTC name >> return True
-    Partial a  -> updateConstraint name (Solvable (IsLessEqual a)) >> return True
-    Wait       -> convertSubtypingToSupremum name path >> return False -- in this case we try to change this one into a sup
+    Finished a -> dischargeConstraint @MonadDMTC name
+    Partial a  -> updateConstraint name (Solvable (IsLessEqual a))
+    Wait       -> convertSubtypingToSupremum name path -- in this case we try to change this one into a sup
     Fail e     -> throwError (UnsatisfiableConstraint (show (fst path) <> " ⊑ " <> show (snd path) <> "\n\n"
                          <> "Got the following errors while searching the subtyping graph:\n"
                          <> show e))
@@ -224,43 +228,119 @@ instance Typeable k => FixedVars TVarOf (IsInfimum ((DMTypeOf k, DMTypeOf k) :=:
   fixedVars (IsInfimum (_ :=: a)) = freeVars a
 
 
+data ContractionAllowed = ContractionAllowed | ContractionDisallowed
 
-tryContractEdge :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => Symbol -> (DMTypeOf k, DMTypeOf k) -> t ()
-tryContractEdge name (TVar a,TVar b) = do
-  ctrs_all_ab <- filterWithSomeVars [SomeK a,SomeK b] <$> getAllConstraints
-  ctrs_relevant <- filterWithSomeVars [SomeK a, SomeK b] <$> fmap (second runConstr) <$> getConstraintsByType (Proxy @(IsLessEqual (DMTypeOf k, DMTypeOf k)))
 
-  -- First we check that the only constraints containing a and b are subtyping constraints
-  case length ctrs_all_ab == length ctrs_relevant of
-    False -> return ()
+getCurrentConstraintSubtypingGraph :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => t [(DMTypeOf k, DMTypeOf k)]
+getCurrentConstraintSubtypingGraph = do
+  ctrs_all_ab <- getAllConstraints
+  ctrs_relevant <- fmap (second runConstr) <$> getConstraintsByType (Proxy @(IsLessEqual (DMTypeOf k, DMTypeOf k)))
+  ctrs_relevant_max <- fmap (second runConstr) <$> getConstraintsByType (Proxy @(IsSupremum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k)))
+  ctrs_relevant_min <- fmap (second runConstr) <$> getConstraintsByType (Proxy @(IsInfimum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k)))
+
+  let subFromSub (_,(a,b)) = [(a,b)]
+  let subFromMax (_,((a,b) :=: c)) = [(a,c),(b,c)]
+  let subFromMin (_,((a,b) :=: c)) = [(c,a),(c,b)]
+
+  let subs = (ctrs_relevant >>= subFromSub)
+              <> (ctrs_relevant_max >>= subFromMax)
+              <> (ctrs_relevant_min >>= subFromMin)
+  return subs
+
+hasPathN :: Int -> [(DMTypeOf k, DMTypeOf k)] -> (DMTypeOf k, DMTypeOf k) -> Maybe [DMTypeOf k]
+hasPathN 0 graph (a0,a1) | a0 == a1  = Just [a0,a1]
+hasPathN 0 graph (a0,a1) | otherwise = Nothing
+hasPathN n graph (a0,a1) =
+  let smallerPaths = [hasPathN (n - 1) graph (b,a1) | (a0',b) <- graph , a0' == a0]
+      goodPaths = [p | Just p <- smallerPaths]
+  in case goodPaths of
+    [] -> Nothing
+    (p:_) -> Just (a0:p)
+
+hasPath :: [(DMTypeOf k, DMTypeOf k)] -> (DMTypeOf k, DMTypeOf k) -> Maybe [DMTypeOf k]
+hasPath graph (a, b) = rep (\i -> hasPathN i graph (a, b)) 0 2
+  where rep :: (Int -> Maybe a) -> Int -> Int -> Maybe a
+        rep f i 0 = Nothing
+        rep f i n = case f i of
+                      Just a -> Just a
+                      Nothing -> rep f (i +! 1) (n - 1)
+
+completeDiamondDownstream2 :: (SingI k, Typeable k) => [(DMTypeOf k, DMTypeOf k)] -> (DMTypeOf k, DMTypeOf k) -> [(DMTypeOf k, [DMTypeOf k])]
+completeDiamondDownstream2 graph (a0,a1) =
+  let graph'      = trace ("graph: " <> show graph) graph
+      elements    = nub (concat [[a,b] | (a,b) <- graph'])
+      elements'   = trace ("elements: " <> show elements) elements
+      doublePaths = [(hasPath graph (a0, x), hasPath graph (a1, x),x) | x <- elements']
+      doublePaths' = trace ("doublePaths: " <> show doublePaths) doublePaths
+      goodPaths   = [(x,el1 <> el2) | (Just el1, Just el2, x) <- doublePaths']
+      goodPaths' = trace ("goodPaths: " <> show goodPaths) goodPaths
+  in goodPaths'
+
+completeDiamondUpstream2 :: (SingI k, Typeable k) => [(DMTypeOf k, DMTypeOf k)] -> (DMTypeOf k, DMTypeOf k) -> [(DMTypeOf k, [DMTypeOf k])]
+completeDiamondUpstream2 graph (a0,a1) = completeDiamondDownstream2 ([(a,b) | (b,a) <- graph]) (a0,a1)
+
+
+
+
+checkContractionAllowed :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => [(DMTypeOf k)] -> (DMTypeOf k, DMTypeOf k) -> t ContractionAllowed
+checkContractionAllowed contrTypes (TVar a, TVar b) = do
+  let contrVars = freeVars contrTypes
+
+  ctrs_all_ab <- filterWithSomeVars contrVars <$> getAllConstraints
+  ctrs_relevant <- filterWithSomeVars contrVars <$> fmap (second runConstr) <$> getConstraintsByType (Proxy @(IsLessEqual (DMTypeOf k, DMTypeOf k)))
+  ctrs_relevant_max <- filterWithSomeVars contrVars <$> fmap (second runConstr) <$> getConstraintsByType (Proxy @(IsSupremum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k)))
+  ctrs_relevant_min <- filterWithSomeVars contrVars <$> fmap (second runConstr) <$> getConstraintsByType (Proxy @(IsInfimum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k)))
+
+  -- First we check that the only constraints containing contrVars are
+  -- {subtyping,sup,inf} constraints
+  let m = length ctrs_all_ab
+      n = length ctrs_relevant P.+ length ctrs_relevant_max P.+ length ctrs_relevant_min
+  case m == n of
+    False -> return ContractionDisallowed
     True -> do
-      -- Next we check that if `a` occurs on the left side of a constraint, then we actually
-      -- have the same constraint as the input is
+      -- Get all subtyping pairs
+      let subFromSub (_,(a,b)) = [(a,b)]
+      let subFromMax (_,((a,b) :=: c)) = [(a,c),(b,c)]
+      let subFromMin (_,((a,b) :=: c)) = [(c,a),(c,b)]
+
+      let subs = (ctrs_relevant >>= subFromSub)
+                 <> (ctrs_relevant_max >>= subFromMax)
+                 <> (ctrs_relevant_min >>= subFromMin)
+
+      -- Next we check that all subtyping edges are good
+      -- i.e., if `a` occurs on the left side of a pair, then the whole pair is actually (a <= b)
       -- And the same with `b`
-      let isGood (_,(x,y)) =
+      let isGood (x,y) =
             or
-              [ and [TVar a == x, TVar b == y]
-              , not (or [SomeK a `elem` freeVars x, SomeK b `elem` freeVars y])
+              [ and [x `elem` (contrTypes), y `elem` (contrTypes)]
+              , and [y == TVar a, freeVars x `intersect` contrVars == []]
+              , and [x == TVar b, freeVars y `intersect` contrVars == []]
               ]
 
-      let allRelevantAreGood = and (isGood <$> ctrs_relevant)
+      let allRelevantAreGood = and (isGood <$> subs)
       case allRelevantAreGood of
-        False -> return ()
-        True -> do
-          unify (TVar a) (TVar b)
-          dischargeConstraint name
+        False -> return ContractionDisallowed
+        True -> return ContractionAllowed
 
-tryContractEdge name (_,_) = return ()
+checkContractionAllowed _ _ = return ContractionDisallowed
 
 
 -- We can solve `IsLessEqual` constraints for DMTypes.
 -- NOTE: IsLessEqual is interpreted as a subtyping relation.
 instance (SingI k, Typeable k) => Solve MonadDMTC IsLessEqual (DMTypeOf k, DMTypeOf k) where
   solve_ Dict mode name (IsLessEqual (a,b)) = do
-    res <- solveSubtyping name (a,b)
-    case (res, mode) of
-      (False,SolveAssumeWorst) -> tryContractEdge name (a,b)
-      (_,_) -> return ()
+    -- if we are additionaly in assumeworst, we try to contract the edge first
+    case (mode) of
+      (SolveAssumeWorst) -> do
+        traceM $ "Computing LessEqual: " <> show (a,b)
+        allowed <- checkContractionAllowed [a,b] (a,b)
+        case allowed of
+          ContractionAllowed -> unify a b >> return ()
+          ContractionDisallowed -> return ()
+      (_) -> return ()
+
+    solveSubtyping name (a,b)
+
 
 
 
@@ -293,14 +373,69 @@ solveSupremum graph name ((a,b) :=: x) = do
                          <> show e))
 
 
+unifyAll :: (IsT MonadDMTC t) => [DMTypeOf k] -> t ()
+unifyAll ([]) = return ()
+unifyAll (x:[]) = return ()
+unifyAll (x:y:vars) = do
+  unify x y
+  unifyAll (y:vars)
+
 -- TODO: Check whether this does the correct thing.
 instance (SingI k, Typeable k) => Solve MonadDMTC IsSupremum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) where
-  solve_ Dict _ name (IsSupremum a) = solveSupremum (GraphM subtypingGraph) name a
+  solve_ Dict SolveExact name (IsSupremum a) = solveSupremum (GraphM subtypingGraph) name a
+  solve_ Dict SolveAssumeWorst name (IsSupremum ((a,b) :=: y)) = do
+
+    traceM $ "Computing supremum: " <> show ((a,b) :=: y)
+
+    graph <- getCurrentConstraintSubtypingGraph
+    let contrCandidates = completeDiamondUpstream2 graph (a,b)
+    let f (x,contrVars) = do
+
+              traceM $ "Trying to contract from " <> show (x,y) <> " with contrVars: " <> show contrVars
+              allowed <- checkContractionAllowed (y:contrVars) (x,y)
+              case allowed of
+                ContractionAllowed -> unifyAll (y:contrVars) >> return True
+                ContractionDisallowed -> return False
+
+    let g f [] = return ()
+        g f (x:xs) = do
+          res <- f x
+          case res of
+            True -> return ()
+            False -> g f xs
+
+    g f contrCandidates
+
+    solveSupremum (GraphM subtypingGraph) name ((a,b) :=: y)
 
 
 -- TODO: Check whether this does the correct thing.
 instance (SingI k, Typeable k) => Solve MonadDMTC IsInfimum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) where
-  solve_ Dict _ name (IsInfimum a) = solveSupremum (oppositeGraph (GraphM subtypingGraph)) name a
+  solve_ Dict SolveExact name (IsInfimum a) = solveSupremum (oppositeGraph (GraphM subtypingGraph)) name a
+  solve_ Dict SolveAssumeWorst name (IsInfimum ((a,b) :=: x)) = do
+
+    traceM $ "Computing infimum: " <> show ((a,b) :=: x)
+    graph <- getCurrentConstraintSubtypingGraph
+
+    let contrCandidates = completeDiamondDownstream2 graph (a,b)
+    let f (y,contrVars) = do
+
+              traceM $ "Trying to contract from " <> show (x,y) <> " with contrVars: " <> show contrVars
+              allowed <- checkContractionAllowed (x:contrVars) (x,y)
+              case allowed of
+                ContractionAllowed -> unifyAll (x:contrVars) >> return True
+                ContractionDisallowed -> return False
+
+    let g f [] = return ()
+        g f (x:xs) = do
+          res <- f x
+          case res of
+            True -> return ()
+            False -> g f xs
+
+    g f contrCandidates
+
+    solveSupremum (oppositeGraph (GraphM subtypingGraph)) name ((a,b) :=: x)
 
 ------------------------------------------------------------
 -- Solve supremum (TODO this should live somewhere else.)
