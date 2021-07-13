@@ -68,6 +68,7 @@ class (Monad t) => MonadConstraint isT t | t -> isT where
   mergeTopConstraintSet :: t CloseConstraintSetResult
   logPrintConstraints :: t ()
   getConstraintsByType :: (Typeable c, Typeable a) => Proxy (c a) -> t [(Symbol, c a)]
+  getAllConstraints :: t [(Symbol, Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT)]
   -- clearConstraints :: t (ConstraintBackup t)
   -- restoreConstraints :: ConstraintBackup t -> t ()
 
@@ -161,7 +162,5 @@ solvingAllNewConstraints mode f = withLogLocation "Constr" $ do
   logPrintConstraints
   log "============ END solve all new constraints <<<<<<<<<<<<<<<<"
   return (closeRes, res)
-
-
 
 

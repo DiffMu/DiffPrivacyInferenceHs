@@ -795,6 +795,23 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
     log $ show ctrs
     log $ ""
 
+  getAllConstraints = do
+    (Ctx (MonCom cs)) <- use (meta.constraints.anncontent.topctx)
+    let cs' = H.toList cs
+    return [(name,c) | (name, Watched _ c) <- cs']
+
+
+instance FreeVars TVarOf (Solvable (GoodConstraint) (GoodConstraintContent) MonadDMTC) where
+  freeVars (Solvable (c :: c a)) = freeVars @_ @TVarOf (runConstr c)
+
+filterWithSomeVars :: FreeVars TVarOf x => [SomeK TVarOf] -> [x] -> [x]
+filterWithSomeVars wanted ctrs =
+  let f x = freeVars @_ @TVarOf x
+  in [x | x <- ctrs , length (intersect (f x) wanted) > 0]
+
+  
+
+
     -- case null top of
     --   True  -> 
     --   False -> return Failure_WasNotEmpty

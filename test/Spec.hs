@@ -13,6 +13,7 @@ import DiffMu.Core.DelayedScope
 import DiffMu.Typecheck.Operations
 import DiffMu.Typecheck.Subtyping
 import DiffMu.Typecheck.Typecheck
+import DiffMu.Typecheck.Constraint.IsJuliaEqual
 import DiffMu.Runner
 import DiffMu.Parser.DMTerm.FromString
 
@@ -116,6 +117,69 @@ testSupremum = do
             (Left (UnsatisfiableConstraint "[test]"))
 
 
+testSubtyping_ContractEdge = do
+  describe "subtyping (contracting edges)" $ do
+    it "contracts a single edge" $ do
+      let test0 = do
+            (a :: DMMain) <- newVar
+            b <- newVar
+            a ⊑! b
+            return (a,b)
+      (tc $ (sn test0 >>= (\(a,b) -> return (a == b)))) `shouldReturn` (Right True)
+
+    it "does contract edge if left variable is only bounded from below and right from above" $ do
+      let test1 = do
+            -- the interesting variables a ≤ b
+            (a :: DMMain) <- newVar
+            b <- newVar
+            a ⊑! b
+
+            -- the additional variables x ≤ a ≤ b ≤ y
+            x <- newVar
+            y <- newVar
+            x ⊑! a
+            b ⊑! y
+
+            -- we are interested in how `a` and `b` turn out
+            return (a,b)
+      (tc $ (sn test1 >>= (\(a,b) -> return (a == b)))) `shouldReturn` (Right True)
+
+    it "does NOT contract edge if left variable is bounded from above" $ do
+      let test1 = do
+            -- main
+            (a :: DMMain) <- newVar
+            b <- newVar
+            a ⊑! b
+            -- blocking constraint
+            x <- newVar
+            a ⊑! x
+            return (a,b)
+      (tc $ (sn test1 >>= (\(a,b) -> return (a == b)))) `shouldReturn` (Right False)
+
+    it "does NOT contract edge if right variable is bounded from below" $ do
+      let test1 = do
+            -- main
+            (a :: DMMain) <- newVar
+            b <- newVar
+            a ⊑! b
+            -- blocking constraint
+            y <- newVar
+            y ⊑! b
+            return (a,b)
+      (tc $ (sn test1 >>= (\(a,b) -> return (a == b)))) `shouldReturn` (Right False)
+
+    it "does NOT contract edge if variable additionally appears in a non subtyping constraint " $ do
+      let test1 = do
+            -- main
+            (a :: DMMain) <- newVar
+            b <- newVar
+            a ⊑! b
+            -- blocking constraint
+            (y :: DMMain) <- newVar
+            addConstraint (Solvable (IsJuliaEqual (y, a)))
+            return (a,b)
+      (tc $ (sn test1 >>= (\(a,b) -> return (a == b)))) `shouldReturn` (Right False)
+
 testCheck_Rules = do
   describe "rules-privacy-slet" $ do
     it "forwards inner type correctly" $ do
@@ -167,6 +231,7 @@ runAllTests :: (String -> IO String) -> IO ()
 runAllTests parse = defaultspec $ do
   testUnification
   testSubtyping
+  testSubtyping_ContractEdge
   testSupremum
   testCheck_Rules
   testCheckSens parse

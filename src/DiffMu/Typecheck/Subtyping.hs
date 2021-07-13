@@ -182,13 +182,18 @@ convertSubtypingToSupremum name (lower, TVar upper) = do
       dischargeConstraint name'
       dischargeConstraint name
       addConstraint (Solvable (IsSupremum ((lower, lower') :=: TVar upper)))
+      logForce "Something very suspicious is happening, at least make sure that this is really the correct approach."
+      logForce ("What happens is that we convert the subtyping constraint of " <> show (lower, TVar upper) <> " into the supremum " <> show ((lower, lower') :=: TVar upper))
+      logForce "Whyever that is supposed to be correct..."
       return ()
     ((name',lower'):xs) -> error "Not implemented yet: When more than two subtyping constrs are merged to a single supremum. Don't worry, this case shouldn't be hard!"
 convertSubtypingToSupremum name _                   = pure ()
 
 -- The actual solving is done here.
 -- this simply uses the `findPathM` function from Abstract.Computation.MonadicGraph
-solveSubtyping :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => Symbol -> (DMTypeOf k, DMTypeOf k) -> t ()
+-- We return True if we could do something about the constraint
+--    return False if nothing could be done
+solveSubtyping :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => Symbol -> (DMTypeOf k, DMTypeOf k) -> t Bool
 solveSubtyping name path = do
   -- Here we define which errors should be caught while doing our hypothetical computation.
   let relevance (UnificationError _ _)      = IsGraphRelevant
@@ -204,9 +209,9 @@ solveSubtyping name path = do
 
   -- We look at the result and if necessary throw errors.
   case res of
-    Finished a -> dischargeConstraint @MonadDMTC name
-    Partial a  -> updateConstraint name (Solvable (IsLessEqual a))
-    Wait       -> logForce "Something very suspicious is happening, at least make sure that this is really the correct approach." >> logForce ("What happens is that we convert the subtyping constraint of " <> show path <> " into a supremum...\nWhyever that is supposed to be correct...") >> convertSubtypingToSupremum name path -- in this case we try to change this one into a sup
+    Finished a -> dischargeConstraint @MonadDMTC name >> return True
+    Partial a  -> updateConstraint name (Solvable (IsLessEqual a)) >> return True
+    Wait       -> convertSubtypingToSupremum name path >> return False -- in this case we try to change this one into a sup
     Fail e     -> throwError (UnsatisfiableConstraint (show (fst path) <> " ⊑ " <> show (snd path) <> "\n\n"
                          <> "Got the following errors while searching the subtyping graph:\n"
                          <> show e))
@@ -219,10 +224,43 @@ instance Typeable k => FixedVars TVarOf (IsInfimum ((DMTypeOf k, DMTypeOf k) :=:
   fixedVars (IsInfimum (_ :=: a)) = freeVars a
 
 
+
+tryContractEdge :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => Symbol -> (DMTypeOf k, DMTypeOf k) -> t ()
+tryContractEdge name (TVar a,TVar b) = do
+  ctrs_all_ab <- filterWithSomeVars [SomeK a,SomeK b] <$> getAllConstraints
+  ctrs_relevant <- filterWithSomeVars [SomeK a, SomeK b] <$> fmap (second runConstr) <$> getConstraintsByType (Proxy @(IsLessEqual (DMTypeOf k, DMTypeOf k)))
+
+  -- First we check that the only constraints containing a and b are subtyping constraints
+  case length ctrs_all_ab == length ctrs_relevant of
+    False -> return ()
+    True -> do
+      -- Next we check that if `a` occurs on the left side of a constraint, then we actually
+      -- have the same constraint as the input is
+      -- And the same with `b`
+      let isGood (_,(x,y)) =
+            or
+              [ and [TVar a == x, TVar b == y]
+              , not (or [SomeK a `elem` freeVars x, SomeK b `elem` freeVars y])
+              ]
+
+      let allRelevantAreGood = and (isGood <$> ctrs_relevant)
+      case allRelevantAreGood of
+        False -> return ()
+        True -> do
+          unify (TVar a) (TVar b)
+          dischargeConstraint name
+
+tryContractEdge name (_,_) = return ()
+
+
 -- We can solve `IsLessEqual` constraints for DMTypes.
 -- NOTE: IsLessEqual is interpreted as a subtyping relation.
 instance (SingI k, Typeable k) => Solve MonadDMTC IsLessEqual (DMTypeOf k, DMTypeOf k) where
-  solve_ Dict _ name (IsLessEqual (a,b)) = solveSubtyping name (a,b)
+  solve_ Dict mode name (IsLessEqual (a,b)) = do
+    res <- solveSubtyping name (a,b)
+    case (res, mode) of
+      (False,SolveAssumeWorst) -> tryContractEdge name (a,b)
+      (_,_) -> return ()
 
 
 
