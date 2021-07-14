@@ -214,9 +214,6 @@ instance Hashable (DMTypeOf k) where
 instance (Hashable a, Hashable b) => Hashable (a :@ b) where
   hashWithSalt s (a:@ b) = s `hashWithSalt` a `hashWithSalt` b
 
-
-
-
 type DMExtra e = (Typeable e, SingI e)
 --                   Eq (Annotation e), Show (Annotation e),
 --                   CMonoidM Identity (Annotation e),

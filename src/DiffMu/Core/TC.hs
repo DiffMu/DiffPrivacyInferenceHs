@@ -948,6 +948,9 @@ instance (Normalize t a) => Normalize t [a] where
 
 instance (Normalize t a, Normalize t b, Normalize t c) => Normalize t (a, b, c) where
   normalize (a,b,c) = (,,) <$> normalize a <*> normalize b <*> normalize c
+
+instance (Normalize t a, Normalize t b, Normalize t c, Normalize t d) => Normalize t (a, b, c, d) where
+  normalize (a,b,c,d) = (,,,) <$> normalize a <*> normalize b <*> normalize c <*> normalize d
 -- instance Monad t => Normalize t DMNumType where
 --   normalize = pure
 
