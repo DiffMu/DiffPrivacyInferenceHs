@@ -9,6 +9,9 @@ import DiffMu.Core.TC
 import DiffMu.Core.Symbolic
 import DiffMu.Core.Unification
 
+
+import qualified Data.HashMap.Strict as H
+
 import Debug.Trace
 
 
@@ -195,6 +198,8 @@ convertSubtypingToSupremum name _                   = pure ()
 --    return False if nothing could be done
 solveSubtyping :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => Symbol -> (DMTypeOf k, DMTypeOf k) -> t Bool
 solveSubtyping name path = do
+--  collapseSubtypingCycles path
+
   -- Here we define which errors should be caught while doing our hypothetical computation.
   let relevance (UnificationError _ _)      = IsGraphRelevant
       relevance (UnsatisfiableConstraint _) = IsGraphRelevant
@@ -271,6 +276,7 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsLessEqual (DMTypeOf k, DMTyp
 -- this simply uses the `findSupremumM` function from Abstract.Computation.MonadicGraph
 solveSupremum :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> Symbol -> ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) -> t ()
 solveSupremum graph name ((a,b) :=: x) = do
+
   -- Here we define which errors should be caught while doing our hypothetical computation.
   let relevance (UnificationError _ _)      = IsGraphRelevant
       relevance (UnsatisfiableConstraint _) = IsGraphRelevant
@@ -295,40 +301,70 @@ solveSupremum graph name ((a,b) :=: x) = do
 
 -- TODO: Check whether this does the correct thing.
 instance (SingI k, Typeable k) => Solve MonadDMTC IsSupremum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) where
-  solve_ Dict _ name (IsSupremum a) = solveSupremum (GraphM subtypingGraph) name a
+  solve_ Dict _ name (IsSupremum ((a,b) :=: x)) = do
+     collapseSubtypingCycles (a,x)
+     collapseSubtypingCycles (b,x)
+     solveSupremum (GraphM subtypingGraph) name ((a,b) :=: x)
 
 
 -- TODO: Check whether this does the correct thing.
 instance (SingI k, Typeable k) => Solve MonadDMTC IsInfimum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) where
-  solve_ Dict _ name (IsInfimum a) = solveSupremum (oppositeGraph (GraphM subtypingGraph)) name a
+  solve_ Dict _ name (IsInfimum ((a,b) :=: x)) = do
+     collapseSubtypingCycles (x,a)
+     collapseSubtypingCycles (x,b)
+     solveSupremum (oppositeGraph (GraphM subtypingGraph)) name ((a,b) :=: x)
 
-------------------------------------------------------------
--- Solve supremum (TODO this should live somewhere else.)
 
+-- find all cyclic subtyping constraints, that is, chains of the form
+-- a <= b <= c <= a
+-- where for every constraint Sup(a,b) = c we also add additional a <= c and b <= c constraints (likewise for Inf).
+-- all types in such a chain can be unified.
+collapseSubtypingCycles :: forall k t. (SingI k, Typeable k, IsT MonadDMTC t) => (DMTypeOf k, DMTypeOf k) -> t ()
+collapseSubtypingCycles (start, end) = do
+  traceM $ ("~~~~ collapsing cycles of " <> show (start,end))
+  allSubtypings <- getConstraintsByType (Proxy @(IsLessEqual (DMTypeOf k, DMTypeOf k)))
+  allInfima <- getConstraintsByType (Proxy @(IsInfimum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k)))
+  allSuprema <- getConstraintsByType (Proxy @(IsSupremum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k)))
 
-instance FixedVars TVarOf (IsGaussResult (DMTypeOf MainKind, DMTypeOf MainKind)) where
-  fixedVars (IsGaussResult (gauss,_)) = freeVars gauss
+  -- we build a graph of subtype relations, represented by adjacency lists stored in a hash map
+  -- nodes are types that appear in <=, Inf or Sup constraints, edges are suptype relations
+  let addEdge :: H.HashMap (DMTypeOf k) [DMTypeOf k] -> (DMTypeOf k, DMTypeOf k) -> H.HashMap (DMTypeOf k) [DMTypeOf k]
+      addEdge graph (s, e) = case H.lookup s graph of
+                               Nothing -> H.insert s [e] graph
+                               Just sc -> H.insert s (e:sc) graph
 
--- is it gauss or mgauss?
-instance Solve MonadDMTC IsGaussResult (DMTypeOf MainKind, DMTypeOf MainKind) where
-  solve_ Dict _ name (IsGaussResult (τgauss, τin)) =
-     case τin of
-        TVar x -> pure () -- we don't know yet.
-        NoFun (DMMat nrm clp n m τ) -> do -- is mgauss
+  let graph1 = foldl addEdge H.empty [(s,e) | (_, IsLessEqual (s,e)) <- allSubtypings]
+  let graph2 = foldl addEdge graph1 [(s,e) | (_, IsInfimum ((e,_) :=: s)) <- allInfima]
+  let graph3 = foldl addEdge graph2 [(s,e) | (_, IsInfimum ((_,e) :=: s)) <- allInfima]
+  let graph4 = foldl addEdge graph3 [(s,e) | (_, IsSupremum ((s,_) :=: e)) <- allSuprema]
+  let graph = foldl addEdge graph4 [(s,e) | (_, IsSupremum ((_,s) :=: e)) <- allSuprema]
 
-           iclp <- newVar -- clip of input matrix can be anything
-           τv <- newVar -- input matrix element type can be anything (as long as it's numeric)
+  traceM $ ("~~~~ graph is " <> show graph)--(H.insert end (start:[start]) H.empty))
 
-           -- set in- and output types as given in the mgauss rule
-           unify τin (NoFun (DMMat L2 iclp n m (Numeric (τv))))
-           unify τgauss (NoFun (DMMat LInf U n m (Numeric (NonConst DMReal))))
+  -- a simple search for the start node, returning all nodes on all paths from the
+  -- input node to the start node. invoked with the end nodes successors as input, it gives all
+  -- nodes that lie on a path from end to start. as the constraint start <= end is
+  -- given, this means all nodes returned are on a cycle
+  let allNodesFrom :: DMTypeOf k -> [DMTypeOf k]
+      allNodesFrom s | s == start = [s] -- reached start from end, this is the cycles we like
+      allNodesFrom s | s == end   = [] -- is an end-end cycle
+      allNodesFrom s              = case H.lookup s graph of
+                                       Just scs -> case concat (map allNodesFrom scs) of
+                                                      [] -> []
+                                                      sc -> (s : sc)
+                                       _ -> [] -- has no successors
 
-           dischargeConstraint @MonadDMTC name
-        _ -> do -- regular gauss or unification errpr later
-           τ <- newVar -- input type can be anything (as long as it's numeric)
+  -- all successors of the end node
+  let ssucc = case H.lookup end graph of
+                   Just s -> s
+                   _ -> []
 
-           -- set in- and output types as given in the gauss rule
-           unify τin (NoFun (Numeric τ))
-           unify τgauss (NoFun (Numeric (NonConst DMReal)))
+  -- find all paths from the ssucc to the start node, hence cycles that contain the start-end-edge
+  let cycles = (concat (map allNodesFrom ssucc))
 
-           dischargeConstraint @MonadDMTC name
+  traceM $ ("~~~~ found cycles " <> show cycles <> " unifying with " <> show end <> "\n")
+
+  -- unify all types in all cycles with the end type
+  foldM unify end cycles
+
+  return ()

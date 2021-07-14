@@ -187,6 +187,36 @@ data DMTypeOf (k :: DMKind) where
   Fun :: [DMTypeOf ForAllKind :@ Maybe [JuliaType]] -> DMTypeOf MainKind
   (:∧:) :: DMTypeOf MainKind -> DMTypeOf MainKind -> DMTypeOf MainKind -- infimum
 
+instance Hashable (DMTypeOf k) where
+  hashWithSalt s (Deleted) = s
+  hashWithSalt s (DMInt) = s +! 1
+  hashWithSalt s (DMReal) = s +! 2
+  hashWithSalt s (DMData) = s +! 3
+  hashWithSalt s (L1) = s +! 4
+  hashWithSalt s (L2) = s +! 5
+  hashWithSalt s (LInf) = s +! 6
+  hashWithSalt s (U) = s +! 7
+  hashWithSalt s (Const n t) = s `hashWithSalt` n `hashWithSalt` t
+  hashWithSalt s (NonConst t) = s `hashWithSalt` t
+  hashWithSalt s (Numeric t) = s `hashWithSalt` t
+  hashWithSalt s (TVar t) = s `hashWithSalt` t
+  hashWithSalt s (n :->: t) = s `hashWithSalt` n `hashWithSalt` t
+  hashWithSalt s (n :->*: t) = s `hashWithSalt` n `hashWithSalt` t
+  hashWithSalt s (DMTup t) = s `hashWithSalt` t
+  hashWithSalt s (Clip t) = s `hashWithSalt` t
+  hashWithSalt s (DMMat n t u v w) = s `hashWithSalt` n `hashWithSalt` t `hashWithSalt` u `hashWithSalt` v `hashWithSalt` w
+  hashWithSalt s (DMChoice t) = s `hashWithSalt` t
+  hashWithSalt s (ForAll n t) = s `hashWithSalt` n `hashWithSalt` t
+  hashWithSalt s (Fun t) = s `hashWithSalt` t
+  hashWithSalt s (NoFun t) = s `hashWithSalt` t
+  hashWithSalt s (n :∧: t) = s `hashWithSalt` n `hashWithSalt` t
+
+instance (Hashable a, Hashable b) => Hashable (a :@ b) where
+  hashWithSalt s (a:@ b) = s `hashWithSalt` a `hashWithSalt` b
+
+
+
+
 type DMExtra e = (Typeable e, SingI e)
 --                   Eq (Annotation e), Show (Annotation e),
 --                   CMonoidM Identity (Annotation e),

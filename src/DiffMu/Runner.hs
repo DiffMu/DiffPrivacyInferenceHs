@@ -101,7 +101,7 @@ typecheckFromDMTerm term = do
         --Location_Constraint
         -- Location_INC,
         -- Location_MonadicGraph,
-         Location_All
+         --Location_All
         ]
 
   x <- executeTC (DoShowLog Force logging_locations) r
