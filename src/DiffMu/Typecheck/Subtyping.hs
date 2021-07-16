@@ -314,43 +314,66 @@ completeDiamondUpstream graph (a0,a1) =
 
 checkContractionAllowed :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => [(DMTypeOf k)] -> (DMTypeOf k, DMTypeOf k) -> t ContractionAllowed
 checkContractionAllowed contrTypes (TVar a, TVar b) = do
-  let contrVars = freeVars contrTypes
+  let acceptOnlyVar (TVar a) = Just a
+      acceptOnlyVar _        = Nothing
 
-  ctrs_all_ab <- filterWithSomeVars contrVars <$> getAllConstraints
-  ctrs_relevant <- filterWithSomeVars contrVars <$> fmap (second runConstr) <$> getConstraintsByType (Proxy @(IsLessEqual (DMTypeOf k, DMTypeOf k)))
-  ctrs_relevant_max <- filterWithSomeVars contrVars <$> fmap (second runConstr) <$> getConstraintsByType (Proxy @(IsSupremum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k)))
-  ctrs_relevant_min <- filterWithSomeVars contrVars <$> fmap (second runConstr) <$> getConstraintsByType (Proxy @(IsInfimum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k)))
+      -- We check that all types which we want to contract are type variables
+      -- if this returns `Just [xs]` then all types were actually vars
+      contrVars' = mapM acceptOnlyVar contrTypes
 
-  -- First we check that the only constraints containing contrVars are
-  -- {subtyping,sup,inf} constraints
-  let m = length ctrs_all_ab
-      n = length ctrs_relevant P.+ length ctrs_relevant_max P.+ length ctrs_relevant_min
-  case m == n of
-    False -> return ContractionDisallowed
-    True -> do
-      -- Get all subtyping pairs
-      let subFromSub (_,(a,b)) = [(a,b)]
-      let subFromMax (_,((a,b) :=: c)) = [(a,c),(b,c)]
-      let subFromMin (_,((a,b) :=: c)) = [(c,a),(c,b)]
+  -- The actual case distinction
+  case contrVars' of
+    Nothing -> do
+      debug "Contraction not allowed because the candidate list contains types which are not TVars."
+      return ContractionDisallowed
+    (Just contrVars') -> do
+      let contrVars = (SomeK <$> contrVars')
 
-      let subs = (ctrs_relevant >>= subFromSub)
-                 <> (ctrs_relevant_max >>= subFromMax)
-                 <> (ctrs_relevant_min >>= subFromMin)
+      ctrs_all_ab <- filterWithSomeVars contrVars <$> getAllConstraints
+      ctrs_relevant <- filterWithSomeVars contrVars <$> fmap (second runConstr) <$> getConstraintsByType (Proxy @(IsLessEqual (DMTypeOf k, DMTypeOf k)))
+      ctrs_relevant_max <- filterWithSomeVars contrVars <$> fmap (second runConstr) <$> getConstraintsByType (Proxy @(IsSupremum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k)))
+      ctrs_relevant_min <- filterWithSomeVars contrVars <$> fmap (second runConstr) <$> getConstraintsByType (Proxy @(IsInfimum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k)))
 
-      -- Next we check that all subtyping edges are good
-      -- i.e., if `a` occurs on the left side of a pair, then the whole pair is actually (a <= b)
-      -- And the same with `b`
-      let isGood (x,y) =
-            or
-              [ and [x `elem` (contrTypes), y `elem` (contrTypes)]
-              , and [y == TVar a, freeVars x `intersect` contrVars == []]
-              , and [x == TVar b, freeVars y `intersect` contrVars == []]
-              ]
-
-      let allRelevantAreGood = and (isGood <$> subs)
-      case allRelevantAreGood of
+      -- First we check that the only constraints containing contrVars are
+      -- {subtyping,sup,inf} constraints
+      let m = length ctrs_all_ab
+          n = length ctrs_relevant P.+ length ctrs_relevant_max P.+ length ctrs_relevant_min
+      case m == n of
         False -> return ContractionDisallowed
-        True -> return ContractionAllowed
+        True -> do
+          -- Get all subtyping pairs
+          let subFromSub (_,(a,b)) = [(a,b)]
+          let subFromMax (_,((a,b) :=: c)) = [(a,c),(b,c)]
+          let subFromMin (_,((a,b) :=: c)) = [(c,a),(c,b)]
+
+          let subs = (ctrs_relevant >>= subFromSub)
+                    <> (ctrs_relevant_max >>= subFromMax)
+                    <> (ctrs_relevant_min >>= subFromMin)
+
+          --
+          -- NOTE: In the following, we only deal with edges here which are relevant,
+          --       i.e. contain some of the contraction-variables
+          --
+          -- Next we check that all subtyping edges are good
+          -- i.e., an edge is good if one of the following cases appears:
+          let isGood (x,y) =
+                or
+                  [ -- the edge is fully part of the diamond to be contracted
+                    and [x `elem` (contrTypes), y `elem` (contrTypes)]
+
+                    -- the edge attaches to the input of the diamond, and in it's own input
+                    -- does not reference any contraction-variables
+                  , and [y == TVar a, freeVars x `intersect` contrVars == []]
+
+                    -- the edge attaches to the output of the diamond, and in it's own output
+                    -- does not reference any contraction-variables
+                  , and [x == TVar b, freeVars y `intersect` contrVars == []]
+                  ]
+
+          let allRelevantAreGood = and (isGood <$> subs)
+          case allRelevantAreGood of
+            False -> return ContractionDisallowed
+            True -> return ContractionAllowed
 
 checkContractionAllowed _ _ = return ContractionDisallowed
 
