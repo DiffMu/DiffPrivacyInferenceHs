@@ -8,6 +8,7 @@ import DiffMu.Abstract
 import qualified Prelude as P
 
 import Data.Singletons.TH
+import Data.HashMap.Strict as H
 
 data SymVal =
   Infty | Fin Float -- a| Ln (SymTerm t)
@@ -66,6 +67,7 @@ instance Monad t => SemiringM t (SymVal) where
 
 data SymVar (k :: SensKind) =
   HonestVar (SymbolOf k)
+  | Id (SymTerm MainSensKind)
   | Ln (SymTerm MainSensKind)
   | Exp (SymTerm MainSensKind, SymTerm MainSensKind)
   | Ceil (SymTerm MainSensKind)
@@ -83,8 +85,46 @@ maxS s = injectVarId (Max s)
 minus s t = injectVarId (Minus (s, t))
 divide s t = injectVarId (Div (s, t))
 
+tryComputeSym :: SymVar k -> SymVar k
+tryComputeSym x = case f x of
+                    Just val -> Id val
+                    Nothing -> x
+  where
+    extractVal :: SymTerm MainSensKind -> Maybe SymVal
+    extractVal (SingleKinded (LinCom (MonCom h))) =
+      let h' = H.toList h
+      in case h' of
+        [(exp,coeff)] | exp == neutralId -> Just coeff
+        _                                -> Nothing
+
+    dmMinus :: SymVal -> SymVal -> SymVal
+    dmMinus Infty Infty     = undefined
+    dmMinus Infty b         = undefined
+    dmMinus a Infty         = undefined
+    dmMinus (Fin a) (Fin b) = Fin (a P.- b)
+
+    f :: SymVar k -> Maybe (SymTerm MainSensKind)
+    f (HonestVar _)  = Nothing
+    f (Id t)         = Nothing
+    f (Ln a)         = Nothing
+    f (Exp a)        = Nothing
+    f (Ceil a)       = Nothing
+    f (Sqrt a)       = Nothing
+    f (Max as)       = constCoeff <$> (maximum <$> mapM extractVal as)
+    f (Minus (a, b)) = case extractVal b of
+        (Just (Fin 0))  -> pure a
+        _               -> constCoeff <$> (dmMinus <$> extractVal a <*> extractVal b)
+    -- NOTE: Without the check for b=0, we get an easier definition, but then it only computes
+    --       minus terms where both operands are known. And thus terms like
+    --         `a_0 - 0.0`
+    --       cannot be solved.
+    --
+    -- f (Minus (a, b)) = constCoeff <$> (dmMinus <$> extractVal a <*> extractVal b)
+    f (Div (a, b))   = Nothing
+
 instance Show (SymVar k) where
   show (HonestVar v) = show v
+  show (Id te) = "id(" <> show te <> ")"
   show (Ln te) = "ln(" <> show te <> ")"
   show (Exp (b, e)) = show b <> "^(" <> show e <> ")"
   show (Ceil te) = "ceil(" <> show te <> ")"
@@ -115,6 +155,7 @@ type SymTerm = CPolyM SymVal Int (SymVar MainSensKind)
 -- SingleKinded (LinCom SymVal (MonCom Int (SymVar MainSensKind)))
 
 instance CheckContains (SymVar MainSensKind) (SymbolOf MainSensKind) where
+  checkContains (Id _) = Nothing
   checkContains (Ln _) = Nothing
   checkContains (Exp _) = Nothing
   checkContains (Ceil _) = Nothing
@@ -150,15 +191,17 @@ instance (CheckNeutral m a, CheckNeutral m b) => CheckNeutral m (a,b) where
     y <- checkNeutral b
     return (and [x,y])
 
+
 instance (Substitute SymVar (CPolyM SymVal Int (SymVar MainSensKind)) (SymVar k2)) where
   substitute σ (HonestVar v) = pure (HonestVar v)
-  substitute σ (Ln a) = Ln <$> substitute σ a
-  substitute σ (Exp (b,e)) = (\b e -> Exp (b,e)) <$> substitute σ b <*> substitute σ e
-  substitute σ (Ceil a) = Ceil <$> substitute σ a
-  substitute σ (Sqrt a) = Sqrt <$> substitute σ a
-  substitute σ (Max as) = Max <$> mapM (substitute σ) as
-  substitute σ (Minus (a,b)) = (\a b -> Minus (a,b)) <$> substitute σ a <*> substitute σ b
-  substitute σ (Div (a,b)) = (\a b -> Div (a,b)) <$> substitute σ a <*> substitute σ b
+  substitute σ (Id v)        = tryComputeSym <$> Id <$> substitute σ v
+  substitute σ (Ln a)        = tryComputeSym <$> Ln <$> substitute σ a
+  substitute σ (Exp (b,e))   = tryComputeSym <$> ((\b e -> Exp (b,e)) <$> substitute σ b <*> substitute σ e)
+  substitute σ (Ceil a)      = tryComputeSym <$> Ceil <$> substitute σ a
+  substitute σ (Sqrt a)      = tryComputeSym <$> Sqrt <$> substitute σ a
+  substitute σ (Max as)      = tryComputeSym <$> Max <$> mapM (substitute σ) as
+  substitute σ (Minus (a,b)) = tryComputeSym <$> ((\a b -> Minus (a,b)) <$> substitute σ a <*> substitute σ b)
+  substitute σ (Div (a,b))   = tryComputeSym <$> ((\a b -> Div (a,b)) <$> substitute σ a <*> substitute σ b)
 
 
 

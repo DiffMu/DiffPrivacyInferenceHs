@@ -263,6 +263,7 @@ instance Substitute SVarOf SensitivityOf (SensitivityOf k) where
   substitute (σs :: forall k. (IsKind k) => SVarOf k -> t (SensitivityOf k)) s = substitute f s
     where f :: (IsKind l) => SymVar l -> t (SensitivityOf l)
           f (HonestVar a) = σs (a)
+          f (Id a) = pure (coerce a)
           f b = pure $ var (b)
 
 instance (Substitute v a x, Substitute v a y) => Substitute v a (x,y) where
