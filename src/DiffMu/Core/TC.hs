@@ -11,7 +11,7 @@ import DiffMu.Core.Definitions
 import DiffMu.Core.Symbolic
 import DiffMu.Core.Logging
 import {-# SOURCE #-} DiffMu.Typecheck.Subtyping
--- import {-# SOURCE #-} DiffMu.Core.Unification
+import {-# SOURCE #-} DiffMu.Core.Unification
 
 import qualified Data.HashMap.Strict as H
 
@@ -277,7 +277,6 @@ instance Term SVarOf SensitivityOf where
 
 type TSubs = Subs DMTypeOf
 type SSubs = Subs SensitivityOf
-
 
 
 
@@ -1129,10 +1128,18 @@ normalizeAnn (a :∧: b) = do
   b' <- normalizeAnn b
 
   let makeNoFunInf :: DMTypeOf NoFunKind -> DMTypeOf NoFunKind -> t (DMMain)
-      makeNoFunInf x y = do -- z <- infimum @MonadDMTC @t x y
-        z <- newVar
-        addConstraint (Solvable (IsInfimum ((x, y) :=: z)))
-        return (NoFun z)
+      makeNoFunInf x y = do
+        -- NOTE: Instead of taking the infimum of x and y we simply
+        --       unify them. This is allowed and necessary for type-propagation
+        --       to work. I.e, if we put an `a :: Int` into a function f(a) which
+        --       might use a multiple times, then we want all those occurences to
+        --       receive the actual type `Int`.
+        --
+        -- z <- newVar
+        -- addConstraint (Solvable (IsInfimum ((x, y) :=: z)))
+        -- return (NoFun z)
+        addConstraint (Solvable (IsEqual (x,y)))
+        return (NoFun x)
 
   case (a', b') of
     (Fun xs, Fun ys) -> pure $ Fun (xs <> ys)
