@@ -235,10 +235,11 @@ instance Typeable k => FixedVars TVarOf (IsInfimum ((DMTypeOf k, DMTypeOf k) :=:
 
 data ContractionAllowed = ContractionAllowed | ContractionDisallowed
 
+type TypeGraph k = H.HashMap (DMTypeOf k) [DMTypeOf k]
 
-getCurrentConstraintSubtypingGraph :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => t [(DMTypeOf k, DMTypeOf k)]
+getCurrentConstraintSubtypingGraph :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => t (TypeGraph k)
 getCurrentConstraintSubtypingGraph = do
-  ctrs_all_ab <- getAllConstraints
+
   ctrs_relevant <- fmap (second runConstr) <$> getConstraintsByType (Proxy @(IsLessEqual (DMTypeOf k, DMTypeOf k)))
   ctrs_relevant_max <- fmap (second runConstr) <$> getConstraintsByType (Proxy @(IsSupremum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k)))
   ctrs_relevant_min <- fmap (second runConstr) <$> getConstraintsByType (Proxy @(IsInfimum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k)))
@@ -247,43 +248,67 @@ getCurrentConstraintSubtypingGraph = do
   let subFromMax (_,((a,b) :=: c)) = [(a,c),(b,c)]
   let subFromMin (_,((a,b) :=: c)) = [(c,a),(c,b)]
 
-  let subs = (ctrs_relevant >>= subFromSub)
+  let edges = (ctrs_relevant >>= subFromSub)
               <> (ctrs_relevant_max >>= subFromMax)
               <> (ctrs_relevant_min >>= subFromMin)
-  return subs
 
-hasPathN :: Int -> [(DMTypeOf k, DMTypeOf k)] -> (DMTypeOf k, DMTypeOf k) -> Maybe [DMTypeOf k]
-hasPathN 0 graph (a0,a1) | a0 == a1  = Just [a0,a1]
-hasPathN 0 graph (a0,a1) | otherwise = Nothing
-hasPathN n graph (a0,a1) =
-  let smallerPaths = [hasPathN (n - 1) graph (b,a1) | (a0',b) <- graph , a0' == a0]
-      goodPaths = [p | Just p <- smallerPaths]
+  -- we build a graph of subtype relations, represented by adjacency lists stored in a hash map
+  -- nodes are types that appear in <=, Inf or Sup constraints, edges are suptype relations
+  let addEdge :: H.HashMap (DMTypeOf k) [DMTypeOf k] -> (DMTypeOf k, DMTypeOf k) -> H.HashMap (DMTypeOf k) [DMTypeOf k]
+      addEdge graph (s, e) = case H.lookup s graph of
+                               Nothing -> H.insert s [e] graph
+                               Just sc -> H.insert s (e:sc) graph
+
+  let graph = foldl addEdge H.empty edges
+  return graph
+
+
+
+-- all paths in the graph of length <= N connecting a0 and a1
+allPathsN :: Int -> TypeGraph k -> (DMTypeOf k, DMTypeOf k) -> Maybe [[DMTypeOf k]]
+allPathsN 0 _ (a0,a1) | a0 == a1  = Just [[a0,a1]]
+allPathsN 0 _ (a0,a1) | otherwise = Nothing
+allPathsN n graph (a0,a1) =
+  let succ = case H.lookup a0 graph of -- successors of a0
+                      Nothing -> []
+                      Just s -> s
+      smallerPaths = [allPathsN (n - 1) graph (b,a1) | b <- succ] -- all maybe-paths of length N-1 from successors to a1
+      goodPaths = concat [p | Just p <- smallerPaths] -- the ones that actually exist
   in case goodPaths of
     [] -> Nothing
-    (p:_) -> Just (a0:p)
+    ps -> Just [(a0:p) | p <- ps]
 
-hasPath :: [(DMTypeOf k, DMTypeOf k)] -> (DMTypeOf k, DMTypeOf k) -> Maybe [DMTypeOf k]
-hasPath graph (a, b) = rep (\i -> hasPathN i graph (a, b)) 0 2
-  where rep :: (Int -> Maybe a) -> Int -> Int -> Maybe a
-        rep f i 0 = Nothing
-        rep f i n = case f i of
-                      Just a -> Just a
-                      Nothing -> rep f (i +! 1) (n - 1)
 
-completeDiamondDownstream2 :: (SingI k, Typeable k) => [(DMTypeOf k, DMTypeOf k)] -> (DMTypeOf k, DMTypeOf k) -> [(DMTypeOf k, [DMTypeOf k])]
-completeDiamondDownstream2 graph (a0,a1) =
+-- all paths in the graph connecting a0 and a1.
+allPaths :: TypeGraph k -> (DMTypeOf k, DMTypeOf k) -> Maybe [[DMTypeOf k]]
+allPaths graph (a0,a1) = allPathsN ((H.size graph) -1) graph (a0,a1)
+
+
+-- given two vertices in the subtype relation graph, find all vertices that have an incoming
+-- edge from both of them.
+completeDiamondDownstream :: (SingI k, Typeable k) => TypeGraph k -> (DMTypeOf k, DMTypeOf k) -> [(DMTypeOf k, [DMTypeOf k])]
+completeDiamondDownstream graph (a0,a1) =
   let graph'      = trace ("graph: " <> show graph) graph
-      elements    = nub (concat [[a,b] | (a,b) <- graph'])
-      elements'   = trace ("elements: " <> show elements) elements
-      doublePaths = [(hasPath graph (a0, x), hasPath graph (a1, x),x) | x <- elements']
+      -- all one-edge long paths from any graph vertex from both a0 and a1, or Nothing if none exist
+      doublePaths = [(allPathsN 1 graph (a0, x), allPathsN 1 graph (a1, x), x) | x <- (H.keys graph)]
       doublePaths' = trace ("doublePaths: " <> show doublePaths) doublePaths
-      goodPaths   = [(x,el1 <> el2) | (Just el1, Just el2, x) <- doublePaths']
+      -- all x that actually have an edge.
+      goodPaths   = [(x,concat (el1 <> el2)) | (Just el1, Just el2, x) <- doublePaths']
       goodPaths' = trace ("goodPaths: " <> show goodPaths) goodPaths
   in goodPaths'
 
-completeDiamondUpstream2 :: (SingI k, Typeable k) => [(DMTypeOf k, DMTypeOf k)] -> (DMTypeOf k, DMTypeOf k) -> [(DMTypeOf k, [DMTypeOf k])]
-completeDiamondUpstream2 graph (a0,a1) = completeDiamondDownstream2 ([(a,b) | (b,a) <- graph]) (a0,a1)
-
+-- given two vertices in the subtype relation graph, find all vertices that have an outgoing
+-- edge from both of them.
+completeDiamondUpstream :: (SingI k, Typeable k) => TypeGraph k -> (DMTypeOf k, DMTypeOf k) -> [(DMTypeOf k, [DMTypeOf k])]
+completeDiamondUpstream graph (a0,a1) =
+  let graph'      = trace ("graph: " <> show graph) graph
+      -- all one-edge long paths from any graph vertex to both a0 and a1, or Nothing if none exist
+      doublePaths = [(allPathsN 1 graph (x, a0), allPathsN 1 graph (x, a1), x) | x <- (H.keys graph)]
+      doublePaths' = trace ("doublePaths: " <> show doublePaths) doublePaths
+      -- all x that actually have an edge.
+      goodPaths   = [(x,concat (el1 <> el2)) | (Just el1, Just el2, x) <- doublePaths']
+      goodPaths' = trace ("goodPaths: " <> show goodPaths) goodPaths
+  in goodPaths'
 
 
 
@@ -398,7 +423,7 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsSupremum ((DMTypeOf k, DMTyp
     traceM $ "Computing supremum: " <> show ((a,b) :=: y)
 
     graph <- getCurrentConstraintSubtypingGraph
-    let contrCandidates = completeDiamondUpstream2 graph (a,b)
+    let contrCandidates = completeDiamondUpstream graph (a,b)
     let f (x,contrVars) = do
 
               traceM $ "Trying to contract from " <> show (x,y) <> " with contrVars: " <> show contrVars
@@ -432,7 +457,7 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsInfimum ((DMTypeOf k, DMType
     traceM $ "Computing infimum: " <> show ((a,b) :=: x)
     graph <- getCurrentConstraintSubtypingGraph
 
-    let contrCandidates = completeDiamondDownstream2 graph (a,b)
+    let contrCandidates = completeDiamondDownstream graph (a,b)
     let f (y,contrVars) = do
 
               traceM $ "Trying to contract from " <> show (x,y) <> " with contrVars: " <> show contrVars
@@ -459,49 +484,16 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsInfimum ((DMTypeOf k, DMType
 collapseSubtypingCycles :: forall k t. (SingI k, Typeable k, IsT MonadDMTC t) => (DMTypeOf k, DMTypeOf k) -> t ()
 collapseSubtypingCycles (start, end) = do
   traceM $ ("~~~~ collapsing cycles of " <> show (start,end))
-  allSubtypings <- getConstraintsByType (Proxy @(IsLessEqual (DMTypeOf k, DMTypeOf k)))
-  allInfima <- getConstraintsByType (Proxy @(IsInfimum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k)))
-  allSuprema <- getConstraintsByType (Proxy @(IsSupremum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k)))
-
-  -- we build a graph of subtype relations, represented by adjacency lists stored in a hash map
-  -- nodes are types that appear in <=, Inf or Sup constraints, edges are suptype relations
-  let addEdge :: H.HashMap (DMTypeOf k) [DMTypeOf k] -> (DMTypeOf k, DMTypeOf k) -> H.HashMap (DMTypeOf k) [DMTypeOf k]
-      addEdge graph (s, e) = case H.lookup s graph of
-                               Nothing -> H.insert s [e] graph
-                               Just sc -> H.insert s (e:sc) graph
-
-  let graph1 = foldl addEdge H.empty [(s,e) | (_, IsLessEqual (s,e)) <- allSubtypings]
-  let graph2 = foldl addEdge graph1 [(s,e) | (_, IsInfimum ((e,_) :=: s)) <- allInfima]
-  let graph3 = foldl addEdge graph2 [(s,e) | (_, IsInfimum ((_,e) :=: s)) <- allInfima]
-  let graph4 = foldl addEdge graph3 [(s,e) | (_, IsSupremum ((s,_) :=: e)) <- allSuprema]
-  let graph = foldl addEdge graph4 [(s,e) | (_, IsSupremum ((_,s) :=: e)) <- allSuprema]
+  graph <- getCurrentConstraintSubtypingGraph
 
   traceM $ ("~~~~ graph is " <> show graph)--(H.insert end (start:[start]) H.empty))
 
-  -- a simple search for the start node, returning all nodes on all paths from the
-  -- input node to the start node. invoked with the end nodes successors as input, it gives all
-  -- nodes that lie on a path from end to start. as the constraint start <= end is
-  -- given, this means all nodes returned are on a cycle
-  let allNodesFrom :: DMTypeOf k -> [DMTypeOf k]
-      allNodesFrom s | s == start = [s] -- reached start from end, this is the cycles we like
-      allNodesFrom s | s == end   = [] -- is an end-end cycle
-      allNodesFrom s              = case H.lookup s graph of
-                                       Just scs -> case concat (map allNodesFrom scs) of
-                                                      [] -> []
-                                                      sc -> (s : sc)
-                                       _ -> [] -- has no successors
-
-  -- all successors of the end node
-  let ssucc = case H.lookup end graph of
-                   Just s -> s
-                   _ -> []
-
   -- find all paths from the ssucc to the start node, hence cycles that contain the start-end-edge
-  let cycles = (concat (map allNodesFrom ssucc))
+  let cycles = concat (allPaths graph (end, start))
 
   traceM $ ("~~~~ found cycles " <> show cycles <> " unifying with " <> show end <> "\n")
 
   -- unify all types in all cycles with the end type
-  foldM unify end cycles
+  unifyAll (concat cycles)
 
   return ()
