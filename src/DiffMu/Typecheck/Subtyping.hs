@@ -400,10 +400,43 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsLessEqual (DMTypeOf k, DMTyp
 ------------------------------------------------------------
 -- Solve supremum
 
--- The actual solving is done here.
--- this simply uses the `findSupremumM` function from Abstract.Computation.MonadicGraph
+
+
+
+--------------------------------------------
+-- wrapper for computing supremum
 solveSupremum :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> Symbol -> ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) -> t ()
-solveSupremum graph name ((a,b) :=: x) = do
+-- if one input is equal to the output we can skip the supremum computation,
+-- then we only have to create a subtyping constraint
+solveSupremum graph name ((a,b) :=: x) | a == x = do
+  b ≤! x
+  dischargeConstraint name
+
+solveSupremum graph name ((a,b) :=: x) | b == x = do
+  a ≤! x
+  dischargeConstraint name
+solveSupremum graph name ((a,b) :=: x) | otherwise = callMonadicGraphSupremum graph name ((a,b) :=: x)
+
+--------------------------------------------
+-- wrapper for computing infimum
+solveInfimum :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> Symbol -> ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) -> t ()
+solveInfimum graph name ((a,b) :=: x) | a == x = do
+  x ≤! b
+  dischargeConstraint name
+
+solveInfimum graph name ((a,b) :=: x) | b == x = do
+  x ≤! a
+  dischargeConstraint name
+solveInfimum graph name ((a,b) :=: x) | otherwise = callMonadicGraphSupremum (oppositeGraph graph) name ((a,b) :=: x)
+
+
+
+
+--------------------------------------------
+-- The actual solving is done here.
+-- we call the `findSupremumM` function from Abstract.Computation.MonadicGraph
+callMonadicGraphSupremum :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> Symbol -> ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) -> t ()
+callMonadicGraphSupremum graph name ((a,b) :=: x) = do
 
   -- Here we define which errors should be caught while doing our hypothetical computation.
   let relevance (UnificationError _ _)      = IsGraphRelevant
@@ -445,6 +478,7 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsSupremum ((DMTypeOf k, DMTyp
     collapseSubtypingCycles (b,y)
     traceM $ "Computing supremum: " <> show ((a,b) :=: y)
 
+    -- j
     graph <- getCurrentConstraintSubtypingGraph
     let contrCandidates = completeDiamondUpstream graph (a,b)
     let f (x,contrVars) = do
@@ -472,7 +506,7 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsInfimum ((DMTypeOf k, DMType
   solve_ Dict SolveExact name (IsInfimum ((a,b) :=: x)) = do
     collapseSubtypingCycles (x,a)
     collapseSubtypingCycles (x,b)
-    solveSupremum (oppositeGraph (GraphM subtypingGraph)) name ((a,b) :=: x)
+    solveInfimum (GraphM subtypingGraph) name ((a,b) :=: x)
 
   solve_ Dict SolveAssumeWorst name (IsInfimum ((a,b) :=: x)) = do
     collapseSubtypingCycles (x,a)
@@ -498,7 +532,7 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsInfimum ((DMTypeOf k, DMType
 
     g f contrCandidates
 
-    solveSupremum (oppositeGraph (GraphM subtypingGraph)) name ((a,b) :=: x)
+    solveInfimum (GraphM subtypingGraph) name ((a,b) :=: x)
 
 -- find all cyclic subtyping constraints, that is, chains of the form
 -- a <= b <= c <= a
