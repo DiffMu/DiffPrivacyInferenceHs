@@ -292,6 +292,13 @@ checkSen' (Phi cond ifbr elsebr) scope = do
       (τif, τelse) <- case τ_sum of
                            (τ1 : τ2 : _) -> return (τ1, τ2)
                            _ -> throwError (ImpossibleError "Sum cannot return empty.")
+
+      -- the branches need to return types that are indistinguishable by julia dispatch,
+      -- otherwise we cannot resolve dispatch because we don't know which branch is going
+      -- to be chosen at runtime.
+      addConstraint (Solvable (IsJuliaEqual (τif, τelse)))
+
+      -- once we know they are julia-equal, we can safely make the Phi return their supremum.
       τ <- newVar
       addConstraint (Solvable (IsSupremum ((τif, τelse) :=: τ)))
       return τ
@@ -686,7 +693,7 @@ checkPri' (Loop niter cs (xi, xc) body) scope =
       -- check body term in that new scope
       cbody <- checkPriv body scope''
 
-      -- append the computation of removing the args from the context again, remembering their types
+      -- apnd the computation of removing the args from the context again, remembering their types
       -- and sensitivities
       let cbody' = do
             τ <- cbody
