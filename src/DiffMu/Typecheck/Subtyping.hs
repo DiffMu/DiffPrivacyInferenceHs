@@ -214,14 +214,14 @@ solveSubtyping name path = do
   -- traceM $ "I have " <> show (length (graph (IsReflexive NotStructural))) <> " candidates."
 
   -- Executing the computation
-  res <- findPathM @(Full) relevance (GraphM graph) path
+  (res) <- findPathM @(Full) relevance (GraphM graph) path
 
   -- We look at the result and if necessary throw errors.
   case res of
-    Finished a -> dischargeConstraint @MonadDMTC name
-    Partial a  -> updateConstraint name (Solvable (IsLessEqual a))
-    Wait       -> convertSubtypingToSupremum name path -- in this case we try to change this one into a sup
-    Fail e     -> throwError (UnsatisfiableConstraint (show (fst path) <> " ⊑ " <> show (snd path) <> "\n\n"
+    Finished a     -> dischargeConstraint @MonadDMTC name
+    Partial (a,_)  -> updateConstraint name (Solvable (IsLessEqual a))
+    Wait           -> convertSubtypingToSupremum name path -- in this case we try to change this one into a sup
+    Fail e         -> throwError (UnsatisfiableConstraint (show (fst path) <> " ⊑ " <> show (snd path) <> "\n\n"
                          <> "Got the following errors while searching the subtyping graph:\n"
                          <> show e))
 
@@ -392,7 +392,7 @@ solveSupremum graph name ((a,b) :=: x) = do
   -- traceM $ "I have " <> show (length (graph (IsReflexive NotStructural))) <> " candidates."
 
   -- Executing the computation
-  res <- findSupremumM @(Full) relevance (graph) ((a,b) :=: x)
+  res <- findSupremumM @(Full) relevance (graph) ((a,b) :=: x, IsShortestPossiblePath)
 
   -- We look at the result and if necessary throw errors.
   case res of
@@ -483,15 +483,15 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsInfimum ((DMTypeOf k, DMType
 -- all types in such a chain can be unified.
 collapseSubtypingCycles :: forall k t. (SingI k, Typeable k, IsT MonadDMTC t) => (DMTypeOf k, DMTypeOf k) -> t ()
 collapseSubtypingCycles (start, end) = do
-  traceM $ ("~~~~ collapsing cycles of " <> show (start,end))
+  debug $ ("~~~~ collapsing cycles of " <> show (start,end))
   graph <- getCurrentConstraintSubtypingGraph
 
-  traceM $ ("~~~~ graph is " <> show graph)--(H.insert end (start:[start]) H.empty))
+  debug $ ("~~~~ graph is " <> show graph)--(H.insert end (start:[start]) H.empty))
 
   -- find all paths from the ssucc to the start node, hence cycles that contain the start-end-edge
   let cycles = concat (allPaths graph (end, start))
 
-  traceM $ ("~~~~ found cycles " <> show cycles <> " unifying with " <> show end <> "\n")
+  debug $ ("~~~~ found cycles " <> show cycles <> " unifying with " <> show end <> "\n")
 
   -- unify all types in all cycles with the end type
   unifyAll (concat cycles)

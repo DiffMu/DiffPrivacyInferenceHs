@@ -36,7 +36,13 @@ newtype GraphM m a = GraphM (EdgeType -> [Edge m a])
 data ErrorRelevance = IsGraphRelevant | NotGraphRelevant
   deriving (Show)
 
+data IsShortestPossiblePath = IsShortestPossiblePath | NotShortestPossiblePath
 
+instance Show IsShortestPossiblePath where
+  show IsShortestPossiblePath = "shortest ossible"
+  show NotShortestPossiblePath = "not shortest possible"
+
+type PathState a = ((a,a),IsShortestPossiblePath)
 
 oppositeGraph :: forall m a. Monad m => GraphM m a -> GraphM m a
 oppositeGraph (GraphM graph) = GraphM (opp graph)
@@ -48,8 +54,8 @@ oppositeGraph (GraphM graph) = GraphM (opp graph)
         opp f ty = oppositeEdge <$> f ty
 
 -- findPathM :: forall s m e a. (Show e, Show a, MonadError e m, MonadState s m, MonoidM m a, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> (a,a) -> m (INCRes e (a,a))
-findPathM :: forall s m isT e a. (Show e, Show a, Eq a, MonadConstraint isT m, IsT isT m, Normalize m a, MonadNormalize m, MonadError e m, MonadState s m, MonadLog m, Unify isT a, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> (a,a) -> m (INCRes e (a,a))
-findPathM relevance (GraphM g) (start,goal) | start == goal = return $ Finished (start,goal)
+findPathM :: forall s m isT e a. (Show e, Show a, Eq a, MonadConstraint isT m, IsT isT m, Normalize m a, MonadNormalize m, MonadError e m, MonadState s m, MonadLog m, Unify isT a, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> (a,a) -> m (INCRes e (PathState a))
+findPathM relevance (GraphM g) (start,goal) | start == goal = return $ Finished ((start,goal),IsShortestPossiblePath)
 findPathM relevance (GraphM g) (start,goal) | otherwise     =
   let both (Finished a) (Finished b) | a == b = Finished a
       both (Fail e) _                         = Fail e
@@ -88,27 +94,27 @@ findPathM relevance (GraphM g) (start,goal) | otherwise     =
       checkByStructurality NotStructural getIdx a b x = checkPair both       getIdx a b x
 
 
-      f_refl :: Eq b => Structurality -> EdgeFamily m a b -> (a,a) -> m (INCRes e (a,a))
-      f_refl s (EdgeFamily (getIdx,edge)) (start,goal) =
+      f_refl :: Eq b => Structurality -> EdgeFamily m a b -> PathState a -> m (INCRes e (PathState a))
+      f_refl s (EdgeFamily (getIdx,edge)) ((start,goal),isShortest) =
         checkByStructurality s getIdx start goal $ \idx -> do
           (n₀, n₁) <- edge idx
           n₀'' <- unify start n₀
           n₁'' <- unify n₁ goal
-          return (Finished (n₀'', n₁''))
+          return (Finished ((n₀'', n₁''),isShortest))
 
-      fromLeft :: EdgeFamily m a b -> (a,a) -> m (INCRes e (a,a))
-      fromLeft (EdgeFamily (getIdx,edge)) (start,goal) =
+      fromLeft :: EdgeFamily m a b -> PathState a -> m (INCRes e (PathState a))
+      fromLeft (EdgeFamily (getIdx,edge)) ((start,goal),_) =
         checkSingle getIdx start $ \idx -> do
           (n₀,n₁) <- edge idx
           n₀'' <- unify start n₀
-          return (Partial (n₁, goal))
+          return (Partial ((n₁, goal),NotShortestPossiblePath))
 
-      fromRight :: EdgeFamily m a b -> (a,a) -> m (INCRes e (a,a))
-      fromRight (EdgeFamily (getIdx,edge)) (start,goal) =
+      fromRight :: EdgeFamily m a b -> PathState a -> m (INCRes e (PathState a))
+      fromRight (EdgeFamily (getIdx,edge)) ((start,goal),_) =
         checkSingle getIdx goal $ \idx -> do
           (n₀,n₁) <- edge idx
           n₁'' <- unify n₁ goal
-          return (Partial (start, n₀))
+          return (Partial ((start, n₀),NotShortestPossiblePath))
 
       catchRelevant :: forall a b. (a -> m (INCRes e a)) -> (a -> m (INCRes e a))
       catchRelevant f a =
@@ -141,11 +147,12 @@ findPathM relevance (GraphM g) (start,goal) | otherwise     =
                   <> [catchRelevant (withFamily fromLeft a)   | a <- g NotReflexive]
                   <> [catchRelevant (withFamily fromRight a)  | a <- g NotReflexive]
 
-  in evalINC (INC computations) (start,goal)
+  in evalINC (INC computations) ((start,goal),IsShortestPossiblePath)
 
+type SupState a = ((a,a) :=: a, IsShortestPossiblePath)
 
-findSupremumM :: forall s m isT e a. (Show e, Show a, Eq a, MonadError e m, MonadConstraint isT m, IsT isT m, Unify isT (a), Normalize m a, MonadNormalize m, MonadState s m, MonadLog m, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> ((a,a) :=: a) -> m (INCRes e ((a,a) :=: a))
-findSupremumM relevance (GraphM graph) ((a,b) :=: x) =
+findSupremumM :: forall s m isT e a. (Show e, Show a, Eq a, MonadError e m, MonadConstraint isT m, IsT isT m, Unify isT (a), Normalize m a, MonadNormalize m, MonadState s m, MonadLog m, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> SupState a -> m (INCRes e ((a,a) :=: a))
+findSupremumM relevance (GraphM graph) ((a,b) :=: x,isShortestSup) =
   let
     -------------
     -- This is copy paste from above
@@ -210,8 +217,8 @@ findSupremumM relevance (GraphM graph) ((a,b) :=: x) =
    -- end copy paste
    -------------
 
-      fromLeft :: Eq b => Bool -> EdgeFamily m a b -> ((a,a) :=: a) -> m (INCRes e ((a,a) :=: a))
-      fromLeft failhere (EdgeFamily (getIdx,edge)) ((start₀,start₁) :=: goal) =
+      fromLeft :: Eq b => EdgeType -> EdgeFamily m a b -> ((a,a) :=: a) -> m (INCRes e ((a,a) :=: a))
+      fromLeft edgeType (EdgeFamily (getIdx,edge)) ((start₀,start₁) :=: goal) =
         checkPair both getIdx start₀ start₁ $ \idx -> do
           openNewConstraintSet
           ((n₀, n₁)) <- edge idx
@@ -221,13 +228,13 @@ findSupremumM relevance (GraphM graph) ((a,b) :=: x) =
           debug $ "for that, find path: " <> show (start₁,n₁) <> "\nGot: " <> show rpath
           case rpath of
             Wait -> return Wait
-            Fail e -> case failhere of
+            Fail e -> case edgeType of
                         -- If have a reflexive edge, and failed, then we do not continue
-                        True  -> return $ Fail e
+                        IsReflexive _  -> return $ Fail e
                         -- If we mereley had a non-reflexive edge, we try again with the target of that edge
-                        False -> traceShow ("=> [Left] Finding path " <> show (start₁,n₁) <> " failed. Now computing sup " <> show (n₁, start₁, goal)) (findSupremumM relevance (GraphM graph) ((n₁, start₁) :=: goal))
+                        NotReflexive -> traceShow ("=> [Left] Finding path " <> show (start₁,n₁) <> " failed. Now computing sup " <> show (n₁, start₁, goal)) (findSupremumM relevance (GraphM graph) (((n₁, start₁) :=: goal),NotShortestPossiblePath))
             Partial x -> logForce ("Waiting because got partial:\n" <> show x) >> return Wait
-            Finished (a₀,a₁) -> do
+            Finished ((a₀,a₁),isShortestPath) -> do
               debug "Since finding path successfull, solving leftover constraints."
               debug "============ BEFORE solving all new constraints >>>>>>>>>>>>>>>>"
               solveAllConstraints SolveExact
@@ -235,7 +242,15 @@ findSupremumM relevance (GraphM graph) ((a,b) :=: x) =
               logPrintConstraints
               closedRes <- mergeTopConstraintSet
               case closedRes of
-                ConstraintSet_WasNotEmpty -> logForce "Waiting because constraint set not empty!" >> return Wait
+                ConstraintSet_WasNotEmpty ->
+                  case (edgeType,isShortestSup,isShortestPath) of
+                    (IsReflexive IsStructural, IsShortestPossiblePath, IsShortestPossiblePath) -> do
+                      debug "Constraint set was not empty. But the paths leading to it were only reflexive edges. Thus we commit this sup result."
+                      goal' <- unify goal a₁
+                      debug $ " we have:\nsup(" <> show (n₀'', a₀) <> " = " <> show goal'
+                      return $ Finished ((n₀'' , a₀) :=: goal')
+                    _ -> do
+                      logForce "Waiting because constraint set not empty! (And paths not shortest.)" >> return Wait
                 ConstraintSet_WasEmpty -> do
                   debug "Constraint set was empty! Thus we found the supremum."
                   debug $ "After unification with the goal" <> show goal <> " =! " <> show a₁
@@ -243,26 +258,26 @@ findSupremumM relevance (GraphM graph) ((a,b) :=: x) =
                   debug $ " we have:\nsup(" <> show (n₀'', a₀) <> " = " <> show goal'
                   return $ Finished ((n₀'' , a₀) :=: goal')
 
-      fromRight :: Eq b => Bool -> EdgeFamily m a b -> ((a,a) :=: a) -> m (INCRes e ((a,a) :=: a))
-      fromRight failhere (EdgeFamily (getIdx,edge)) ((start₀,start₁) :=: goal) =
+      fromRight :: Eq b => EdgeType -> EdgeFamily m a b -> ((a,a) :=: a) -> m (INCRes e ((a,a) :=: a))
+      fromRight edgeType (EdgeFamily (getIdx,edge)) ((start₀,start₁) :=: goal) =
         checkPair both getIdx start₀ start₁ $ \idx -> do
           openNewConstraintSet
           (n₀, n₁) <- edge idx
           n₀'' <- unify start₁ n₀
-          (rpath) <- findPathM relevance (GraphM graph) (start₀,n₁)
+          (rpath) <- findPathM relevance (GraphM graph) ((start₀,n₁))
           debug $ "fromRight: trying to solve sup" <> show (start₀,start₁) <> " = " <> show goal
           debug $ "for that, find path: " <> show (start₀,n₁) <> "\nGot: " <> show rpath
           case rpath of
             Wait -> return Wait
-            Fail e -> case failhere of
+            Fail e -> case edgeType of
                         -- If have a reflexive edge, and failed, then we do not continue
-                        True  -> return $ Fail e
+                        IsReflexive _  -> return $ Fail e
                         -- If we mereley had a non-reflexive edge, we try again with the target of that edge
-                        False -> do
+                        NotReflexive -> do
                           log ("=> [Right] Finding path " <> show (start₀,n₁) <> " failed. Now computing sup " <> show (start₀, n₁, goal))
-                          (findSupremumM relevance (GraphM graph) ((start₀, n₁) :=: goal))
+                          (findSupremumM relevance (GraphM graph) (((start₀, n₁) :=: goal),NotShortestPossiblePath))
             Partial x -> return Wait
-            Finished (a₀,a₁) -> do
+            Finished ((a₀,a₁),isShortestPath) -> do
               debug "Since finding path successfull, solving leftover constraints."
               debug "============ BEFORE solving all new constraints >>>>>>>>>>>>>>>>"
               solveAllConstraints SolveExact
@@ -270,7 +285,15 @@ findSupremumM relevance (GraphM graph) ((a,b) :=: x) =
               logPrintConstraints
               closedRes <- mergeTopConstraintSet
               case closedRes of
-                ConstraintSet_WasNotEmpty -> debug "Constraint set not empty! Thus waiting." >> return Wait
+                ConstraintSet_WasNotEmpty ->
+                  case (edgeType,isShortestSup,isShortestPath) of
+                    (IsReflexive IsStructural, IsShortestPossiblePath, IsShortestPossiblePath) -> do
+                      debug "Constraint set was not empty. But the paths leading to it were only reflexive edges. Thus we commit this sup result."
+                      goal' <- unify goal a₁
+                      debug $ " we have:\nsup(" <> show (a₀ , n₀'') <> " = " <> show goal'
+                      return $ Finished ((a₀ , n₀'') :=: goal')
+                    _ -> do
+                      logForce "Waiting because constraint set not empty! (And paths not shortest.)" >> return Wait
                 ConstraintSet_WasEmpty -> do
                   debug "Constraint set was empty! Thus we found the supremum."
                   debug $ "After unification with the goal" <> show goal <> " =! " <> show a₁
@@ -279,18 +302,18 @@ findSupremumM relevance (GraphM graph) ((a,b) :=: x) =
                   return $ Finished ((a₀ , n₀'') :=: goal')
 
 
-      computations =  [catchRelevant (withFamily (fromLeft True) a)  | a <- graph (IsReflexive IsStructural)]
-                     <> [catchRelevant (withFamily (fromLeft True) a)  | a <- graph (IsReflexive NotStructural)]
-                     <> [catchRelevant (withFamily (fromLeft False) a)  | a <- graph (NotReflexive)]
+      computations =  [catchRelevant (withFamily (fromLeft (IsReflexive IsStructural)) a)  | a <- graph (IsReflexive IsStructural)]
+                     <> [catchRelevant (withFamily (fromLeft (IsReflexive NotStructural)) a)  | a <- graph (IsReflexive NotStructural)]
+                     <> [catchRelevant (withFamily (fromLeft (NotReflexive)) a)  | a <- graph (NotReflexive)]
 
-                     <> [catchRelevant (withFamily (fromRight True) a)  | a <- graph (IsReflexive IsStructural)]
-                     <> [catchRelevant (withFamily (fromRight True) a)  | a <- graph (IsReflexive NotStructural)]
-                     <> [catchRelevant (withFamily (fromRight False) a)  | a <- graph (NotReflexive)]
+                     <> [catchRelevant (withFamily (fromRight (IsReflexive IsStructural)) a)  | a <- graph (IsReflexive IsStructural)]
+                     <> [catchRelevant (withFamily (fromRight (IsReflexive NotStructural)) a)  | a <- graph (IsReflexive NotStructural)]
+                     <> [catchRelevant (withFamily (fromRight NotReflexive) a)  | a <- graph (NotReflexive)]
 
 
   in withLogLocation "MndGraph" $ do
     evalINC (INC computations) ((a,b) :=: x)
 
 findInfimumM :: forall s m isT e a. (Show e, Show a, Eq a, MonadError e m, MonadConstraint isT m, IsT isT m, Unify isT (a), Normalize m a, MonadNormalize m, MonadState s m, MonadLog m, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> ((a,a) :=: a) -> m (INCRes e ((a,a) :=: a))
-findInfimumM relevance graph z = findSupremumM relevance (oppositeGraph graph) z
+findInfimumM relevance graph z = findSupremumM relevance (oppositeGraph graph) (z,IsShortestPossiblePath)
 

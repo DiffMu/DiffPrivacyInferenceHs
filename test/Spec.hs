@@ -117,6 +117,20 @@ testSupremum = do
             (Fun [ForAll [] ([NoFun (Numeric (NonConst DMInt)) :@ oneId] :->: (NoFun (Numeric (NonConst DMInt)))) :@ Nothing])
             (Left (UnsatisfiableConstraint "[test]"))
 
+  describe "advanced supremum" $ do
+    it "breaks down Num wrapped sups" $ do
+      let term :: TC ()
+          term = do
+            a <- newVar
+            b <- newVar
+            c <- supremum (Numeric a) (Numeric b)
+            return ()
+          eval = do
+            c <- getConstraintsByType (Proxy @(IsSupremum ((DMTypeOf NoFunKind, DMTypeOf NoFunKind) :=: DMTypeOf NoFunKind)))
+            d <- getConstraintsByType (Proxy @(IsSupremum ((DMTypeOf NumKind, DMTypeOf NumKind) :=: DMTypeOf NumKind)))
+            return (length c , length d)
+      (tcl $ (sn term) >> eval) `shouldReturn` Right (0,1)
+
 
 testSubtyping_ContractEdge = do
   describe "subtyping (contracting edges - only subtyping constraints)" $ do
