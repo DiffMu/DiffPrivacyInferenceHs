@@ -132,6 +132,66 @@ testSupremum = do
       (tcl $ (sn term) >> eval) `shouldReturn` Right (0,1)
 
 
+
+testSubtyping_Cycles = do
+  describe "subtyping (contracting cycles - only subtyping constraints)" $ do
+    it "contracts a two-variable cycle" $ do
+      let test0 = do
+            (a :: DMMain) <- newVar
+            b <- newVar
+            a ⊑! b
+            b ⊑! a
+            return (a,b)
+      (tc $ (sn test0 >>= (\(a,b) -> return (a == b)))) `shouldReturn` (Right True)
+
+    it "contracts a larger cycle with more stuff" $ do
+      let test1 = do
+            -- the interesting variables a ≤ b
+            (a :: DMMain) <- newVar
+            b <- newVar
+            a ⊑! b
+
+            -- the additional variables b ≤ x ≤ y ≤ a
+            x <- newVar
+            y <- newVar
+            b ⊑! x
+            x ⊑! y
+            y ⊑! a
+
+            -- some more uninteresting things
+            z <- newVar
+            s <- newVar
+            t <- newVar
+            z ⊑! x
+            s ⊑! t
+            a ⊑! t
+
+            -- we are interested in how `a` and `b` turn out
+            return (a,b)
+      let checkres (a,b) = a == b
+      (tc $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right True)
+
+    it "contracts a larger cycle that also has sup/inf constraints" $ do
+      let test2 = do
+            -- the interesting variables a ≤ b
+            (a :: DMMain) <- newVar
+            b <- newVar
+            a ⊑! b
+
+            -- the additional variables b ≤ x ≤ z ≤ y ≤ a
+            (x :: DMMain) <- supremum a b
+            (y :: DMMain) <- infimum a x
+            z <- newVar
+            x ⊑! z
+            z ⊑! y
+
+            -- we are interested in how `a` and `b` turn out
+            return (a,b)
+      let checkres (a,b) = a == b
+      (tc $ (sn test2 >>= (return . checkres))) `shouldReturn` (Right True)
+
+
+
 testSubtyping_ContractEdge = do
   describe "subtyping (contracting edges - only subtyping constraints)" $ do
     it "contracts a single edge" $ do
@@ -304,6 +364,7 @@ runAllTests :: (String -> IO String) -> IO ()
 runAllTests parse = defaultspec $ do
   testUnification
   testSubtyping
+  testSubtyping_Cycles
   testSubtyping_ContractEdge
   testSupremum
   testCheck_Rules
