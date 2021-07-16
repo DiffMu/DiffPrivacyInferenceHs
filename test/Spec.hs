@@ -190,6 +190,23 @@ testSubtyping_Cycles = do
       let checkres (a,b) = a == b
       (tc $ (sn test2 >>= (return . checkres))) `shouldReturn` (Right True)
 
+    it "does not contract a constraint that is not in a cycle" $ do
+      let test3 = do
+            -- the interesting variables a ≤ b
+            (a :: DMMain) <- newVar
+            b <- newVar
+            a ⊑! b
+
+            -- the additional variables b ≤ x ≤ z ≤ y ≤ a
+            (x :: DMMain) <- supremum a b
+            (y :: DMMain) <- infimum a x
+            z <- newVar
+            x ⊑! z
+
+            -- we are interested in how `a` and `b` turn out
+            return (a,b)
+      let checkres (a,b) = not (a == b)
+      (tc $ (sn test3 >>= (return . checkres))) `shouldReturn` (Right True)
 
 
 testSubtyping_ContractEdge = do
