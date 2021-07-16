@@ -202,7 +202,7 @@ convertSubtypingToSupremum name _                   = pure ()
 --    return False if nothing could be done
 solveSubtyping :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => Symbol -> (DMTypeOf k, DMTypeOf k) -> t ()
 solveSubtyping name path = do
---  collapseSubtypingCycles path
+  collapseSubtypingCycles path
 
   -- Here we define which errors should be caught while doing our hypothetical computation.
   let relevance (UnificationError _ _)      = IsGraphRelevant

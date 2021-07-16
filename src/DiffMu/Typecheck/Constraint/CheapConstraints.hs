@@ -53,8 +53,6 @@ instance Typeable k => Solve MonadDMTC MakeConst (DMTypeOf k) where
 
      mapM makeVarConst freev3
 
-     traceM $ ("=====================================> solving" <> show (MakeConst τ) <> " constraint, got free " <> show freev)
-
      -- compare the length of `m` and `n`, that is, if all free variables
      -- have the aforementioned kinds
      let m = length freev

@@ -408,8 +408,8 @@ checkSen' (Loop niter cs (xi, xc) body) scope = do
       τbnc <- newVar
       addConstraint (Solvable (IsNonConst (τb, τbnc)))
       -- addConstraint (Solvable (MakeNonConst (τbcs)))
-      addConstraint (Solvable (IsEqual (τbnc, τbcs)))
-      addConstraint (Solvable (IsJuliaEqual (τcs, τbcs)))
+      unify τbnc τbcs
+      addConstraint (Solvable (IsLessEqual (τcs, τbcs)))
       addConstraint (Solvable (IsLoopResult ((sit, scs, sb), sbcs, τit))) -- compute the right scalars once we know if τ_iter is const or not.
 
       return τbnc
@@ -715,8 +715,8 @@ checkPri' (Loop niter cs (xi, xc) body) scope =
          τbnc <- newVar
          addConstraint (Solvable (IsNonConst (τb, τbnc)))
          -- addConstraint (Solvable (MakeNonConst (τbcs)))
-         addConstraint (Solvable (IsEqual (τbnc, τbcs)))
-         addConstraint (Solvable (IsJuliaEqual (τcs, τbcs)))
+         unify τbnc τbcs
+         addConstraint (Solvable (IsLessEqual (τcs, τbcs)))
 
          return τbnc
 
