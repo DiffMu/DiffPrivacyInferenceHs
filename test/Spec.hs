@@ -197,7 +197,7 @@ testSubtyping_Cycles = do
             b <- newVar
             a ⊑! b
 
-            -- the additional variables b ≤ x ≤ z ≤ y ≤ a
+            -- the additional variables b ≤ x ≤ z and y ≤ a
             (x :: DMMain) <- supremum a b
             (y :: DMMain) <- infimum a x
             z <- newVar

@@ -103,14 +103,33 @@ tryComputeSym x = case f x of
     dmMinus a Infty         = undefined
     dmMinus (Fin a) (Fin b) = Fin (a P.- b)
 
+    dmSqrt :: SymVal -> SymVal
+    dmSqrt Infty = Infty
+    dmSqrt (Fin a) = Fin (P.sqrt a)
+
+    dmCeil :: SymVal -> SymVal
+    dmCeil Infty = Infty
+    dmCeil (Fin a) = Fin (P.fromIntegral (P.ceiling a))
+
+    dmExp :: SymVal -> SymVal -> SymVal
+    dmExp a Infty = Infty
+    dmExp Infty a = Infty
+    dmExp (Fin a) (Fin b) = Fin (a P.** b)
+
+    dmLog :: SymVal -> SymVal
+    dmLog Infty = Infty
+    dmLog (Fin a) = Fin (P.log a)
+
     f :: SymVar k -> Maybe (SymTerm MainSensKind)
     f (HonestVar _)  = Nothing
     f (Id t)         = Nothing
-    f (Ln a)         = Nothing
-    f (Exp a)        = Nothing
-    f (Ceil a)       = Nothing
-    f (Sqrt a)       = Nothing
-    f (Max as)       = constCoeff <$> (maximum <$> mapM extractVal as)
+    f (Ln a)         = constCoeff <$> (dmLog <$> extractVal a)
+    f (Exp (a,b))    = constCoeff <$> (dmExp <$> extractVal a <*> extractVal b)
+    f (Ceil a)       = constCoeff <$> (dmCeil <$> extractVal a)
+    f (Sqrt a)       = constCoeff <$> (dmSqrt <$> extractVal a)
+    f (Max (a:as))   = case all (== a) as of
+        False -> constCoeff <$> (maximum <$> mapM extractVal (a:as))
+        True  -> Just a
     f (Minus (a, b)) = case extractVal b of
         (Just (Fin 0))  -> pure a
         _               -> constCoeff <$> (dmMinus <$> extractVal a <*> extractVal b)
