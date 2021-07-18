@@ -203,13 +203,14 @@ checkSen' (LamStar xτs body) scope =
 
 checkSen' (SLet (x :- dτ) term body) scope = do
 
-  -- put the computation to check the term into the scope
+   -- put the computation to check the term into the scope
    let scope' = setValue x (checkSens term scope) scope
 
    -- check body with that new scope
    result <- checkSens body scope'
 
    return $ do
+     --traceM $ "checking sensitivity SLet: " <> show (x :- dτ) <> " = " <> show term
      -- TODO
      case dτ of
         JTAny -> return dτ
@@ -244,6 +245,7 @@ checkSen' (Apply f args) scope =
     mf = checkSens f scope
 
   in do
+    --traceM $ "checking sens apply " <> show (f, args)
     -- we typecheck the function, but `apply` our current layer on the Later computation
     -- i.e. "typecheck" means here "extracting" the result of the later computation
     res <- (applyDelayedLayer scope mf)
@@ -308,6 +310,7 @@ checkSen' (Phi cond ifbr elsebr) scope = do
 checkSen' (Tup ts) scope = do
   τsd <- mapM (\t -> (checkSens t scope)) ts
   Done $ do
+     --traceM $ "checking sens Tup: " <> show (Tup ts)
      -- check tuple entries and sum contexts
      τsum <- msumS τsd
 
@@ -344,6 +347,7 @@ checkSen' (TLet xs term body) original_scope = do
 
   -- merging the computations and matching inferred types and sensitivities
   Done $ do
+    --traceM $ "checking sensitivities TLet: " <> show (xs) <> " = " <> show term
     -- create a new var for scaling the term context
     s <- newVar
 
@@ -397,6 +401,7 @@ checkSen' (Loop niter cs (xi, xc) body) scope = do
 
    Done $ do
 
+      --traceM $ "checking sens Loop: " <> show  (Loop niter cs (xi, xc) body)
       -- add scalars for iterator, capture and body context
       -- we compute their values once it is known if the number of iterations is const or not.
       sit <- newVar
@@ -535,6 +540,7 @@ checkPri' (Apply f args) scope =
                 return r
 
   in do
+    --traceM $ "checking priv apply " <> show (f, args)
     -- extract result of f typechecking
     ff <- f_check
 
@@ -545,10 +551,13 @@ checkPri' (Apply f args) scope =
     return (sbranch_check ff args)
 
 
+
+
 checkPri' (SLet (x :- dτ) term body) scope = do
-  -- this is the bind rule.
-  -- as it does not matter what sensitivity/privacy x has in the body, we put an Arg term in the scope
-  -- and later discard its annotation.
+   -- this is the bind rule.
+   -- as it does not matter what sensitivity/privacy x has in the body, we put an Arg term in the scope
+   -- and later discard its annotation. we use checkSens because there are no Vars in privacy terms so
+   -- x will only ever be used in a sensitivity term.
    let scope' = setValue x (checkSens (Arg x dτ NotRelevant) scope) scope
 
    -- check body with that new scope
@@ -563,6 +572,7 @@ checkPri' (SLet (x :- dτ) term body) scope = do
    dterm <- checkPriv term scope
 
    return $ do
+     --traceM $ "checking privacy SLet: " <> show (x :- dτ) <> " = " <> show term
      -- TODO
      case dτ of
         JTAny -> return dτ
@@ -601,6 +611,77 @@ checkPri' (FLet fname term body) scope = do
      result' <- result
      removeVar @PrivacyK fname
      return result'
+
+-- TODO check if this is correct
+-- this is basically the same as sensitivity Tup, only the entries are privacy terms
+checkPri' (Tup ts) scope = do
+  τsd <- mapM (\t -> (checkPriv t scope)) ts
+  Done $ do
+     --traceM $ "checking privacy Tup: " <> show (Tup ts)
+     -- check tuple entries and sum contexts
+     τsum <- msumP τsd
+
+     -- ensure nothing that is put in a tuple is a function
+     let makeNoFun ty = do v <- newVar
+                           unify (NoFun v) ty
+                           return v
+     τnf <- mapM makeNoFun τsum
+
+     -- return the tuple.
+     return (NoFun (DMTup τnf))
+
+
+-- TODO check if this is correct.
+checkPri' (TLet xs term body) original_scope = do
+
+  -- add all variables bound in the tuple let as args-checking-commands to the scope
+  -- we use checkSens because there are no Vars in privacy terms so the variables will
+  -- only ever be used in a sensitivity term.
+  -- TODO: do we need to make sure that we have unique names here?
+  let addarg scope (x :- τ) = setValue x (checkSens (Arg x τ NotRelevant) original_scope) scope
+  let scope_with_args = foldl addarg original_scope xs
+
+  -- check the body in the scope with the new args
+  cbody <- checkPriv body scope_with_args
+
+  -- append the computation of removing the args from the context again, remembering their
+  -- types so we can build the DMTup from them. we throw away the privacy they have in the
+  -- body because in bind / privacy mode, things already are private so their privacy does
+  -- not change no matter what we do with them.
+  let cbody' = do
+        τ <- cbody
+        xs_types <- mapM (removeVar @PrivacyK) [x | (x :- _) <- xs]
+        let xs_types' = [ ty | WithRelev _ (ty :@ PrivacyAnnotation _) <- xs_types ]
+        return (τ,xs_types')
+
+  -- the computation for checking the term
+  cterm <- checkPriv term original_scope
+
+  -- merging the computations and matching inferred types
+  Done $ do
+    --traceM $ "checking privacy TLet: " <> show (xs) <> " = " <> show term
+    -- extract both TC computations
+    -- we don't scale any of the contexts because this is just multiple bind and
+    -- we don't care what privacy the assigned elements have in the body.
+    ((τbody,xs_types), τterm) <- msumTup (cbody', cterm)
+
+    -- helper function for making sure that type is a nofun, returning the nofun component
+    let makeNoFun ty = do v <- newVar
+                          unify (NoFun v) ty
+                          return v
+
+    -- here we use `makeNoFun`
+    -- we make all tuple component types into nofuns
+    xs_types' <- mapM makeNoFun xs_types
+
+    -- and require that the type of the term is actually this tuple type
+    τterm ==! NoFun (DMTup xs_types')
+
+    -- and we return the type of the body
+    return τbody
+
+
+
 
 checkPri' (Gauss rp εp δp f) scope =
   let
@@ -671,6 +752,7 @@ checkPri' (Loop niter cs (xi, xc) body) scope =
           return ()
 
    in do
+      --traceM $ "checking privacy Loop: " <> show  (Loop niter cs (xi, xc) body)
       cniter <- checkSens niter scope
 
       let cniter' = do
@@ -686,14 +768,15 @@ checkPri' (Loop niter cs (xi, xc) body) scope =
 
 
       -- add iteration and capture variables as args-checking-commands to the scope
+      -- capture variable is not relevant bc captures get ∞ privacy anyways
       -- TODO: do we need to make sure that we have unique names here?
       let scope' = setValue xi (checkSens (Arg xi JTNumInt NotRelevant) scope) scope
-      let scope'' = setValue xc (checkSens (Arg xc JTAny IsRelevant) scope) scope'
+      let scope'' = setValue xc (checkSens (Arg xc JTAny NotRelevant) scope) scope'
 
       -- check body term in that new scope
       cbody <- checkPriv body scope''
 
-      -- apnd the computation of removing the args from the context again, remembering their types
+      -- append the computation of removing the args from the context again, remembering their types
       -- and sensitivities
       let cbody' = do
             τ <- cbody
@@ -705,7 +788,6 @@ checkPri' (Loop niter cs (xi, xc) body) scope =
 
             n <- newVar
             setInteresting interesting n
-
             return (τ, n, τi, τc)
 
       Done $ do
