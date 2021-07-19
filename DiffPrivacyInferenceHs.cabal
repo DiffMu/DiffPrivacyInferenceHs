@@ -80,6 +80,11 @@ library
       DiffMu.Typecheck.Typecheck
       Lib
       Spec
+      Spec.Base
+      Spec.Rules
+      Spec.Subtyping
+      Spec.Supremum
+      Spec.TypecheckingExamples
   other-modules:
       Paths_DiffPrivacyInferenceHs
   hs-source-dirs:
