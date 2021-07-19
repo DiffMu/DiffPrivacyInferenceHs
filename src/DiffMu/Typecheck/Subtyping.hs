@@ -204,7 +204,6 @@ convertSubtypingToSupremum name _                   = pure ()
 --    return False if nothing could be done
 solveSubtyping :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => Symbol -> (DMTypeOf k, DMTypeOf k) -> t ()
 solveSubtyping name path = withLogLocation "Subtyping" $ do
-  collapseSubtypingCycles path
 
   -- Here we define which errors should be caught while doing our hypothetical computation.
   let relevance (UnificationError _ _)      = IsGraphRelevant
@@ -393,18 +392,17 @@ checkContractionAllowed _ _ = return ContractionDisallowed
 -- We can solve `IsLessEqual` constraints for DMTypes.
 -- NOTE: IsLessEqual is interpreted as a subtyping relation.
 instance (SingI k, Typeable k) => Solve MonadDMTC IsLessEqual (DMTypeOf k, DMTypeOf k) where
-  solve_ Dict mode name (IsLessEqual (a,b)) = do
-    -- if we are additionaly in assumeworst, we try to contract the edge first
-    case (mode) of
-      (SolveAssumeWorst) -> do
+  solve_ Dict SolveExact name (IsLessEqual (a,b))  = solveSubtyping name (a,b)
+  solve_ Dict SolveGlobal name (IsLessEqual path) = collapseSubtypingCycles path
+  solve_ Dict SolveAssumeWorst name (IsLessEqual (a,b)) = return ()
+  solve_ Dict SolveFinal name (IsLessEqual (a,b)) = do
+    -- if we are in solve final, we try to contract the edge
         debug $ "Computing LessEqual: " <> show (a,b)
         allowed <- checkContractionAllowed [a,b] (a,b)
         case allowed of
           ContractionAllowed -> unify a b >> return ()
           ContractionDisallowed -> return ()
-      (_) -> return ()
 
-    solveSubtyping name (a,b)
 
 
 
@@ -481,16 +479,15 @@ unifyAll (x:y:vars) = do
 
 -- TODO: Check whether this does the correct thing.
 instance (SingI k, Typeable k) => Solve MonadDMTC IsSupremum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) where
-  solve_ Dict SolveExact name (IsSupremum ((a,b) :=: y)) = do
-    collapseSubtypingCycles (a,y)
-    collapseSubtypingCycles (b,y)
-    solveSupremum (GraphM subtypingGraph) name ((a,b) :=: y)
-  solve_ Dict SolveAssumeWorst name (IsSupremum ((a,b) :=: y)) = do
-    collapseSubtypingCycles (a,y)
-    collapseSubtypingCycles (b,y)
-    debug $ "Computing supremum: " <> show ((a,b) :=: y)
+  solve_ Dict SolveExact name (IsSupremum ((a,b) :=: y)) = solveSupremum (GraphM subtypingGraph) name ((a,b) :=: y)
 
-    -- j
+  solve_ Dict SolveGlobal name (IsSupremum ((a,b) :=: y)) = do
+    collapseSubtypingCycles (a,y)
+    collapseSubtypingCycles (b,y)
+
+  solve_ Dict SolveFinal name (IsSupremum ((a,b) :=: y)) = do
+    debug $ "Computing supremum (final solving mode): " <> show ((a,b) :=: y)
+
     graph <- getCurrentConstraintSubtypingGraph
     let contrCandidates = completeDiamondUpstream graph (a,b)
     let f (x,contrVars) = do
@@ -510,20 +507,18 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsSupremum ((DMTypeOf k, DMTyp
 
     g f contrCandidates
 
-    solveSupremum (GraphM subtypingGraph) name ((a,b) :=: y)
+  solve_ Dict SolveAssumeWorst name (IsSupremum ((a,b) :=: y)) = return ()
 
 
 -- TODO: Check whether this does the correct thing.
 instance (SingI k, Typeable k) => Solve MonadDMTC IsInfimum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) where
-  solve_ Dict SolveExact name (IsInfimum ((a,b) :=: x)) = do
+  solve_ Dict SolveExact name (IsInfimum ((a,b) :=: x)) = solveInfimum (GraphM subtypingGraph) name ((a,b) :=: x)
+  solve_ Dict SolveGlobal name (IsInfimum ((a,b) :=: x)) = do
     collapseSubtypingCycles (x,a)
     collapseSubtypingCycles (x,b)
-    solveInfimum (GraphM subtypingGraph) name ((a,b) :=: x)
 
-  solve_ Dict SolveAssumeWorst name (IsInfimum ((a,b) :=: x)) = do
-    collapseSubtypingCycles (x,a)
-    collapseSubtypingCycles (x,b)
-    debug $ "Computing infimum: " <> show ((a,b) :=: x)
+  solve_ Dict SolveFinal name (IsInfimum ((a,b) :=: x)) = do
+    debug $ "Computing infimum (final solving): " <> show ((a,b) :=: x)
     graph <- getCurrentConstraintSubtypingGraph
 
     let contrCandidates = completeDiamondDownstream graph (a,b)
@@ -545,6 +540,8 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsInfimum ((DMTypeOf k, DMType
     g f contrCandidates
 
     solveInfimum (GraphM subtypingGraph) name ((a,b) :=: x)
+
+  solve_ Dict SolveAssumeWorst name (IsInfimum ((a,b) :=: x)) = return ()
 
 -- find all cyclic subtyping constraints, that is, chains of the form
 -- a <= b <= c <= a

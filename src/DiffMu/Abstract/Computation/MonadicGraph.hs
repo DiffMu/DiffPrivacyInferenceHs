@@ -46,7 +46,7 @@ data ErrorRelevance = IsGraphRelevant | NotGraphRelevant
 data IsShortestPossiblePath = IsShortestPossiblePath | NotShortestPossiblePath
 
 instance Show IsShortestPossiblePath where
-  show IsShortestPossiblePath = "shortest ossible"
+  show IsShortestPossiblePath = "shortest possible"
   show NotShortestPossiblePath = "not shortest possible"
 
 type PathState a = ((a,a),IsShortestPossiblePath)
@@ -277,7 +277,7 @@ findSupremumM relevance (GraphM graph) ((a,b) :=: x,isShortestSup) =
             Finished ((a₀,a₁),isShortestPath) -> do
               debug "Since finding path successfull, solving leftover constraints."
               debug "============ BEFORE solving all new constraints >>>>>>>>>>>>>>>>"
-              solveAllConstraints SolveExact
+              solveAllConstraints [SolveExact]
               debug "============ AFTER solving all new constraints >>>>>>>>>>>>>>>>"
               logPrintConstraints
               closedRes <- mergeTopConstraintSet
@@ -320,7 +320,7 @@ findSupremumM relevance (GraphM graph) ((a,b) :=: x,isShortestSup) =
             Finished ((a₀,a₁),isShortestPath) -> do
               debug "Since finding path successfull, solving leftover constraints."
               debug "============ BEFORE solving all new constraints >>>>>>>>>>>>>>>>"
-              solveAllConstraints SolveExact
+              solveAllConstraints [SolveExact]
               debug "============ AFTER solving all new constraints >>>>>>>>>>>>>>>>"
               logPrintConstraints
               closedRes <- mergeTopConstraintSet

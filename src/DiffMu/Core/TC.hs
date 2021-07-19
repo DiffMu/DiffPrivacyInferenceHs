@@ -326,7 +326,8 @@ data AnnNameCtx ks = AnnNameCtx
 -- instance MonadDMTC t => Normalize (t) DMSolvable where
 --   -- normalize (DMSolvable c) = DMSolvable <$> normalize c
 
-data NormalizationLevel = NormalForMode SolvingMode | NotNormal
+data NormalizationLevel = NormalForMode [SolvingMode]
+-- SolvingMode | NotNormal
   deriving (Eq)
 
 data Watched a = Watched NormalizationLevel a
@@ -334,11 +335,11 @@ data Watched a = Watched NormalizationLevel a
 -- this is the action of Changed on NormalizationLevel
 updateNormalizationLevel :: Changed -> NormalizationLevel -> NormalizationLevel
 updateNormalizationLevel NotChanged a = a
-updateNormalizationLevel IsChanged _ = NotNormal
+updateNormalizationLevel IsChanged _ = NormalForMode []
 
 instance Show a => Show (Watched a) where
-  show (Watched NotNormal a) = "*" <> show a
-  show (Watched (NormalForMode m) a) = "<" <> show m <> ">" <> show a
+  -- show (Watched NotNormal a) = "*" <> show a
+  show (Watched (NormalForMode m) a) = show m <> " " <> show a
 
 instance (MonadWatch t, Normalize t a) => Normalize t (Watched a) where
   normalize (Watched c a) =
@@ -596,22 +597,21 @@ instance Default (Full) where
 
 
 instance Semigroup NormalizationLevel where
-  NotNormal <> a = NotNormal
-  a <> NotNormal = NotNormal
-  NormalForMode a <> NormalForMode b = NormalForMode (min a b)
+  NormalForMode a <> NormalForMode b = NormalForMode (a `intersect` b)
+  -- NotNormal <> a = NotNormal
+  -- a <> NotNormal = NotNormal
+  -- NormalForMode a <> NormalForMode b = NormalForMode (min a b)
 
-instance Ord (NormalizationLevel) where
-  NotNormal <= _ = True
-  NormalForMode a <= NotNormal = False
-  NormalForMode a <= NormalForMode b = a <= b
+-- instance Ord (NormalizationLevel) where
+--   NotNormal <= _ = True
+--   NormalForMode a <= NotNormal = False
+--   NormalForMode a <= NormalForMode b = a <= b
 
 instance (SemigroupM t a) => SemigroupM t (Watched a) where
   (⋆) (Watched x a) (Watched y b) = Watched (x <> y) <$> a ⋆ b
 
 instance (MonoidM t a) => MonoidM t (Watched a) where
-  neutral = Watched (NormalForMode SolveAssumeWorst) <$> neutral
-
--- instance MonadInternalError t => MonoidM t (Watched a) where
+  neutral = Watched (NormalForMode [SolveExact , SolveAssumeWorst , SolveGlobal]) <$> neutral
 
 instance (CheckNeutral t a) => CheckNeutral t (Watched a) where
   checkNeutral a = pure False
@@ -735,17 +735,18 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
       meta.fixedTVars <>= [SingSomeK v | SomeK v <- newFixed]
 
       -- add the constraint to the constraint list
-      meta.constraints %%= (newAnnName "constr" (Watched NotNormal (Solvable c)))
+      meta.constraints %%= (newAnnName "constr" (Watched (NormalForMode []) (Solvable c)))
 
-  getUnsolvedConstraintMarkNormal mode = do
+  getUnsolvedConstraintMarkNormal modes = do
     (Ctx (MonCom constrs)) <- use (meta.constraints.anncontent.topctx)
     let constrs2 = H.toList constrs
-    let changed = filter (\(a, Watched state constr) -> (state < NormalForMode mode)) constrs2
+    let changedFor curMode = filter (\(a, Watched (NormalForMode normalModes) constr) -> (curMode `notElem` normalModes)) constrs2
+    let changed = join [zip (changedFor m) (repeat m) | m <- modes]
     case changed of
       [] -> return Nothing
-      ((name,Watched _ constr):_) -> do
-        meta.constraints.anncontent.topctx %= (setValue name (Watched (NormalForMode mode) constr))
-        return (Just (name, constr))
+      (((name,Watched (NormalForMode normalModes) constr),newMode):_) -> do
+        meta.constraints.anncontent.topctx %= (setValue name (Watched (NormalForMode (newMode:normalModes)) constr))
+        return (Just (name, constr, newMode))
 
   dischargeConstraint name = do
     meta.constraints.anncontent.topctx %= (deleteValue name)
@@ -757,7 +758,7 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
     throwError (UnsatisfiableConstraint (show c))
 
   updateConstraint name c = do
-    meta.constraints %= (\(AnnNameCtx n cs) -> AnnNameCtx n (setValue name (Watched NotNormal c) cs))
+    meta.constraints %= (\(AnnNameCtx n cs) -> AnnNameCtx n (setValue name (Watched (NormalForMode []) c) cs))
     recomputeFixedVars
 
   openNewConstraintSet = do

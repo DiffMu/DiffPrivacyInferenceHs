@@ -68,8 +68,7 @@ typecheckFromDMTerm term = do
         log $ "Type before constraint resolving: " <> show tres'
         log $ "solving constraints:"
         logPrintConstraints
-        solveAllConstraints SolveExact
-        solveAllConstraints SolveAssumeWorst
+        solveAllConstraints [SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
         tres'' <- normalize tres'
         return tres''
 

@@ -48,7 +48,7 @@ tc r = do
 tcl :: TC a -> IO (Either DMException a)
 tcl r = do
   -- x <- executeTC (DoShowLog Force [Location_Constraint , Location_INC, Location_MonadicGraph]) r
-  x <- executeTC (DoShowLog Force [Location_MonadicGraph, Location_INC, Location_Constraint, Location_Subtyping]) r
+  x <- executeTC (DoShowLog Force [Location_Constraint, Location_Subtyping]) r
   return (fst <$> x)
 
 
@@ -59,8 +59,13 @@ tcb False = tc
 sn :: Normalize TC a => TC a -> TC a
 sn x = do
   x' <- x
-  solveAllConstraints SolveExact
-  solveAllConstraints SolveAssumeWorst
+  solveAllConstraints [SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
+  normalize x'
+
+sn_EW :: Normalize TC a => TC a -> TC a
+sn_EW x = do
+  x' <- x
+  solveAllConstraints [SolveExact,SolveAssumeWorst]
   normalize x'
 
 
@@ -74,8 +79,8 @@ testSubtyping = do
   let testsub x (a :: DMTypeOf k) b c = do
         it ("computes " <> show a <> " ≤ " <> show b <> " as [" <> show c <> "]") $ do
           (tcb x $ do
-              sn (a ≤! b)
-              res <- (getUnsolvedConstraintMarkNormal SolveExact)
+              sn_EW (a ≤! b)
+              res <- (getUnsolvedConstraintMarkNormal [SolveExact])
               return (fmap (\_ -> ()) res)
             )
             `shouldReturn` (c)
@@ -89,7 +94,7 @@ testSubtyping = do
             return (a,b)
       let correct (TVar a,TVar b) | a /= b = pure (Right ())
           correct x                        = pure (Left x)
-      (tcl $ (sn test0 >>= correct)) `shouldReturn` (Right (Right ()))
+      (tcl $ (sn_EW test0 >>= correct)) `shouldReturn` (Right (Right ()))
 
 
   describe "subtyping of BaseNumKind/NumKind" $ do
@@ -104,18 +109,18 @@ testSubtyping = do
     testsub False (NoFun nci1) (NoFun nnr) (Right Nothing)
     testsub False (DMTup [nci1,nci2]) (DMTup [nci1,nnr]) (Right Nothing)
     testsub False (DMTup [nci1,nci2]) (DMTup [nci2,nnr]) (Left (UnsatisfiableConstraint "[test]"))
-    testsub False (DMTup [nnr,nci2]) (DMTup [nci2,nnr]) (Left (UnificationError "val1" "val2"))
+    testsub False (DMTup [nnr,nci2]) (DMTup [nci2,nnr]) (Left (UnsatisfiableConstraint "[test]"))
     testsub False (DMTup [nnr,nci2]) (nnr) (Left (UnsatisfiableConstraint "[test]"))
 
 testSupremum = do
   describe "supremum" $ do
     let testsup (a :: DMTypeOf k) b c = do
           it ("computes sup{" <> show a <> ", " <> show b <> "} = " <> show c) $ do
-            (tc $ sn $ supremum a b) `shouldReturn` (c)
+            (tc $ sn_EW $ supremum a b) `shouldReturn` (c)
 
     let testsupl (a :: DMTypeOf k) b c = do
           it ("computes sup{" <> show a <> ", " <> show b <> "} = " <> show c) $ do
-            (tcl $ sn $ supremum a b) `shouldReturn` (c)
+            (tcl $ sn_EW $ supremum a b) `shouldReturn` (c)
 
     let twoId = oneId ⋆! oneId
 
@@ -144,7 +149,7 @@ testSupremum = do
             c <- getConstraintsByType (Proxy @(IsSupremum ((DMTypeOf NoFunKind, DMTypeOf NoFunKind) :=: DMTypeOf NoFunKind)))
             d <- getConstraintsByType (Proxy @(IsSupremum ((DMTypeOf NumKind, DMTypeOf NumKind) :=: DMTypeOf NumKind)))
             return (length c , length d)
-      (tc $ (sn term) >> eval) `shouldReturn` Right (0,1)
+      (tc $ (sn_EW term) >> eval) `shouldReturn` Right (0,1)
 
 
 
@@ -184,7 +189,7 @@ testSubtyping_Cycles = do
             -- we are interested in how `a` and `b` turn out
             return (a,b)
       let checkres (a,b) = a == b
-      (tc $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right True)
+      (tcl $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right True)
 
     it "contracts a larger cycle that also has sup/inf constraints" $ do
       let test2 = do
@@ -352,14 +357,14 @@ testSubtyping_MaxMinCases = do
             a <- newVar
             a ⊑! DMInt
             return (a)
-      (tc $ (sn test0)) `shouldReturn` (Right DMInt)
+      (tc $ (sn_EW test0)) `shouldReturn` (Right DMInt)
 
     it "resolves 'Real ≤ a'." $ do
       let test0 = do
             a <- newVar
             DMReal ⊑! a
             return (a)
-      (tc $ (sn test0)) `shouldReturn` (Right DMReal)
+      (tc $ (sn_EW test0)) `shouldReturn` (Right DMReal)
 
     it "does NOT resolve 'Int ≤ a'." $ do
       let test0 = do
@@ -368,7 +373,7 @@ testSubtyping_MaxMinCases = do
             return a
       let isTVar (TVar x) = pure (Right ())
           isTVar a        = pure (Left a)
-      (tc $ (sn test0) >>= isTVar) `shouldReturn` (Right (Right ()))
+      (tc $ (sn_EW test0) >>= isTVar) `shouldReturn` (Right (Right ()))
 
     it "does NOT resolve 'a ≤ Real'." $ do
       let test0 = do
@@ -377,7 +382,7 @@ testSubtyping_MaxMinCases = do
             return a
       let isTVar (TVar x) = pure (Right ())
           isTVar a        = pure (Left a)
-      (tc $ (sn test0) >>= isTVar) `shouldReturn` (Right (Right ()))
+      (tc $ (sn_EW test0) >>= isTVar) `shouldReturn` (Right (Right ()))
 
     it "resolves 'a ≤ Int[2]' inside NoFun" $ do
       let ty = NoFun (Numeric (Const (constCoeff (Fin 2)) DMInt))
@@ -385,7 +390,7 @@ testSubtyping_MaxMinCases = do
             a <- newVar
             a ⊑! ty
             return a
-      (tc $ sn test0) `shouldReturn` (Right ty)
+      (tc $ sn_EW test0) `shouldReturn` (Right ty)
 
     it "partially resolves 'a[--] ≤ b' inside NoFun" $ do
       let test0 = do
@@ -398,7 +403,7 @@ testSubtyping_MaxMinCases = do
       let correct :: (DMMain,DMMain) -> TC (Either (DMMain,DMMain) ())
           correct (NoFun (Numeric (NonConst a)), NoFun (Numeric (NonConst b))) | (a /= b) = pure $ Right ()
           correct (x,y)                                                                   = pure $ Left (x,y)
-      (tc $ sn test0 >>= correct) `shouldReturn` (Right (Right ()))
+      (tc $ sn_EW test0 >>= correct) `shouldReturn` (Right (Right ()))
 
 
 testCheck_Rules = do
