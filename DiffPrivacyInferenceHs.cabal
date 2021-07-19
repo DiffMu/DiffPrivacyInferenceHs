@@ -121,6 +121,7 @@ library
       ImplicitParams
       TypeFamilyDependencies
       RoleAnnotations
+      PartialTypeSignatures
   build-depends:
       HUnit
     , QuickCheck

@@ -18,7 +18,7 @@ instance Semigroup DMLogMessages where
 instance Monoid DMLogMessages where
   mempty = DMLogMessages []
 
-data DMLogLocation = Location_INC | Location_Constraint | Location_Check | Location_MonadicGraph | Location_All | Location_Unknown String
+data DMLogLocation = Location_INC | Location_Constraint | Location_Check | Location_Subtyping | Location_MonadicGraph | Location_All | Location_Unknown String
   deriving (Eq)
 
 instance Show DMLogLocation where
@@ -26,6 +26,7 @@ instance Show DMLogLocation where
   show Location_Constraint = "Constr"
   show Location_All = "All"
   show Location_Check = "Check"
+  show Location_Subtyping = "Subtyping"
   show Location_MonadicGraph = "MndGraph"
   show (Location_Unknown s) = red ("Unknown Location (" <> s <> ")")
 
@@ -35,6 +36,7 @@ fromString_DMLogLocation "Constr" = Location_Constraint
 fromString_DMLogLocation "Check" = Location_Check
 fromString_DMLogLocation "All" = Location_All
 fromString_DMLogLocation "MndGraph" = Location_MonadicGraph
+fromString_DMLogLocation "Subtyping" = Location_Subtyping
 fromString_DMLogLocation s = Location_Unknown s
 
 instance Ord (DMLogLocation) where

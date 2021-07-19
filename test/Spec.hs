@@ -48,7 +48,7 @@ tc r = do
 tcl :: TC a -> IO (Either DMException a)
 tcl r = do
   -- x <- executeTC (DoShowLog Force [Location_Constraint , Location_INC, Location_MonadicGraph]) r
-  x <- executeTC (DoShowLog Force [Location_Constraint]) r
+  x <- executeTC (DoShowLog Force [Location_MonadicGraph, Location_INC, Location_Constraint, Location_Subtyping]) r
   return (fst <$> x)
 
 
@@ -80,6 +80,18 @@ testSubtyping = do
             )
             `shouldReturn` (c)
 
+  describe "generic subtyping" $ do
+    it "does not resolve 'a ≤ b'." $ do
+      let test0 = do
+            (a :: DMTypeOf BaseNumKind) <- newVar
+            b <- newVar
+            a ⊑! b
+            return (a,b)
+      let correct (TVar a,TVar b) | a /= b = pure (Right ())
+          correct x                        = pure (Left x)
+      (tcl $ (sn test0 >>= correct)) `shouldReturn` (Right (Right ()))
+
+
   describe "subtyping of BaseNumKind/NumKind" $ do
     testsub False DMInt DMReal (Right Nothing)
     testsub False DMReal DMInt (Left (UnsatisfiableConstraint "[test]"))
@@ -107,6 +119,9 @@ testSupremum = do
 
     let twoId = oneId ⋆! oneId
 
+    testsup (DMInt) (DMInt) (Right $ DMInt)
+    testsup (DMReal) (DMReal) (Right $ DMReal)
+
     testsup (NonConst DMInt) (NonConst DMInt) (Right $ NonConst DMInt)
     testsup (NonConst DMInt) (NonConst DMReal) (Right $ NonConst DMReal)
 
@@ -129,7 +144,7 @@ testSupremum = do
             c <- getConstraintsByType (Proxy @(IsSupremum ((DMTypeOf NoFunKind, DMTypeOf NoFunKind) :=: DMTypeOf NoFunKind)))
             d <- getConstraintsByType (Proxy @(IsSupremum ((DMTypeOf NumKind, DMTypeOf NumKind) :=: DMTypeOf NumKind)))
             return (length c , length d)
-      (tcl $ (sn term) >> eval) `shouldReturn` Right (0,1)
+      (tc $ (sn term) >> eval) `shouldReturn` Right (0,1)
 
 
 
@@ -311,7 +326,7 @@ testSubtyping_ContractEdge = do
 
             return (d,a,b,c)
       let checkres (d,a,b,c) = (a == c, b == c, a == d, b == d)
-      (tcl $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right (True,True,True,True))
+      (tc $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right (True,True,True,True))
     -- it "does contract edge if left variable is only bounded from below and right from above" $ do
     --   let test1 = do
     --         -- the interesting variables a ≤ b
@@ -329,6 +344,62 @@ testSubtyping_ContractEdge = do
     --         return (a,b)
     --   let checkres (a,b) = a == b
     --   (tc $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right True)
+
+testSubtyping_MaxMinCases = do
+  describe "subtyping (paths with max/min cases)" $ do
+    it "resolves 'a ≤ Int'." $ do
+      let test0 = do
+            a <- newVar
+            a ⊑! DMInt
+            return (a)
+      (tc $ (sn test0)) `shouldReturn` (Right DMInt)
+
+    it "resolves 'Real ≤ a'." $ do
+      let test0 = do
+            a <- newVar
+            DMReal ⊑! a
+            return (a)
+      (tc $ (sn test0)) `shouldReturn` (Right DMReal)
+
+    it "does NOT resolve 'Int ≤ a'." $ do
+      let test0 = do
+            a <- newVar
+            DMInt ⊑! a
+            return a
+      let isTVar (TVar x) = pure (Right ())
+          isTVar a        = pure (Left a)
+      (tc $ (sn test0) >>= isTVar) `shouldReturn` (Right (Right ()))
+
+    it "does NOT resolve 'a ≤ Real'." $ do
+      let test0 = do
+            a <- newVar
+            a ⊑! DMReal
+            return a
+      let isTVar (TVar x) = pure (Right ())
+          isTVar a        = pure (Left a)
+      (tc $ (sn test0) >>= isTVar) `shouldReturn` (Right (Right ()))
+
+    it "resolves 'a ≤ Int[2]' inside NoFun" $ do
+      let ty = NoFun (Numeric (Const (constCoeff (Fin 2)) DMInt))
+      let test0 = do
+            a <- newVar
+            a ⊑! ty
+            return a
+      (tc $ sn test0) `shouldReturn` (Right ty)
+
+    it "partially resolves 'a[--] ≤ b' inside NoFun" $ do
+      let test0 = do
+            a <- newVar
+            b <- newVar
+            let a'  = NoFun (Numeric (NonConst a))
+
+            a' ⊑! b
+            return (a', b)
+      let correct :: (DMMain,DMMain) -> TC (Either (DMMain,DMMain) ())
+          correct (NoFun (Numeric (NonConst a)), NoFun (Numeric (NonConst b))) | (a /= b) = pure $ Right ()
+          correct (x,y)                                                                   = pure $ Left (x,y)
+      (tc $ sn test0 >>= correct) `shouldReturn` (Right (Right ()))
+
 
 testCheck_Rules = do
   describe "rules-privacy-slet" $ do
@@ -381,6 +452,7 @@ runAllTests :: (String -> IO String) -> IO ()
 runAllTests parse = defaultspec $ do
   testUnification
   testSubtyping
+  testSubtyping_MaxMinCases
   testSubtyping_Cycles
   testSubtyping_ContractEdge
   testSupremum

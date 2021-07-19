@@ -14,6 +14,14 @@ import Debug.Trace
 -- Thus we add this as annotation.
 data EdgeType = IsReflexive Structurality | NotReflexive
 
+type Structurality = (MatchForcing, MatchForcing)
+data MatchForcing = IsMatchForcing | NotMatchForcing
+
+pattern IsStructural = (IsMatchForcing,IsMatchForcing)
+pattern IsLeftStructural = (IsMatchForcing,NotMatchForcing)
+pattern IsRightStructural = (NotMatchForcing,IsMatchForcing)
+pattern NotStructural = (NotMatchForcing,NotMatchForcing)
+
 -- A reflexive edge is structural if matching on one side already is enough to know that
 -- we got the correct edge.
 -- For example, the (a₀ -> b₀ ⊑ a₁ -> b₁) rule/edge is structural, because an arrow is
@@ -22,14 +30,13 @@ data EdgeType = IsReflexive Structurality | NotReflexive
 -- in the case of checking (Const s₀ a₀ ⊑ b) even though we matched on the left hand side,
 -- it is still possible that the rule (Const s₀ a₀ ⊑ NonConst a₀) is the one which actually
 -- should be used.
-data Structurality = IsStructural | NotStructural
+-- data Structurality = IsStructural | NotStructural
 
 newtype EdgeFamily m a b = EdgeFamily (a -> m (INCRes () b), b -> m (a,a))
 
 data Edge m a where
   SingleEdge :: m (a,a) -> Edge m a
   MultiEdge :: Eq b => (a -> INCRes () b) -> (b -> m (a,a)) -> Edge m a
-
 
 newtype GraphM m a = GraphM (EdgeType -> [Edge m a])
 
@@ -51,23 +58,31 @@ oppositeGraph (GraphM graph) = GraphM (opp graph)
         oppositeEdge (MultiEdge pre fam) = MultiEdge pre ((\x -> (\(a,b) -> (b,a)) <$> x) . fam)
 
         opp :: (EdgeType -> [Edge m a]) -> (EdgeType -> [Edge m a])
-        opp f ty = oppositeEdge <$> f ty
+        opp f (NotReflexive) = oppositeEdge <$> f NotReflexive
+        opp f (IsReflexive (sl,sr)) = oppositeEdge <$> f (IsReflexive (sr,sl))
 
 -- findPathM :: forall s m e a. (Show e, Show a, MonadError e m, MonadState s m, MonoidM m a, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> (a,a) -> m (INCRes e (a,a))
 findPathM :: forall s m isT e a. (Show e, Show a, Eq a, MonadConstraint isT m, IsT isT m, Normalize m a, MonadNormalize m, MonadError e m, MonadState s m, MonadLog m, Unify isT a, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> (a,a) -> m (INCRes e (PathState a))
 findPathM relevance (GraphM g) (start,goal) | start == goal = return $ Finished ((start,goal),IsShortestPossiblePath)
 findPathM relevance (GraphM g) (start,goal) | otherwise     =
-  let both (Finished a) (Finished b) | a == b = Finished a
-      both (Fail e) _                         = Fail e
-      both _ (Fail e)                         = Fail e
-      both _ _                                = Wait
+  let -- both (Finished a) (Finished b) | a == b = Finished a
+      -- both (Fail e) _                         = Fail e
+      -- both _ (Fail e)                         = Fail e
+      -- both _ _                                = Wait
 
-      atLeastOne (Finished a) Wait = Finished a
-      atLeastOne Wait (Finished b) = Finished b
-      atLeastOne (Finished a) (Finished b) | a == b = Finished a
-      atLeastOne (Fail e) _                         = Fail e
-      atLeastOne _ (Fail e)                         = Fail e
-      atLeastOne _ _                                = Wait
+      -- atLeastOne (Finished a) Wait = Finished a
+      -- atLeastOne Wait (Finished b) = Finished b
+      -- atLeastOne (Finished a) (Finished b) | a == b = Finished a
+      -- atLeastOne (Fail e) _                         = Fail e
+      -- atLeastOne _ (Fail e)                         = Fail e
+      -- atLeastOne _ _                                = Wait
+
+      tryFastMatch x (Finished a) (Finished b) | a == b = Finished a
+      tryFastMatch (IsMatchForcing,_) (Finished a) Wait = Finished a
+      tryFastMatch (_,IsMatchForcing) Wait (Finished b) = Finished b
+      tryFastMatch x (Fail e) _                         = Fail e
+      tryFastMatch x _ (Fail e)                         = Fail e
+      tryFastMatch _ _ _                                = Wait
 
       checkSingle getIdx a x =
         do ia <- getIdx a
@@ -80,40 +95,63 @@ findPathM relevance (GraphM g) (start,goal) | otherwise     =
       -- we check the neutrality of a and b
       -- And wait either - only if both are not neutral
       --          or     - if at least one is not neutral
-      checkPair op getIdx a b x = do
+      -- checkPair op getIdx a b x = do
+      --   ia <- getIdx a
+      --   ib <- getIdx b
+      --   case (op ia ib) of
+      --     Finished c -> x c
+      --     Fail _ -> return (Fail MultiEdgeIndexFailed)
+      --     Wait -> return Wait
+      --     Partial _ -> return Wait
+
+      checkPair op getIdx a b x = withLogLocation "MndGraph" $ do
         ia <- getIdx a
         ib <- getIdx b
         case (op ia ib) of
-          Finished c -> x c
-          Fail _ -> return (Fail MultiEdgeIndexFailed)
-          Wait -> return Wait
-          Partial _ -> return Wait
+          Finished c -> do
+            debug $ "Checkpair[path] on " <> show (a,b) <> " successfull. => Continuing path computation."
+            x c
+          Fail _ -> do
+            debug $ "Checkpair[path] on " <> show (a,b) <> " failed. => We are failing as well."
+            return (Fail MultiEdgeIndexFailed)
+          Wait -> do
+            debug $ "Checkpair[path] on " <> show (a,b) <> " returned Wait."
+            return Wait
+          Partial _ -> do
+            debug $ "Checkpair[path] on " <> show (a,b) <> " returned a Partial. => We wait"
+            return Wait
 
 
-      checkByStructurality IsStructural  getIdx a b x = checkPair atLeastOne getIdx a b x
-      checkByStructurality NotStructural getIdx a b x = checkPair both       getIdx a b x
+      checkByStructurality s getIdx a b x = checkPair (tryFastMatch s) getIdx a b x
+      -- checkByStructurality NotStructural getIdx a b x = checkPair both       getIdx a b x
 
 
       f_refl :: Eq b => Structurality -> EdgeFamily m a b -> PathState a -> m (INCRes e (PathState a))
       f_refl s (EdgeFamily (getIdx,edge)) ((start,goal),isShortest) =
         checkByStructurality s getIdx start goal $ \idx -> do
+          debug $ "[pathfinding from refl] trying to find path" <> show (start, goal)
           (n₀, n₁) <- edge idx
           n₀'' <- unify start n₀
           n₁'' <- unify n₁ goal
+          debug $ "[pathfinding from refl] got path " <> show ((n₀'', n₁''),isShortest)
           return (Finished ((n₀'', n₁''),isShortest))
 
-      fromLeft :: EdgeFamily m a b -> PathState a -> m (INCRes e (PathState a))
+      fromLeft :: Eq b => EdgeFamily m a b -> PathState a -> m (INCRes e (PathState a))
       fromLeft (EdgeFamily (getIdx,edge)) ((start,goal),_) =
-        checkSingle getIdx start $ \idx -> do
+        checkByStructurality NotStructural getIdx start goal $ \idx -> do
+          debug $ "[pathfinding from Left] trying to find path" <> show (start, goal)
           (n₀,n₁) <- edge idx
           n₀'' <- unify start n₀
+          debug $ "[pathfinding from Left] got partial path. Next we want: " <> show ((n₁, goal),NotShortestPossiblePath)
           return (Partial ((n₁, goal),NotShortestPossiblePath))
 
-      fromRight :: EdgeFamily m a b -> PathState a -> m (INCRes e (PathState a))
+      fromRight :: Eq b => EdgeFamily m a b -> PathState a -> m (INCRes e (PathState a))
       fromRight (EdgeFamily (getIdx,edge)) ((start,goal),_) =
-        checkSingle getIdx goal $ \idx -> do
+        checkByStructurality NotStructural getIdx start goal $ \idx -> do
+          debug $ "[pathfinding from Right] trying to find path" <> show (start, goal)
           (n₀,n₁) <- edge idx
           n₁'' <- unify n₁ goal
+          debug $ "[pathfinding from Right] got partial path. Next we want: " <> show ((start, n₀),NotShortestPossiblePath)
           return (Partial ((start, n₀),NotShortestPossiblePath))
 
       catchRelevant :: forall a b. (a -> m (INCRes e a)) -> (a -> m (INCRes e a))
@@ -142,12 +180,14 @@ findPathM relevance (GraphM g) (start,goal) | otherwise     =
       withFamily f (SingleEdge edge)       = f (EdgeFamily (checkNeutrality, \() -> edge))
       withFamily f (MultiEdge getIdx edge) = f (EdgeFamily (checkNeutrality' getIdx, edge))
 
-      computations = [catchRelevant (withFamily (f_refl IsStructural) a)  | a <- g (IsReflexive IsStructural)]
-                  <> [catchRelevant (withFamily (f_refl NotStructural) a) | a <- g (IsReflexive NotStructural)]
+
+      reflComp s = [catchRelevant (withFamily (f_refl s) a)  | a <- g (IsReflexive s)]
+
+      computations = join [reflComp (s,t) | s <- [IsMatchForcing,NotMatchForcing], t <- [IsMatchForcing,NotMatchForcing]]
                   <> [catchRelevant (withFamily fromLeft a)   | a <- g NotReflexive]
                   <> [catchRelevant (withFamily fromRight a)  | a <- g NotReflexive]
 
-  in evalINC (INC computations) ((start,goal),IsShortestPossiblePath)
+  in withLogLocation "MndGraph" $ evalINC (INC computations) ((start,goal),IsShortestPossiblePath)
 
 type SupState a = ((a,a) :=: a, IsShortestPossiblePath)
 
@@ -162,12 +202,12 @@ findSupremumM relevance (GraphM graph) ((a,b) :=: x,isShortestSup) =
       both _ (Fail e)                         = Fail e
       both _ _                                = Wait
 
-      atLeastOne (Finished a) Wait = Finished a
-      atLeastOne Wait (Finished b) = Finished b
-      atLeastOne (Finished a) (Finished b) | a == b = Finished a
-      atLeastOne (Fail e) _                         = Fail e
-      atLeastOne _ (Fail e)                         = Fail e
-      atLeastOne _ _                                = Wait
+      -- atLeastOne (Finished a) Wait = Finished a
+      -- atLeastOne Wait (Finished b) = Finished b
+      -- atLeastOne (Finished a) (Finished b) | a == b = Finished a
+      -- atLeastOne (Fail e) _                         = Fail e
+      -- atLeastOne _ (Fail e)                         = Fail e
+      -- atLeastOne _ _                                = Wait
 
       checkPair op getIdx a b x = withLogLocation "MndGraph" $ do
         ia <- getIdx a
@@ -187,8 +227,8 @@ findSupremumM relevance (GraphM graph) ((a,b) :=: x,isShortestSup) =
             return Wait
 
 
-      checkByStructurality IsStructural  getIdx a b x = checkPair atLeastOne getIdx a b x
-      checkByStructurality NotStructural getIdx a b x = checkPair both       getIdx a b x
+      -- checkByStructurality IsStructural  getIdx a b x = checkPair atLeastOne getIdx a b x
+      -- checkByStructurality NotStructural getIdx a b x = checkPair both       getIdx a b x
 
       catchRelevant :: forall a b. (a -> m (INCRes e a)) -> (a -> m (INCRes e a))
       catchRelevant f a =
@@ -244,7 +284,7 @@ findSupremumM relevance (GraphM graph) ((a,b) :=: x,isShortestSup) =
               case closedRes of
                 ConstraintSet_WasNotEmpty ->
                   case (edgeType,isShortestSup,isShortestPath) of
-                    (IsReflexive IsStructural, IsShortestPossiblePath, IsShortestPossiblePath) -> do
+                    (IsReflexive (IsMatchForcing, _), IsShortestPossiblePath, IsShortestPossiblePath) -> do
                       debug "Constraint set was not empty. But the paths leading to it were only reflexive edges. Thus we commit this sup result."
                       goal' <- unify goal a₁
                       debug $ " we have:\nsup(" <> show (n₀'', a₀) <> " = " <> show goal'
@@ -287,7 +327,7 @@ findSupremumM relevance (GraphM graph) ((a,b) :=: x,isShortestSup) =
               case closedRes of
                 ConstraintSet_WasNotEmpty ->
                   case (edgeType,isShortestSup,isShortestPath) of
-                    (IsReflexive IsStructural, IsShortestPossiblePath, IsShortestPossiblePath) -> do
+                    (IsReflexive (IsMatchForcing, _), IsShortestPossiblePath, IsShortestPossiblePath) -> do
                       debug "Constraint set was not empty. But the paths leading to it were only reflexive edges. Thus we commit this sup result."
                       goal' <- unify goal a₁
                       debug $ " we have:\nsup(" <> show (a₀ , n₀'') <> " = " <> show goal'
@@ -301,13 +341,13 @@ findSupremumM relevance (GraphM graph) ((a,b) :=: x,isShortestSup) =
                   debug $ " we have:\nsup(" <> show (a₀ , n₀'') <> " = " <> show goal'
                   return $ Finished ((a₀ , n₀'') :=: goal')
 
+      reflCompLeft s  = [catchRelevant (withFamily (fromLeft (IsReflexive s)) a)   | a <- graph (IsReflexive s)]
+      reflCompRight s = [catchRelevant (withFamily (fromRight (IsReflexive s)) a)  | a <- graph (IsReflexive s)]
 
-      computations =  [catchRelevant (withFamily (fromLeft (IsReflexive IsStructural)) a)  | a <- graph (IsReflexive IsStructural)]
-                     <> [catchRelevant (withFamily (fromLeft (IsReflexive NotStructural)) a)  | a <- graph (IsReflexive NotStructural)]
+      computations =    join [reflCompLeft (s,t) | s <- [IsMatchForcing,NotMatchForcing], t <- [IsMatchForcing,NotMatchForcing]]
                      <> [catchRelevant (withFamily (fromLeft (NotReflexive)) a)  | a <- graph (NotReflexive)]
 
-                     <> [catchRelevant (withFamily (fromRight (IsReflexive IsStructural)) a)  | a <- graph (IsReflexive IsStructural)]
-                     <> [catchRelevant (withFamily (fromRight (IsReflexive NotStructural)) a)  | a <- graph (IsReflexive NotStructural)]
+                     <> join [reflCompRight (s,t) | s <- [IsMatchForcing,NotMatchForcing], t <- [IsMatchForcing,NotMatchForcing]]
                      <> [catchRelevant (withFamily (fromRight NotReflexive) a)  | a <- graph (NotReflexive)]
 
 

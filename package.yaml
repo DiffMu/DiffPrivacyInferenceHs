@@ -87,6 +87,7 @@ library:
     - ImplicitParams
     - TypeFamilyDependencies
     - RoleAnnotations
+    - PartialTypeSignatures
 
 verbatim: |
   foreign-library diffmu-wrapper
