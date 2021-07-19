@@ -1124,6 +1124,7 @@ normalizeAnn (Fun as) = do
   let normalizeInside (f :@ annot) = (:@ annot) <$> normalizeAnn f
   Fun <$> mapM normalizeInside as
 normalizeAnn (NoFun fs) = pure $ NoFun fs
+normalizeAnn (ForAll vars t) = ForAll vars <$> normalizeAnn t
 normalizeAnn (a :∧: b) = do
   a' <- normalizeAnn a
   b' <- normalizeAnn b
