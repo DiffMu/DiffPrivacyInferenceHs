@@ -6,24 +6,25 @@ This is the backend for [DiffPrivacyInference.jl](https://github.com/DiffMu/Diff
 ### Dependencies
 This project uses both Julia and Haskell, as such, you need to have both languages installed.
 In particular, in order to run/build from source, you need:
- - A relatively recent version of [Julia](https://julialang.org/), e.g. `>= 1.6.1`
- - The [Haskell Tool Stack](https://docs.haskellstack.org/en/stable/README/)
+ - [Julia](https://julialang.org/), a relatively recent version, e.g. `>= 1.6.1`
+ - [Haskell Tool Stack](https://docs.haskellstack.org/en/stable/README/)
  - GNU Make
 
 ### Building from source
  1. Clone this repository, as well as the [julia frontend](https://github.com/DiffMu/DiffPrivacyInference.jl).
+    (They do not have to be cloned into the same directory)
     ```bash
     ~ $ git clone https://github.com/DiffMu/DiffPrivacyInferenceHs
     ~ $ git clone https://github.com/DiffMu/DiffPrivacyInference.jl
-    ```
-    (They do not need to be located in the same directory.)
+    ``` 
  2. Build the haskell project.
     ```bash
     ~/DiffPrivacyInferenceHs $ make install
     ```
-    (The makefile is a small wrapper which calls `stack build`, and then copies the built library
-    `libdiffmu-wrapper` to the location given at the top of the makefile, `LIB_INSTALL_DIR = $${HOME}/.local/lib`. This is the location where the julia frontend expects to find the library, but by updating it
-    in both places (makefile and in `DiffPrivacyInference.jl/src/haskell_interface.jl`) it can be changed.)
+    > **NOTE**: The makefile is a small wrapper which calls `stack build`, and then copies the built library
+    > `libdiffmu-wrapper` to the location given at the top of the makefile, `LIB_INSTALL_DIR = $${HOME}/.local/lib`.
+    > This is the location where the julia frontend expects to find the library, but by updating it
+    > in both places (makefile and in `DiffPrivacyInference.jl/src/haskell_interface.jl`) it can be changed.
  3. [Register `DiffPrivacyInference.jl` as a local package.]
  4. Start the julia REPL, and then load the project with
     ```julia
@@ -33,14 +34,12 @@ In particular, in order to run/build from source, you need:
     ```julia
     julia> term = string_to_dmterm("function my_identity(a)
                                       return a
-                                  end")
-    flet(:my_identity, lam(Tuple{Symbol, DataType}[(:a, Any)], var(:a, Any)), var(:my_identity, Any))
+                                    end")
 
     julia> typecheck_hs_from_dmterm(term)
-    [...]
     ```
     To execute all (haskell-)tests, simply run
-    ```
+    ```julia
     julia> test_hs()
     ```
 
