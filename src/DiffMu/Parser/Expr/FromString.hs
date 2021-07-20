@@ -6,7 +6,9 @@ import DiffMu.Abstract
 import DiffMu.Core
 
 parseExprFromString :: String -> Either String DMTerm
-parseExprFromString _ = Left "The expr parser is currently not implemented!"
+parseExprFromString input = Left $ "The expr parser is currently not implemented!\n"
+                            <> "But anyways, since we are here, I was called with the string:\n\n"
+                            <> input
 
 
 
