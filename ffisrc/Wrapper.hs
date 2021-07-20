@@ -27,6 +27,7 @@ import Data.IORef
 import DiffMu.Runner
 import DiffMu.Core.Definitions
 import DiffMu.Typecheck.JuliaType
+import DiffMu.Parser.Expr.FromString
 
 import Spec
 
@@ -70,8 +71,27 @@ runHaskellTests sub parse = do
     putStrLn "======================================="
     putStrLn $ "Call to haskell resulted in exception (" <> displayException e <> ")."
 
+foreign import ccall "dynamic" call_StringString :: FunPtr (CString -> IO CString) -> CString -> IO CString
 foreign export ccall runHaskellTests :: FunPtr SubtypingCallbackFun -> FunPtr TermParserCallbackFun -> IO ()
 
-foreign import ccall "dynamic" call_StringString :: FunPtr (CString -> IO CString) -> CString -> IO CString
+runExprParser :: CString -> IO ()
+runExprParser str = do
+  putStrLn "Running the Expr parser now!"
+  str' <- peekCString str
+
+  let parseAndPrint = do
+        let res = parseExprFromString str'
+        case res of
+          Left e -> putStrLn $ "Error: " <> e
+          Right e -> putStrLn $ "Expr: " <> show e
+
+  parseAndPrint `catchAny` \e -> do
+    putStrLn "======================================="
+    putStrLn $ "Call to haskell resulted in exception (" <> displayException e <> ")."
+
+
+foreign export ccall runExprParser :: CString -> IO ()
+
+
 
 
