@@ -197,6 +197,14 @@ findSupremumM relevance (GraphM graph) ((a,b) :=: x,isShortestSup) =
     -------------
     -- This is copy paste from above
 
+      tryFastMatch x (Finished a) (Finished b) | a == b = Finished a
+      tryFastMatch (IsMatchForcing,_) (Finished a) Wait = Finished a
+      tryFastMatch (_,IsMatchForcing) Wait (Finished b) = Finished b
+      tryFastMatch x (Fail e) _                         = Fail e
+      tryFastMatch x _ (Fail e)                         = Fail e
+      tryFastMatch _ _ _                                = Wait
+
+
       both (Finished a) (Finished b) | a == b = Finished a
       both (Fail e) _                         = Fail e
       both _ (Fail e)                         = Fail e
@@ -344,15 +352,20 @@ findSupremumM relevance (GraphM graph) ((a,b) :=: x,isShortestSup) =
       reflCompLeft s  = [catchRelevant (withFamily (fromLeft (IsReflexive s)) a)   | a <- graph (IsReflexive s)]
       reflCompRight s = [catchRelevant (withFamily (fromRight (IsReflexive s)) a)  | a <- graph (IsReflexive s)]
 
-      computations =    join [reflCompLeft (s,t) | s <- [IsMatchForcing,NotMatchForcing], t <- [IsMatchForcing,NotMatchForcing]]
-                     <> [catchRelevant (withFamily (fromLeft (NotReflexive)) a)  | a <- graph (NotReflexive)]
-
+      reflComputations =    join [reflCompLeft (s,t) | s <- [IsMatchForcing,NotMatchForcing], t <- [IsMatchForcing,NotMatchForcing]]
                      <> join [reflCompRight (s,t) | s <- [IsMatchForcing,NotMatchForcing], t <- [IsMatchForcing,NotMatchForcing]]
+      stepComputations = [catchRelevant (withFamily (fromLeft (NotReflexive)) a)  | a <- graph (NotReflexive)]
                      <> [catchRelevant (withFamily (fromRight NotReflexive) a)  | a <- graph (NotReflexive)]
 
 
   in withLogLocation "MndGraph" $ do
-    evalINC (INC computations) ((a,b) :=: x)
+    reflResult <- evalINC (INC reflComputations) ((a,b) :=: x)
+    case reflResult of
+      Wait -> return Wait
+      Partial a -> return (Partial a)
+      Finished a -> return (Finished a)
+      -- only if all reflexive edges fail, then we can look at the non-reflexive ones
+      Fail e -> evalINC (INC stepComputations) ((a,b) :=: x)
 
 findInfimumM :: forall s m isT e a. (Show e, Show a, Eq a, MonadError e m, MonadConstraint isT m, IsT isT m, Unify isT (a), Normalize m a, MonadNormalize m, MonadState s m, MonadLog m, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> ((a,a) :=: a) -> m (INCRes e ((a,a) :=: a))
 findInfimumM relevance graph z = findSupremumM relevance (oppositeGraph graph) (z,IsShortestPossiblePath)

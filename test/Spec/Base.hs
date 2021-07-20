@@ -41,8 +41,8 @@ tc r = do
 
 tcl :: TC a -> IO (Either DMException a)
 tcl r = do
-  -- x <- executeTC (DoShowLog Force [Location_Constraint , Location_INC, Location_MonadicGraph]) r
-  x <- executeTC (DoShowLog Force [Location_Constraint, Location_Subtyping]) r
+  x <- executeTC (DoShowLog Force [Location_Constraint , Location_INC, Location_MonadicGraph]) r
+  -- x <- executeTC (DoShowLog Force [Location_Constraint, Location_Subtyping]) r
   return (fst <$> x)
 
 

@@ -43,6 +43,18 @@ testSupremum = do
             return (length c , length d)
       (tc $ (sn_EW term) >> eval) `shouldReturn` Right (0,1)
 
+  describe "supremum (with unknown variables)" $ do
+    it "does NOT solve 'max{a,Int} = b'" $ do
+      let test :: TC _
+          test = do
+            a <- newVar
+            b <- supremum a DMInt
+            return (a,b)
+      let check (TVar a, TVar b) | a /= b = pure (Right ())
+          check x                         = pure (Left x)
+      (tcl $ (sn_EW test >>= check)) `shouldReturn` (Right (Right ()))
+
+
 
 
 
