@@ -275,8 +275,8 @@ getCurrentConstraintSubtypingGraph = do
 
 -- all paths in the graph of length <= N connecting a0 and a1
 allPathsN :: Int -> TypeGraph k -> (DMTypeOf k, DMTypeOf k) -> Maybe [[DMTypeOf k]]
-allPathsN 0 _ (a0,a1) | a0 == a1  = Just [[a0,a1]]
-allPathsN 0 _ (a0,a1) | otherwise = Nothing
+allPathsN _ _ (a0,a1) | a0 == a1  = Just [[a0,a1]]
+allPathsN 0 _ (a0,a1) = Nothing
 allPathsN n graph (a0,a1) =
   let succ = case H.lookup a0 graph of -- successors of a0
                       Nothing -> []
@@ -290,7 +290,7 @@ allPathsN n graph (a0,a1) =
 
 -- all paths in the graph connecting a0 and a1.
 allPaths :: TypeGraph k -> (DMTypeOf k, DMTypeOf k) -> Maybe [[DMTypeOf k]]
-allPaths graph (a0,a1) = allPathsN ((H.size graph) -1) graph (a0,a1)
+allPaths graph (a0,a1) = allPathsN ((H.size graph) - 1) graph (a0,a1)
 
 
 traceNot a x = x
