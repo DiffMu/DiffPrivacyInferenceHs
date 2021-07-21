@@ -25,8 +25,15 @@ In particular, in order to run/build from source, you need:
     > `libdiffmu-wrapper` to the location given at the top of the makefile, `LIB_INSTALL_DIR = $${HOME}/.local/lib`.
     > This is the location where the julia frontend expects to find the library, but by updating it
     > in both places (makefile and in `DiffPrivacyInference.jl/src/haskell_interface.jl`) it can be changed.
- 3. [Register `DiffPrivacyInference.jl` as a local package.]
- 4. Start the julia REPL, and then load the project with
+ 3. Register `DiffPrivacyInference.jl` as a local package by navigating into the directory you cloned the julia frontend repo into and launching the julia REPL. There, first activate the package by entering
+    ```
+    ] activate .
+    ```
+    Then install all dependencies:
+    ```
+    ] instantiate
+    ```
+ 4. Still in the julia REPL, load the project with
     ```julia
     julia> using DiffPrivacyInference
     ```
@@ -42,6 +49,12 @@ In particular, in order to run/build from source, you need:
     ```julia
     julia> test_hs()
     ```
+    You may want to use [`Revise.jl`]() so you don't have to restart the REPL everytime you change the code. If you put
+    ```
+    using Revise
+    ```
+    in your `~/.julia/config/startup.jl` (or wherever you keep your julia config), you won't have to type it on every REPL restart.
+
 
 
 ### Folder structure
