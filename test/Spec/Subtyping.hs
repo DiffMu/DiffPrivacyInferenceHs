@@ -108,6 +108,32 @@ testSubtyping_Cycles = do
             return (a,b)
       (tc $ (sn test0 >>= (\(a,b) -> return (a == b)))) `shouldReturn` (Right True)
 
+    it "contracts a cycle that has top in it" $ do
+      let test01 = do
+            (a :: DMTypeOf BaseNumKind) <- newVar
+            b <- newVar
+            c <- newVar
+            d <- newVar
+            DMReal ⊑! a
+            a ⊑! b
+            b ⊑! c
+            c ⊑! d
+            return (a,b)
+      (tc $ (sn test01 >>= (\(a,b) -> return (and [(a == DMReal), (a == b)])))) `shouldReturn` (Right True)
+
+    it "contracts a cycle that has bottom in it" $ do
+      let test02 = do
+            a <- newVar
+            b <- newVar
+            c <- newVar
+            d <- newVar
+            a ⊑! b
+            b ⊑! c
+            c ⊑! d
+            d ⊑! DMInt
+            return (a,b)
+      (tc $ (sn test02 >>= (\(a,b) -> return (and [(a == DMInt), (a == b)])))) `shouldReturn` (Right True)
+
     it "contracts a larger cycle with more stuff" $ do
       let test1 = do
             -- the interesting variables a ≤ b

@@ -244,6 +244,18 @@ instance Typeable k => FixedVars TVarOf (IsInfimum ((DMTypeOf k, DMTypeOf k) :=:
 
 data ContractionAllowed = ContractionAllowed | ContractionDisallowed
 
+getBottoms :: forall k. (SingI k, Typeable k) => [DMTypeOf k]
+getBottoms =
+  case testEquality (typeRep @k) (typeRep @BaseNumKind) of
+     Just Refl -> [DMInt]
+     _ -> []
+
+getTops :: forall k. (SingI k, Typeable k) => [DMTypeOf k]
+getTops =
+  case testEquality (typeRep @k) (typeRep @BaseNumKind) of
+     Just Refl -> [DMReal]
+     _ -> []
+
 type TypeGraph k = H.HashMap (DMTypeOf k) [DMTypeOf k]
 
 getCurrentConstraintSubtypingGraph :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => t (TypeGraph k)
@@ -263,13 +275,25 @@ getCurrentConstraintSubtypingGraph = do
 
   -- we build a graph of subtype relations, represented by adjacency lists stored in a hash map
   -- nodes are types that appear in <=, Inf or Sup constraints, edges are suptype relations
+  -- for every node we also add edges from the bottom types (if existent for kind k) an to the top types.
   let addEdge :: H.HashMap (DMTypeOf k) [DMTypeOf k] -> (DMTypeOf k, DMTypeOf k) -> H.HashMap (DMTypeOf k) [DMTypeOf k]
-      addEdge graph (s, e) = case H.lookup s graph of
-                               Nothing -> H.insert s [e] graph
-                               Just sc -> H.insert s (e:sc) graph
+      addEdge graph (s, e) = let
+            tops = getTops @k
+            -- add edges [s -> t for t in tops] and edge s -> e.
+            graph'  = case H.lookup s graph of
+                               Nothing -> H.insert s (e:tops) graph
+                               Just sc -> H.insert s (e:sc) graph -- tops were added already in this case
+
+            -- also add edges [e -> t for t in tops].
+            graph'' = case H.lookup e graph' of
+                               Nothing | not (null tops) -> H.insert e tops graph'
+                               _ -> graph' -- if e has outgoing edges already, they were added above and tops are in.
+         in graph''
+
 
   let graph = foldl addEdge H.empty edges
-  return graph
+  let graph' = foldl addEdge graph [(b, e) | b <- getBottoms @k, e <- (H.keys graph)] -- add edges from bottoms to all other nodes.
+  return graph'
 
 
 
