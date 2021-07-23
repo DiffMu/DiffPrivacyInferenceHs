@@ -15,6 +15,8 @@ import DiffMu.Typecheck.Constraint.CheapConstraints
 
 import qualified Data.HashMap.Strict as H
 
+import qualified Data.Text as T
+
 import Debug.Trace
 
 ------------------------------------------------------------------------
@@ -41,7 +43,7 @@ checkPriv t scope = do
   res <- checkPri' t scope
 
   -- combine with the pre/post compututations
-  return (beforeCheck >> res >>= afterCheck)
+  return (beforeCheck >> withLogLocation "Check" res >>= afterCheck)
 
 
 
@@ -67,7 +69,7 @@ checkSens t scope = do
   res <- checkSen' t scope
 
   -- combine with the pre/post compututations
-  return (beforeCheck >> res >>= afterCheck)
+  return (beforeCheck >> withLogLocation "Check" res >>= afterCheck)
 
 
 --------------------
@@ -210,7 +212,7 @@ checkSen' (SLet (x :- dτ) term body) scope = do
    result <- checkSens body scope'
 
    return $ do
-     --traceM $ "checking sensitivity SLet: " <> show (x :- dτ) <> " = " <> show term
+     log $ "checking sensitivity SLet: " <> show (x :- dτ) <> " = " <> show term
      -- TODO
      case dτ of
         JTAny -> return dτ
@@ -310,7 +312,7 @@ checkSen' (Phi cond ifbr elsebr) scope = do
 checkSen' (Tup ts) scope = do
   τsd <- mapM (\t -> (checkSens t scope)) ts
   Done $ do
-     --traceM $ "checking sens Tup: " <> show (Tup ts)
+     log $ "checking sens Tup: " <> show (Tup ts)
      -- check tuple entries and sum contexts
      τsum <- msumS τsd
 
@@ -500,6 +502,7 @@ checkPri' :: DMTerm -> DMScope -> DMDelayed
 checkPri' (Ret t) scope = do
    mτ <- checkSens t scope
    Done $ do
+      log $ "checking " <> show (Ret t)
       τ <- mτ
       mtruncateP inftyP
       return τ
@@ -572,7 +575,7 @@ checkPri' (SLet (x :- dτ) term body) scope = do
    dterm <- checkPriv term scope
 
    return $ do
-     --traceM $ "checking privacy SLet: " <> show (x :- dτ) <> " = " <> show term
+     log $ "checking privacy SLet: " <> show (x :- dτ) <> " = " <> show term
      -- TODO
      case dτ of
         JTAny -> return dτ
@@ -612,76 +615,45 @@ checkPri' (FLet fname term body) scope = do
      removeVar @PrivacyK fname
      return result'
 
--- TODO check if this is correct
--- this is basically the same as sensitivity Tup, only the entries are privacy terms
-checkPri' (Tup ts) scope = do
-  τsd <- mapM (\t -> (checkPriv t scope)) ts
-  Done $ do
-     --traceM $ "checking privacy Tup: " <> show (Tup ts)
-     -- check tuple entries and sum contexts
-     τsum <- msumP τsd
+-- there are no privacy tuples. instead we transform the term:
+-- (t1, t2)
+-- becomes
+--
+-- slet x1 = t1
+-- slet x2 = t2
+-- in return (x1, x2)
+--
+-- this way if t1 and t2 are privacy terms, they can be checked in privcacy mode
+-- but the tuple is still a sensitivity term.
+-- TODO the names must be unique.
+checkPri' (Tup ts) scope =
+   let names = [Symbol (T.pack ("x" <> (show i))) | i <- [1..(length ts)]]
+       body = Ret (Tup [Var n JTAny | n <- names])
+       t1 = foldl (\b -> \(x, t) -> SLet (x :- JTAny) t b) body (zip names ts)
+   in do
+      --traceM $ "privacy Tup checking term " <> show t1
+      checkPriv t1 scope
 
-     -- ensure nothing that is put in a tuple is a function
-     let makeNoFun ty = do v <- newVar
-                           unify (NoFun v) ty
-                           return v
-     τnf <- mapM makeNoFun τsum
-
-     -- return the tuple.
-     return (NoFun (DMTup τnf))
-
-
--- TODO check if this is correct.
-checkPri' (TLet xs term body) original_scope = do
-
-  -- add all variables bound in the tuple let as args-checking-commands to the scope
-  -- we use checkSens because there are no Vars in privacy terms so the variables will
-  -- only ever be used in a sensitivity term.
-  -- TODO: do we need to make sure that we have unique names here?
-  let addarg scope (x :- τ) = setValue x (checkSens (Arg x τ NotRelevant) original_scope) scope
-  let scope_with_args = foldl addarg original_scope xs
-
-  -- check the body in the scope with the new args
-  cbody <- checkPriv body scope_with_args
-
-  -- append the computation of removing the args from the context again, remembering their
-  -- types so we can build the DMTup from them. we throw away the privacy they have in the
-  -- body because in bind / privacy mode, things already are private so their privacy does
-  -- not change no matter what we do with them.
-  let cbody' = do
-        τ <- cbody
-        xs_types <- mapM (removeVar @PrivacyK) [x | (x :- _) <- xs]
-        let xs_types' = [ ty | WithRelev _ (ty :@ PrivacyAnnotation _) <- xs_types ]
-        return (τ,xs_types')
-
-  -- the computation for checking the term
-  cterm <- checkPriv term original_scope
-
-  -- merging the computations and matching inferred types
-  Done $ do
-    --traceM $ "checking privacy TLet: " <> show (xs) <> " = " <> show term
-    -- extract both TC computations
-    -- we don't scale any of the contexts because this is just multiple bind and
-    -- we don't care what privacy the assigned elements have in the body.
-    ((τbody,xs_types), τterm) <- msumTup (cbody', cterm)
-
-    -- helper function for making sure that type is a nofun, returning the nofun component
-    let makeNoFun ty = do v <- newVar
-                          unify (NoFun v) ty
-                          return v
-
-    -- here we use `makeNoFun`
-    -- we make all tuple component types into nofuns
-    xs_types' <- mapM makeNoFun xs_types
-
-    -- and require that the type of the term is actually this tuple type
-    τterm ==! NoFun (DMTup xs_types')
-
-    -- and we return the type of the body
-    return τbody
-
-
-
+-- there are no privacy tlets either. so here's what we do:
+-- tlet (x1, x2) = t
+-- in ...
+-- becomes
+--
+-- tup = t
+-- slet x1 = return { tlet (x1,_) = tup
+--                    in x1 }
+-- slet x2 = return { tlet (_,x2) = tup
+--                   in x2 }
+-- in ...
+--
+-- this way we can do the projections in sensitivity mode while the body can still be a privacy term.
+-- TODO tup needs to be a unique name instead.
+checkPri' (TLet xs term body) scope =
+   let t1 = foldl (\t -> \(x :- τj) -> SLet (x :- τj) (Ret (TLet xs (Var (Symbol "tup") JTAny) (Var x τj))) t) body xs
+       t2 = SLet (Symbol "tup" :- (JTAny)) term t1
+   in do
+      --traceM $ "privacy TLet checking term " <> show t2
+      checkPriv t2 scope
 
 checkPri' (Gauss rp εp δp f) scope =
   let

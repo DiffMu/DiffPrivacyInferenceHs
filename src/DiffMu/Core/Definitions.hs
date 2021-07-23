@@ -620,7 +620,6 @@ data DMTerm =
 -- ....
   deriving (Generic, Show, Eq)
 
-
 --------------------------------------------------------------------------
 -- DMException
 --
@@ -637,7 +636,7 @@ data DMException where
   UnsatisfiableConstraint :: String -> DMException
   TypeMismatchError       :: String -> DMException
   NoChoiceFoundError      :: String -> DMException
-  UnificationShouldWaitError :: DMException
+  UnificationShouldWaitError :: DMTypeOf k -> DMTypeOf k -> DMException
 
 instance Show DMException where
   show (UnsupportedTermError t) = "The term '" <> show t <> "' is currently not supported."
@@ -650,20 +649,20 @@ instance Show DMException where
   show (UnsatisfiableConstraint c) = "The constraint " <> c <> " is not satisfiable."
   show (TypeMismatchError e) = "Type mismatch: " <> e
   show (NoChoiceFoundError e) = "No choice found: " <> e
-  show (UnificationShouldWaitError) = "Trying to unify types with unresolved infimum (∧)."
+  show (UnificationShouldWaitError a b) = "Trying to unify types " <> show a <> " and " <> show b <> " with unresolved infimum (∧)."
 
 instance Eq DMException where
-  UnsupportedTermError    a    == UnsupportedTermError    b    = True
-  UnificationError        a a2 == UnificationError        b b2 = True
-  WrongNumberOfArgs       a a2 == WrongNumberOfArgs       b b2 = True
-  WrongNumberOfArgsOp     a a2 == WrongNumberOfArgsOp     b b2 = True
-  ImpossibleError         a    == ImpossibleError         b    = True
-  InternalError           a    == InternalError           b    = True
-  VariableNotInScope      a    == VariableNotInScope      b    = True
-  UnsatisfiableConstraint a    == UnsatisfiableConstraint b    = True
-  TypeMismatchError       a    == TypeMismatchError       b    = True
-  NoChoiceFoundError      a    == NoChoiceFoundError      b    = True
-  UnificationShouldWaitError   == UnificationShouldWaitError   = True
+  UnsupportedTermError    a        == UnsupportedTermError    b       = True
+  UnificationError        a a2     == UnificationError        b b2    = True
+  WrongNumberOfArgs       a a2     == WrongNumberOfArgs       b b2    = True
+  WrongNumberOfArgsOp     a a2     == WrongNumberOfArgsOp     b b2    = True
+  ImpossibleError         a        == ImpossibleError         b       = True
+  InternalError           a        == InternalError           b       = True
+  VariableNotInScope      a        == VariableNotInScope      b       = True
+  UnsatisfiableConstraint a        == UnsatisfiableConstraint b       = True
+  TypeMismatchError       a        == TypeMismatchError       b       = True
+  NoChoiceFoundError      a        == NoChoiceFoundError      b       = True
+  UnificationShouldWaitError a a2  == UnificationShouldWaitError b b2 = True
   _ == _ = False
 
 

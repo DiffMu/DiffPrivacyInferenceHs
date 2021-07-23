@@ -62,8 +62,16 @@ instance Unify MonadDMTC (DMTypeOf k) where
      DMMat <$> unify nrm1 nrm2 <*> unify clp1 clp2 <*> unify n1 n2 <*> unify m1 m2 <*> unify τ1 τ2
   unify_ (NoFun x) (NoFun y)              = NoFun <$> unify x y
   unify_ (Fun xs) (Fun ys)                = Fun <$> unify xs ys
-  unify_ _ (v :∧: w)                      = throwError UnificationShouldWaitError
-  unify_ (v :∧: w) _                      = throwError UnificationShouldWaitError
+  unify_ (NoFun a) (v :∧: w)              = do
+    res0 <- unify (NoFun a) v
+    res1 <- unify res0 w
+    return res1
+  unify_ (v :∧: w) (NoFun b)              = do
+    res0 <- unify (NoFun b) v
+    res1 <- unify res0 w
+    return res1
+  unify_ (Fun a) (v :∧: w)                      = throwError (UnificationShouldWaitError (Fun a) (v :∧: w))
+  unify_ (v :∧: w) (Fun a)                      = throwError (UnificationShouldWaitError (Fun a) (v :∧: w))
   unify_ (ForAll xs t) (ForAll ys s)      =
     -- NOTE: we actually have to remove all variables which were substituted
     --       from the merged list (xs <> ys). But luckily this is done
@@ -91,7 +99,7 @@ instance Typeable k => FixedVars TVarOf (IsEqual (DMTypeOf k, DMTypeOf k)) where
 instance Solve MonadDMTC IsEqual (DMTypeOf k, DMTypeOf k) where
   solve_ Dict _ name (IsEqual (a,b)) = catchError (unify_ a b >> dischargeConstraint name) $ \e ->
     do case e of
-         UnificationShouldWaitError -> pure ()
+         UnificationShouldWaitError _ _ -> pure ()
          e        -> throwError e
 
 
