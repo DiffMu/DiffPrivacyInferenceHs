@@ -162,6 +162,9 @@ instance DMExtra a => FreeVars TVarOf (WithRelev a) where
 instance FreeVars TVarOf Symbol where
    freeVars a = []
 
+instance FreeVars TVarOf TeVar where
+   freeVars a = []
+
 instance (FreeVars v a, FreeVars v b) => FreeVars v (Either a b) where
   freeVars (Left aa) = freeVars aa
   freeVars (Right bb) = freeVars bb
@@ -451,7 +454,7 @@ instance (MonadDMTC t) => Normalize t (WithRelev e) where
 
 
 
-type TypeCtx extra = Ctx Symbol (WithRelev extra)
+type TypeCtx extra = Ctx TeVar (WithRelev extra)
 type TypeCtxSP = Either (TypeCtx SensitivityK) (TypeCtx PrivacyK)
 
 

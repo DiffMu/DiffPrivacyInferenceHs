@@ -68,11 +68,11 @@ insideDelayed (Later g) f = Later (\x -> insideDelayed (g x) (\a -> applyDelayed
 
 type DMDelayed = Delayed DMScope (TC DMMain)
 
-newtype DMScope = DMScope (H.HashMap Symbol (DMDelayed))
+newtype DMScope = DMScope (H.HashMap TeVar (DMDelayed))
   deriving Generic
 
 -- our scopes are `DictLike`
-instance DictLike Symbol (DMDelayed) (DMScope) where
+instance DictLike TeVar (DMDelayed) (DMScope) where
   setValue v m (DMScope h) = DMScope (H.insert v m h)
   deleteValue v (DMScope h) = DMScope (H.delete v h)
   getValue k (DMScope h) = h H.!? k
@@ -87,7 +87,7 @@ instance Default (DMScope) where
 -- pushing choices (multiple dispatch function variables) is different from pushing
 -- normal variables because if another method of the same function was defined
 -- earlier, their types have to be collected in one type using the `:∧:` operator
-pushChoice :: Symbol -> (DMDelayed) -> DMScope -> DMScope
+pushChoice :: TeVar -> (DMDelayed) -> DMScope -> DMScope
 pushChoice name ma scope =
   let oldval = getValue name scope
       newval = case oldval of

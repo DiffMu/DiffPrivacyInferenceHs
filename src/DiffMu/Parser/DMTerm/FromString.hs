@@ -33,6 +33,9 @@ pSymbol :: Parser Symbol
 pSymbol = (Symbol . T.pack) <$> (try (char ':' *> pIdentifier)
                                  <|> try (string "Symbol" *> between (string "(\"") (string "\")") pIdentifier))
 
+pTeVar :: Parser TeVar
+pTeVar = UserTeVar <$> pSymbol
+
 -- TODO: Add more types.
 pJuliaType :: Parser JuliaType
 pJuliaType = do
@@ -65,8 +68,8 @@ infixl 2 <*､>
 (<*､>) :: Parser (a -> b) -> Parser a -> Parser b
 (<*､>) f a = (f <* string ", ") <*> a
 
-pAsgmt :: (Symbol -> JuliaType -> c) -> Parser c
-pAsgmt f = between (char '(') (char ')') (f <$> pSymbol <*､> pJuliaType)
+pAsgmt :: (TeVar -> JuliaType -> c) -> Parser c
+pAsgmt f = between (char '(') (char ')') (f <$> pTeVar <*､> pJuliaType)
 
 pRelevance :: Parser Relevance
 pRelevance = (try (string "1" *> pure IsRelevant))
@@ -106,14 +109,14 @@ pSingleChoiceHash = f <$> pTuple2 (pArray "DataType" pJuliaType) pDMTerm
 pGauss = f <$> pTuple3 pDMTerm pDMTerm pDMTerm <*､> pDMTerm
   where f (a,b,c) d = Gauss a b c d
 
-pLoop = f <$> pDMTerm <*､> pDMTerm <*､> pDMTerm <*､> pTuple2 pSymbol pSymbol <*､> pDMTerm
+pLoop = f <$> pDMTerm <*､> pDMTerm <*､> pDMTerm <*､> pTuple2 pTeVar pTeVar <*､> pDMTerm
   where f _ a b c d = Loop a b c d
 
 pDMTerm :: Parser DMTerm
 pDMTerm =
       try ("ret"       `with` (Ret     <$> pDMTerm))
   <|> try ("sng"       `with` (pSng))
-  <|> try ("var"       `with` (Var     <$> pSymbol <*､> pJuliaType))
+  <|> try ("var"       `with` (Var     <$> pTeVar <*､> pJuliaType))
   -- <|> try ("arg"       `with` (Arg     <$> pSymbol <*､> pJuliaType))
   <|> try ("op"        `with` (Op      <$> pDMTypeOp <*､> pArray "DMTerm" pDMTerm))
   <|> try ("phi"       `with` (Phi     <$> pDMTerm <*､> pDMTerm <*､> pDMTerm))
@@ -121,7 +124,7 @@ pDMTerm =
   <|> try ("lam_star"  `with` (LamStar <$> pArray "Tuple{Tuple{Symbol, DataType}, Bool}" pAsgmtWithRel <*､> pDMTerm ))
   <|> try ("apply"     `with` (Apply   <$> pDMTerm <*､> pArray "DMTerm" pDMTerm))
   <|> try ("iter"      `with` (Iter    <$> pDMTerm <*､> pDMTerm <*､> pDMTerm)) -- NOTE: iter should be deprecated
-  <|> try ("flet"      `with` (FLet    <$> pSymbol <*､> pDMTerm <*､> pDMTerm))
+  <|> try ("flet"      `with` (FLet    <$> pTeVar <*､> pDMTerm <*､> pDMTerm))
   -- no choice
   <|> try ("slet"      `with` (SLet    <$> (pAsgmt (:-)) <*､> pDMTerm <*､> pDMTerm))
   <|> try ("tup"       `with` (Tup     <$> pArray "DMTerm" pDMTerm))

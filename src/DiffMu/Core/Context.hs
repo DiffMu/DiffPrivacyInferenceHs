@@ -145,10 +145,10 @@ msum3Tup (ma, mb, mc) = do
 
 
 
-setVarS :: MonadDMTC t => Symbol -> WithRelev SensitivityK -> t ()
+setVarS :: MonadDMTC t => TeVar -> WithRelev SensitivityK -> t ()
 setVarS k v = types %=~ setValueM k (Left v :: Either (WithRelev SensitivityK) (WithRelev PrivacyK))
 
-setVarP :: MonadDMTC t => Symbol -> WithRelev PrivacyK -> t ()
+setVarP :: MonadDMTC t => TeVar -> WithRelev PrivacyK -> t ()
 setVarP k v = types %=~ setValueM k (Right v :: Either (WithRelev SensitivityK) (WithRelev PrivacyK))
 
 
@@ -225,7 +225,7 @@ getAllVars = do
   return h
 
 
-removeVar :: forall e t. (DMExtra e, MonadDMTC t) => Symbol -> t (WithRelev e)
+removeVar :: forall e t. (DMExtra e, MonadDMTC t) => TeVar -> t (WithRelev e)
 removeVar x =  do
   -- (γ :: Ctx Symbol (DMType :@ e)) <- use types
   γ <- use types
@@ -237,19 +237,19 @@ removeVar x =  do
   types .= γ'
   return vr
 
-lookupVar :: forall e t. (DMExtra e, MonadDMTC t) => Symbol -> t (Maybe (WithRelev e))
+lookupVar :: forall e t. (DMExtra e, MonadDMTC t) => TeVar -> t (Maybe (WithRelev e))
 lookupVar x =  do
   γ <- use types
   v <- getValueM x γ
   cast v
 
-getInteresting :: MonadDMTC t => t ([Symbol],[DMTypeOf MainKind :@ (Annotation PrivacyK)])
+getInteresting :: MonadDMTC t => t ([TeVar],[DMTypeOf MainKind :@ (Annotation PrivacyK)])
 getInteresting = do
    γ <- use types
    h <- case γ of
            Left _ -> throwError (ImpossibleError "getInteresting called on sensitivity context.")
            Right (Ctx (MonCom h')) -> return (H.toList h')
-   let f :: [(Symbol, WithRelev PrivacyK)] -> ([(Symbol, DMTypeOf MainKind :@ (Annotation PrivacyK))])
+   let f :: [(TeVar, WithRelev PrivacyK)] -> ([(TeVar, DMTypeOf MainKind :@ (Annotation PrivacyK))])
        f xs = [ (x , τ) | (x , WithRelev IsRelevant τ) <- xs ]
    return (unzip (f h))
 
