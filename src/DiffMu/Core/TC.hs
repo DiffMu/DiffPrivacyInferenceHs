@@ -1041,15 +1041,15 @@ instance FixedVars (TVarOf) (IsLessEqual (Sensitivity,Sensitivity)) where
 -- constraint is solvable in any class of monads, in particular in MonadDMTC,
 -- is shown in Abstract.Data.MonadicPolynomial.
 --
-instance Unify MonadDMTC Sensitivity where
+instance MonadDMTC t => Unify t Sensitivity where
   unify_ s1 s2 = do
     c <- addConstraint @MonadDMTC (Solvable (IsEqual (s1, s2)))
     return s1
 
-instance (Unify t a, Unify t b) => Unify t (a,b) where
+instance (Monad t, Unify t a, Unify t b) => Unify t (a,b) where
   unify_ (a1,b1) (a2,b2) = (,) <$> (unify_ a1 a2) <*> (unify_ b1 b2)
 
-instance (Show a, Unify MonadDMTC a) => Unify MonadDMTC (Maybe a) where
+instance (MonadDMTC t, Show a, Unify t a) => Unify t (Maybe a) where
   unify_ Nothing Nothing = pure Nothing
   unify_ (Just a) (Just b) = Just <$> unify_ a b
   unify_ t s = throwError (UnificationError t s)
@@ -1143,7 +1143,7 @@ normalizeAnn (a :∧: b) = do
         -- return (NoFun z)
         -- addConstraint (Solvable (IsEqual (x,y)))
 
-        liftTC (unify x y)
+        unify x y
         return (NoFun x)
 
   case (a', b') of

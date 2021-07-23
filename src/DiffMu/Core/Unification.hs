@@ -1,4 +1,6 @@
 
+{-# LANGUAGE UndecidableInstances #-}
+
 module DiffMu.Core.Unification where
 
 import DiffMu.Prelude
@@ -14,17 +16,140 @@ import Data.HashMap.Strict as H
 -- Unification of dmtypes
 --
 
+
+class HasUnificationError e a where
+  unificationError' :: Show a => a -> a -> e
+
+
+-- data INCResT m e a = Finished' (m a) | Wait' | Fail' e
+--   deriving (Show, Functor)
+
+data StoppingReason e = Wait' | Fail' e
+
+newtype INCResT e m a = INCResT {runINCResT :: ExceptT (StoppingReason e) m a}
+  -- Finished' (m a) | Wait' | Fail' e
+  deriving (Functor, Applicative, Monad, MonadError (StoppingReason e))
+
+instance HasUnificationError DMException a where
+  unificationError' = UnificationError
+
+instance HasUnificationError e a => HasUnificationError (StoppingReason e) a where
+
+instance HasUnificationError e a => HasUnificationError (e) [a] where
+
+
+-- newtype INCResT m e a = INCResT {runINCResT :: Either (StoppingReason e) (m a)} 
+  -- deriving (Functor, Applicative, Monad)
+
+
+{-
+instance Functor m => Functor (INCResT m e) where
+  fmap f (Finished' a) = Finished' (fmap f a)
+  -- fmap f (Partial' a) = Partial' (fmap f a)
+  fmap f Wait' = Wait'
+  fmap f (Fail' e) = Fail' e
+
+instance Applicative m => Applicative (INCResT m e) where
+  pure a = Finished' (pure a)
+  Finished' f <*> Finished' x = Finished' (f <*> x)
+  Finished' f <*> Wait' = Wait'
+  Wait' <*> Finished' x = Wait'
+  Wait' <*> Wait' = Wait'
+  Fail' e <*> _ = Fail' e
+  _ <*> Fail' e = Fail' e
+  -- Finished' f <*> Partial' x = Partial' (f <*> x)
+  -- Partial' f <*> Partial' x = Partial' (f <*> x)
+
+-- instance Monad m => Monad (INCResT m e) where
+--   Finished' x >>= f = (x >>=) <*> f
+-}
+
+normalizeᵢ :: Normalize t a => a -> INCResT e t a
+normalizeᵢ a = liftINC (normalize a)
+
+class Monad t => Unifyᵢ t a where
+  unifyᵢ_ :: a -> a -> t a
+
+unifyᵢ :: (Unifyᵢ (INCResT e t) a, Normalize (t) a) => a -> a -> (INCResT e t a)
+unifyᵢ a b = (chainM2 unifyᵢ_ (normalizeᵢ a) (normalizeᵢ b))
+
+liftINC :: Functor m => m a -> INCResT e m a
+liftINC a = INCResT (ExceptT (fmap Right a))
+
+-- we define the 'incremental' version of unification
+
+instance (Monad t, HasUnificationError e JuliaType, MonadError e t) => Unifyᵢ t JuliaType where
+  unifyᵢ_ (JuliaType a) (JuliaType b) | a == b = pure (JuliaType a)
+  unifyᵢ_ t s = throwError (unificationError' t s)
+
+instance MonadDMTC t => Unifyᵢ (INCResT e t) Sensitivity where
+  unifyᵢ_ a b = liftINC $ unify a b
+
+instance (Monad t, Unifyᵢ t a, Unifyᵢ t b) => Unifyᵢ t (a,b) where
+  unifyᵢ_ (a1,b1) (a2,b2) = (,) <$> (unifyᵢ_ a1 a2) <*> (unifyᵢ_ b1 b2)
+
+instance (Unifyᵢ isT a, Unifyᵢ isT b) => Unifyᵢ isT (a :@ b) where
+  unifyᵢ_ (a₁ :@ e₁) (a₂ :@ e₂) = (:@) <$> unifyᵢ_ a₁ a₂ <*> unifyᵢ_ e₁ e₂
+
+instance (HasUnificationError e a, MonadError e t, Show a, Unifyᵢ t a) => Unifyᵢ t [a] where
+  unifyᵢ_ xs ys | length xs == length ys = mapM (uncurry unifyᵢ_) (zip xs ys)
+  unifyᵢ_ xs ys = throwError (unificationError' xs ys)
+
+instance (HasUnificationError e (Maybe a), MonadError e t, Show a, Unifyᵢ t a) => Unifyᵢ t (Maybe a) where
+  unifyᵢ_ Nothing Nothing = pure Nothing
+  unifyᵢ_ (Just a) (Just b) = Just <$> unifyᵢ_ a b
+  unifyᵢ_ t s = throwError (unificationError' t s)
+
+-- instance Normalize t a => Normalize (INCResT e t) a where
+--   normalize a = liftINC (normalize a)
+
+instance MonadDMTC t => Unifyᵢ (INCResT DMException t) (DMTypeOf k) where
+  unifyᵢ_ Deleted a                     = liftINC $ internalError "A deleted variable reappeared and tried to escape via unification."
+  unifyᵢ_ a Deleted                     = liftINC $ internalError "A deleted variable reappeared and tried to escape via unification."
+  unifyᵢ_ DMReal DMReal                 = pure DMReal
+  unifyᵢ_ DMInt DMInt                   = pure DMInt
+  unifyᵢ_ DMData DMData                 = pure DMData
+  unifyᵢ_ (Numeric t) (Numeric s)       = Numeric <$> unifyᵢ t s
+  unifyᵢ_ (NonConst τ₁) (NonConst τ₂)   = NonConst <$> unifyᵢ τ₁ τ₂
+  unifyᵢ_ (Const η₁ τ₁) (Const η₂ τ₂)   = Const <$> liftINC (unify η₁ η₂) <*> unifyᵢ τ₁ τ₂
+  unifyᵢ_ (as :->: a) (bs :->: b)       = (:->:) <$> unifyᵢ as bs <*> unifyᵢ a b
+  unifyᵢ_ (as :->*: a) (bs :->*: b)     = (:->*:) <$> unifyᵢ as bs <*> unifyᵢ a b
+  unifyᵢ_ (DMTup as) (DMTup bs)         = DMTup <$> unifyᵢ as bs
+  unifyᵢ_ (TVar x) (TVar y) | x == y    = pure $ TVar x
+  unifyᵢ_ (TVar x) t                    = liftINC (addSub (x := t)) >> pure t
+  unifyᵢ_ t (TVar x)                    = liftINC (addSub (x := t)) >> pure t
+  unifyᵢ_ L1 L1                         = pure L1
+  unifyᵢ_ L2 L2                         = pure L2
+  unifyᵢ_ LInf LInf                     = pure LInf
+  unifyᵢ_ U U                           = pure U
+  unifyᵢ_ (Clip k) (Clip s)             = Clip <$> unifyᵢ k s
+  unifyᵢ_ (DMMat nrm1 clp1 n1 m1 τ1) (DMMat nrm2 clp2 n2 m2 τ2) =
+      DMMat <$> unifyᵢ nrm1 nrm2 <*> unifyᵢ clp1 clp2 <*> unifyᵢ n1 n2 <*> unifyᵢ m1 m2 <*> unifyᵢ τ1 τ2
+  unifyᵢ_ (NoFun x) (NoFun y)              = NoFun <$> unifyᵢ x y
+  unifyᵢ_ (Fun xs) (Fun ys)                = Fun <$> unifyᵢ xs ys
+  unifyᵢ_ _ (v :∧: w)                      = throwError Wait'
+  unifyᵢ_ (v :∧: w) _                      = throwError Wait'
+  unifyᵢ_ (ForAll xs t) (ForAll ys s)      =
+    -- NOTE: we actually have to remove all variables which were substituted
+    --       from the merged list (xs <> ys). But luckily this is done
+    --       automatically by the definition of substitution, and will happen
+    --       when the returned type is being normalized
+    --
+    ForAll (xs <> ys) <$> unifyᵢ t s
+  unifyᵢ_ t s                              = throwError (Fail' $ UnificationError t s)
+
+
 instance Monad t => Normalize t JuliaType where
   normalize = pure
 
 
 
-instance Unify MonadDMTC JuliaType where
+instance MonadDMTC t => Unify t JuliaType where
   unify_ (JuliaType a) (JuliaType b) | a == b = pure (JuliaType a)
   unify_ t s = throwError (UnificationError t s)
 
 
-instance Unify MonadDMTC (Annotation e) where
+instance MonadDMTC t => Unify t (Annotation e) where
   -- NOTE: we can use the unify_ (with underscore) function here,
   -- because we do not have to normalize the just normalized arguments
   unify_ (SensitivityAnnotation s) (SensitivityAnnotation t) = SensitivityAnnotation <$> unify_ s t
@@ -34,44 +159,17 @@ instance Unify MonadDMTC (Annotation e) where
 -- instance Unify MonadDMTC e => Unify MonadDMTC (WithRelev e) where
 --   unify_ (WithRelev i e) (WithRelev j f)  = WithRelev (i <> j) <$> unify_ e f
 
-instance Unify MonadDMTC (WithRelev e) where
+instance MonadDMTC t => Unify t (WithRelev e) where
   unify_ (WithRelev i e) (WithRelev j f)  = WithRelev (i <> j) <$> unify_ e f
 
 -- Unification of DMTypes (of any kind k) is given by:
-instance Unify MonadDMTC (DMTypeOf k) where
-  unify_ Deleted a                     = internalError "A deleted variable reappeared and tried to escape via unification."
-  unify_ a Deleted                     = internalError "A deleted variable reappeared and tried to escape via unification."
-  unify_ DMReal DMReal                 = pure DMReal
-  unify_ DMInt DMInt                   = pure DMInt
-  unify_ DMData DMData                 = pure DMData
-  unify_ (Numeric t) (Numeric s)       = Numeric <$> unify t s
-  unify_ (NonConst τ₁) (NonConst τ₂)   = NonConst <$> unify τ₁ τ₂
-  unify_ (Const η₁ τ₁) (Const η₂ τ₂)   = Const <$> unify η₁ η₂ <*> unify τ₁ τ₂
-  unify_ (as :->: a) (bs :->: b)       = (:->:) <$> unify as bs <*> unify a b
-  unify_ (as :->*: a) (bs :->*: b)     = (:->*:) <$> unify as bs <*> unify a b
-  unify_ (DMTup as) (DMTup bs)         = DMTup <$> unify as bs
-  unify_ (TVar x) (TVar y) | x == y    = pure $ TVar x
-  unify_ (TVar x) t                    = addSub (x := t) >> pure t
-  unify_ t (TVar x)                    = addSub (x := t) >> pure t
-  unify_ L1 L1                         = pure L1
-  unify_ L2 L2                         = pure L2
-  unify_ LInf LInf                     = pure LInf
-  unify_ U U                           = pure U
-  unify_ (Clip k) (Clip s)             = Clip <$> unify k s
-  unify_ (DMMat nrm1 clp1 n1 m1 τ1) (DMMat nrm2 clp2 n2 m2 τ2) =
-     DMMat <$> unify nrm1 nrm2 <*> unify clp1 clp2 <*> unify n1 n2 <*> unify m1 m2 <*> unify τ1 τ2
-  unify_ (NoFun x) (NoFun y)              = NoFun <$> unify x y
-  unify_ (Fun xs) (Fun ys)                = Fun <$> unify xs ys
-  unify_ _ (v :∧: w)                      = throwError UnificationShouldWaitError
-  unify_ (v :∧: w) _                      = throwError UnificationShouldWaitError
-  unify_ (ForAll xs t) (ForAll ys s)      =
-    -- NOTE: we actually have to remove all variables which were substituted
-    --       from the merged list (xs <> ys). But luckily this is done
-    --       automatically by the definition of substitution, and will happen
-    --       when the returned type is being normalized
-    --
-    ForAll (xs <> ys) <$> unify t s
-  unify_ t s                              = throwError (UnificationError t s)
+instance MonadDMTC t => Unify t (DMTypeOf k) where
+  unify_ a b = do
+    res <- runExceptT $ runINCResT $ unifyᵢ_ @(INCResT DMException t) a b
+    case res of
+      Left (Wait')   -> return a
+      Left (Fail' e) -> throwError e
+      Right a -> return a
 
 -- Above we implictly use unification of terms of the type (a :@ b).
 -- These are unified entry-wise:
@@ -80,19 +178,21 @@ instance (Unify isT a, Unify isT b) => Unify isT (a :@ b) where
 
 -- Similarly, lists of terms are unified elements wise,
 -- but they only match if they are of the same lenght:
-instance (Show a, Unify MonadDMTC a) => Unify MonadDMTC [a] where
+instance (HasUnificationError e a, MonadError e t, Show a, Unify t a) => Unify t [a] where
   unify_ xs ys | length xs == length ys = mapM (uncurry unify_) (zip xs ys)
-  unify_ xs ys = throwError (UnificationError xs ys)
+  unify_ xs ys = throwError (unificationError' xs ys)
 
 instance Typeable k => FixedVars TVarOf (IsEqual (DMTypeOf k, DMTypeOf k)) where
   fixedVars _ = mempty
 
 -- Using the unification instance, we implement solving of the `IsEqual` constraint for DMTypes.
 instance Solve MonadDMTC IsEqual (DMTypeOf k, DMTypeOf k) where
-  solve_ Dict _ name (IsEqual (a,b)) = catchError (unify_ a b >> dischargeConstraint name) $ \e ->
-    do case e of
-         UnificationShouldWaitError -> pure ()
-         e        -> throwError e
+  solve_ Dict _ name (IsEqual (a,b)) = do
+    res <- runExceptT $ runINCResT $ unifyᵢ_ @(INCResT DMException _) a b
+    case res of
+      Left (Wait')   -> return ()
+      Left (Fail' e) -> throwError e
+      Right a -> dischargeConstraint name
 
 
 solveLessEqualSensitivity :: Sensitivity -> Sensitivity -> Maybe Bool
