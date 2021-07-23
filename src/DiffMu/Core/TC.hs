@@ -305,8 +305,8 @@ class (MonadImpossible (t), MonadWatch (t), MonadLog t,
        MonadConstraint (MonadDMTC) (t),
        MonadNormalize t,
        ContentConstraintOnSolvable t ~ GoodConstraintContent,
-       ConstraintOnSolvable t ~ GoodConstraint
-       -- LiftTC t
+       ConstraintOnSolvable t ~ GoodConstraint,
+       LiftTC t
       ) => MonadDMTC (t :: * -> *) where
 
 data Tag = DM
@@ -918,12 +918,10 @@ instance Monad m => MonadDMTC (TCT m) where
 --   normalize solv = liftTC (normalize solv)
 
 instance Monad m => LiftTC (TCT m) where
-  liftTC (TCT v) = undefined -- TCT (v >>= (lift . lift . return))
-    -- let x = StateT (\s -> ExceptT (return $ runExcept (runStateT v s)))
-    -- in TCT (x) -- TCT (return v)
+  liftTC (TCT v) = -- TCT (v >>= (lift . lift . return))
+    let x = StateT (\s -> ExceptT (WriterT (return $ runWriter $ runExceptT $ runStateT v s)))
+    in TCT x
 
-  {-
--}
 instance Monad m => MonadImpossible (TCT m) where
   impossible err = throwError (ImpossibleError err)
 
@@ -1120,6 +1118,8 @@ scaleExtra η (PrivacyAnnotation (ε, δ)) = PrivacyAnnotation (η ⋅! ε , η 
 -- scaleSens = undefined
 
 normalizeAnn :: forall t k. (MonadDMTC t) => DMTypeOf k -> t (DMTypeOf k)
+-- normalizeAnn :: Monad m => DMTypeOf k -> (TCT m) (DMTypeOf k)
+-- normalizeAnn :: forall t k. (IsT MonadDMTC t) => DMTypeOf k -> t (DMTypeOf k)
 normalizeAnn (TVar a) = pure $ TVar a
 normalizeAnn (Fun as) = do
   let normalizeInside (f :@ annot) = (:@ annot) <$> normalizeAnn f
@@ -1141,7 +1141,9 @@ normalizeAnn (a :∧: b) = do
         -- z <- newVar
         -- addConstraint (Solvable (IsInfimum ((x, y) :=: z)))
         -- return (NoFun z)
-        addConstraint (Solvable (IsEqual (x,y)))
+        -- addConstraint (Solvable (IsEqual (x,y)))
+
+        liftTC (unify x y)
         return (NoFun x)
 
   case (a', b') of

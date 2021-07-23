@@ -18,6 +18,8 @@ instance (FreeVars TVarOf x, Substitute TVarOf DMTypeOf x) => GoodConstraintCont
 class (FixedVars TVarOf x) => GoodConstraint (x :: *) where
 instance (FixedVars TVarOf x) => GoodConstraint x where
 
+class LiftTC (t :: * -> *)
+
 class (MonadImpossible (t), MonadWatch (t), MonadLog t,
        MonadTerm DMTypeOf (t),
        MonadTermDuplication DMTypeOf (t),
@@ -31,7 +33,7 @@ class (MonadImpossible (t), MonadWatch (t), MonadLog t,
        MonadConstraint (MonadDMTC) (t),
        MonadNormalize t,
        ContentConstraintOnSolvable t ~ GoodConstraintContent,
-       ConstraintOnSolvable t ~ GoodConstraint
-       -- LiftTC t
+       ConstraintOnSolvable t ~ GoodConstraint,
+       LiftTC t
       ) => MonadDMTC (t :: * -> *) where
 
