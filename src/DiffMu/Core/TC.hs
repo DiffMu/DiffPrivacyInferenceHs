@@ -464,6 +464,7 @@ data Watcher = Watcher Changed
 
 data MetaCtx = MetaCtx
   {
+    _termVars :: NameCtx,
     _sensVars :: KindedNameCtx SVarOf,
     _typeVars :: KindedNameCtx TVarOf,
     _sensSubs :: Subs SVarOf SensitivityOf,
@@ -568,8 +569,9 @@ instance Monad m => MonadLog (TCT m) where
 --                             <> "- types:       " <> show γ <> "\n"
 
 instance Show (MetaCtx) where
-  show (MetaCtx s t sσ tσ cs fixedT) =
-       "- sens vars: " <> show s <> "\n"
+  show (MetaCtx te s t sσ tσ cs fixedT) =
+       "- term vars: " <> show te <> "\n"
+    <> "- sens vars: " <> show s <> "\n"
     <> "- type vars: " <> show t <> "\n"
     -- <> "- cnst vars: " <> show c <> "\n"
     <> "- sens subs:   " <> show sσ <> "\n"
@@ -1017,6 +1019,8 @@ newPVar = do
    p2 :: Sensitivity <- newVar
    return (p1, p2)
 
+newTeVar :: (MonadDMTC t) => Text -> t (TeVar)
+newTeVar hint = meta.termVars %%= (first GenTeVar . newName hint)
 
   -- where f names = let (τ , names') = newName hint names
   --                 in (TVar τ, names')
