@@ -449,6 +449,15 @@ solveSupremum graph name ((a,b) :=: x) | a == x = do
 solveSupremum graph name ((a,b) :=: x) | b == x = do
   a ≤! x
   dischargeConstraint name
+
+solveSupremum graph name ((a,b) :=: x) | elem a (getBottoms @k) = do
+  unify b x
+  dischargeConstraint name
+
+solveSupremum graph name ((a,b) :=: x) | elem b (getBottoms @k) = do
+  unify a x
+  dischargeConstraint name
+
 solveSupremum graph name ((a,b) :=: x) | otherwise = callMonadicGraphSupremum graph name ((a,b) :=: x)
 
 --------------------------------------------
@@ -461,6 +470,15 @@ solveInfimum graph name ((a,b) :=: x) | a == x = do
 solveInfimum graph name ((a,b) :=: x) | b == x = do
   x ≤! a
   dischargeConstraint name
+
+solveInfimum graph name ((a,b) :=: x) | elem a (getTops @k) = do
+  unify b x
+  dischargeConstraint name
+
+solveInfimum graph name ((a,b) :=: x) | elem b (getTops @k) = do
+  unify a x
+  dischargeConstraint name
+
 solveInfimum graph name ((a,b) :=: x) | otherwise = callMonadicGraphSupremum (oppositeGraph graph) name ((a,b) :=: x)
 
 
