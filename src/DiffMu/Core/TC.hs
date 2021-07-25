@@ -162,6 +162,9 @@ instance DMExtra a => FreeVars TVarOf (WithRelev a) where
 instance FreeVars TVarOf Symbol where
    freeVars a = []
 
+instance FreeVars TVarOf TeVar where
+   freeVars a = []
+
 instance (FreeVars v a, FreeVars v b) => FreeVars v (Either a b) where
   freeVars (Left aa) = freeVars aa
   freeVars (Right bb) = freeVars bb
@@ -305,8 +308,8 @@ class (MonadImpossible (t), MonadWatch (t), MonadLog t,
        MonadConstraint (MonadDMTC) (t),
        MonadNormalize t,
        ContentConstraintOnSolvable t ~ GoodConstraintContent,
-       ConstraintOnSolvable t ~ GoodConstraint
-       -- LiftTC t
+       ConstraintOnSolvable t ~ GoodConstraint,
+       LiftTC t
       ) => MonadDMTC (t :: * -> *) where
 
 data Tag = DM
@@ -451,7 +454,7 @@ instance (MonadDMTC t) => Normalize t (WithRelev e) where
 
 
 
-type TypeCtx extra = Ctx Symbol (WithRelev extra)
+type TypeCtx extra = Ctx TeVar (WithRelev extra)
 type TypeCtxSP = Either (TypeCtx SensitivityK) (TypeCtx PrivacyK)
 
 
@@ -461,6 +464,7 @@ data Watcher = Watcher Changed
 
 data MetaCtx = MetaCtx
   {
+    _termVars :: NameCtx,
     _sensVars :: KindedNameCtx SVarOf,
     _typeVars :: KindedNameCtx TVarOf,
     _sensSubs :: Subs SVarOf SensitivityOf,
@@ -565,8 +569,9 @@ instance Monad m => MonadLog (TCT m) where
 --                             <> "- types:       " <> show γ <> "\n"
 
 instance Show (MetaCtx) where
-  show (MetaCtx s t sσ tσ cs fixedT) =
-       "- sens vars: " <> show s <> "\n"
+  show (MetaCtx te s t sσ tσ cs fixedT) =
+       "- term vars: " <> show te <> "\n"
+    <> "- sens vars: " <> show s <> "\n"
     <> "- type vars: " <> show t <> "\n"
     -- <> "- cnst vars: " <> show c <> "\n"
     <> "- sens subs:   " <> show sσ <> "\n"
@@ -918,12 +923,10 @@ instance Monad m => MonadDMTC (TCT m) where
 --   normalize solv = liftTC (normalize solv)
 
 instance Monad m => LiftTC (TCT m) where
-  liftTC (TCT v) = undefined -- TCT (v >>= (lift . lift . return))
-    -- let x = StateT (\s -> ExceptT (return $ runExcept (runStateT v s)))
-    -- in TCT (x) -- TCT (return v)
+  liftTC (TCT v) = -- TCT (v >>= (lift . lift . return))
+    let x = StateT (\s -> ExceptT (WriterT (return $ runWriter $ runExceptT $ runStateT v s)))
+    in TCT x
 
-  {-
--}
 instance Monad m => MonadImpossible (TCT m) where
   impossible err = throwError (ImpossibleError err)
 
@@ -1016,6 +1019,8 @@ newPVar = do
    p2 :: Sensitivity <- newVar
    return (p1, p2)
 
+newTeVar :: (MonadDMTC t) => Text -> t (TeVar)
+newTeVar hint = meta.termVars %%= (first GenTeVar . newName hint)
 
   -- where f names = let (τ , names') = newName hint names
   --                 in (TVar τ, names')
@@ -1043,15 +1048,15 @@ instance FixedVars (TVarOf) (IsLessEqual (Sensitivity,Sensitivity)) where
 -- constraint is solvable in any class of monads, in particular in MonadDMTC,
 -- is shown in Abstract.Data.MonadicPolynomial.
 --
-instance Unify MonadDMTC Sensitivity where
+instance MonadDMTC t => Unify t Sensitivity where
   unify_ s1 s2 = do
     c <- addConstraint @MonadDMTC (Solvable (IsEqual (s1, s2)))
     return s1
 
-instance (Unify t a, Unify t b) => Unify t (a,b) where
+instance (Monad t, Unify t a, Unify t b) => Unify t (a,b) where
   unify_ (a1,b1) (a2,b2) = (,) <$> (unify_ a1 a2) <*> (unify_ b1 b2)
 
-instance (Show a, Unify MonadDMTC a) => Unify MonadDMTC (Maybe a) where
+instance (MonadDMTC t, Show a, Unify t a) => Unify t (Maybe a) where
   unify_ Nothing Nothing = pure Nothing
   unify_ (Just a) (Just b) = Just <$> unify_ a b
   unify_ t s = throwError (UnificationError t s)
@@ -1120,6 +1125,8 @@ scaleExtra η (PrivacyAnnotation (ε, δ)) = PrivacyAnnotation (η ⋅! ε , η 
 -- scaleSens = undefined
 
 normalizeAnn :: forall t k. (MonadDMTC t) => DMTypeOf k -> t (DMTypeOf k)
+-- normalizeAnn :: Monad m => DMTypeOf k -> (TCT m) (DMTypeOf k)
+-- normalizeAnn :: forall t k. (IsT MonadDMTC t) => DMTypeOf k -> t (DMTypeOf k)
 normalizeAnn (TVar a) = pure $ TVar a
 normalizeAnn (Fun as) = do
   let normalizeInside (f :@ annot) = (:@ annot) <$> normalizeAnn f
@@ -1141,7 +1148,9 @@ normalizeAnn (a :∧: b) = do
         -- z <- newVar
         -- addConstraint (Solvable (IsInfimum ((x, y) :=: z)))
         -- return (NoFun z)
-        addConstraint (Solvable (IsEqual (x,y)))
+        -- addConstraint (Solvable (IsEqual (x,y)))
+
+        unify x y
         return (NoFun x)
 
   case (a', b') of

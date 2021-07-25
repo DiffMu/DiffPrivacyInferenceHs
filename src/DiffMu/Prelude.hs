@@ -16,6 +16,7 @@ module DiffMu.Prelude
   , MonadImpossible (..)
   , MonadInternalError (..)
   , (:=:) (..)
+  , TeVar (..)
   )
   where
 
@@ -61,8 +62,18 @@ instance Show (SymbolOf k) where
 instance Show Symbol where
   show (Symbol t) = T.unpack t
 
+data TeVar = UserTeVar Symbol | GenTeVar Symbol
+  deriving (Eq,Generic, Ord)
+
+instance Hashable TeVar
+instance Show TeVar where
+  show (UserTeVar x) = show x
+  show (GenTeVar x) = "gen_" <> show x
+
+
 class (Eq v, Hashable v) => DictKey v
 instance DictKey Symbol
+instance DictKey TeVar
 
 -- class (forall k. Hashable (v k)) => KHashable v
 -- class (forall k. Show (v k)) => KShow v

@@ -585,10 +585,10 @@ instance TCConstraint IsTypeOpResult where
 
 type Clip = DMTypeOf ClipKind
 
-data Asgmt a = (:-) Symbol a
+data Asgmt a = (:-) TeVar a
   deriving (Generic, Show, Eq, Ord)
 
-fstA :: Asgmt a -> Symbol
+fstA :: Asgmt a -> TeVar
 fstA (x :- τ) = x
 
 sndA :: Asgmt a -> a
@@ -597,26 +597,28 @@ sndA (x :- τ) = τ
 -- data Lam_ = Lam_ [Asgmt JuliaType] DMTerm
 --   deriving (Generic, Show)
 
+
+
 data DMTerm =
   Ret DMTerm
   | Sng Float JuliaType
-  | Var Symbol JuliaType
-  | Arg Symbol JuliaType Relevance
+  | Var TeVar JuliaType
+  | Arg TeVar JuliaType Relevance
   | Op DMTypeOp_Some [DMTerm]
   | Phi DMTerm DMTerm DMTerm
   | Lam     [Asgmt JuliaType] DMTerm
   | LamStar [(Asgmt JuliaType, Relevance)] DMTerm
   | Apply DMTerm [DMTerm]
-  | FLet Symbol DMTerm DMTerm
+  | FLet TeVar DMTerm DMTerm
   | Choice (HashMap [JuliaType] DMTerm)
   | SLet (Asgmt JuliaType) DMTerm DMTerm
   | Tup [DMTerm]
   | TLet [(Asgmt JuliaType)] DMTerm DMTerm
   | Gauss DMTerm DMTerm DMTerm DMTerm
-  | MCreate DMTerm DMTerm (Symbol, Symbol) DMTerm
+  | MCreate DMTerm DMTerm (TeVar, TeVar) DMTerm
   | ClipM Clip DMTerm
   | Iter DMTerm DMTerm DMTerm
-  | Loop DMTerm DMTerm (Symbol, Symbol) DMTerm
+  | Loop DMTerm DMTerm (TeVar, TeVar) DMTerm
 -- ....
   deriving (Generic, Show, Eq)
 
