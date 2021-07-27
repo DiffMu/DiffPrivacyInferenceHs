@@ -6,6 +6,7 @@ import Spec.Subtyping
 import Spec.Supremum
 import Spec.Rules
 import Spec.TypecheckingExamples
+import Spec.Unsafe
 
 -- import Test.QuickCheck hiding (Fun)
 
@@ -28,6 +29,7 @@ testUnification = do
 
 runAllTests :: (String -> IO String) -> IO ()
 runAllTests parse = defaultspec $ do
+  testUnsafe
   testUnification
   testSubtyping
   testSubtyping_MaxMinCases
