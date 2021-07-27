@@ -22,7 +22,7 @@ testSubtyping = do
             return (a,b)
       let correct (TVar a,TVar b) | a /= b = pure (Right ())
           correct x                        = pure (Left x)
-      (tcl $ (sn_EW test0 >>= correct)) `shouldReturn` (Right (Right ()))
+      (tc $ (sn_EW test0 >>= correct)) `shouldReturn` (Right (Right ()))
 
 
   describe "subtyping of BaseNumKind/NumKind" $ do
@@ -160,7 +160,7 @@ testSubtyping_Cycles = do
             -- we are interested in how `a` and `b` turn out
             return (a,b)
       let checkres (a,b) = a == b
-      (tcl $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right True)
+      (tc $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right True)
 
     it "contracts a larger cycle that also has sup/inf constraints" $ do
       let test2 = do

@@ -1,3 +1,5 @@
+{-# LANGUAGE BangPatterns #-}
+{-# OPTIONS_GHC -fno-cse #-}
 
 module DiffMu.Typecheck.Typecheck where
 
@@ -26,9 +28,12 @@ global_tevar_counter :: IORef (NameCtx)
 global_tevar_counter = unsafePerformIO (newIORef def)
 
 unsafe_newTeVar :: Text -> TeVar
-unsafe_newTeVar hint = unsafePerformIO $ do
-  res <- atomicModifyIORef' global_tevar_counter ((\(a,b) -> (b,a)) . newName hint)
-  return (GenTeVar res)
+unsafe_newTeVar hint =
+  let f ctx = let (ctx',name) = newName hint ctx
+              in traceShowId (name,ctx')
+      !res = unsafePerformIO $ atomicModifyIORef' global_tevar_counter f
+-- ((\(a,b) -> (b,a)) . newName hint)
+  in (GenTeVar res)
 
 reset_tevar_counter :: IO ()
 reset_tevar_counter = writeIORef global_tevar_counter def

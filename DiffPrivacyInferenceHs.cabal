@@ -86,6 +86,7 @@ library
       Spec.Subtyping
       Spec.Supremum
       Spec.TypecheckingExamples
+      Spec.Unsafe
   other-modules:
       Paths_DiffPrivacyInferenceHs
   hs-source-dirs:
