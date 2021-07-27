@@ -230,7 +230,7 @@ checkSen' (SLet (x :- dτ) term body) scope = do
    result <- checkSens body scope'
 
    return $ do
-     log $ "checking sensitivity SLet: " <> show (x :- dτ) <> " = " <> show term
+     log $ "checking sensitivity SLet: " <> show (x :- dτ) <> " = " <> show term <> " in " <> show body
      -- TODO
      case dτ of
         JTAny -> return dτ
@@ -330,7 +330,7 @@ checkSen' (Phi cond ifbr elsebr) scope = do
 checkSen' (Tup ts) scope = do
   τsd <- mapM (\t -> (checkSens t scope)) ts
   done $ do
-     log $ "checking sens Tup: " <> show (Tup ts)
+
      -- check tuple entries and sum contexts
      τsum <- msumS τsd
 
@@ -340,6 +340,7 @@ checkSen' (Tup ts) scope = do
                            return v
      τnf <- mapM makeNoFun τsum
 
+     log $ "checking sens Tup: " <> show (Tup ts) <> ", type is " <> show (NoFun (DMTup τnf)) <> " when terms were " <> show τsum
      -- return the tuple.
      return (NoFun (DMTup τnf))
 
@@ -367,7 +368,6 @@ checkSen' (TLet xs term body) original_scope = do
 
   -- merging the computations and matching inferred types and sensitivities
   done $ do
-    --traceM $ "checking sensitivities TLet: " <> show (xs) <> " = " <> show term
     -- create a new var for scaling the term context
     s <- newVar
 
@@ -388,11 +388,12 @@ checkSen' (TLet xs term body) original_scope = do
     xs_types' <- mapM makeNoFun xs_types
 
     -- and require that the type of the term is actually this tuple type
-    τterm ==! NoFun (DMTup xs_types')
+    unify τterm (NoFun (DMTup xs_types'))
 
     -- finally we need make sure that our scaling factor `s` is the maximum of the tuple sensitivities
     s ==! maxS xs_sens
 
+    log $ "checking sensitivities TLet: " <> show (xs) <> " = " <> show term <> " in " <> show body <> "\n ==> types are " <> show τbody <> " for term " <> show τterm
     -- and we return the type of the body
     return τbody
 
@@ -520,9 +521,9 @@ checkPri' :: DMTerm -> DMScope -> DMDelayed
 checkPri' (Ret t) scope = do
    mτ <- checkSens t scope
    done $ do
-      log $ "checking " <> show (Ret t)
       τ <- mτ
       mtruncateP inftyP
+      log $ "checking privacy " <> show (Ret t) <> ", type is " <> show τ
       return τ
 
 -- TODO it is ambiguous if this is an application of a LamStar or an application of a Lam followed by Return.
@@ -593,7 +594,6 @@ checkPri' (SLet (x :- dτ) term body) scope = do
    dterm <- checkPriv term scope
 
    return $ do
-     log $ "checking privacy SLet: " <> show (x :- dτ) <> " = " <> show term
      -- TODO
      case dτ of
         JTAny -> return dτ
@@ -614,6 +614,7 @@ checkPri' (SLet (x :- dτ) term body) scope = do
      τnofun <- newVar
      unify τbody (NoFun τnofun)
 
+     log $ "checking privacy SLet: " <> show (x :- dτ) <> " = " <> show term <> " in " <> show body<> "\n ==> inferred type is " <> show τx <> ", term type is " <> show τterm <> ", body types is " <> show τbody
      -- return the type of this bind expression
      return τbody
 
