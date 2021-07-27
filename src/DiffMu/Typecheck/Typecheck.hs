@@ -643,7 +643,7 @@ checkPri' (FLet fname term body) scope = do
 -- but the tuple is still a sensitivity term.
 -- TODO the names must be unique.
 checkPri' (Tup ts) scope =
-   let names = [GenTeVar $ (Symbol (T.pack ("x" <> (show i)))) | i <- [1..(length ts)]]
+   let names = [unsafe_newTeVar (T.pack ("x" <> (show i))) | i <- [1..(length ts)]]
        body = Ret (Tup [Var n JTAny | n <- names])
        t1 = foldl (\b -> \(x, t) -> SLet (x :- JTAny) t b) body (zip names ts)
    in do
@@ -665,8 +665,9 @@ checkPri' (Tup ts) scope =
 -- this way we can do the projections in sensitivity mode while the body can still be a privacy term.
 -- TODO tup needs to be a unique name instead.
 checkPri' (TLet xs term body) scope =
-   let t1 = foldl (\t -> \(x :- τj) -> SLet (x :- τj) (Ret (TLet xs (Var (GenTeVar $ (Symbol "tup")) JTAny) (Var x τj))) t) body xs
-       t2 = SLet ((GenTeVar $ (Symbol "tup")) :- (JTAny)) term t1
+   let tupvar = unsafe_newTeVar "tup"
+       t1 = foldl (\t -> \(x :- τj) -> SLet (x :- τj) (Ret (TLet xs (Var tupvar JTAny) (Var x τj))) t) body xs
+       t2 = SLet (tupvar :- (JTAny)) term t1
    in do
       --traceM $ "privacy TLet checking term " <> show t2
       checkPriv t2 scope
