@@ -10,7 +10,8 @@ testCheck_Rules = do
       let term = SLet (UserTeVar (Symbol "x") :- JTAny) (Sng 1.0 (JuliaType "Real")) (Var (UserTeVar (Symbol "x")) JTAny)
       let f = do
             let tres = checkPriv term def
-            extractDelayed def tres
+            let (tres'',_) = runState (extractDelayed def tres) def
+            tres''
       (tc $ sn $ f) `shouldReturn` (Right $ NoFun (Numeric (Const (oneId) DMReal)))
 
 

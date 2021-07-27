@@ -36,18 +36,11 @@ import Test.Hspec.Core.Runner as All
 
 tc :: TC a -> IO (Either DMException a)
 tc r = do
-  -- NOTE: This is necessary to have deterministic typechecking calls
-  reset_tevar_counter
-  --
-
   x <- executeTC (DontShowLog) r
   return (fst <$> x)
 
 tcl :: TC a -> IO (Either DMException a)
 tcl r = do
-  -- NOTE: This is necessary to have deterministic typechecking calls
-  reset_tevar_counter
-  --
 
   x <- executeTC (DoShowLog Force [Location_Constraint , Location_INC, Location_MonadicGraph]) r
   -- x <- executeTC (DoShowLog Force [Location_Constraint, Location_Subtyping]) r

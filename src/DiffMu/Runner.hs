@@ -59,15 +59,13 @@ typecheckFromDMTerm :: DMTerm -> IO ()
 typecheckFromDMTerm term = do
   putStrLn "Starting DiffMu!"
 
-  -- NOTE: This is necessary to have deterministic typechecking calls
-  reset_tevar_counter
-
   let r = do
 
         log $ "Checking term   : " <> show term
         -- typecheck the term t5
         let tres = checkSens term def
-        tres' <- extractDelayed def tres
+        let (tres'',_) = runState (extractDelayed def tres) def
+        tres' <- tres''
         log $ "Type before constraint resolving: " <> show tres'
         log $ "solving constraints:"
         logPrintConstraints
@@ -100,6 +98,7 @@ typecheckFromDMTerm term = do
 
   -- these are the locations from which the logs will be shown
   let logging_locations = [
+        Location_Check
         --Location_Constraint
         -- Location_INC,
         -- Location_MonadicGraph,

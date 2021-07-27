@@ -1,5 +1,3 @@
-{-# LANGUAGE BangPatterns #-}
-{-# OPTIONS_GHC -fno-cse #-}
 
 module DiffMu.Typecheck.Typecheck where
 
@@ -24,19 +22,19 @@ import Debug.Trace
 import Data.IORef
 import System.IO.Unsafe
 
-global_tevar_counter :: IORef (NameCtx)
-global_tevar_counter = unsafePerformIO (newIORef def)
+-- global_tevar_counter :: IORef (NameCtx)
+-- global_tevar_counter = unsafePerformIO (newIORef def)
 
-unsafe_newTeVar :: Text -> TeVar
-unsafe_newTeVar hint =
-  let f ctx = let (ctx',name) = newName hint ctx
-              in traceShowId (name,ctx')
-      !res = unsafePerformIO $ atomicModifyIORef' global_tevar_counter f
--- ((\(a,b) -> (b,a)) . newName hint)
-  in (GenTeVar res)
+-- unsafe_newTeVar :: Text -> TeVar
+-- unsafe_newTeVar hint =
+--   let f ctx = let (ctx',name) = newName hint ctx
+--               in traceShowId (name,ctx')
+--       !res = unsafePerformIO $ atomicModifyIORef' global_tevar_counter f
+-- -- ((\(a,b) -> (b,a)) . newName hint)
+--   in (GenTeVar res)
 
-reset_tevar_counter :: IO ()
-reset_tevar_counter = writeIORef global_tevar_counter def
+-- reset_tevar_counter :: IO ()
+-- reset_tevar_counter = writeIORef global_tevar_counter def
 
 
 
@@ -100,7 +98,7 @@ checkSens t scope = do
 checkSen' :: DMTerm -> DMScope -> DMDelayed
 
 -- TODO: Here we assume that η really has type τ, and do not check it. Should maybe do that.
-checkSen' (Sng η τ) scope = Done $ do
+checkSen' (Sng η τ) scope = done $ do
   res <- Numeric <$> (Const (constCoeff (Fin η)) <$> (createDMTypeNum τ))
   return (NoFun res)
 
@@ -108,7 +106,7 @@ checkSen' (Sng η τ) scope = Done $ do
 -- typechecking an op
 checkSen' (Op op args) scope = do
   argsdel :: [TC DMMain] <- mapM (\t -> checkSens t scope) args -- check all the args in the delayed monad
-  Done $ do
+  done $ do
      let handleOpArg (marg, (τ, s)) = do
                                      τ_arg <- marg
                                      unify (NoFun (Numeric τ)) τ_arg
@@ -131,7 +129,7 @@ checkSen' (Op op args) scope = do
 
 -- a special term for function argument variables.
 -- those get sensitivity 1, all other variables are var terms
-checkSen' (Arg x dτ i) scope = Done $ do
+checkSen' (Arg x dτ i) scope = done $ do
                                          -- the inferred type must be a subtype of the user annotation, if given.
                                          τs <- newVar
                                          τ <- case dτ of
@@ -148,13 +146,13 @@ checkSen' (Arg x dτ i) scope = Done $ do
 checkSen' (Var x dτ) scope =  -- get the term that corresponds to this variable from the scope dict
    let delτ = getValue x scope
    in case delτ of
-     Nothing -> Done $ throwError (VariableNotInScope x)
+     Nothing -> done $ throwError (VariableNotInScope x)
      Just delτ ->
          case dτ of
            JTAny -> delτ
            dτ -> do
               mτ <- delτ -- get the computation that will give us the type of x
-              Done $ do
+              done $ do
                  τ <- mτ -- extract the type of x
                  -- if the user has given an annotation
                  -- inferred type must be a subtype of the user annotation
@@ -162,18 +160,17 @@ checkSen' (Var x dτ) scope =  -- get the term that corresponds to this variable
                  addConstraint (Solvable (IsLessEqual (τ, dτd)))
                  return τ
 
-
 checkSen' (Lam xτs body) scope =
   -- the body is checked in the toplevel scope, not the current variable scope.
   -- this reflects the julia behaviour
-  Later $ \scope -> do
+  later $ \scope -> do
     -- put a special term to mark x as a function argument. those get special tratment
     -- because we're interested in their sensitivity
     let scope' = foldl (\sc -> (\(x :- τ) -> setValue x (checkSens (Arg x τ IsRelevant) scope) sc)) scope xτs
 
     τr <- checkSens body scope'
     let sign = (sndA <$> xτs)
-    Done $ do
+    done $ do
       restype <- τr
       xrτs <- getArgList @_ @SensitivityK xτs
       let xrτs' = [x :@ s | (x :@ SensitivityAnnotation s) <- xrτs]
@@ -185,7 +182,7 @@ checkSen' (Lam xτs body) scope =
 checkSen' (LamStar xτs body) scope =
   -- the body is checked in the toplevel scope, not the current variable scope.
   -- this reflects the julia behaviour
-  Later $ \scope -> do
+  later $ \scope -> do
     -- put a special term to mark x as a function argument. those get special tratment
     -- because we're interested in their privacy. put the relevance given in the function signature, too.
     let scope' = foldl (\sc -> (\((x :- τ), rel) -> setValue x (checkSens (Arg x τ rel) scope) sc)) scope xτs
@@ -195,7 +192,7 @@ checkSen' (LamStar xτs body) scope =
     τr <- checkPriv body scope'
     -- extract julia signature
     let sign = (sndA <$> fst <$> xτs)
-    Done $ do
+    done $ do
       restype <- τr
       -- get inferred types and privacies for the arguments
       xrτs <- getArgList @_ @PrivacyK (fst <$> xτs)
@@ -247,7 +244,7 @@ checkSen' (Apply f args) scope =
   let
     -- check the argument in the given scope,
     -- and scale scope by new variable, return both
-    checkArg :: DMTerm -> DMScope -> Delayed DMScope (TC (DMMain :@ Sensitivity))
+    checkArg :: DMTerm -> DMScope -> DelayedT DMScope (State DelayedState) (TC (DMMain :@ Sensitivity))
     checkArg arg scope = do
       τ <- checkSens arg scope
       let scaleContext :: TC (DMMain :@ Sensitivity)
@@ -296,7 +293,7 @@ checkSen' (FLet fname term body) scope = do
 
 checkSen' (Choice d) scope = do
    delCs <- mapM (\t -> checkSens t scope) (snd <$> H.toList d)
-   Done $ do
+   done $ do
       choices <- msumS delCs
       let combined = foldl (:∧:) (Fun []) choices
       return combined
@@ -307,12 +304,12 @@ checkSen' (Phi cond ifbr elsebr) scope = do
    elsed <- checkSens elsebr scope
    condd <- checkSens cond scope
 
-   mcond <- Done $ do
+   mcond <- done $ do
         τ_cond <- condd
         mscale inftyS
         return τ_cond
 
-   Done $ do
+   done $ do
       τ_sum <- msumS [ifd, elsed, mcond]
       (τif, τelse) <- case τ_sum of
                            (τ1 : τ2 : _) -> return (τ1, τ2)
@@ -332,7 +329,7 @@ checkSen' (Phi cond ifbr elsebr) scope = do
 
 checkSen' (Tup ts) scope = do
   τsd <- mapM (\t -> (checkSens t scope)) ts
-  Done $ do
+  done $ do
      log $ "checking sens Tup: " <> show (Tup ts)
      -- check tuple entries and sum contexts
      τsum <- msumS τsd
@@ -369,7 +366,7 @@ checkSen' (TLet xs term body) original_scope = do
   cterm <- checkSens term original_scope
 
   -- merging the computations and matching inferred types and sensitivities
-  Done $ do
+  done $ do
     --traceM $ "checking sensitivities TLet: " <> show (xs) <> " = " <> show term
     -- create a new var for scaling the term context
     s <- newVar
@@ -422,7 +419,7 @@ checkSen' (Loop niter cs (xi, xc) body) scope = do
          WithRelev _ (τc :@ sc) <- removeVar @SensitivityK xc
          return (τ, (τi, si), (τc, sc))
 
-   Done $ do
+   done $ do
 
       --traceM $ "checking sens Loop: " <> show  (Loop niter cs (xi, xc) body)
       -- add scalars for iterator, capture and body context
@@ -479,7 +476,7 @@ checkSen' (MCreate n m (x1, x2) body) scope =
        mm <- checkSens m scope
        mbody <- checkSens body scope
 
-       Done $ do
+       done $ do
           -- variables for matrix dimension
           nv <- newVar
           mv <- newVar
@@ -496,7 +493,7 @@ checkSen' (MCreate n m (x1, x2) body) scope =
 
 checkSen' (ClipM c m) scope = do
    mb <- checkSens m scope -- check the matrix
-   Done $ do
+   done $ do
       τb <- mb
 
       -- variables for norm and clip parameters and dimension
@@ -522,7 +519,7 @@ checkPri' :: DMTerm -> DMScope -> DMDelayed
 
 checkPri' (Ret t) scope = do
    mτ <- checkSens t scope
-   Done $ do
+   done $ do
       log $ "checking " <> show (Ret t)
       τ <- mτ
       mtruncateP inftyP
@@ -534,7 +531,7 @@ checkPri' (Apply f args) scope =
   let
     -- check the argument in the given scope,
     -- and scale scope by new variable, return both
-    checkArg :: DMTerm -> DMScope -> Delayed DMScope (TC (DMMain :@ Privacy))
+    checkArg :: DMTerm -> DMScope -> DelayedT DMScope (State DelayedState) (TC (DMMain :@ Privacy))
     checkArg arg scope = do
       τ <- checkSens arg scope
       let restrictTruncateContext :: TC (DMMain :@ Privacy)
@@ -554,11 +551,11 @@ checkPri' (Apply f args) scope =
 
     margs = (\arg -> (checkArg arg scope)) <$> args
 
-    f_check :: Delayed DMScope (TC DMMain) = do
+    f_check :: DelayedT DMScope (State DelayedState) (TC DMMain) = do
        -- we typecheck the function, but `apply` our current layer on the Later computation
        -- i.e. "typecheck" means here "extracting" the result of the later computation
        res <- (applyDelayedLayer scope (checkSens f scope))
-       Done $ do
+       done $ do
                 r <- res
                 mtruncateP inftyP -- truncate f's context to ∞
                 return r
@@ -586,7 +583,7 @@ checkPri' (SLet (x :- dτ) term body) scope = do
 
    -- check body with that new scope
    dbody <- checkPriv body scope'
-   mbody <- Done $ do
+   mbody <- done $ do
                    τ <- dbody
                    -- discard x from the context, never mind it's inferred annotation
                    WithRelev _ (τx :@ _) <- removeVar @PrivacyK x
@@ -647,13 +644,13 @@ checkPri' (FLet fname term body) scope = do
 -- this way if t1 and t2 are privacy terms, they can be checked in privcacy mode
 -- but the tuple is still a sensitivity term.
 -- TODO the names must be unique.
-checkPri' (Tup ts) scope =
-   let names = [unsafe_newTeVar (T.pack ("x" <> (show i))) | i <- [1..(length ts)]]
-       body = Ret (Tup [Var n JTAny | n <- names])
-       t1 = foldl (\b -> \(x, t) -> SLet (x :- JTAny) t b) body (zip names ts)
-   in do
+checkPri' (Tup ts) scope = do
+   -- names <- sequence [newTeVar (T.pack ("x" <> (show i))) | i <- [1..(length ts)]]
+   names <- mapM newTeVar [(T.pack ("x" <> (show i))) | i <- [1..(length ts)]]
+   let body = Ret (Tup [Var n JTAny | n <- names])
+   let t1 = foldl (\b -> \(x, t) -> SLet (x :- JTAny) t b) body (zip names ts)
       --traceM $ "privacy Tup checking term " <> show t1
-      checkPriv t1 scope
+   checkPriv t1 scope
 
 -- there are no privacy tlets either. so here's what we do:
 -- tlet (x1, x2) = t
@@ -669,13 +666,12 @@ checkPri' (Tup ts) scope =
 --
 -- this way we can do the projections in sensitivity mode while the body can still be a privacy term.
 -- TODO tup needs to be a unique name instead.
-checkPri' (TLet xs term body) scope =
-   let tupvar = unsafe_newTeVar "tup"
-       t1 = foldl (\t -> \(x :- τj) -> SLet (x :- τj) (Ret (TLet xs (Var tupvar JTAny) (Var x τj))) t) body xs
+checkPri' (TLet xs term body) scope = do
+   tupvar <- newTeVar "tup"
+   let t1 = foldl (\t -> \(x :- τj) -> SLet (x :- τj) (Ret (TLet xs (Var tupvar JTAny) (Var x τj))) t) body xs
        t2 = SLet (tupvar :- (JTAny)) term t1
-   in do
       --traceM $ "privacy TLet checking term " <> show t2
-      checkPriv t2 scope
+   checkPriv t2 scope
 
 checkPri' (Gauss rp εp δp f) scope =
   let
@@ -705,7 +701,7 @@ checkPri' (Gauss rp εp δp f) scope =
       dδp <- checkSens δp scope
       df <- checkSens f scope
 
-      Done $ do
+      done $ do
          -- create variables for the parameters
          v_ε :: Sensitivity <- newVar
          v_δ :: Sensitivity <- newVar
@@ -784,7 +780,7 @@ checkPri' (Loop niter cs (xi, xc) body) scope =
             setInteresting interesting n
             return (τ, n, τi, τc)
 
-      Done $ do
+      done $ do
          -- scale and sum contexts
          (τit, τcs, (τb, n, τbit, τbcs)) <- msum3Tup (cniter', mcaps', cbody')
 

@@ -22,7 +22,8 @@ parseEval parse desc term (expected :: TC DMMain) =
                             unify inferredT expectedT
                             return ()
                       )
-           pure $ extractDelayed def tres
+           let (tres'',_) = runState (extractDelayed def tres) def
+           pure $ tres''
 
     (tc $ sn $ term'') `shouldReturn` (Right ())
 
