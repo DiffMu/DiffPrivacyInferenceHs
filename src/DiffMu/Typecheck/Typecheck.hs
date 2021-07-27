@@ -19,6 +19,22 @@ import qualified Data.Text as T
 
 import Debug.Trace
 
+import Data.IORef
+import System.IO.Unsafe
+
+global_tevar_counter :: IORef (NameCtx)
+global_tevar_counter = unsafePerformIO (newIORef def)
+
+unsafe_newTeVar :: Text -> TeVar
+unsafe_newTeVar hint = unsafePerformIO $ do
+  res <- atomicModifyIORef' global_tevar_counter ((\(a,b) -> (b,a)) . newName hint)
+  return (GenTeVar res)
+
+reset_tevar_counter :: IO ()
+reset_tevar_counter = writeIORef global_tevar_counter def
+
+
+
 ------------------------------------------------------------------------
 -- The typechecking function
 checkPriv :: DMTerm -> DMScope -> DMDelayed

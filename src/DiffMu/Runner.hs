@@ -59,6 +59,9 @@ typecheckFromDMTerm :: DMTerm -> IO ()
 typecheckFromDMTerm term = do
   putStrLn "Starting DiffMu!"
 
+  -- NOTE: This is necessary to have deterministic typechecking calls
+  reset_tevar_counter
+
   let r = do
 
         log $ "Checking term   : " <> show term
