@@ -114,7 +114,8 @@ testSubtyping_Cycles = do
             b <- newVar
             c <- newVar
             d <- newVar
-            DMReal ⊑! a
+            e <- newVar
+            a <- supremum DMReal e -- use supremum here bc the constraint Real <= a would be resolved by a special case
             a ⊑! b
             b ⊑! c
             c ⊑! d
@@ -126,13 +127,13 @@ testSubtyping_Cycles = do
             a <- newVar
             b <- newVar
             c <- newVar
-            d <- newVar
+            e <- newVar
+            d <- infimum DMInt e -- use inf here bc the constraint d <= Int would be resolved by a special case
             a ⊑! b
             b ⊑! c
             c ⊑! d
-            d ⊑! DMInt
             return (a,b)
-      (tc $ (sn test02 >>= (\(a,b) -> return (and [(a == DMInt), (a == b)])))) `shouldReturn` (Right True)
+      (tcl $ (sn test02 >>= (\(a,b) -> return (and [(a == DMInt), (a == b)])))) `shouldReturn` (Right True)
 
     it "contracts a larger cycle with more stuff" $ do
       let test1 = do
