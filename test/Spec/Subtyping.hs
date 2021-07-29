@@ -133,7 +133,7 @@ testSubtyping_Cycles = do
             b ⊑! c
             c ⊑! d
             return (a,b)
-      (tcl $ (sn test02 >>= (\(a,b) -> return (and [(a == DMInt), (a == b)])))) `shouldReturn` (Right True)
+      (tc $ (sn test02 >>= (\(a,b) -> return (and [(a == DMInt), (a == b)])))) `shouldReturn` (Right True)
 
     it "contracts a larger cycle with more stuff" $ do
       let test1 = do

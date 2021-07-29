@@ -7,6 +7,8 @@ import Spec.Supremum
 import Spec.Rules
 import Spec.TypecheckingExamples
 import Spec.Unsafe
+import Spec.Unification
+import Spec.Issues
 
 -- import Test.QuickCheck hiding (Fun)
 
@@ -18,12 +20,6 @@ defaultspec spec = do
   -- >>= withArgs [] . runSpec spec
   -- >>= evaluateSummary
 
-
-  -- TODO: Use quickcheck
-testUnification = do
-  describe "unify" $ do
-    it "unifies equal types" $ do
-      (tc $ unify (DMInt) (DMInt)) `shouldReturn` ((Right DMInt))
 
 
 
@@ -38,6 +34,7 @@ runAllTests parse = defaultspec $ do
   testSupremum
   testCheck_Rules
   testCheckSens parse
+  testIssues parse
 
 
 

@@ -3,29 +3,6 @@ module Spec.TypecheckingExamples where
 
 import Spec.Base
 
-parseEvalSimple p term expected =
-  parseEval p ("Checks '" <> term <> "' correctly") term expected
-
-parseEval parse desc term (expected :: TC DMMain) =
-  it desc $ do
-    term' <- parse term
-
-    let res = pDMTermFromString term'
-    term'' <- case res of
-      Left err -> error $ "Error while parsing DMTerm from string: " <> show err
-      Right res ->
-        do let tres = (do
-                          inferredT_Delayed <- checkSens res def
-                          return $ do
-                            inferredT <- inferredT_Delayed
-                            expectedT <- expected
-                            unify inferredT expectedT
-                            return ()
-                      )
-           let (tres'',_) = runState (extractDelayed def tres) def
-           pure $ tres''
-
-    (tc $ sn $ term'') `shouldReturn` (Right ())
 
 testCheckSens parse = do
   describe "checkSens" $ do

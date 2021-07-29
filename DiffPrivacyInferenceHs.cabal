@@ -82,10 +82,12 @@ library
       Lib
       Spec
       Spec.Base
+      Spec.Issues
       Spec.Rules
       Spec.Subtyping
       Spec.Supremum
       Spec.TypecheckingExamples
+      Spec.Unification
       Spec.Unsafe
   other-modules:
       Paths_DiffPrivacyInferenceHs

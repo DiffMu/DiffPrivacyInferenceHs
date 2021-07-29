@@ -18,10 +18,12 @@ instance Semigroup DMLogMessages where
 instance Monoid DMLogMessages where
   mempty = DMLogMessages []
 
-data DMLogLocation = Location_INC | Location_Constraint | Location_Check | Location_Subtyping | Location_MonadicGraph | Location_All | Location_Unknown String
+data DMLogLocation = Location_Unification | Location_Subst | Location_INC | Location_Constraint | Location_Check | Location_Subtyping | Location_MonadicGraph | Location_All | Location_Unknown String
   deriving (Eq)
 
 instance Show DMLogLocation where
+  show Location_Unification = "Unification"
+  show Location_Subst = "Subst"
   show Location_INC = "INC"
   show Location_Constraint = "Constr"
   show Location_All = "All"
@@ -31,6 +33,8 @@ instance Show DMLogLocation where
   show (Location_Unknown s) = red ("Unknown Location (" <> s <> ")")
 
 fromString_DMLogLocation :: String -> DMLogLocation
+fromString_DMLogLocation "Unification" = Location_Unification
+fromString_DMLogLocation "Subst" = Location_Subst
 fromString_DMLogLocation "INC" = Location_INC
 fromString_DMLogLocation "Constr" = Location_Constraint
 fromString_DMLogLocation "Check" = Location_Check

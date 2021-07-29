@@ -51,7 +51,7 @@ testSupremum = do
             return (a,b)
       let check (TVar a, TVar b) | a == b = pure (Right ())
           check x                         = pure (Left x)
-      (tcl $ (sn_EW test >>= check)) `shouldReturn` (Right (Right ()))
+      (tc $ (sn_EW test >>= check)) `shouldReturn` (Right (Right ()))
 
   describe "supremum (with unknown variables)" $ do
     it "does NOT solve 'max{a,b} = Int'" $ do
@@ -64,5 +64,5 @@ testSupremum = do
             return (a,b)
       let check (TVar a, TVar b) | a /= b = pure (Right ())
           check x                         = pure (Left x)
-      (tcl $ (sn_EW test >>= check)) `shouldReturn` (Right (Right ()))
+      (tc $ (sn_EW test >>= check)) `shouldReturn` (Right (Right ()))
 

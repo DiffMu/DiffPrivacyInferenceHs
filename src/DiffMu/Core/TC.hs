@@ -633,6 +633,9 @@ instance Monad m => MonadTerm DMTypeOf (TCT m) where
   addSub σ = do
     σs <- use (meta.typeSubs)
     -- traceM ("/ Type: I have the subs " <> show σs <> ", and I want to add: " <> show σ)
+    -- withLogLocation "Subst" $ debug ("/ Type: I have the subs " <> show σs <> ", and I want to add: " <> show σ)
+    withLogLocation "Subst" $ debug ("Adding type subst: " <> show σ)
+    -- logPrintConstraints
     σs' <- σs ⋆ singletonSub σ
     -- traceM ("\\ Type: I now have: " <> show σs')
     meta.typeSubs .= σs'

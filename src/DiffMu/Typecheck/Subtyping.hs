@@ -512,7 +512,7 @@ callMonadicGraphSupremum graph name ((a,b) :=: x) = do
                          <> show e))
 
 
-unifyAll :: (IsT MonadDMTC t) => [DMTypeOf k] -> t ()
+unifyAll :: (Typeable k, IsT MonadDMTC t) => [DMTypeOf k] -> t ()
 unifyAll ([]) = return ()
 unifyAll (x:[]) = return ()
 unifyAll (x:y:vars) = do

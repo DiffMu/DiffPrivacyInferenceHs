@@ -7,6 +7,7 @@ import DiffMu.Prelude
 import DiffMu.Abstract
 import DiffMu.Core.Definitions
 import DiffMu.Core.TC
+import DiffMu.Core.Logging
 
 import DiffMu.Core.Symbolic
 
@@ -125,10 +126,21 @@ instance MonadDMTC t => Unifyᵢ (INCResT DMException t) (DMTypeOf k) where
   unifyᵢ_ (Clip k) (Clip s)             = Clip <$> unifyᵢ k s
   unifyᵢ_ (DMMat nrm1 clp1 n1 m1 τ1) (DMMat nrm2 clp2 n2 m2 τ2) =
       DMMat <$> unifyᵢ nrm1 nrm2 <*> unifyᵢ clp1 clp2 <*> unifyᵢ n1 n2 <*> unifyᵢ m1 m2 <*> unifyᵢ τ1 τ2
+
+
+  unifyᵢ_ (NoFun a) (v :∧: w)              = do
+    res0 <- unifyᵢ (NoFun a) v
+    res1 <- unifyᵢ res0 w
+    return res1
+  unifyᵢ_ (v :∧: w) (NoFun b)              = do
+    res0 <- unifyᵢ (NoFun b) v
+    res1 <- unifyᵢ res0 w
+    return res1
   unifyᵢ_ (NoFun x) (NoFun y)              = NoFun <$> unifyᵢ x y
   unifyᵢ_ (Fun xs) (Fun ys)                = Fun <$> unifyᵢ xs ys
-  unifyᵢ_ _ (v :∧: w)                      = throwError Wait'
-  unifyᵢ_ (v :∧: w) _                      = throwError Wait'
+  unifyᵢ_ (Fun _) (v :∧: w)                = throwError Wait'
+  unifyᵢ_ (v :∧: w) (Fun _)                = throwError Wait'
+  unifyᵢ_ (_ :∧: _) (v :∧: w)              = throwError Wait'
   unifyᵢ_ (ForAll xs t) (ForAll ys s)      =
     -- NOTE: we actually have to remove all variables which were substituted
     --       from the merged list (xs <> ys). But luckily this is done
@@ -163,11 +175,14 @@ instance MonadDMTC t => Unify t (WithRelev e) where
   unify_ (WithRelev i e) (WithRelev j f)  = WithRelev (i <> j) <$> unify_ e f
 
 -- Unification of DMTypes (of any kind k) is given by:
-instance MonadDMTC t => Unify t (DMTypeOf k) where
+instance (Typeable k, MonadDMTC t) => Unify t (DMTypeOf k) where
   unify_ a b = do
     res <- runExceptT $ runINCResT $ unifyᵢ_ @(INCResT DMException t) a b
     case res of
-      Left (Wait')   -> return a
+      Left (Wait')   -> do
+        withLogLocation "Unification" $ debug ("Got wait in unify on " <> show a <> " ==! "<> show b)
+        liftTC (a ==! b)
+        return a
       Left (Fail' e) -> throwError e
       Right a -> return a
 
