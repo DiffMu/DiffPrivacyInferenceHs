@@ -216,7 +216,7 @@ testSubtyping_Cycles = do
 
 
 testSubtyping_ContractEdge = do
-  describe "subtyping (contracting edges - only subtyping constraints)" $ do
+  describe "subtyping (contracting edges (degenerate diamonds) - only subtyping constraints)" $ do
     it "contracts a single edge" $ do
       let test0 = do
             (a :: DMMain) <- newVar
@@ -305,8 +305,8 @@ testSubtyping_ContractEdge = do
                                    , y /= b ]
       (tc $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right True)
 
-  describe "subtyping (contracting edges - subtyping and sup/inf constraints)" $ do
-    it "does contract edge given by supremum" $ do
+  describe "subtyping (contracting diamonds - subtyping and sup/inf constraints)" $ do
+    it "does contract diamond given by sup/inf" $ do
       let test1 :: TC (DMMain,DMMain,DMMain,DMMain)
           test1 = do
             -- the interesting variables a ≤ b
@@ -318,6 +318,89 @@ testSubtyping_ContractEdge = do
             return (d,a,b,c)
       let checkres (d,a,b,c) = (a == c, b == c, a == d, b == d)
       (tc $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right (True,True,True,True))
+
+    it "does contract diamond even if lower/upper end are bound from below/above" $ do
+      let int = NoFun (Numeric (NonConst DMInt))
+          real = NoFun (Numeric (NonConst DMReal))
+      let test1 :: TC (DMMain,DMMain,DMMain,DMMain)
+          test1 = do
+            -- the interesting variables
+            (a :: DMMain) <- newVar
+            (b :: DMMain) <- newVar
+            (c :: DMMain) <- newVar
+            (d :: DMMain) <- newVar
+
+            a ≤! c
+            b ≤! c
+
+            d ≤! a
+            d ≤! b
+
+            -- the additional constraints
+            int ≤! d
+            c ≤! real
+
+            return (d,a,b,c)
+      let checkres (d,a,b,c) = (a == c, b == c, a == d, b == d, isGood a)
+            where isGood (NoFun (Numeric (NonConst (TVar x)))) = True
+                  isGood _ = False
+      (tc $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right (True,True,True,True,True))
+
+    it "does NOT contract diamond if inner vertices end are bound from outside" $ do
+      let int = NoFun (Numeric (NonConst DMInt))
+          real = NoFun (Numeric (NonConst DMReal))
+      let test1 :: TC (DMMain,DMMain,DMMain,DMMain)
+          test1 = do
+            -- the interesting variables
+            (a :: DMMain) <- newVar
+            (b :: DMMain) <- newVar
+            (c :: DMMain) <- newVar
+            (d :: DMMain) <- newVar
+
+            a ≤! c
+            b ≤! c
+
+            d ≤! a
+            d ≤! b
+
+
+            -- the additional constraint
+            x <- newVar
+            x ≤! a
+
+            return (d,a,b,c)
+      let checkres (d,a,b,c) | let f = [a,b,c,d]
+                                   ix = [0,1,2,3]
+                               in and [(f !! i /= f !! j) | i <- ix, j <- ix, i /= j] = Right ()
+          checkres x = Left x
+      (tc $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right (Right ()))
+
+    it "does NOT contract diamond if any vertices appear in other constraints" $ do
+      let int = NoFun (Numeric (NonConst DMInt))
+          real = NoFun (Numeric (NonConst DMReal))
+      let test1 :: TC (DMMain,DMMain,DMMain,DMMain)
+          test1 = do
+            -- the interesting variables
+            (a :: DMMain) <- newVar
+            (b :: DMMain) <- newVar
+            (c :: DMMain) <- newVar
+            (d :: DMMain) <- newVar
+
+            a ≤! c
+            b ≤! c
+
+            d ≤! a
+            d ≤! b
+
+            -- the additional constraint
+            addConstraint (Solvable (IsJuliaEqual (c, int)))
+
+            return (d,a,b,c)
+      let checkres (d,a,b,c) | let f = [a,b,c,d]
+                                   ix = [0,1,2,3]
+                               in and [(f !! i /= f !! j) | i <- ix, j <- ix, i /= j] = Right ()
+          checkres x = Left x
+      (tc $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right (Right ()))
 
 
 
