@@ -35,8 +35,10 @@ instance HasUnificationError DMException a where
   unificationError' = UnificationError
 
 instance HasUnificationError e a => HasUnificationError (StoppingReason e) a where
+  unificationError' a b = Fail' (unificationError' a b)
 
-instance HasUnificationError e a => HasUnificationError (e) [a] where
+-- instance HasUnificationError e a => HasUnificationError (e) [a] where
+--   unificationError' a b = unificationError' a b
 
 
 -- newtype INCResT m e a = INCResT {runINCResT :: Either (StoppingReason e) (m a)} 
@@ -92,7 +94,7 @@ instance (Monad t, Unifyᵢ t a, Unifyᵢ t b) => Unifyᵢ t (a,b) where
 instance (Unifyᵢ isT a, Unifyᵢ isT b) => Unifyᵢ isT (a :@ b) where
   unifyᵢ_ (a₁ :@ e₁) (a₂ :@ e₂) = (:@) <$> unifyᵢ_ a₁ a₂ <*> unifyᵢ_ e₁ e₂
 
-instance (HasUnificationError e a, MonadError e t, Show a, Unifyᵢ t a) => Unifyᵢ t [a] where
+instance (HasUnificationError e [a], MonadError e t, Show a, Unifyᵢ t a) => Unifyᵢ t [a] where
   unifyᵢ_ xs ys | length xs == length ys = mapM (uncurry unifyᵢ_) (zip xs ys)
   unifyᵢ_ xs ys = throwError (unificationError' xs ys)
 
@@ -193,7 +195,7 @@ instance (Unify isT a, Unify isT b) => Unify isT (a :@ b) where
 
 -- Similarly, lists of terms are unified elements wise,
 -- but they only match if they are of the same lenght:
-instance (HasUnificationError e a, MonadError e t, Show a, Unify t a) => Unify t [a] where
+instance (HasUnificationError e [a], MonadError e t, Show a, Unify t a) => Unify t [a] where
   unify_ xs ys | length xs == length ys = mapM (uncurry unify_) (zip xs ys)
   unify_ xs ys = throwError (unificationError' xs ys)
 

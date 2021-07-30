@@ -67,6 +67,16 @@ testSupremum = do
       (tc $ (sn_EW test >>= check)) `shouldReturn` (Right (Right ()))
 
   describe "supremum - special case solving" $ do
+    it "solves 'max{a,a} = b'" $ do
+      let test :: TC _
+          test = do
+            a :: DMMain <- newVar
+            b <- supremum a a
+            return (a,b)
+      let check (TVar a, TVar b) | a == b = pure (Right ())
+          check x                         = pure (Left x)
+      (tc $ (sn test >>= check)) `shouldReturn` (Right (Right ()))
+
     it "solves 'max{a,Int} = b' since Int is bottom element" $ do
       let test :: TC _
           test = do

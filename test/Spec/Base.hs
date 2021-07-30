@@ -81,9 +81,14 @@ parseEval parse desc term (expected :: TC DMMain) =
                             inferredT <- inferredT_Delayed
                             expectedT <- expected
                             unify inferredT expectedT
-                            return ()
                       )
            let (tres'',_) = runState (extractDelayed def tres) def
            pure $ tres''
 
-    (tc $ sn $ term'') `shouldReturn` (Right ())
+    let correct _ = do
+          ctrs <- getAllConstraints
+          case ctrs of
+            [] -> pure $ Right ()
+            cs -> pure $ Left (show cs)
+
+    (tc $ (sn term'' >>= correct)) `shouldReturn` (Right (Right ()))
