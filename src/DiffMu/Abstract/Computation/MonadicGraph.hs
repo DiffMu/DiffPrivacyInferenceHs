@@ -359,13 +359,34 @@ findSupremumM relevance (GraphM graph) ((a,b) :=: x,isShortestSup) =
 
 
   in withLogLocation "MndGraph" $ do
-    reflResult <- evalINC (INC reflComputations) ((a,b) :=: x)
-    case reflResult of
-      Wait -> return Wait
-      Partial a -> return (Partial a)
-      Finished a -> return (Finished a)
-      -- only if all reflexive edges fail, then we can look at the non-reflexive ones
-      Fail e -> evalINC (INC stepComputations) ((a,b) :=: x)
+    -- first, we check if there are even paths a -> x and b -> x
+    pathLeft  <- findPathM relevance (GraphM graph) (a,x)
+    pathRight <- findPathM relevance (GraphM graph) (b,x)
+
+    case (pathLeft,pathRight) of
+      -- if one of the paths fails, then the supremum cannot exist,
+      -- thus we can fail as well
+      (Fail e, _) -> return $ Fail e
+      (_, Fail e) -> return $ Fail e
+
+      -- if both found paths are shortest possible,
+      -- then we actually now that the supremum is already found
+      (Finished ((a' , x0) , IsShortestPossiblePath), Finished ((b' , x1) , IsShortestPossiblePath)) -> do
+        x <- unify x0 x1
+        return (Finished ((a' , b') :=: x))
+
+      -- but if we have to wait, or the paths were found, but not shortest, we
+      -- simply do the actual supremum computation
+      _  -> do
+        -- since our args may have been updated, first normalize them
+        wantedSup <- normalize ((a,b) :=: x)
+        reflResult <- evalINC (INC reflComputations) wantedSup
+        case reflResult of
+          Wait -> return Wait
+          Partial a -> return (Partial a)
+          Finished a -> return (Finished a)
+          -- only if all reflexive edges fail, then we can look at the non-reflexive ones
+          Fail e -> evalINC (INC stepComputations) ((a,b) :=: x)
 
 findInfimumM :: forall s m isT e a. (Show e, Show a, Eq a, MonadError e m, MonadConstraint isT m, IsT isT m, Unify m (a), Normalize m a, MonadNormalize m, MonadState s m, MonadLog m, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> ((a,a) :=: a) -> m (INCRes e ((a,a) :=: a))
 findInfimumM relevance graph z = findSupremumM relevance (oppositeGraph graph) (z,IsShortestPossiblePath)

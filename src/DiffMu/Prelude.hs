@@ -15,7 +15,6 @@ module DiffMu.Prelude
   , composeFunM
   , MonadImpossible (..)
   , MonadInternalError (..)
-  , (:=:) (..)
   , TeVar (..)
   )
   where
@@ -26,7 +25,7 @@ import DiffMu.Imports as All hiding (msum)
 -- import DiffMu.Prelude.Polynomial as All
 
 import DiffMu.Prelude.MonadicAlgebra as All
--- import DiffMu.Prelude.MonadicPolynomial as All
+import DiffMu.Prelude.Data as All
 
 import qualified Prelude (String)
 import Data.Text as T
@@ -104,11 +103,6 @@ class Monad t => MonadImpossible t where
 
 class Monad t => MonadInternalError t where
   internalError :: String -> t a
-
-data (:=:) a b = (:=:) a b
-
-instance (Show a, Show b) => Show (a :=: b) where
-  show (a :=: b) = show a <> " :=: " <> show b
 
 
 -- import           Prelude                                 hiding

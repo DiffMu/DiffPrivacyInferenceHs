@@ -69,6 +69,7 @@ library
       DiffMu.Parser.Expr.FromString
       DiffMu.Prelude
       DiffMu.Prelude.Algebra
+      DiffMu.Prelude.Data
       DiffMu.Prelude.MonadicAlgebra
       DiffMu.Prelude.Polynomial
       DiffMu.Runner

@@ -879,14 +879,9 @@ instance Monad m => MonadWatch (TCT m) where
 
 
 
-instance Monad t => (Normalize t ()) where
-  normalize () = pure ()
-
 instance Monad t => (Normalize t Symbol) where
   normalize a = pure a
 
-instance (Normalize t a, Normalize t b) => Normalize t (a :=: b) where
-  normalize (a :=: b) =  (:=:) <$> normalize a <*> normalize b
 
 
 supremum :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsSupremum ((a k, a k) :=: a k), SingI k, Typeable k, ContentConstraintOnSolvable t ((a k, a k) :=: a k), ConstraintOnSolvable t (IsSupremum ((a k, a k) :=: a k))) => (a k) -> (a k) -> t (a k)

@@ -10,6 +10,7 @@ module DiffMu.Prelude.MonadicAlgebra
 where
 
 import DiffMu.Imports
+import DiffMu.Prelude.Data
 
 -- import Data.Semigroup as All hiding (diff, Min, Max, Any)
 -- import Data.Monoid as All hiding (Last, First, getLast, getFirst)
@@ -48,6 +49,13 @@ instance (Normalize t a, Normalize t b) => Normalize t (a,b) where
 instance (Normalize t a, Normalize t b) => Normalize t (Either a b) where
   normalize (Left a) = Left <$> normalize a
   normalize (Right a) = Right <$> normalize a
+
+instance (Normalize t a, Normalize t b) => Normalize t (a :=: b) where
+  normalize (a :=: b) =  (:=:) <$> normalize a <*> normalize b
+
+instance Monad t => (Normalize t ()) where
+  normalize () = pure ()
+
 
 -- class Has a where
 --   mempty :: a

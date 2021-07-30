@@ -31,17 +31,49 @@ testSupremum = do
 
   describe "advanced supremum" $ do
     it "breaks down Num wrapped sups" $ do
-      let term :: TC ()
+      let term :: TC _
           term = do
             a <- newVar
             b <- newVar
             c <- supremum (Numeric a) (Numeric b)
-            return ()
-          eval = do
-            c <- getConstraintsByType (Proxy @(IsSupremum ((DMTypeOf NoFunKind, DMTypeOf NoFunKind) :=: DMTypeOf NoFunKind)))
-            d <- getConstraintsByType (Proxy @(IsSupremum ((DMTypeOf NumKind, DMTypeOf NumKind) :=: DMTypeOf NumKind)))
-            return (length c , length d)
-      (tc $ (sn_EW term) >> eval) `shouldReturn` Right (0,1)
+            return (a,b,c)
+          eval (a,b,c) = do
+            p0 <- getConstraintsByType (Proxy @(IsSupremum ((DMTypeOf NoFunKind, DMTypeOf NoFunKind) :=: DMTypeOf NoFunKind)))
+            p1 <- getConstraintsByType (Proxy @(IsSupremum ((DMTypeOf NumKind, DMTypeOf NumKind) :=: DMTypeOf NumKind)))
+            case (p0,p1) of
+              -- what should happen is that the same variables (a and b) that were created
+              -- above are here inside of the constraint.
+              -- We do not know their order, and the sup-result should be a new variable
+              -- which is neither a nor b
+              ([],[(_ , (IsSupremum ((a', b') :=: c')))])
+                | or [and [a == a', b == b', c' /= a', c' /= b']
+                     ,and [a == b', b == a', c' /= a', c' /= b']] -> pure $ Right ()
+              xs                                                  -> pure $ Left (show xs)
+      (tc $ (sn_EW term >>= eval)) `shouldReturn` (Right (Right ()))
+
+    it "solves 'max{a,b} = Int', since there can be nothing smaller than Int" $ do
+      let test :: TC _
+          test = do
+            a <- newVar
+            b <- newVar
+            c <- supremum a b
+            unify c DMInt
+            return (a,b)
+      let check :: (DMTypeOf BaseNumKind, DMTypeOf BaseNumKind) -> TC _
+          check (DMInt, DMInt) = pure (Right ())
+          check x              = pure (Left x)
+      (tc $ (sn_EW test >>= check)) `shouldReturn` (Right (Right ()))
+
+    it "solves 'max{a,Real} = b' since from Real there is only 1 reflexive path" $ do
+      let test :: TC _
+          test = do
+            a <- newVar
+            b <- supremum a DMReal
+            return (a,b)
+      let check :: (DMTypeOf BaseNumKind, DMTypeOf BaseNumKind) -> TC _
+          check (TVar a, DMReal) = pure (Right ())
+          check x                = pure (Left x)
+      (tc $ (sn_EW test >>= check)) `shouldReturn` (Right (Right ()))
 
   describe "supremum (with unknown variables)" $ do
     it "does NOT solve 'max{a,Int} = b'" $ do
@@ -54,13 +86,13 @@ testSupremum = do
           check x                         = pure (Left x)
       (tc $ (sn_EW test >>= check)) `shouldReturn` (Right (Right ()))
 
-    it "does NOT solve 'max{a,b} = Int'" $ do
+    it "does NOT solve 'max{a,b} = Real'" $ do
       let test :: TC _
           test = do
             a <- newVar
             b <- newVar
             c <- supremum a b
-            unify c DMInt
+            unify c DMReal
             return (a,b)
       let check (TVar a, TVar b) | a /= b = pure (Right ())
           check x                         = pure (Left x)
@@ -78,16 +110,6 @@ testSupremum = do
       (tc $ (sn test >>= check)) `shouldReturn` (Right (Right ()))
 
     it "solves 'max{a,Int} = b' since Int is bottom element" $ do
-      let test :: TC _
-          test = do
-            a <- newVar
-            b <- supremum a DMInt
-            return (a,b)
-      let check (TVar a, TVar b) | a == b = pure (Right ())
-          check x                         = pure (Left x)
-      (tc $ (sn test >>= check)) `shouldReturn` (Right (Right ()))
-
-    it "does NOT solve 'max{a,Real} = b' since Real is not a bottom element" $ do
       let test :: TC _
           test = do
             a <- newVar
