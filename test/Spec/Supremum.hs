@@ -75,6 +75,15 @@ testSupremum = do
           check x                = pure (Left x)
       (tc $ (sn_EW test >>= check)) `shouldReturn` (Right (Right ()))
 
+    it "fails on 'max{a,Real} = Int', since there can be no path Real -> Int" $ do
+      let test :: TC _
+          test = do
+            a <- newVar
+            b <- supremum a DMReal
+            unify b DMInt
+            return ()
+      (tc $ (sn_EW test)) `shouldReturn` (Left (UnsatisfiableConstraint "test"))
+
   describe "supremum (with unknown variables)" $ do
     it "does NOT solve 'max{a,Int} = b'" $ do
       let test :: TC _
