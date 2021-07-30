@@ -11,14 +11,15 @@ import DiffMu.Abstract.Class.Term
 -- import DiffMu.Abstract.Class.MonadTerm
 import Debug.Trace
 
-data SolvingMode = SolveExact | SolveAssumeWorst | SolveGlobal | SolveFinal
+data SolvingMode = SolveExact | SolveAssumeWorst | SolveGlobal | SolveFinal | SolveSpecial
   deriving (Eq)
 
 instance Show SolvingMode where
   show SolveExact = "exact"
   show SolveAssumeWorst = "worst"
   show SolveGlobal = "global"
-  show SolveFinal = "global"
+  show SolveFinal = "final"
+  show SolveSpecial = "special"
 
 -- instance Ord SolvingMode where
 --   SolveExact <= a = True

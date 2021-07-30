@@ -83,6 +83,19 @@ testSubtyping_MaxMinCases = do
             return a
       (tc $ sn_EW test0) `shouldReturn` (Right ty)
 
+    it "partially resolves 'a ≤ (Int[2],Real[--])'" $ do
+      let ty1 = (Numeric (Const (constCoeff (Fin 2)) DMInt))
+          ty2 = (Numeric (NonConst DMReal))
+          ty = DMTup [ty1 , ty2]
+      let test0 = do
+            a <- newVar
+            a ⊑! ty
+            return a
+      let correct :: (DMType) -> TC _
+          correct ((DMTup [Numeric (Const s DMInt), Numeric (TVar y)])) = pure $ Right s
+          correct r                                                     = pure $ Left r
+      (tc $ sn_EW test0 >>= correct) `shouldReturn` (Right (Right (constCoeff (Fin 2))))
+
     it "partially resolves 'a[--] ≤ b' inside NoFun" $ do
       let test0 = do
             a <- newVar

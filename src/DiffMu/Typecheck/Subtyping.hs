@@ -416,6 +416,7 @@ checkContractionAllowed _ _ = return ContractionDisallowed
 -- We can solve `IsLessEqual` constraints for DMTypes.
 -- NOTE: IsLessEqual is interpreted as a subtyping relation.
 instance (SingI k, Typeable k) => Solve MonadDMTC IsLessEqual (DMTypeOf k, DMTypeOf k) where
+  solve_ Dict SolveSpecial name (IsLessEqual (a,b)) = return ()
   solve_ Dict SolveExact name (IsLessEqual (a,b))  = solveSubtyping name (a,b)
   solve_ Dict SolveGlobal name (IsLessEqual path) = collapseSubtypingCycles path
   solve_ Dict SolveAssumeWorst name (IsLessEqual (a,b)) = return ()
@@ -431,57 +432,62 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsLessEqual (DMTypeOf k, DMTyp
 
 
 
-------------------------------------------------------------
--- Solve supremum
-
-
-
-
 --------------------------------------------
 -- wrapper for computing supremum
 solveSupremum :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> Symbol -> ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) -> t ()
--- if one input is equal to the output we can skip the supremum computation,
--- then we only have to create a subtyping constraint
-solveSupremum graph name ((a,b) :=: x) | a == x = do
-  b ≤! x
-  dischargeConstraint name
-
-solveSupremum graph name ((a,b) :=: x) | b == x = do
-  a ≤! x
-  dischargeConstraint name
-
-solveSupremum graph name ((a,b) :=: x) | elem a (getBottoms @k) = do
-  unify b x
-  dischargeConstraint name
-
-solveSupremum graph name ((a,b) :=: x) | elem b (getBottoms @k) = do
-  unify a x
-  dischargeConstraint name
-
-solveSupremum graph name ((a,b) :=: x) | otherwise = callMonadicGraphSupremum graph name ((a,b) :=: x)
+solveSupremum graph name ((a,b) :=: x) = callMonadicGraphSupremum graph name ((a,b) :=: x)
 
 --------------------------------------------
 -- wrapper for computing infimum
 solveInfimum :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> Symbol -> ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) -> t ()
-solveInfimum graph name ((a,b) :=: x) | a == x = do
-  x ≤! b
+solveInfimum graph name ((a,b) :=: x) = callMonadicGraphSupremum (oppositeGraph graph) name ((a,b) :=: x)
+
+
+----------------------------------------------------------------------------------------
+-- solvers for special cases
+-------------------
+-- supremum
+solveSupremumSpecial :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> Symbol -> ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) -> t ()
+-- if one input is equal to the output we can skip the supremum computation,
+-- then we only have to create a subtyping constraint
+solveSupremumSpecial graph name ((a,b) :=: x) | a == x = do
+  b ≤! x
   dischargeConstraint name
 
-solveInfimum graph name ((a,b) :=: x) | b == x = do
-  x ≤! a
+solveSupremumSpecial graph name ((a,b) :=: x) | b == x = do
+  a ≤! x
   dischargeConstraint name
 
-solveInfimum graph name ((a,b) :=: x) | elem a (getTops @k) = do
+solveSupremumSpecial graph name ((a,b) :=: x) | elem a (getBottoms @k) = do
   unify b x
   dischargeConstraint name
 
-solveInfimum graph name ((a,b) :=: x) | elem b (getTops @k) = do
+solveSupremumSpecial graph name ((a,b) :=: x) | elem b (getBottoms @k) = do
   unify a x
   dischargeConstraint name
 
-solveInfimum graph name ((a,b) :=: x) | otherwise = callMonadicGraphSupremum (oppositeGraph graph) name ((a,b) :=: x)
+solveSupremumSpecial graph name ((a,b) :=: x) | otherwise = return ()
 
+-------------------
+-- infimum
+solveInfimumSpecial :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> Symbol -> ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) -> t ()
+solveInfimumSpecial graph name ((a,b) :=: x) | a == x = do
+  x ≤! b
+  dischargeConstraint name
 
+solveInfimumSpecial graph name ((a,b) :=: x) | b == x = do
+  x ≤! a
+  dischargeConstraint name
+
+solveInfimumSpecial graph name ((a,b) :=: x) | elem a (getTops @k) = do
+  unify b x
+  dischargeConstraint name
+
+solveInfimumSpecial graph name ((a,b) :=: x) | elem b (getTops @k) = do
+  unify a x
+  dischargeConstraint name
+
+solveInfimumSpecial graph name ((a,b) :=: x) | otherwise = return ()
 
 
 --------------------------------------------
@@ -522,6 +528,7 @@ unifyAll (x:y:vars) = do
 -- TODO: Check whether this does the correct thing.
 instance (SingI k, Typeable k) => Solve MonadDMTC IsSupremum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) where
   solve_ Dict SolveExact name (IsSupremum ((a,b) :=: y)) = solveSupremum (GraphM subtypingGraph) name ((a,b) :=: y)
+  solve_ Dict SolveSpecial name (IsSupremum ((a,b) :=: y)) = solveSupremumSpecial (GraphM subtypingGraph) name ((a,b) :=: y)
 
   solve_ Dict SolveGlobal name (IsSupremum ((a,b) :=: y)) = do
     collapseSubtypingCycles (a,y)
@@ -555,6 +562,7 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsSupremum ((DMTypeOf k, DMTyp
 -- TODO: Check whether this does the correct thing.
 instance (SingI k, Typeable k) => Solve MonadDMTC IsInfimum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) where
   solve_ Dict SolveExact name (IsInfimum ((a,b) :=: x)) = solveInfimum (GraphM subtypingGraph) name ((a,b) :=: x)
+  solve_ Dict SolveSpecial name (IsInfimum ((a,b) :=: x)) = solveInfimumSpecial (GraphM subtypingGraph) name ((a,b) :=: x)
   solve_ Dict SolveGlobal name (IsInfimum ((a,b) :=: x)) = do
     collapseSubtypingCycles (x,a)
     collapseSubtypingCycles (x,b)

@@ -43,17 +43,17 @@ testSupremum = do
             return (length c , length d)
       (tc $ (sn_EW term) >> eval) `shouldReturn` Right (0,1)
 
-    it "does solve 'max{a,Int} = b'" $ do
+  describe "supremum (with unknown variables)" $ do
+    it "does NOT solve 'max{a,Int} = b'" $ do
       let test :: TC _
           test = do
             a <- newVar
             b <- supremum a DMInt
             return (a,b)
-      let check (TVar a, TVar b) | a == b = pure (Right ())
+      let check (TVar a, TVar b) | a /= b = pure (Right ())
           check x                         = pure (Left x)
       (tc $ (sn_EW test >>= check)) `shouldReturn` (Right (Right ()))
 
-  describe "supremum (with unknown variables)" $ do
     it "does NOT solve 'max{a,b} = Int'" $ do
       let test :: TC _
           test = do
@@ -65,4 +65,34 @@ testSupremum = do
       let check (TVar a, TVar b) | a /= b = pure (Right ())
           check x                         = pure (Left x)
       (tc $ (sn_EW test >>= check)) `shouldReturn` (Right (Right ()))
+
+  describe "supremum - special case solving" $ do
+    it "solves 'max{a,Int} = b' since Int is bottom element" $ do
+      let test :: TC _
+          test = do
+            a <- newVar
+            b <- supremum a DMInt
+            return (a,b)
+      let check (TVar a, TVar b) | a == b = pure (Right ())
+          check x                         = pure (Left x)
+      (tc $ (sn test >>= check)) `shouldReturn` (Right (Right ()))
+
+    it "does NOT solve 'max{a,Real} = b' since Real is not a bottom element" $ do
+      let test :: TC _
+          test = do
+            a <- newVar
+            b <- supremum a DMInt
+            return (a,b)
+      let check (TVar a, TVar b) | a == b = pure (Right ())
+          check x                         = pure (Left x)
+      (tc $ (sn test >>= check)) `shouldReturn` (Right (Right ()))
+
+    it "solves 'max{a,Real} = a' since input and output are the same" $ do
+      let test :: TC _
+          test = do
+            a <- newVar
+            b <- supremum a DMReal
+            unify a b
+            return a
+      (tc $ (sn test)) `shouldReturn` (Right (DMReal))
 

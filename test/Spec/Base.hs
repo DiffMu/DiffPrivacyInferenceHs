@@ -54,7 +54,7 @@ tcb False = tc
 sn :: Normalize TC a => TC a -> TC a
 sn x = do
   x' <- x
-  solveAllConstraints [SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
+  solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
   normalize x'
 
 sn_EW :: Normalize TC a => TC a -> TC a
