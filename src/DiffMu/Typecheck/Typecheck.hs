@@ -557,7 +557,7 @@ checkPri' (Apply f args) scope =
     ff <- f_check
 
     -- we extract the result of the args computations
-    args <- sequence margs
+    args <- applyAllDelayedLayers scope (sequence margs)
 
     -- we merge the different TC's into a single result TC
     return (sbranch_check ff args)
