@@ -174,8 +174,7 @@ pushChoice name ma scope =
           a <- ma
           b <- mb
           return $ do
-            a' <- a
-            b' <- b
+            (a',b') <- msumTup (a, b)
             return (a' :∧: b')
   in setValue name newval scope
 

@@ -8,7 +8,7 @@ testScoping pp = do
     testScope01 pp
     testScope02 pp
     testScope03 pp
-    testScope04 pp
+    -- testScope04 pp
 
 
 testScope01 pp = do
@@ -101,6 +101,7 @@ testScope04 pp = do
            \            a*11                   \n\
            \        end                        \n\
            \        a = g(h,a)                 \n\
+           \        a                          \n\
            \    end                            \n\
            \    f(13)                          \n\
            \ end"

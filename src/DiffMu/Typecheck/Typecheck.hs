@@ -34,7 +34,7 @@ checkPriv t scope = do
        case γ of -- TODO prettify.
            Left (Ctx (MonCom c)) | H.null c -> return ()
            Right (Ctx (MonCom c)) | H.null c -> return ()
-           _   -> throwError (ImpossibleError "Input context for checking must be empty.")
+           ctx   -> impossible $ "Input context for checking must be empty. But I got:\n" <> show ctx
        types .= Right def -- cast to privacy context.
 
   -- Define the computation to do after checking
@@ -60,7 +60,7 @@ checkSens t scope = do
        case γ of -- TODO prettify.
            Left (Ctx (MonCom c)) | H.null c -> return ()
            Right (Ctx (MonCom c)) | H.null c -> return ()
-           _   -> throwError (ImpossibleError "Input context for checking must be empty.")
+           ctx   -> impossible $ "Input context for checking must be empty. But I got:\n" <> show ctx <> "\nThe term is:\n" <> show t
        types .= Left def -- cast to sensitivity context.
 
   -- Define the computation to do after checking
