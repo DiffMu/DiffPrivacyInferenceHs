@@ -96,6 +96,11 @@ extractDelayed x (DelayedT ma) = do
     Done a -> return a
     Later g -> extractDelayed x (g x)
 
+applyAllDelayedLayers :: Monad m => x -> DelayedT x m a -> DelayedT x m a
+applyAllDelayedLayers x d = DelayedT $ do
+  res <- extractDelayed x d
+  return (Done $ res)
+
 -- throwing an error finishes a computation
 throwDelayedError e = DelayedT (pure $ Done $ (throwError e))
 

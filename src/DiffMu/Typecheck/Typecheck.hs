@@ -256,8 +256,12 @@ checkSen' (Apply f args) scope =
     -- i.e. "typecheck" means here "extracting" the result of the later computation
     res <- (applyDelayedLayer scope mf)
 
-    -- we extract the result of the args computations
-    args <- sequence margs
+    -- we apply the current scope to *ALL* (!) layers.
+    -- i.e., all arguments are evaluated fully in the current scope
+    -- this only makes sense because of the parsing rule
+    -- restricting function to modify variables which are
+    -- also modified on an outer level
+    args <- applyAllDelayedLayers scope (sequence margs)
 
     -- we merge the different TC's into a single result TC
     return (sbranch_check res args)
