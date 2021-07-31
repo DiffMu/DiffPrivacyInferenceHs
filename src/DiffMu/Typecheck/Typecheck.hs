@@ -22,20 +22,6 @@ import Debug.Trace
 import Data.IORef
 import System.IO.Unsafe
 
--- global_tevar_counter :: IORef (NameCtx)
--- global_tevar_counter = unsafePerformIO (newIORef def)
-
--- unsafe_newTeVar :: Text -> TeVar
--- unsafe_newTeVar hint =
---   let f ctx = let (ctx',name) = newName hint ctx
---               in traceShowId (name,ctx')
---       !res = unsafePerformIO $ atomicModifyIORef' global_tevar_counter f
--- -- ((\(a,b) -> (b,a)) . newName hint)
---   in (GenTeVar res)
-
--- reset_tevar_counter :: IO ()
--- reset_tevar_counter = writeIORef global_tevar_counter def
-
 
 
 ------------------------------------------------------------------------
@@ -646,7 +632,6 @@ checkPri' (FLet fname term body) scope = do
 -- but the tuple is still a sensitivity term.
 -- TODO the names must be unique.
 checkPri' (Tup ts) scope = do
-   -- names <- sequence [newTeVar (T.pack ("x" <> (show i))) | i <- [1..(length ts)]]
    names <- mapM newTeVar [(T.pack ("x" <> (show i))) | i <- [1..(length ts)]]
    let body = Ret (Tup [Var n JTAny | n <- names])
    let t1 = foldl (\b -> \(x, t) -> SLet (x :- JTAny) t b) body (zip names ts)
@@ -671,7 +656,6 @@ checkPri' (TLet xs term body) scope = do
    tupvar <- newTeVar "tup"
    let t1 = foldl (\t -> \(x :- τj) -> SLet (x :- τj) (Ret (TLet xs (Var tupvar JTAny) (Var x τj))) t) body xs
        t2 = SLet (tupvar :- (JTAny)) term t1
-      --traceM $ "privacy TLet checking term " <> show t2
    checkPriv t2 scope
 
 checkPri' (Gauss rp εp δp f) scope =
