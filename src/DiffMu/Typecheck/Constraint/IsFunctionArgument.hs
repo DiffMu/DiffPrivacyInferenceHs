@@ -235,11 +235,11 @@ resolveChoiceHash ((ForAll freevs method), matches) = do
                                           -- in the regular cases the arrows can just be unified.
                                           (matchxs :->: τmatch, methxs :->: τmeth) -> do
                                              zipWithM addC matchxs methxs
-                                             unify τmatch τmeth
+                                             addC (τmeth :@ ()) (τmatch :@ ())
                                              return ()
                                           (matchxs :->*: τmatch, methxs :->*: τmeth) -> do
                                              zipWithM addC matchxs methxs
-                                             unify τmatch τmeth
+                                             addC (τmeth :@ ()) (τmatch :@ ())
                                              return ()
                                           _ -> impossible $ "reached impossible case in resolving choices: " <> show (match, mmethod)
    -- before resolving, we create copies of the method's type where all free type variables
