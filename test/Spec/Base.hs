@@ -1,7 +1,7 @@
 
 module Spec.Base
   (module All
-  , tc , tcl , tcb , sn , sn_EW , parseEval , parseEvalSimple
+  , tc , tcl , tcb , sn , sn_EW , parseEval , parseEval_l , parseEvalSimple
   )
 where
 
@@ -42,7 +42,7 @@ tc r = do
 tcl :: TC a -> IO (Either DMException a)
 tcl r = do
 
-  x <- executeTC (DoShowLog Force [Location_Constraint , Location_INC, Location_MonadicGraph]) r
+  x <- executeTC (DoShowLog Force [Location_Constraint , Location_INC, Location_MonadicGraph, Location_Unification]) r
   -- x <- executeTC (DoShowLog Force [Location_Constraint, Location_Subtyping]) r
   return (fst <$> x)
 
@@ -55,6 +55,7 @@ sn :: Normalize TC a => TC a -> TC a
 sn x = do
   x' <- x
   solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
+  -- solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveFinal]
   normalize x'
 
 sn_EW :: Normalize TC a => TC a -> TC a
@@ -67,7 +68,11 @@ sn_EW x = do
 parseEvalSimple p term expected =
   parseEval p ("Checks '" <> term <> "' correctly") term expected
 
-parseEval parse desc term (expected :: TC DMMain) =
+
+parseEval = parseEval_b False
+parseEval_l = parseEval_b True
+
+parseEval_b dolog parse desc term (expected :: TC DMMain) =
   it desc $ do
     term' <- parse term
 
@@ -79,16 +84,23 @@ parseEval parse desc term (expected :: TC DMMain) =
                           inferredT_Delayed <- checkSens res def
                           return $ do
                             inferredT <- inferredT_Delayed
-                            expectedT <- expected
-                            unify inferredT expectedT
+                            return inferredT
+                            -- expectedT <- expected
+                            -- unify inferredT expectedT
                       )
            let (tres'',_) = runState (extractDelayed def tres) def
            pure $ tres''
 
-    let correct _ = do
+    let correct result = do
+          -- we check whether our result is as expected
+          expectedT <- expected
+          unify result expectedT
+          solveAllConstraints [SolveExact]
+
+          -- and additionally if the constraints are empty
           ctrs <- getAllConstraints
           case ctrs of
             [] -> pure $ Right ()
             cs -> pure $ Left (show cs)
 
-    (tc $ (sn term'' >>= correct)) `shouldReturn` (Right (Right ()))
+    (tcb dolog $ (sn term'' >>= correct)) `shouldReturn` (Right (Right ()))

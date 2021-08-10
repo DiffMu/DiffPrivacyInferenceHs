@@ -179,6 +179,7 @@ instance MonadDMTC t => Unify t (WithRelev e) where
 -- Unification of DMTypes (of any kind k) is given by:
 instance (Typeable k, MonadDMTC t) => Unify t (DMTypeOf k) where
   unify_ a b = do
+    withLogLocation "Unification" $ debug ("Unifying " <> show a <> " ==! "<> show b)
     res <- runExceptT $ runINCResT $ unifyᵢ_ @(INCResT DMException t) a b
     case res of
       Left (Wait')   -> do

@@ -53,20 +53,6 @@ forceNoFun (x :∧: y) = do
 forceNoFun (Fun _) = error "Mismatch!"
 
 
--- if the given argument is a non-function, and we also expect a non-function, we just unify their types
-solveIsFunctionArgument name (NoFun a1, NoFun a2) = do
-  a1 ==! a2
-  dischargeConstraint name
-
--- if we expect a non-function, the given argument must be a non-function.
-solveIsFunctionArgument name (NoFun a1, b) = do
-  nfb <- forceNoFun b
-  return ()
-
--- if the given argument is a non-function, we must expect some non-function type.
-solveIsFunctionArgument name (b, NoFun a1) = do
-  nfb <- forceNoFun b
-  return ()
 -}
 
 solveIsFunctionArgument :: IsT MonadDMTC t => Symbol -> (DMTypeOf MainKind, DMTypeOf MainKind) -> t ()
@@ -95,6 +81,20 @@ solveIsFunctionArgument name (Fun xs, Fun ys) = do
 
 solveIsFunctionArgument name (TVar a, Fun xs) = addSub (a := Fun xs) >> dischargeConstraint name >> pure ()
 
+-- -- if the given argument is a non-function, and we also expect a non-function, we just unify their types
+-- solveIsFunctionArgument name (NoFun a1, NoFun a2) = do
+--   a1 ==! a2
+--   dischargeConstraint name
+
+-- if we expect a non-function, the given argument must be a non-function.
+solveIsFunctionArgument name (NoFun a1, b) = do
+  unify (NoFun a1) b
+  dischargeConstraint name
+
+-- if the given argument is a non-function, we must expect some non-function type.
+solveIsFunctionArgument name (b, NoFun a1) = do
+  unify b (NoFun a1)
+  dischargeConstraint name
 
 -- if both sides are variables or ∧ terms of variables
 -- then we cannot do anything yet, since we do not know whether we have function terms inside, or not.
@@ -109,10 +109,14 @@ getFunctionReturnVar (as :->: (TVar a)) = [SomeK a]
 getFunctionReturnVar (as :->*: (TVar a)) = [SomeK a]
 getFunctionReturnVar _ = mempty
 
+getNoFunVars :: DMMain -> [SomeK TVarOf]
+getNoFunVars (NoFun a) = freeVars a
+getNoFunVars _ = mempty
+
 
 instance FixedVars TVarOf (IsFunctionArgument (DMTypeOf MainKind, DMTypeOf MainKind)) where
   -- TODO: Is this calculation of fixed vars correct?
-  fixedVars (IsFunctionArgument (_, wantedFuns)) = getFunctionReturnVar wantedFuns
+  fixedVars (IsFunctionArgument (existingFuns, wantedFuns)) = getFunctionReturnVar wantedFuns <> getNoFunVars existingFuns <> getNoFunVars wantedFuns
 
 instance Solve MonadDMTC IsFunctionArgument (DMTypeOf MainKind, DMTypeOf MainKind) where
   solve_ Dict _ name (IsFunctionArgument (a,b)) = solveIsFunctionArgument name (a,b)
