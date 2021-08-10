@@ -157,6 +157,9 @@ instance Monad t => Normalize t JuliaType where
   normalize = pure
 
 
+instance Monad t => Unify t () where
+  unify_ _ _ = return ()
+
 
 instance MonadDMTC t => Unify t JuliaType where
   unify_ (JuliaType a) (JuliaType b) | a == b = pure (JuliaType a)
