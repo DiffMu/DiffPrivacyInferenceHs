@@ -208,6 +208,10 @@ solveIsChoice name (provided, required) = do
 
 resolveChoiceHash :: forall t. IsT MonadDMTC t => (DMTypeOf ForAllKind, [DMTypeOf FunKind]) -> t ()
 resolveChoiceHash ((ForAll freevs method), matches) = do
+   let addC :: DMTypeOf MainKind -> DMTypeOf MainKind -> t ()
+       addC τ1 τ2 = do
+                       addConstraint (Solvable (IsFunctionArgument (τ1, τ2)))
+                       return ()
    let resolveChoice :: (DMTypeOf FunKind) -> (DMTypeOf FunKind) -> t ()
        resolveChoice match mmethod = do
                                        case (match, mmethod) of
@@ -216,15 +220,21 @@ resolveChoiceHash ((ForAll freevs method), matches) = do
                                           -- happened is application of a -> arrow followed by Return.
                                           (matchxs :->*: τmatch, methxs :->: τmeth) -> do
                                              -- unify input types
-                                             zipWithM unify [τ1 | (τ1 :@ _) <- matchxs] [τ2 | (τ2 :@ _) <- methxs]
+                                             --zipWithM unify [τ1 | (τ1 :@ _) <- matchxs] [τ2 | (τ2 :@ _) <- methxs]
+                                             zipWithM addC [τ1 | (τ1 :@ _) <- matchxs] [τ2 | (τ2 :@ _) <- methxs]
                                              -- set privacies of the match to ∞
                                              mapM (\p -> unify p inftyP) [p | (_ :@ p) <- matchxs]
                                              -- unify return types
                                              unify τmatch τmeth
                                              return ()
                                           -- in the regular cases the arrows can just be unified.
-                                          _ -> do
-                                             unify match mmethod
+                                          (matchxs :->: τmatch, methxs :->: τmeth) -> do
+                                             zipWithM addC [τ1 | (τ1 :@ _) <- matchxs] [τ2 | (τ2 :@ _) <- methxs]
+                                             unify τmatch τmeth
+                                             return ()
+                                          (matchxs :->*: τmatch, methxs :->*: τmeth) -> do
+                                             zipWithM addC [τ1 | (τ1 :@ _) <- matchxs] [τ2 | (τ2 :@ _) <- methxs]
+                                             unify τmatch τmeth
                                              return ()
    -- before resolving, we create copies of the method's type where all free type variables
    -- are replaced by fresh type variables, so we can safely unify with the type of the matched function.
