@@ -109,6 +109,9 @@ pSingleChoiceHash = f <$> pTuple2 (pArray "DataType" pJuliaType) pDMTerm
 pGauss = f <$> pTuple3 pDMTerm pDMTerm pDMTerm <*､> pDMTerm
   where f (a,b,c) d = Gauss a b c d
 
+pMat = f <$> pDMTerm <*､> pDMTerm <*､> pTuple2 pTeVar pTeVar <*､> pDMTerm
+  where f a b (c,d) e = MCreate a b (c, d) e
+
 pLoop = f <$> pDMTerm <*､> pDMTerm <*､> pDMTerm <*､> pTuple2 pTeVar pTeVar <*､> pDMTerm
   where f _ a b c d = Loop a b c d
 
@@ -131,6 +134,8 @@ pDMTerm =
   <|> try ("tlet"      `with` (TLet    <$> pArray "Tuple{Symbol, DataType}" (pAsgmt (:-)) <*､> pDMTerm <*､> pDMTerm))
   <|> try ("loop"      `with` (pLoop))
   <|> try ("gauss"     `with` (pGauss))
+  <|> try ("mcreate"   `with` (pMat))
+  <|> try ("dmtranspose" `with` (Transpose <$> pDMTerm))
   <|> try ("chce"      `with` (Choice  <$> pSingleChoiceHash))
 
 

@@ -499,6 +499,25 @@ checkSen' (ClipM c m) scope = do
       -- change clip parameter to input
       return (NoFun (DMMat nrm c n m (Numeric DMData)))
 
+
+checkSen' (Transpose m) scope = do
+   mb <- checkSens m scope -- check the matrix
+   done $ do
+      τb <- mb
+
+      -- variables for norm and clip parameters and dimension
+      τ <- newVar
+      clp <- newVar
+      n <- newVar
+      m <- newVar
+
+      -- set correct matrix type
+      unify τb (NoFun (DMMat L1 clp n m (Numeric τ))) -- TODO actually mora than L1 would be possible if we had implicit fr-sens
+
+      -- change clip parameter to input
+      return (NoFun (DMMat L1 U m n (Numeric τ)))
+
+
 -- Everything else is currently not supported.
 checkSen' t scope = (throwDelayedError (UnsupportedTermError t))
 
