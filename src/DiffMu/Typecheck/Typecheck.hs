@@ -518,6 +518,37 @@ checkSen' (Transpose m) scope = do
       return (NoFun (DMMat L1 U m n (Numeric τ)))
 
 
+checkSen' (Index m i j) scope = do
+
+      -- check indicex and set their sensitivity to infinity
+      di <- checkSens i scope
+      dj <- checkSens j scope
+      let dx = do
+                   _ <- msumTup (di, dj)
+                   mscale inftyS
+                   return ()
+
+      dm <- checkSens m scope -- check the matrix
+
+      done $ do
+         (τm, _) <- msumTup (dm, dx)
+
+         -- variables for element type, norm and clip parameters and dimension
+         τ <- newVar
+         nrm <- newVar
+         clp <- newVar
+         n <- newVar
+         m <- newVar
+
+         -- set matrix type
+         unify τm (NoFun (DMMat nrm clp n m (Numeric τ)))
+
+         -- TODO maybe restrict index size?
+
+         return (NoFun (Numeric τ))
+
+
+
 -- Everything else is currently not supported.
 checkSen' t scope = (throwDelayedError (UnsupportedTermError t))
 

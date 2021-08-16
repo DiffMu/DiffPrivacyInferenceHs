@@ -137,6 +137,7 @@ pDMTerm =
   <|> try ("gauss"     `with` (pGauss))
   <|> try ("mcreate"   `with` (pMat))
   <|> try ("dmtranspose" `with` (Transpose <$> pDMTerm))
+  <|> try ("index"     `with` (Index <$> pDMTerm <*､> pDMTerm <*､> pDMTerm))
   <|> try ("chce"      `with` (Choice  <$> pSingleChoiceHash))
 
 
