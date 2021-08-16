@@ -603,6 +603,7 @@ data DMTerm =
   Ret DMTerm
   | Sng Float JuliaType
   | Var TeVar JuliaType
+  | Rnd JuliaType 
   | Arg TeVar JuliaType Relevance
   | Op DMTypeOp_Some [DMTerm]
   | Phi DMTerm DMTerm DMTerm
@@ -616,6 +617,7 @@ data DMTerm =
   | TLet [(Asgmt JuliaType)] DMTerm DMTerm
   | Gauss DMTerm DMTerm DMTerm DMTerm
   | MCreate DMTerm DMTerm (TeVar, TeVar) DMTerm
+  | Transpose DMTerm
   | ClipM Clip DMTerm
   | Iter DMTerm DMTerm DMTerm
   | Loop DMTerm DMTerm (TeVar, TeVar) DMTerm

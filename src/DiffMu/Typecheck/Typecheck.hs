@@ -535,6 +535,12 @@ checkPri' (Ret t) scope = do
       log $ "checking privacy " <> show (Ret t) <> ", type is " <> show τ
       return τ
 
+
+checkPri' (Rnd t) scope = do
+   done $ do
+      τ <- (createDMTypeNum t)
+      return (NoFun (Numeric (NonConst τ)))
+
 -- TODO it is ambiguous if this is an application of a LamStar or an application of a Lam followed by Return.
 -- we probably should resolve IsFunctionArgument ( T -> T, S ->* S) by setting S's privacies to infinity.
 checkPri' (Apply f args) scope =
