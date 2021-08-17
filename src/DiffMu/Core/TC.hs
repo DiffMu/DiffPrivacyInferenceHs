@@ -728,7 +728,7 @@ instance Monad m => MonadTermDuplication DMTypeOf (TCT m) where
     --       not appear in the lower ConstraintCtx's.
     --       (Or duplicate them there too?)
     --
-    -- 0. check that all substitutions only involve vars which are abstract
+    -- 0a. check that all substitutions only involve vars which are abstract
     --    (extract var names from the subs and compare with the actually abstract ones)
     abstr <- use (meta.abstractedTVars)
     let involvedVars = [SomeK v | (SomeK (v := _)) <- subs]
@@ -767,7 +767,6 @@ instance Monad m => MonadTermDuplication DMTypeOf (TCT m) where
 
     return ()
 
-  {-
     ------------------------------------
     -- set all variables to `Deleted`:
     --
@@ -779,7 +778,6 @@ instance Monad m => MonadTermDuplication DMTypeOf (TCT m) where
 
     -- And we are done.
     return ()
--}
 
 getFixedVarsOfSolvable :: Solvable GoodConstraint GoodConstraintContent MonadDMTC -> [SingSomeK TVarOf]
 getFixedVarsOfSolvable (Solvable c) =
