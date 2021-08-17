@@ -9,6 +9,7 @@ testIssues pp = do
   test58 pp
   test59 pp
   test60 pp
+  test67 pp
 
 test25 pp = describe "issue 25" $ do
   let ex = " function test() \n\
@@ -148,6 +149,32 @@ test60 pp = describe "issue 60" $ do
       intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
       ty = Fun([ForAll [] ([] :->: intc (Fin 6)) :@ Just []])
 
-  parseEval_l pp "example variant 1" ex_1 (pure ty)
+  parseEval pp "example variant 1" ex_1 (pure ty)
 
+
+test67 pp = describe "issue 67" $ do
+  let ex_1 =
+         " function test()          \n\      
+         \     function f(a)        \n\      
+         \         function h(b)    \n\     
+         \             2*b+a        \n\ 
+         \         end              \n\   
+         \         function g(h,a)  \n\       
+         \             h(a)         \n\
+         \         end              \n\   
+         \         a = g(h,a)       \n\  
+         \         a = g(h,a)       \n\  
+         \         function h(b)    \n\     
+         \             a            \n\     
+         \         end              \n\   
+         \         a = g(h,a)       \n\  
+         \         a                \n\ 
+         \     end                  \n\
+         \     f(1)                 \n\
+         \ end                      "
+
+      intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
+      ty = Fun([ForAll [] ([] :->: intc (Fin 1)) :@ Just []])
+
+  parseEval pp "example variant 1" ex_1 (pure ty)
 
