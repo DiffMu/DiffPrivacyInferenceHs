@@ -1,7 +1,7 @@
 
 module Spec.Base
   (module All
-  , tc , tcl , tcb , sn , sn_EW , parseEval , parseEval_l , parseEvalSimple
+  , tc , tcl , tcb , sn , sn_EW , parseEval , parseEval_l , parseEvalUnify , parseEvalUnify_l , parseEvalSimple
   )
 where
 
@@ -69,10 +69,15 @@ parseEvalSimple p term expected =
   parseEval p ("Checks '" <> term <> "' correctly") term expected
 
 
-parseEval = parseEval_b False
-parseEval_l = parseEval_b True
+parseEval = parseEval_b False CompareByEqual
+parseEval_l = parseEval_b True CompareByEqual
 
-parseEval_b dolog parse desc term (expected :: TC DMMain) =
+parseEvalUnify = parseEval_b False CompareByUnification
+parseEvalUnify_l = parseEval_b True CompareByUnification
+
+data ComparisonStyle = CompareByEqual | CompareByUnification
+
+parseEval_b dolog compstyle parse desc term (expected :: TC DMMain) =
   it desc $ do
     term' <- parse term
 
@@ -92,15 +97,29 @@ parseEval_b dolog parse desc term (expected :: TC DMMain) =
            pure $ tres''
 
     let correct result = do
+          -- first, get all constraints (these are exactly the ones which returned from the checking)
+          ctrs <- getAllConstraints
+
           -- we check whether our result is as expected
           expectedT <- expected
-          unify result expectedT
-          solveAllConstraints [SolveExact]
+          case compstyle of
+            CompareByUnification -> do
+              unify result expectedT
+              solveAllConstraints [SolveExact]
 
-          -- and additionally if the constraints are empty
-          ctrs <- getAllConstraints
-          case ctrs of
-            [] -> pure $ Right ()
-            cs -> pure $ Left (show cs)
+              -- and additionally if the constraints are empty
+              case ctrs of
+                [] -> pure $ Right ()
+                cs -> pure $ Left (show cs)
+
+            CompareByEqual -> do
+              case expectedT == result of
+                True ->
+                  -- and additionally if the constraints are empty
+                  case ctrs of
+                    [] -> pure $ Right ()
+                    cs -> pure $ Left (show cs)
+                False -> pure $ Left ("expected type " <> show expectedT <> " but got " <> show result)
+
 
     (tcb dolog $ (sn term'' >>= correct)) `shouldReturn` (Right (Right ()))
