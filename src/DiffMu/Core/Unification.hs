@@ -133,6 +133,9 @@ unifyForAll (vx , x) (vy , y) = do
   -- all variables which we potentially still abstract over
   let vall = nub (vx' <> vy')
 
+  -- notify the monad to open these abstracted variables (such that substitutions of them are allowed)
+  openAbstractVars (Proxy @DMTypeOf) vall
+
   -- notify the monad that we want to track newly added substitutions
   newSubstitutionVarSet (Proxy @DMTypeOf)
 
@@ -167,6 +170,10 @@ unifyForAll (vx , x) (vy , y) = do
     Right remVars -> do
       -- the variables which we still abstract over are the ones not in remVars
       let zs = vall \\ (join remVars)
+
+      -- notify the monad to close these abstracted variables (such that substitutions of them are again now longer allowed)
+      closeAbstractVars (Proxy @DMTypeOf) zs
+
       -- the term is the one given by unification
       return (zs,z)
 

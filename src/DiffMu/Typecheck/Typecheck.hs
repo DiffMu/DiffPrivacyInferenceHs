@@ -168,11 +168,13 @@ checkSen' (Lam xτs body) scope =
       τ <- normalize τ'
       debug $ "normalized type: " <> show τ
 
-      fixed <- use (meta.fixedTVars)
-      frees' <- getActuallyFreeVars τ
-      debug $ "the free vars are: " <> show frees' <> " without {" <> show fixed <> "}"
-      let frees = frees' \\ [SomeK v | (SingSomeK v) <- fixed]
-      debug $ "that is: " <> show frees
+      -- fixed <- use (meta.fixedTVars)
+      frees <- getActuallyFreeVars τ
+      -- debug $ "the free vars are: " <> show frees' <> " without {" <> show fixed <> "}"
+      -- let frees = frees' \\ [SomeK v | (SingSomeK v) <- fixed]
+      -- debug $ "that is: " <> show frees
+      debug $ "the free vars are: " <> show frees
+      closeAbstractVars (Proxy @DMTypeOf) (frees)
 
       return (Fun [(ForAll frees τ :@ (Just sign))])
 
@@ -216,9 +218,10 @@ checkSen' (LamStar xτs body) scope =
       let τ' = (xrτs' :->*: restype)
       τ <- normalize τ'
       -- include free variables in a ForAll
-      frees <- getActuallyFreeVars τ
-      return (Fun [(ForAll frees τ :@ (Just sign))])
 
+      frees <- getActuallyFreeVars τ
+      closeAbstractVars (Proxy @DMTypeOf) (frees)
+      return (Fun [(ForAll frees τ :@ (Just sign))])
 
 checkSen' (SLet (x :- dτ) term body) scope = do
 

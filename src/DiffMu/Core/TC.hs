@@ -471,7 +471,8 @@ data MetaCtx = MetaCtx
     _typeSubs :: Subs TVarOf DMTypeOf,
     _constraints :: ConstraintCtx,
     -- cached state
-    _fixedTVars :: [SingSomeK TVarOf]
+    _fixedTVars :: [SingSomeK TVarOf],
+    _abstractedTVars :: [SomeK TVarOf]
   }
   deriving (Generic)
 
@@ -571,13 +572,14 @@ instance Monad m => MonadLog (TCT m) where
 --                             <> "- types:       " <> show γ <> "\n"
 
 instance Show (MetaCtx) where
-  show (MetaCtx s t sσ tσ cs fixedT) =
+  show (MetaCtx s t sσ tσ cs fixedT abstractedT) =
        "- sens vars: " <> show s <> "\n"
     <> "- type vars: " <> show t <> "\n"
     -- <> "- cnst vars: " <> show c <> "\n"
-    <> "- sens subs:   " <> show sσ <> "\n"
-    <> "- type subs:   " <> show tσ <> "\n"
-    <> "- fixed TVars: " <> show fixedT <> "\n"
+    <> "- sens subs:      " <> show sσ <> "\n"
+    <> "- type subs:      " <> show tσ <> "\n"
+    <> "- fixed TVars:    " <> show fixedT <> "\n"
+    <> "- abstract TVars: " <> show abstractedT <> "\n"
     <> "- constraints:\n" <> show cs <> "\n"
     -- <> "- types:       " <> show γ <> "\n"
 
@@ -647,6 +649,12 @@ instance Monad m => MonadTerm DMTypeOf (TCT m) where
     meta.fixedTVars %= removeKindedNameBySubstitution σ
     -- add var as new substitution
     tcstate.newlySubstitutedTVars %= (first (SomeK (fstSub σ) :))
+    -- throw an error if the variable is currently abstract
+    abstr <- use (meta.abstractedTVars)
+    case SomeK (fstSub σ) `elem` abstr of
+      True -> internalError $ "Encountered the substitution " <> show σ <> " but the variable " <> show (fstSub σ) <> " is currently marked as abstract."
+      False -> pure ()
+
   newVar = TVar <$> newTVar "τ"
   getFixedVars _ = do
     vars <- use (meta.fixedTVars)
@@ -668,6 +676,13 @@ instance Monad m => MonadTerm DMTypeOf (TCT m) where
     let splitσ = splitSubs topvars σ
     meta.typeSubs %= (\_ -> originalSubs_Split splitσ)
     return (removedSubs_Split splitσ)
+
+  -- we write the abstract vars into our list
+  closeAbstractVars _ abstractVars = do
+    meta.abstractedTVars %= (abstractVars <>)
+
+  openAbstractVars _ abstractVars = do
+    meta.abstractedTVars %= (\\ abstractVars)
 
 instance Monad m => MonadTerm SensitivityOf (TCT m) where
   type VarFam SensitivityOf = SVarOf
@@ -699,6 +714,9 @@ instance Monad m => MonadTerm SensitivityOf (TCT m) where
     meta.sensSubs %= (\_ -> originalSubs_Split splitσ)
     return (removedSubs_Split splitσ)
 
+  closeAbstractVars _ abstractVars = pure ()
+  openAbstractVars _ abstractVars = pure ()
+
 instance Monad m => MonadTermDuplication DMTypeOf (TCT m) where
   duplicateAllConstraints subs = do
 
@@ -710,6 +728,16 @@ instance Monad m => MonadTermDuplication DMTypeOf (TCT m) where
     --       not appear in the lower ConstraintCtx's.
     --       (Or duplicate them there too?)
     --
+    -- 0. check that all substitutions only involve vars which are abstract
+    --    (extract var names from the subs and compare with the actually abstract ones)
+    abstr <- use (meta.abstractedTVars)
+    let involvedVars = [SomeK v | (SomeK (v := _)) <- subs]
+    case and [a `elem` abstr | a <- involvedVars] of
+      False -> internalError $ "Trying to duplicate constraints with a substitution which involves non-abstract vars.\n"
+                               <> "Substitution:  " <> show subs <> "\n"
+                               <> "Abstract vars: " <> show abstr <> "\n"
+      True -> pure ()
+
     -- 1. get all the constraint (names) from the ctx stack
     (AnnNameCtx _ ctrs) <- use (meta.constraints)
     let ctr_names = getAllKeys ctrs
@@ -737,7 +765,9 @@ instance Monad m => MonadTermDuplication DMTypeOf (TCT m) where
     -- 3. Apply the function to all constraint names
     mapM f ctr_names
 
+    return ()
 
+  {-
     ------------------------------------
     -- set all variables to `Deleted`:
     --
@@ -749,6 +779,7 @@ instance Monad m => MonadTermDuplication DMTypeOf (TCT m) where
 
     -- And we are done.
     return ()
+-}
 
 getFixedVarsOfSolvable :: Solvable GoodConstraint GoodConstraintContent MonadDMTC -> [SingSomeK TVarOf]
 getFixedVarsOfSolvable (Solvable c) =
@@ -767,6 +798,9 @@ recomputeFixedVars = do
   meta.fixedTVars %= (\_ -> constrs3 >>= getFixedVarsOfSolvable)
   return ()
 
+data ShowDirect = ShowDirect String
+instance Show ShowDirect where
+  show (ShowDirect a) = a
 
 instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
   type ConstraintBackup (TCT m) = (Ctx Symbol (Watched (Solvable GoodConstraint GoodConstraintContent MonadDMTC)))
@@ -783,7 +817,18 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
 
   getUnsolvedConstraintMarkNormal modes = do
     (Ctx (MonCom constrs)) <- use (meta.constraints.anncontent.topctx)
-    let constrs2 = H.toList constrs
+    -- get all constraints
+    let constrs3 = H.toList constrs
+
+    -- filtering those which do not have abstract variables
+    abstr <- use (meta.abstractedTVars)
+    let hasNoAbstracts (_ , Watched _ constr) =
+          let unallowedVars = [a | a <- abstr, a `elem` freeVars constr]
+          in case unallowedVars of
+            [] -> True
+            xs -> traceShow (ShowDirect $ "%%%%%%%%\nWhen trying to solve constraint\n" <> show constr <> "\n found that the variables " <> show xs <> " are abstract!") False
+    let constrs2 = filter hasNoAbstracts constrs3
+
     let changedFor curMode = filter (\(a, Watched (NormalForMode normalModes) constr) -> (curMode `notElem` normalModes)) constrs2
     let changed = join [zip (changedFor m) (repeat m) | m <- modes]
     case changed of
@@ -838,8 +883,11 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
 
   logPrintConstraints = do
     ctrs <- use (meta.constraints.anncontent)
+    abstr <- use (meta.abstractedTVars)
     log $ "## Constraints ##"
     log $ show ctrs
+    log $ ""
+    log $ "--- with abstract vars " <> show abstr
     log $ ""
 
   getAllConstraints = do

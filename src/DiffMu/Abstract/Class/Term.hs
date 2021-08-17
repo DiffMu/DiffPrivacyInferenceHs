@@ -275,6 +275,8 @@ class (Monad t, Term (VarFam a) a) => MonadTerm (a :: j -> *) t where
   getFixedVars :: (IsKind k) => Proxy a -> t [VarFam a k]
   newSubstitutionVarSet :: Proxy a -> t ()
   removeTopmostSubstitutionVarSet :: t (Subs (VarFam a) a)
+  closeAbstractVars :: Proxy a -> [SomeK (VarFam a)] -> t ()
+  openAbstractVars :: Proxy a -> [SomeK (VarFam a)] -> t ()
 
 class (Monad t, Term (VarFam a) a, MonadTerm a t) => MonadTermDuplication a t where
   duplicateAllConstraints :: [SomeK (Sub (VarFam a) (ListK a))] -> t ()
