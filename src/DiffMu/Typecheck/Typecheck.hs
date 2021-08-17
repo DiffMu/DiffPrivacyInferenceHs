@@ -161,7 +161,8 @@ checkSen' (Lam xτs body) scope =
       xrτs <- getArgList @_ @SensitivityK xτs
       let xrτs' = [x :@ s | (x :@ SensitivityAnnotation s) <- xrτs]
       let τ = (xrτs' :->: restype)
-      frees <- getActuallyFreeVars τ
+      -- frees <- getActuallyFreeVars τ
+      let frees = []
       return (Fun [(ForAll frees τ :@ (Just sign))])
 
 
@@ -203,7 +204,8 @@ checkSen' (LamStar xτs body) scope =
       let xrτs' = [x :@ p | (x :@ PrivacyAnnotation p) <- xrτs]
       let τ = (xrτs' :->*: restype)
       -- include free variables in a ForAll
-      frees <- getActuallyFreeVars τ
+      -- frees <- getActuallyFreeVars τ
+      let frees = []
       return (Fun [(ForAll frees τ :@ (Just sign))])
 
 

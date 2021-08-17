@@ -145,23 +145,9 @@ test60 pp = describe "issue 60" $ do
              \    f(3)                          \n\
              \ end"
 
-  let ex_1_good = " function test()                  \n\
-             \    function f(a)                 \n\
-             \        function h(b)             \n\
-             \            a                     \n\
-             \        end                       \n\
-             \        function g(h,a)           \n\
-             \            h(a)                  \n\
-             \        end                       \n\
-             \        g(h,a)                    \n\
-             \    end                           \n\
-             \    f(3)                          \n\
-             \ end"
-
       intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
-      ty = Fun([ForAll [] ([] :->: intc (Fin 3)) :@ Just []])
+      ty = Fun([ForAll [] ([] :->: intc (Fin 6)) :@ Just []])
 
   parseEval_l pp "example variant 1" ex_1 (pure ty)
-  parseEval pp "example variant 1 (good)" ex_1_good (pure ty)
 
 

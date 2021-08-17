@@ -8,7 +8,7 @@ testScoping pp = do
     testScope01 pp
     testScope02 pp
     testScope03 pp
-    -- testScope04 pp
+    testScope04 pp
 
 
 testScope01 pp = do
