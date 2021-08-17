@@ -93,6 +93,7 @@ checkSen' (Sng η τ) scope = done $ do
 checkSen' (Op op args) scope = do
   argsdel :: [TC DMMain] <- mapM (\t -> checkSens t scope) args -- check all the args in the delayed monad
   done $ do
+     debug $ "checking " <> show (Op op args)
      let handleOpArg (marg, (τ, s)) = do
                                      τ_arg <- marg
                                      unify (NoFun (Numeric τ)) τ_arg
@@ -160,8 +161,19 @@ checkSen' (Lam xτs body) scope =
       restype <- τr
       xrτs <- getArgList @_ @SensitivityK xτs
       let xrτs' = [x :@ s | (x :@ SensitivityAnnotation s) <- xrτs]
-      let τ = (xrτs' :->: restype)
-      frees <- getActuallyFreeVars τ
+      let τ' = (xrτs' :->: restype)
+      debug $ "checking\n-----\n'" <> show (Lam xτs body) <> "'\n-----"
+      debug $ "original type: " <> show τ'
+
+      τ <- normalize τ'
+      debug $ "normalized type: " <> show τ
+
+      fixed <- use (meta.fixedTVars)
+      frees' <- getActuallyFreeVars τ
+      debug $ "the free vars are: " <> show frees' <> " without {" <> show fixed <> "}"
+      let frees = frees' \\ [SomeK v | (SingSomeK v) <- fixed]
+      debug $ "that is: " <> show frees
+
       return (Fun [(ForAll frees τ :@ (Just sign))])
 
 
@@ -201,7 +213,8 @@ checkSen' (LamStar xτs body) scope =
       mtruncateS inftyS
       -- build the type signature and proper ->* type
       let xrτs' = [x :@ p | (x :@ PrivacyAnnotation p) <- xrτs]
-      let τ = (xrτs' :->*: restype)
+      let τ' = (xrτs' :->*: restype)
+      τ <- normalize τ'
       -- include free variables in a ForAll
       frees <- getActuallyFreeVars τ
       return (Fun [(ForAll frees τ :@ (Just sign))])

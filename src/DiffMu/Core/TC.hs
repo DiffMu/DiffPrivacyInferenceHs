@@ -113,7 +113,8 @@ instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs (TVar x) = σs x
   substitute σs (τ1 :->: τ2) = (:->:) <$> substitute σs τ1 <*> substitute σs τ2
   substitute σs (τ1 :->*: τ2) = (:->*:) <$> substitute σs τ1 <*> substitute σs τ2
-  substitute σs (ForAll vs τ) = ForAll <$> (removeVars σs vs) <*> substitute σs τ
+  -- substitute σs (ForAll vs τ) = ForAll <$> (removeVars σs vs) <*> substitute σs τ
+  substitute σs (ForAll vs τ) = ForAll vs <$> substitute (removeFromSubstitution vs σs) τ
   substitute σs (DMTup τs) = DMTup <$> substitute σs τs
   substitute σs (DMMat nrm clp n m τ) = DMMat nrm clp <$> substitute σs n <*> substitute σs m <*> substitute σs τ
   substitute σs (DMChoice xs) = DMChoice <$> substitute σs xs
@@ -477,7 +478,9 @@ data MetaCtx = MetaCtx
 data TCState = TCState
   {
     _watcher :: Watcher,
-    _logger :: DMLogger
+    _logger :: DMLogger,
+    _newlySubstitutedTVars :: ([SomeK TVarOf], [[SomeK TVarOf]]),
+    _newlySubstitutedSVars :: ([SomeK SVarOf], [[SomeK SVarOf]])
   }
   deriving (Generic)
 
@@ -582,8 +585,8 @@ instance Show Watcher where
   show (Watcher changed) = show changed
 
 instance Show (TCState) where
-  show (TCState w l) = "- watcher: " <> show w <> "\n"
-                       <> "- messages: " <> show l <> "\n"
+  show (TCState w l newTVars newSVars) = "- watcher: " <> show w <> "\n"
+                                <> "- messages: " <> show l <> "\n"
 
 instance Show (Full) where
   show (Full tcs m γ) = "\nState:\n" <> show tcs <> "\nMeta:\n" <> show m <> "\nTypes:\n" <> show γ <> "\n"
@@ -640,14 +643,31 @@ instance Monad m => MonadTerm DMTypeOf (TCT m) where
     -- traceM ("\\ Type: I now have: " <> show σs')
     meta.typeSubs .= σs'
     meta.typeVars %= (removeNameBySubstitution σ)
-
     -- remove fixed var
     meta.fixedTVars %= removeKindedNameBySubstitution σ
+    -- add var as new substitution
+    tcstate.newlySubstitutedTVars %= (first (SomeK (fstSub σ) :))
   newVar = TVar <$> newTVar "τ"
   getFixedVars _ = do
     vars <- use (meta.fixedTVars)
     let somes = [SomeK v | SingSomeK v <- vars]
     return (filterSomeK somes)
+
+  newSubstitutionVarSet _ = tcstate.newlySubstitutedTVars %= (\(top,others) -> ([],(top:others)))
+  removeTopmostSubstitutionVarSet = do
+    -- get the top variables
+    topvars <- fst <$> use (tcstate.newlySubstitutedTVars)
+
+    -- remove the top variables from the list
+    let rem (top,[]) = ([],[])
+        rem (top,(o:os)) = (o,os)
+    tcstate.newlySubstitutedTVars %= rem
+
+    -- get the substitutions
+    σ <- use (meta.typeSubs)
+    let splitσ = splitSubs topvars σ
+    meta.typeSubs %= (\_ -> originalSubs_Split splitσ)
+    return (removedSubs_Split splitσ)
 
 instance Monad m => MonadTerm SensitivityOf (TCT m) where
   type VarFam SensitivityOf = SVarOf
@@ -658,8 +678,26 @@ instance Monad m => MonadTerm SensitivityOf (TCT m) where
     σs' <- σs ⋆ singletonSub σ
     meta.sensSubs .= σs'
     meta.sensVars %= (removeNameBySubstitution σ)
+    -- add var to newly substitituted ones
+    tcstate.newlySubstitutedSVars %= (first (SomeK (fstSub σ) :))
   newVar = coerce <$> svar <$> newSVar "s"
   getFixedVars _ = return mempty
+
+  newSubstitutionVarSet _ = tcstate.newlySubstitutedTVars %= (\(top,others) -> ([],(top:others)))
+  removeTopmostSubstitutionVarSet = do
+    -- get the top variables
+    topvars <- fst <$> use (tcstate.newlySubstitutedSVars)
+
+    -- remove the top variables from the list
+    let rem (top,[]) = ([],[])
+        rem (top,(o:os)) = (o,os)
+    tcstate.newlySubstitutedTVars %= rem
+
+    -- get the substitutions
+    σ <- use (meta.sensSubs)
+    let splitσ = splitSubs topvars σ
+    meta.sensSubs %= (\_ -> originalSubs_Split splitσ)
+    return (removedSubs_Split splitσ)
 
 instance Monad m => MonadTermDuplication DMTypeOf (TCT m) where
   duplicateAllConstraints subs = do
@@ -751,8 +789,10 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
     case changed of
       [] -> return Nothing
       (((name,Watched (NormalForMode normalModes) constr),newMode):_) -> do
-        meta.constraints.anncontent.topctx %= (setValue name (Watched (NormalForMode (newMode:normalModes)) constr))
-        return (Just (name, constr, newMode))
+        -- normalize constraint before setting it to non-changed it
+        constr' <- normalize constr
+        meta.constraints.anncontent.topctx %= (setValue name (Watched (NormalForMode (newMode:normalModes)) constr'))
+        return (Just (name, constr', newMode))
 
   dischargeConstraint name = do
     meta.constraints.anncontent.topctx %= (deleteValue name)
@@ -929,8 +969,15 @@ instance Monad m => LiftTC (TCT m) where
 instance Monad m => MonadImpossible (TCT m) where
   impossible err = throwError (ImpossibleError err)
 
+fixpointM :: (Monad m, Eq x) => (x -> m x) -> x -> m x
+fixpointM f a = do
+  a' <- f a
+  case a' == a of
+    True -> return a
+    False -> fixpointM f a'
+
 instance (MonadDMTC t) => Normalize t (DMTypeOf k) where
-  normalize n =
+  normalize = fixpointM $ \n ->
     do -- we apply all type variable substitutions
        σ <- getSubs @_ @DMTypeOf
        n₂ <- σ ↷ n

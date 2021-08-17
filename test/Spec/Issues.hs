@@ -71,7 +71,7 @@ test58 pp = describe "issue 58" $ do
       ty = Fun([ForAll [] ([] :->: intc (Fin 3)) :@ Just []])
 
   parseEval pp "example variant 1" ex_1 (pure ty)
-  parseEval pp "example variant 2" ex_2 (pure ty)
+  parseEval_l pp "example variant 2" ex_2 (pure ty)
 
 
 test59 pp = describe "issue 59" $ do
@@ -161,7 +161,7 @@ test60 pp = describe "issue 60" $ do
       intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
       ty = Fun([ForAll [] ([] :->: intc (Fin 3)) :@ Just []])
 
-  parseEval_l pp "example variant 1" ex_1 (pure ty)
+  parseEval pp "example variant 1" ex_1 (pure ty)
   parseEval pp "example variant 1 (good)" ex_1_good (pure ty)
 
 

@@ -20,6 +20,9 @@ instance (KShow x, KShow a) => Show (Sub' x a k j) where
 newtype ListK a k = ListK [a k]
   deriving Show
 
+fstSub :: Sub x a k -> x k
+fstSub (x := _) = x
+
 
 compareVar :: KEq a => SomeK a -> SomeK a -> Bool
 compareVar (SomeK (x :: a k)) (SomeK (y :: a k2)) =
@@ -139,7 +142,7 @@ filterSomeK :: forall v k2. (Typeable k2) => [(SomeK v)] -> [v k2]
 filterSomeK vs = [v | Just v <- (f <$> vs)]
   where
     f :: SomeK v -> Maybe (v k2)
-    f (SomeK (v :: v k)) = 
+    f (SomeK (v :: v k)) =
       case testEquality (typeRep @k) (typeRep @k2) of
         Nothing -> Nothing
         Just Refl -> Just v
@@ -149,6 +152,18 @@ data Subs v a where
   -- Subs :: Term v a => (HashMap (SomeK v) (SomeK a)) -> Subs v a
   Subs :: Term v a => (HashMap (SomeK v) (SomeK a)) -> Subs v a
 
+splitSubs :: (Term v a) => [SomeK v] -> (Subs v a) -> SplitSubsResult v a
+splitSubs vs (Subs σ) = SplitSubsResult
+  {
+    originalSubs_Split = Subs (filterWithKey (\k _ -> not (k `elem` vs)) σ)
+  , removedSubs_Split  = Subs (filterWithKey (\k _ ->     (k `elem` vs)) σ)
+  }
+
+data SplitSubsResult v a = SplitSubsResult
+  {
+    originalSubs_Split :: Subs v a,
+    removedSubs_Split :: Subs v a
+  }
 
 instance Term v a => Default (Subs v a) where
   def = Subs empty
@@ -170,6 +185,25 @@ removeFromSubstitution :: (Monad t, Term v a) => [SomeK v] -> (forall k. IsKind 
 removeFromSubstitution vars σ x = case (SomeK x) `elem` vars of
   True -> pure (var x)
   False -> σ x
+
+data SplitSubstitutionResult t v a = SplitSubtitutionResult
+  {
+    originalSubstitution_Split :: forall k. IsKind k => v k -> t (a k),
+    removedSubstitution_Split :: forall k. IsKind k => v k -> t (a k)
+  }
+
+splitSubstitution :: (Monad t, Term v a) => [SomeK v] -> (forall k. IsKind k => v k -> t (a k)) -> SplitSubstitutionResult t v a
+-- splitSubstitution vars σ x = case or [compareVar (SomeK x) v | v <- vars] of
+splitSubstitution vars σ = SplitSubtitutionResult
+  {
+    originalSubstitution_Split = \ x -> case (SomeK x) `elem` vars of
+                                    True -> pure (var x)
+                                    False -> σ x
+  , removedSubstitution_Split = \ x -> case (SomeK x) `elem` vars of
+                                    False -> pure (var x)
+                                    True  -> σ x
+  }
+
 
 
 trySubstitute :: (MonadImpossible t, MonadWatch t, Term v a, IsKind k) => Subs v a -> v k -> t (a k)
@@ -239,6 +273,8 @@ class (Monad t, Term (VarFam a) a) => MonadTerm (a :: j -> *) t where
   addSub :: (IsKind k) => Sub (VarFam a) a k -> t ()
   getSubs :: t (Subs (VarFam a) a)
   getFixedVars :: (IsKind k) => Proxy a -> t [VarFam a k]
+  newSubstitutionVarSet :: Proxy a -> t ()
+  removeTopmostSubstitutionVarSet :: t (Subs (VarFam a) a)
 
 class (Monad t, Term (VarFam a) a, MonadTerm a t) => MonadTermDuplication a t where
   duplicateAllConstraints :: [SomeK (Sub (VarFam a) (ListK a))] -> t ()

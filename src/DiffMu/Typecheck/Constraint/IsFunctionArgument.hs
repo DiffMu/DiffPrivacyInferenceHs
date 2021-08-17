@@ -119,7 +119,8 @@ instance FixedVars TVarOf (IsFunctionArgument (DMTypeOf MainKind, DMTypeOf MainK
   fixedVars (IsFunctionArgument (existingFuns, wantedFuns)) = getFunctionReturnVar wantedFuns <> getNoFunVars existingFuns <> getNoFunVars wantedFuns
 
 instance Solve MonadDMTC IsFunctionArgument (DMTypeOf MainKind, DMTypeOf MainKind) where
-  solve_ Dict _ name (IsFunctionArgument (a,b)) = solveIsFunctionArgument name (a,b)
+  solve_ Dict SolveExact name (IsFunctionArgument (a,b)) = solveIsFunctionArgument name (a,b)
+  solve_ Dict _          name (IsFunctionArgument (a,b)) = pure ()
 
 ------------------------------------------------------------------------------------------------------
 -- IsChoice constraints
@@ -134,7 +135,8 @@ type ChoiceHash = HashMap [JuliaType] (DMTypeOf ForAllKind, [DMTypeOf FunKind])
 
 -- hash has the existing methods, list has the required methods.
 instance Solve MonadDMTC IsChoice (ChoiceHash, [DMTypeOf FunKind]) where
-  solve_ Dict _ name (IsChoice arg) = solveIsChoice name arg
+  solve_ Dict SolveExact name (IsChoice arg) = solveIsChoice name arg
+  solve_ Dict _          name (IsChoice arg) = pure ()
 
 -- see if the constraint can be resolved. might update the IsCHoice constraint, do nothing, or discharge.
 -- might produce new IsFunctionArgument constraints for the arguments.
@@ -230,7 +232,7 @@ resolveChoiceHash ((ForAll freevs method), matches) = do
                                              -- set privacies of the match to ∞
                                              mapM (\p -> unify p inftyP) [p | (_ :@ p) <- matchxs]
                                              -- unify return types
-                                             unify τmatch τmeth
+                                             addC (τmeth :@ ()) (τmatch :@ ())
                                              return ()
                                           -- in the regular cases the arrows can just be unified.
                                           (matchxs :->: τmatch, methxs :->: τmeth) -> do

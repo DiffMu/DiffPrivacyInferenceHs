@@ -18,6 +18,22 @@ testCheckSens parse = do
     parseEval parse "Checks the identity function" test ty
 
 
+  describe "checking with IFA" $ do
+    let ex = " function test()               \n\
+            \   function f(a)               \n\
+            \      backup = a               \n\
+            \      b = a * 2                \n\
+            \      result = backup + a + b  \n\
+            \      result                   \n\
+            \   end                         \n\
+            \   f(1)                        \n\
+            \ end"
+
+        intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
+        ty = Fun([ForAll [] ([] :->: intc (Fin 4)) :@ Just []])
+
+    parseEval parse "example 1 works" ex (pure ty)
+
 
 
 

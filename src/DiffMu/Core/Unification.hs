@@ -106,6 +106,70 @@ instance (HasUnificationError e (Maybe a), MonadError e t, Show a, Unifyᵢ t a)
 -- instance Normalize t a => Normalize (INCResT e t) a where
 --   normalize a = liftINC (normalize a)
 
+renameVarsWithNew :: MonadDMTC t => ([SomeK TVarOf], DMTypeOf k) -> t ([SomeK TVarOf], DMTypeOf k)
+renameVarsWithNew ([] , x) = return ([] , x)
+renameVarsWithNew ((SomeK v:vs), x) = do
+  -- call myself recursively with the rest of the list
+  (ws,y) <- renameVarsWithNew (vs, x)
+
+  -- create a name for the copy of `v`
+  let vname (SymbolOf (Symbol a)) = a
+
+  -- the copy of `v` is `w`
+  w <- newTVar ("r" <> vname v)
+
+  -- substitute the occurences of `v` with `w` in y
+  let y' = substituteSingle (v := TVar w) y
+
+  -- combine the new result with the recursively gotten one
+  return ((SomeK w : ws), y')
+
+
+unifyForAll :: MonadDMTC t => ([SomeK TVarOf], DMFun) -> ([SomeK TVarOf], DMFun) -> t ([SomeK TVarOf], DMFun)
+unifyForAll (vx , x) (vy , y) = do
+  (vx' , x') <- renameVarsWithNew (vx , x)
+  (vy' , y') <- renameVarsWithNew (vy , y)
+
+  -- all variables which we potentially still abstract over
+  let vall = nub (vx' <> vy')
+
+  -- notify the monad that we want to track newly added substitutions
+  newSubstitutionVarSet (Proxy @DMTypeOf)
+
+  -- unify the terms with renamed variables
+  z <- unify x' y'
+
+  -- remove and get the new substitutions
+  Subs σ <- removeTopmostSubstitutionVarSet @_ @DMTypeOf
+  -- make them well kinded
+  σ' <- mapM (\(SomeK v, SomeK a) -> SomeK <$> wellkindedSub (v :=~ a)) (H.toList σ)
+
+  -- a substitution is good if either
+  --  1. its lhs is a new var
+  --  2. its rhs does not contain new vars
+  --  3. its rhs is exactly a new var (this can happen if the unification chose the wrong direction for the sub)
+  -- (in the other cases we have unifications of outside vars with inner vars)
+  --
+  -- we return a list of variables which we no longer abstract over (wrt the given substitution)
+  let isGoodSub :: IsKind k => Sub TVarOf DMTypeOf k -> Either String [SomeK TVarOf]
+      isGoodSub (v := a)      | SomeK v `elem` vall                      = Right [SomeK v]
+      isGoodSub (v := a)      | and [w `notElem` vall | w <- freeVars a] = Right []
+      isGoodSub (v := TVar a) | SomeK a `elem` vall                      = Right [SomeK a]
+      isGoodSub (v := a)                                                 = Left ("While unifying foralls (" <> show (ForAll vx x) <> ") == ("
+                                                                                 <> show (ForAll vy y) <> ").\n Encountered an illegal substitution " <> show (v := a))
+
+  let isGoodSub' :: SomeK (Sub TVarOf DMTypeOf) -> Either String [SomeK TVarOf]
+      isGoodSub' (SomeK s) = isGoodSub s
+
+  let remVars = mapM isGoodSub' σ'
+  case remVars of
+    Left err -> throwError (UnsatisfiableConstraint err)
+    Right remVars -> do
+      -- the variables which we still abstract over are the ones not in remVars
+      let zs = vall \\ (join remVars)
+      -- the term is the one given by unification
+      return (zs,z)
+
 instance MonadDMTC t => Unifyᵢ (INCResT DMException t) (DMTypeOf k) where
   unifyᵢ_ Deleted a                     = liftINC $ internalError "A deleted variable reappeared and tried to escape via unification."
   unifyᵢ_ a Deleted                     = liftINC $ internalError "A deleted variable reappeared and tried to escape via unification."
@@ -143,13 +207,15 @@ instance MonadDMTC t => Unifyᵢ (INCResT DMException t) (DMTypeOf k) where
   unifyᵢ_ (Fun _) (v :∧: w)                = throwError Wait'
   unifyᵢ_ (v :∧: w) (Fun _)                = throwError Wait'
   unifyᵢ_ (_ :∧: _) (v :∧: w)              = throwError Wait'
-  unifyᵢ_ (ForAll xs t) (ForAll ys s)      =
+  unifyᵢ_ (ForAll xs t) (ForAll ys s)      = do
     -- NOTE: we actually have to remove all variables which were substituted
     --       from the merged list (xs <> ys). But luckily this is done
     --       automatically by the definition of substitution, and will happen
     --       when the returned type is being normalized
     --
-    ForAll (xs <> ys) <$> unifyᵢ t s
+    -- ForAll (xs <> ys) <$> unifyᵢ t s
+    (zs,r) <- liftINC $ unifyForAll (xs,t) (ys,s)
+    return (ForAll zs r)
   unifyᵢ_ t s                              = throwError (Fail' $ UnificationError t s)
 
 
