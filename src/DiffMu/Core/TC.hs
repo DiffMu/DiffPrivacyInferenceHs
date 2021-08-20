@@ -78,8 +78,8 @@ instance Substitute TVarOf DMTypeOf (SVarOf k) where
   substitute σs = pure
 
 instance Substitute TVarOf DMTypeOf DMTypeOp where
-  substitute σs (UnaryNum op arg res) = (UnaryNum op <$> substitute σs arg <*> substitute σs res)
-  substitute σs (BinaryNum op args res) = (BinaryNum op <$> substitute σs args <*> substitute σs res)
+  substitute σs (Unary op arg res) = (Unary op <$> substitute σs arg <*> substitute σs res)
+  substitute σs (Binary op args res) = (Binary op <$> substitute σs args <*> substitute σs res)
 
 instance Substitute TVarOf DMTypeOf (Annotation a) where
   substitute σs (SensitivityAnnotation s) = SensitivityAnnotation <$> (substitute σs s)
@@ -185,8 +185,8 @@ instance Typeable k => FreeVars TVarOf (SVarOf k) where
   freeVars = mempty
 
 instance FreeVars TVarOf DMTypeOp where
-  freeVars (UnaryNum op arg res) = freeVars arg <> freeVars res
-  freeVars (BinaryNum op arg res) = freeVars arg <> freeVars res
+  freeVars (Unary op arg res) = freeVars arg <> freeVars res
+  freeVars (Binary op arg res) = freeVars arg <> freeVars res
 
 instance Typeable a => FreeVars TVarOf (Annotation a) where
   freeVars (SensitivityAnnotation s) = freeVars s
@@ -976,8 +976,8 @@ instance (Monad t, Normalize t a) => Normalize t (Maybe a) where
 
 -- instance (Solve MonadDMTC IsInfimum (DMType,DMType,DMType), IsT MonadDMTC t, Monad t) => Normalize (t) DMTypeOp where
 instance (MonadDMTC t) => Normalize (t) DMTypeOp where
-  normalize (UnaryNum op τ res) = UnaryNum op <$> normalize τ <*> normalize res
-  normalize (BinaryNum op τ res) = BinaryNum op <$> normalize τ <*> normalize res
+  normalize (Unary op τ res) = Unary op <$> normalize τ <*> normalize res
+  normalize (Binary op τ res) = Binary op <$> normalize τ <*> normalize res
 
   -- normalize (Ternary op τ res) = Ternary op <$> normalize τ <*> normalize res
 

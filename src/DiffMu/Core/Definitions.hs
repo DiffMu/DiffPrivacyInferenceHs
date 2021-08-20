@@ -487,8 +487,8 @@ instance Show DMTypeOps_Binary where
 
 -- An application of a type operation to an appropriate number of type arguments
 data DMTypeOp =
-     UnaryNum DMTypeOps_Unary   (DMTypeOf NumKind :@ SVar) (DMTypeOf NumKind)
-   | BinaryNum DMTypeOps_Binary (DMTypeOf NumKind :@ SVar , DMTypeOf NumKind :@ SVar) (DMTypeOf NumKind)
+     Unary DMTypeOps_Unary   (DMType :@ SVar) (DMType)
+   | Binary DMTypeOps_Binary (DMType :@ SVar , DMType :@ SVar) (DMType)
   deriving (Show)
 
 

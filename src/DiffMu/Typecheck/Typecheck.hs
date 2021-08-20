@@ -95,7 +95,7 @@ checkSen' (Op op args) scope = do
   done $ do
      let handleOpArg (marg, (τ, s)) = do
                                      τ_arg <- marg
-                                     unify (NoFun (Numeric τ)) τ_arg
+                                     unify (NoFun τ) τ_arg
                                      mscale (svar s)
                                      return τ_arg
 
@@ -110,7 +110,7 @@ checkSen' (Op op args) scope = do
      msumS (map handleOpArg (zip argsdel arg_sens))
 
      -- return the `res` type given by `makeTypeOp`
-     return (NoFun (Numeric res))
+     return (NoFun res)
 
 
 -- a special term for function argument variables.
