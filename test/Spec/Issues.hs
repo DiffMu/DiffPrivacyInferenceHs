@@ -10,6 +10,7 @@ testIssues pp = do
   test59 pp
   test60 pp
   test67 pp
+  test21 pp
 
 test25 pp = describe "issue 25" $ do
   let ex = " function test() \n\
@@ -177,4 +178,31 @@ test67 pp = describe "issue 67" $ do
       ty = Fun([ForAll [] ([] :->: intc (Fin 1)) :@ Just []])
 
   parseEval pp "example variant 1" ex_1 (pure ty)
+
+test21 pp = describe "issue 21 (FLet collection)" $ do
+  let ex_1 =
+         "  function test()     \n\
+         \      f(a) = 1        \n\
+         \      x = f(0,0)      \n\
+         \      f(a,b) = 2      \n\
+         \      x               \n\
+         \  end                 "
+
+      intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
+      ty = Fun([ForAll [] ([] :->: intc (Fin 2)) :@ Just []])
+
+  parseEval pp "example variant 1" ex_1 (pure ty)
+
+  let ex_2 =
+         "  function test()     \n\
+         \      x = f(0,0)      \n\
+         \      f(a) = 1        \n\
+         \      f(a,b) = 2      \n\
+         \      x               \n\
+         \  end                 "
+
+  parseEvalFail pp "example variant 2 (needs to fail)" ex_2 (VariableNotInScope "f")
+
+
+
 

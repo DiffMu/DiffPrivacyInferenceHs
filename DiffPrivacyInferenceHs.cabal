@@ -78,6 +78,7 @@ library
       DiffMu.Typecheck.Constraint.IsJuliaEqual
       DiffMu.Typecheck.JuliaType
       DiffMu.Typecheck.Operations
+      DiffMu.Typecheck.Preprocess
       DiffMu.Typecheck.Subtyping
       DiffMu.Typecheck.Typecheck
       Lib

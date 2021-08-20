@@ -1,7 +1,7 @@
 
 module Spec.Base
   (module All
-  , tc , tcl , tcb , sn , sn_EW , parseEval , parseEval_l , parseEvalUnify , parseEvalUnify_l , parseEvalSimple
+  , tc , tcl , tcb , sn , sn_EW , parseEval , parseEval_l , parseEvalUnify , parseEvalUnify_l , parseEvalSimple, parseEvalFail
   )
 where
 
@@ -18,6 +18,7 @@ import DiffMu.Typecheck.Operations as All
 import DiffMu.Typecheck.Subtyping as All
 import DiffMu.Typecheck.Typecheck as All
 import DiffMu.Typecheck.Constraint.IsJuliaEqual as All
+import DiffMu.Typecheck.Preprocess
 import DiffMu.Runner as All
 import DiffMu.Parser.DMTerm.FromString as All
 
@@ -68,24 +69,31 @@ sn_EW x = do
 parseEvalSimple p term expected =
   parseEval p ("Checks '" <> term <> "' correctly") term expected
 
+parseEvalFail a b c f = parseEval_b False CompareByEqual (ExpectFail f) a b c (pure Deleted)
 
-parseEval = parseEval_b False CompareByEqual
-parseEval_l = parseEval_b True CompareByEqual
+parseEval = parseEval_b False CompareByEqual ExpectSuccess
+parseEval_l = parseEval_b True CompareByEqual ExpectSuccess
 
-parseEvalUnify = parseEval_b False CompareByUnification
-parseEvalUnify_l = parseEval_b True CompareByUnification
+parseEvalUnify = parseEval_b False CompareByUnification ExpectSuccess
+parseEvalUnify_l = parseEval_b True CompareByUnification ExpectSuccess
 
 data ComparisonStyle = CompareByEqual | CompareByUnification
+data TestExpectation b = ExpectSuccess | ExpectFail b
 
-parseEval_b dolog compstyle parse desc term (expected :: TC DMMain) =
+parseEval_b dolog compstyle failOrSuccess parse desc term (expected :: TC DMMain) =
   it desc $ do
     term' <- parse term
 
     let res = pDMTermFromString term'
     term'' <- case res of
       Left err -> error $ "Error while parsing DMTerm from string: " <> show err
-      Right res ->
+      Right res' ->
         do let tres = (do
+                          let res = (preprocessDMTerm res')
+                          case dolog of
+                            True -> traceM $ "preprocessed term:\n" <> show res
+                            False -> pure ()
+
                           inferredT_Delayed <- checkSens res def
                           return $ do
                             inferredT <- inferredT_Delayed
@@ -122,4 +130,7 @@ parseEval_b dolog compstyle parse desc term (expected :: TC DMMain) =
                 False -> pure $ Left ("expected type " <> show expectedT <> " but got " <> show result)
 
 
-    (tcb dolog $ (sn term'' >>= correct)) `shouldReturn` (Right (Right ()))
+    case failOrSuccess of
+      ExpectSuccess -> (tcb dolog $ (sn term'' >>= correct)) `shouldReturn` (Right (Right ()))
+      ExpectFail f  -> (tcb dolog $ (sn term'' >>= correct)) `shouldReturn` (Left f)
+

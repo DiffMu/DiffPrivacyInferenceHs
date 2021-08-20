@@ -13,6 +13,7 @@ import DiffMu.Core.DelayedScope
 import DiffMu.Typecheck.Operations
 import DiffMu.Typecheck.Subtyping
 import DiffMu.Typecheck.Typecheck
+import DiffMu.Typecheck.Preprocess
 import DiffMu.Parser.DMTerm.FromString
 
 import DiffMu.Typecheck.JuliaType
@@ -63,7 +64,7 @@ typecheckFromDMTerm term = do
 
         log $ "Checking term   : " <> show term
         -- typecheck the term t5
-        let tres = checkSens term def
+        let tres = checkSens (preprocessDMTerm term) def
         let (tres'',_) = runState (extractDelayed def tres) def
         tres' <- tres''
         log $ "Type before constraint resolving: " <> show tres'
