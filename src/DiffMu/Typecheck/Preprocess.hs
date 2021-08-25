@@ -20,40 +20,59 @@ import qualified Data.Text as T
 import Debug.Trace
 
 
-preprocessDMTerm :: DMTerm -> DMTerm
+preprocessDMTerm :: DMTerm -> TC DMTerm
 preprocessDMTerm t = collectAllFLets t
 
-collectAllFLets :: DMTerm -> DMTerm
+collectAllFLets :: DMTerm -> TC DMTerm
 
-collectAllFLets (FLet var def rest) =
+collectAllFLets (FLet var def rest) = do
   let FindFLetsResult defs rest' = findFLets var rest
-  in FLet var (collectAllFLets def) (expandFLets var (collectAllFLets <$> defs) rest')
-collectAllFLets (SLet var def rest) = SLet var (collectAllFLets def) (collectAllFLets rest)
-collectAllFLets (TLet var def rest) = TLet var (collectAllFLets def) (collectAllFLets rest)
+      alldefs = (def:defs)
 
-collectAllFLets (Ret t)           = Ret (collectAllFLets t)
-collectAllFLets (Sng a t)         = Sng a t
-collectAllFLets (Var a t)         = Var a t
-collectAllFLets (Rnd t)           = Rnd t
-collectAllFLets (Arg a b c)       = Arg a b c
-collectAllFLets (Op o ts)         = Op o (collectAllFLets <$> ts)
-collectAllFLets (Phi a b c)       = Phi (collectAllFLets a) (collectAllFLets b) (collectAllFLets c)
-collectAllFLets (Lam a t)         = Lam a (collectAllFLets t)
-collectAllFLets (LamStar a t)     = LamStar a (collectAllFLets t)
-collectAllFLets (Apply t ts)      = Apply (collectAllFLets t) (collectAllFLets <$> ts)
-collectAllFLets (Choice m)        = Choice (collectAllFLets <$> m)
-collectAllFLets (Tup ts)          = Tup (collectAllFLets <$> ts)
-collectAllFLets (Gauss a b c d)   = Gauss (collectAllFLets a) (collectAllFLets b) (collectAllFLets c) (collectAllFLets d)
-collectAllFLets (MCreate a b x c) = MCreate (collectAllFLets a) (collectAllFLets b) x (collectAllFLets c)
-collectAllFLets (Transpose a)     = Transpose (collectAllFLets a)
-collectAllFLets (Index a b c)     = Index (collectAllFLets a) (collectAllFLets b) (collectAllFLets c)
-collectAllFLets (ClipM x a)       = ClipM x (collectAllFLets a)
-collectAllFLets (Iter a b c)      = Iter (collectAllFLets a) (collectAllFLets b) (collectAllFLets c)
-collectAllFLets (Loop a b x c)    = Loop (collectAllFLets a) (collectAllFLets b) x (collectAllFLets c)
+  -- we derive the julia type from the term, appending the corresponding julia types to their definitions
+  allsigs <- mapM getJuliaSig alldefs
+  let alldefsWithJuliaSig = zip allsigs alldefs
+
+      -- we thread the elements through a hashmap => if we have terms with the same juliatype,
+      -- the second one overwrites the first one
+      alldefsWithJuliaSig' = H.elems (H.fromList alldefsWithJuliaSig)
+  debug $ "-----------------"
+  debug $ "for var " <> show var <> " found the signatures:"
+  debug $ show alldefsWithJuliaSig
+  debug $ "after removing duplicates, we have: "
+  debug $ show alldefsWithJuliaSig'
+
+  updatedAllDefs <- mapM collectAllFLets alldefsWithJuliaSig'
+  updatedRest <- collectAllFLets rest'
+  return $ expandFLets var updatedAllDefs updatedRest
+collectAllFLets (SLet var def rest) = SLet var <$> (collectAllFLets def) <*> (collectAllFLets rest)
+collectAllFLets (TLet var def rest) = TLet var <$> (collectAllFLets def) <*> (collectAllFLets rest)
+
+collectAllFLets (Ret t)           = Ret <$> (collectAllFLets t)
+collectAllFLets (Sng a t)         = pure $ Sng a t
+collectAllFLets (Var a t)         = pure $ Var a t
+collectAllFLets (Rnd t)           = pure $ Rnd t
+collectAllFLets (Arg a b c)       = pure $ Arg a b c
+collectAllFLets (Op o ts)         = Op o <$> (mapM collectAllFLets ts)
+collectAllFLets (Phi a b c)       = Phi <$> (collectAllFLets a) <*> (collectAllFLets b) <*> (collectAllFLets c)
+collectAllFLets (Lam a t)         = Lam a <$> (collectAllFLets t)
+collectAllFLets (LamStar a t)     = LamStar a <$> (collectAllFLets t)
+collectAllFLets (Apply t ts)      = Apply <$> (collectAllFLets t) <*> (mapM collectAllFLets ts)
+collectAllFLets (Choice m)        = Choice <$> (mapM collectAllFLets m)
+collectAllFLets (Tup ts)          = Tup <$> (mapM collectAllFLets ts)
+collectAllFLets (Gauss a b c d)   = Gauss <$> (collectAllFLets a) <*> (collectAllFLets b) <*> (collectAllFLets c) <*> (collectAllFLets d)
+collectAllFLets (MCreate a b x c) = MCreate <$> (collectAllFLets a) <*> (collectAllFLets b) <*> pure x <*> (collectAllFLets c)
+collectAllFLets (Transpose a)     = Transpose <$> (collectAllFLets a)
+collectAllFLets (Index a b c)     = Index <$> (collectAllFLets a) <*> (collectAllFLets b) <*> (collectAllFLets c)
+collectAllFLets (ClipM x a)       = ClipM x <$> (collectAllFLets a)
+collectAllFLets (Iter a b c)      = Iter <$> (collectAllFLets a) <*> (collectAllFLets b) <*> (collectAllFLets c)
+collectAllFLets (Loop a b x c)    = Loop <$> (collectAllFLets a) <*> (collectAllFLets b) <*> pure x <*> (collectAllFLets c)
 
 expandFLets :: TeVar -> [DMTerm] -> DMTerm -> DMTerm
 expandFLets var [] rest = rest
 expandFLets var (d:defs) rest = FLet var d (expandFLets var defs rest)
+
+type JuliaSig = [JuliaType]
 
 data FindFLetsResult = FindFLetsResult
   {
@@ -73,5 +92,8 @@ findFLets target (TLet var def rest) = let FindFLetsResult others rest' = findFL
 findFLets target t = FindFLetsResult [] t
 
 
-
+getJuliaSig :: DMTerm -> TC JuliaSig
+getJuliaSig (Lam as _) = pure $ map sndA as
+getJuliaSig (LamStar as _) = pure $ map (sndA . fst) as
+getJuliaSig _ = impossible "Expected a lam/lamstar inside an flet."
 

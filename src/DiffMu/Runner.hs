@@ -64,7 +64,8 @@ typecheckFromDMTerm term = do
 
         log $ "Checking term   : " <> show term
         -- typecheck the term t5
-        let tres = checkSens (preprocessDMTerm term) def
+        term' <- preprocessDMTerm term
+        let tres = checkSens (term') def
         let (tres'',_) = runState (extractDelayed def tres) def
         tres' <- tres''
         log $ "Type before constraint resolving: " <> show tres'

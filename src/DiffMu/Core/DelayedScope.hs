@@ -175,12 +175,6 @@ pushChoice name ma scope =
           b <- mb
           return $ do
             (a',b') <- msumTup (a, b)
-            -- NOTE: it is very important that b' is added before a' here.
-            --       this makes a difference in the case where both types have the
-            --       same JuliaType representation. Then, in IFA resolution we need
-            --       to use the newer type. And appearently, IFA takes the type which
-            --       is further on the right.
-            --       (Yes, this is a very brittle solution...)
-            return (b' :∧: a')
+            return (a' :∧: b')
   in setValue name newval scope
 

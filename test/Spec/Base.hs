@@ -85,24 +85,28 @@ parseEval_b dolog compstyle failOrSuccess parse desc term (expected :: TC DMMain
     term' <- parse term
 
     let res = pDMTermFromString term'
-    term'' <- case res of
-      Left err -> error $ "Error while parsing DMTerm from string: " <> show err
-      Right res' ->
-        do let tres = (do
-                          let res = (preprocessDMTerm res')
-                          case dolog of
-                            True -> traceM $ "preprocessed term:\n" <> show res
-                            False -> pure ()
+    let term'' :: TC DMMain
+        term'' = case res of
+                   Left err -> error $ "Error while parsing DMTerm from string: " <> show err
+                   Right res' ->
+                     do
+                            res <- preprocessDMTerm res'
+                            let tres = checkSens res def
+                                  -- (do
+                                  --          case dolog of
+                                  --            True -> traceM $ "preprocessed term:\n" <> show res
+                                  --            False -> pure ()
 
-                          inferredT_Delayed <- checkSens res def
-                          return $ do
-                            inferredT <- inferredT_Delayed
-                            return inferredT
-                            -- expectedT <- expected
-                            -- unify inferredT expectedT
-                      )
-           let (tres'',_) = runState (extractDelayed def tres) def
-           pure $ tres''
+                                  --          inferredT_Delayed <- checkSens res def
+                                  --          return $ do
+                                  --            inferredT <- inferredT_Delayed
+                                  --            return inferredT
+                                  --            -- expectedT <- expected
+                                  --            -- unify inferredT expectedT
+                                  --      )
+                            let (tres'',_) = runState (extractDelayed def tres) def
+                            tres''
+           -- pure $ (tres'')
 
     let correct result = do
           -- first, get all constraints (these are exactly the ones which returned from the checking)
