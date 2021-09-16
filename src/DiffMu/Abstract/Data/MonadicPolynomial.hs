@@ -67,6 +67,10 @@ class DictKey k => DictLike k v d | d -> k v where
   emptyDict :: d
   isEmptyDict :: d -> Bool
   getAllKeys :: d -> [k]
+  getAllElems :: d -> [v]
+
+popValue :: DictLike k v d => k -> d -> (Maybe v , d)
+popValue k d = (getValue k d , deleteValue k d)
 
 class ShowDict k v d | d -> k v where
   showWith :: String -> (k -> v -> String) -> d -> String -> String
@@ -78,6 +82,7 @@ instance (DictKey k) => DictLike k v (MonCom v k) where
   emptyDict = MonCom H.empty
   isEmptyDict (MonCom h) = H.null h
   getAllKeys (MonCom h) = H.keys h
+  getAllElems (MonCom h) = H.elems h
 
 instance ShowDict k v (MonCom v k) where
   showWith comma merge (MonCom d) emptycase =
