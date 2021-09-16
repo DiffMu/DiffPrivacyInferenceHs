@@ -550,6 +550,36 @@ checkSen' (Index m i j) scope = do
          return (NoFun (Numeric τ))
 
 
+checkSen' (SubGrad ps gs) scope = do
+
+      -- check indicex and set their sensitivity to infinity
+      dps <- checkSens ps scope
+      dgs <- checkSens gs scope
+
+      done $ do
+         let handleOpArg (τ_arg, (τ, s)) = do
+                                     mscale (svar s)
+                                     return τ_arg
+
+         gs <- dgs
+         ps <- dps
+
+         -- variables for element types, norm and clip parameters and dimension
+         τgs <- newVar
+         τps <- newVar
+         nrm <- newVar
+         clp <- newVar
+         m <- newVar
+
+         -- set matrix type
+         unify gs (NoFun (DMGrads nrm clp m (Numeric τgs)))
+         unify ps (NoFun (DMParams m (Numeric τps)))
+
+         (res, arg_sens) <- makeTypeOp (IsBinary DMOpSub) 2
+         msumS (map handleOpArg (zip [τps, τgs] arg_sens))
+
+         return (NoFun (DMParams m res))
+
 
 -- Everything else is currently not supported.
 checkSen' t scope = (throwDelayedError (UnsupportedTermError t))
