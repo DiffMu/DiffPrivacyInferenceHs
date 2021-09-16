@@ -276,9 +276,10 @@ keepLeastGeneral cs =
   -- make a poset from the (julia-)subtype relations of the given signatures
   -- convert to JuliaSignature so we use our custom `leq`
   let pos :: POSet JuliaSignature
-      pos = PO.fromList (map JuliaSignature (HS.toList (H.keysSet cs)))
+      pos = foldr PO.insert PO.empty (map JuliaSignature (HS.toList (H.keysSet cs))) 
       -- pick the ones that are not supertypes of any of the others
       mins = PO.lookupMin pos
+
       mins' = [(k, cs H.! k) | JuliaSignature k <- mins]
   in
       H.fromList mins'
