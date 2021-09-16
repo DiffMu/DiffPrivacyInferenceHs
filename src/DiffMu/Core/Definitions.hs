@@ -622,8 +622,16 @@ data DMTerm =
   | ClipM Clip DMTerm
   | Iter DMTerm DMTerm DMTerm
   | Loop DMTerm DMTerm (TeVar, TeVar) DMTerm
--- ....
+-- only used in the "mutable" code
+  | MutLet DMTerm DMTerm
   deriving (Generic, Show, Eq)
+
+--------------------------------------------------------------------------
+-- Mutable code
+
+data IsMutated = Mutated | NotMutated
+  deriving (Generic, Show, Eq)
+
 
 --------------------------------------------------------------------------
 -- DMException
@@ -641,6 +649,7 @@ data DMException where
   UnsatisfiableConstraint :: String -> DMException
   TypeMismatchError       :: String -> DMException
   NoChoiceFoundError      :: String -> DMException
+  DemutationError         :: String -> DMException
   UnificationShouldWaitError :: DMTypeOf k -> DMTypeOf k -> DMException
 
 instance Show DMException where
@@ -655,6 +664,7 @@ instance Show DMException where
   show (TypeMismatchError e) = "Type mismatch: " <> e
   show (NoChoiceFoundError e) = "No choice found: " <> e
   show (UnificationShouldWaitError a b) = "Trying to unify types " <> show a <> " and " <> show b <> " with unresolved infimum (∧)."
+  show (DemutationError e) = "While trying to demutate, the following error was encountered:\n " <> e
 
 instance Eq DMException where
   UnsupportedTermError    a        == UnsupportedTermError    b       = True

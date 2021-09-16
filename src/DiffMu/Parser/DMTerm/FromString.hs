@@ -115,6 +115,12 @@ pMat = f <$> pDMTerm <*､> pDMTerm <*､> pTuple2 pTeVar pTeVar <*､> pDMTerm
 pLoop = f <$> pDMTerm <*､> pDMTerm <*､> pDMTerm <*､> pTuple2 pTeVar pTeVar <*､> pDMTerm
   where f _ a b c d = Loop a b c d
 
+withNothing1 a = f <$> a
+  where f a = (a , Nothing)
+
+withNothing2 a = f <$> a
+  where f (a , b) = (a , b , Nothing)
+
 pDMTerm :: Parser DMTerm
 pDMTerm =
       try ("ret"       `with` (Ret     <$> pDMTerm))
@@ -139,6 +145,12 @@ pDMTerm =
   <|> try ("dmtranspose" `with` (Transpose <$> pDMTerm))
   <|> try ("index"     `with` (Index <$> pDMTerm <*､> pDMTerm <*､> pDMTerm))
   <|> try ("chce"      `with` (Choice  <$> pSingleChoiceHash))
+
+  -- mutable terms
+  -- <|> try ("mut_lam"       `with` (MutLam     <$> pArray "Tuple{Symbol, DataType}" (withNothing1 $ pAsgmt (:-)) <*､> pDMTerm ))
+  -- <|> try ("mut_lam_star"  `with` (MutLamStar <$> pArray "Tuple{Tuple{Symbol, DataType}, Bool}" (withNothing2 $ pAsgmtWithRel) <*､> pDMTerm ))
+  -- <|> try ("mut_apply"     `with` (MutApply   <$> pDMTerm <*､> pArray "DMTerm" pDMTerm))
+  <|> try ("mut_slet"      `with` (MutLet    <$> pDMTerm <*､> pDMTerm))
 
 
 -- flet(:f, Type[Any, Any], lam(Tuple{Symbol, Type}[(:a, Any), (:b, Any)], op(:+, DMTerm[var(:a, Any), op(:+, DMTerm[op(:*, DMTerm[var(:b, Any), var(:b, Any)]), var(:a, Any)])])), var(:f, Any))
