@@ -143,8 +143,11 @@ pDMTerm =
   <|> try ("gauss"     `with` (pGauss))
   <|> try ("mcreate"   `with` (pMat))
   <|> try ("dmtranspose" `with` (Transpose <$> pDMTerm))
-  <|> try ("index"     `with` (Index <$> pDMTerm <*､> pDMTerm <*､> pDMTerm))
-  <|> try ("chce"      `with` (Choice  <$> pSingleChoiceHash))
+  <|> try ("index"     `with` (Index    <$> pDMTerm <*､> pDMTerm <*､> pDMTerm))
+  <|> try ("chce"      `with` (Choice   <$> pSingleChoiceHash))
+  -- NN builtins
+  <|> try ("dmsubgrad" `with` (SubGrad  <$> pDMTerm <*､> pDMTerm))
+
 
   -- mutable terms
   -- <|> try ("mut_lam"       `with` (MutLam     <$> pArray "Tuple{Symbol, DataType}" (withNothing1 $ pAsgmt (:-)) <*､> pDMTerm ))

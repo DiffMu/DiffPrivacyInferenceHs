@@ -628,6 +628,8 @@ data DMTerm =
   | ClipM Clip DMTerm
   | Iter DMTerm DMTerm DMTerm
   | Loop DMTerm DMTerm (TeVar, TeVar) DMTerm
+-- Special NN builtins
+  | SubGrad DMTerm DMTerm
 -- only used in the "mutable" code
   | MutLet DMTerm DMTerm
   deriving (Generic, Show, Eq)
