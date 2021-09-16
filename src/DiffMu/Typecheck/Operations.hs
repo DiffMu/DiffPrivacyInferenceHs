@@ -110,21 +110,14 @@ solveBinary op (τ1, τ2) = f op τ1 τ2
     f DMOpDiv (Numeric (NonConst t1)) (Numeric (Const s2 t2)) = ret (divide oneId s2) zeroId (return (Numeric (NonConst DMReal)))
     f DMOpDiv (Numeric (NonConst t1)) (Numeric (NonConst t2)) = ret (constCoeff Infty) (constCoeff Infty) (return (Numeric (NonConst DMReal)))
 
+    f DMOpMod (Numeric (NonConst t1)) (Numeric (Const s2 t2)) = ret s2 zeroId ((Numeric . NonConst) <$> supremum t1 t2)
+    f DMOpMod (Numeric (NonConst t1)) (Numeric (NonConst t2)) = ret (constCoeff Infty) (constCoeff Infty) ((Numeric . NonConst) <$> supremum t1 t2)
+
     -- TODO: Don't we need to return a "Bool" type?
     f DMOpEq (Numeric (Const s1 t1)) (Numeric (Const s2 t2)) = ret zeroId zeroId (pure $ Numeric (NonConst DMInt))
     f DMOpEq (Numeric (Const s1 t1)) (Numeric (NonConst t2)) = ret zeroId oneId  (pure $ Numeric (NonConst DMInt))
     f DMOpEq (Numeric (NonConst t1)) (Numeric (Const s2 t2)) = ret oneId  zeroId (pure $ Numeric (NonConst DMInt))
     f DMOpEq (Numeric (NonConst t1)) (Numeric (NonConst t2)) = ret oneId  oneId  (pure $ Numeric (NonConst DMInt))
-
-    f _ (Numeric _) (TVar a)           = do
-                                           τ <- newVar
-                                           unify (TVar a) (Numeric τ)
-                                           return Nothing
-
-    f _ (TVar a) (Numeric _)           = do
-                                           τ <- newVar
-                                           unify (TVar a) (Numeric τ)
-                                           return Nothing
 
     f _ _ _                            = return Nothing
 
