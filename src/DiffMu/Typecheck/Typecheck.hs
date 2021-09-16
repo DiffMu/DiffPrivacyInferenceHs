@@ -501,6 +501,29 @@ checkSen' (ClipM c m) scope = do
       return (NoFun (DMGrads nrm c n (Numeric DMData)))
 
 
+--------------------
+-- TODO
+checkSen' (ConvertM m) scope = do
+   mb <- checkSens m scope -- check the matrix
+   done $ do
+      τb <- mb
+
+      -- variables for norm and clip parameters and dimension
+      nrm <- newVar
+      clp <- newVar -- this is a norm, because we do not accept
+                    -- the unbounded clip value
+      n <- newVar
+
+      -- set correct matrix type
+      unify τb (NoFun (DMGrads nrm (Clip clp) n (Numeric DMData)))
+
+      -- move clip to the norm position,
+      -- and forget about old `nrm`
+      return (NoFun (DMGrads clp U n (Numeric (NonConst DMReal))))
+
+--------------------
+
+
 checkSen' (Transpose m) scope = do
    mb <- checkSens m scope -- check the matrix
    done $ do

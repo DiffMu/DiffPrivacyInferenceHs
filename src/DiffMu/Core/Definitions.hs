@@ -622,6 +622,7 @@ data DMTerm =
   | Tup [DMTerm]
   | TLet [(Asgmt JuliaType)] DMTerm DMTerm
   | Gauss DMTerm DMTerm DMTerm DMTerm
+  | ConvertM DMTerm
   | MCreate DMTerm DMTerm (TeVar, TeVar) DMTerm
   | Transpose DMTerm
   | Index DMTerm DMTerm DMTerm

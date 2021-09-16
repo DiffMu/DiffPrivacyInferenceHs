@@ -261,6 +261,12 @@ elaborateMut scope (Gauss t1 t2 t3 t4) = do
     [newT1, newT2, newT3, newT4] -> pure (Gauss newT1 newT2 newT3 newT4, VirtualMutated mutVars)
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
+elaborateMut scope (ConvertM t1) = do
+  (argTerms, mutVars) <- elaborateMutList "convert" scope [(Mutated , t1)]
+  case argTerms of
+    [newT1] -> pure (ConvertM newT1, VirtualMutated mutVars)
+    _ -> internalError ("Wrong number of terms after elaborateMutList")
+
 
 elaborateMut scope t = throwError (UnsupportedTermError t)
 
