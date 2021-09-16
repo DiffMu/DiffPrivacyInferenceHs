@@ -75,8 +75,24 @@ markRead var = do
   mutTypes %= (⋆! singl)
 
 
+
+
+
+
 elaborateNonmut :: Scope -> DMTerm -> MTC (DMTerm , ImmutType)
-elaborateNonmut = undefined
+elaborateNonmut scope term = do
+  res <- elaborateMut scope term
+
+  -- get the context and make sure that all variables are not mutated
+  Ctx (MonCom ctx) <- use mutTypes
+  let ctxElems = H.toList ctx
+  let somethingMutated = [a | (a , m) <- ctxElems, m == Mutated]
+
+  case somethingMutated of
+    [] -> pure ()
+    xs -> throwError (DemutationError $ "expected that the term " <> show term <> " does not mutate anything, but it mutates the following variables: " <> show xs)
+
+  return res
 
 elaborateMut :: Scope -> DMTerm -> MTC (DMTerm , ImmutType)
 
@@ -112,7 +128,9 @@ elaborateMut scope (SLet (x :- τ) term body) = do
 elaborateMut scope (Lam args body) = do
 
   -- add args as vars to the scope
-  let scope' = undefined
+  let scope' = foldr (\(a :- _) -> setValue a (SingleArg a))
+                     scope
+                     args
 
   -- check the body
   (newBody,τ) <- elaborateMut scope' body
@@ -178,44 +196,8 @@ elaborateMut scope (Apply f args) = do
     True -> pure ()
     False -> throwError (DemutationError $ "Trying to call the function '" <> show f <> "' with a wrong number of arguments.")
 
-  -- function for typechecking a single argument
-  let checkArg :: (IsMutated , DMTerm) -> MTC (DMTerm , Maybe TeVar)
-      checkArg (Mutated , arg) = do
-        -- if the argument is given in a mutable position,
-        -- it _must_ be a var
-        case arg of
-          (Var x a) -> do
-            -- get the type of this var from the scope
-            -- this one needs to be a single arg
-            case getValue x scope of
-              Nothing -> throwError (VariableNotInScope x)
-              Just (SingleArg y) | x == y -> do
-                markMutated y
-                return (Var x a , Just x)
-              Just _ -> throwError (DemutationError $ "When calling the mutating function " <> show f <> " found the variable " <> show x <> " as argument in a mutable-argument-position. This variable should be bound to a direct argument of the function, but it is not.")
-
-          -- if argument is not a var, throw error
-          _ -> throwError (DemutationError $ "When calling the mutating function " <> show f <> " found the term " <> show arg <> " as argument in a mutable-argument-position. Only function arguments themselves are allowed here.")
-
-      checkArg (NotMutated , arg) = do
-        -- if the argument is given in an immutable position,
-        -- we allow to use the full immut checking
-        (arg' , τ) <- elaborateNonmut scope arg
-
-        -- we require the argument to be of pure type
-        case τ of
-          Pure -> pure ()
-          _ -> throwError (DemutationError $ "It is not allowed to pass mutating functions as arguments. " <> "\nWhen checking '" <> show (Apply f args) <> "'")
-
-        return (arg' , Nothing)
-
-  -- the mutation status and the argument terms
   let mutargs = zip muts args
-
-  -- check them
-  newArgsWithMutTeVars <- mapM checkArg mutargs
-  let newArgs = [te | (te , _) <- newArgsWithMutTeVars]
-  let muts = [m | (_ , Just m) <- newArgsWithMutTeVars]
+  (newArgs , muts) <- elaborateMutList (show f) scope mutargs
 
   -- the new term
   return (Apply newF newArgs , retType muts)
@@ -261,8 +243,60 @@ elaborateMut scope (MutLet term body) = do
            where
              ns = [n :- JTAny | n <- xs]
 
+elaborateMut scope (SubGrad t1 t2) = do
+  (argTerms, mutVars) <- elaborateMutList "subgrad" scope [(Mutated , t1), (NotMutated , t2)]
+  case argTerms of
+    [newT1, newT2] -> pure (SubGrad newT1 newT2, VirtualMutated mutVars)
+    _ -> internalError ("Wrong number of terms after elaborateMutList")
+
 elaborateMut scope t = throwError (UnsupportedTermError t)
 
+
+---------------------------------------------------
+-- recurring utilities
+
+elaborateMutList :: String -> Scope -> [(IsMutated , DMTerm)] -> MTC ([DMTerm] , [TeVar])
+elaborateMutList f scope mutargs = do
+
+  -- function for typechecking a single argument
+  let checkArg :: (IsMutated , DMTerm) -> MTC (DMTerm , Maybe TeVar)
+      checkArg (Mutated , arg) = do
+        -- if the argument is given in a mutable position,
+        -- it _must_ be a var
+        case arg of
+          (Var x a) -> do
+            -- get the type of this var from the scope
+            -- this one needs to be a single arg
+            case getValue x scope of
+              Nothing -> throwError (VariableNotInScope x)
+              Just (SingleArg y) | x == y -> do
+                markMutated y
+                return (Var x a , Just x)
+              Just _ -> throwError (DemutationError $ "When calling the mutating function " <> f <> " found the variable " <> show x <> " as argument in a mutable-argument-position. This variable should be bound to a direct argument of the function, but it is not.")
+
+          -- if argument is not a var, throw error
+          _ -> throwError (DemutationError $ "When calling the mutating function " <> f <> " found the term " <> show arg <> " as argument in a mutable-argument-position. Only function arguments themselves are allowed here.")
+
+      checkArg (NotMutated , arg) = do
+        -- if the argument is given in an immutable position,
+        -- we allow to use the full immut checking
+        (arg' , τ) <- elaborateMut scope arg
+
+        -- we require the argument to be of pure type
+        case τ of
+          Pure -> pure ()
+          SingleArg _ -> pure ()
+          Mutating _ -> throwError (DemutationError $ "It is not allowed to pass mutating functions as arguments. " <> "\nWhen checking " <> f <> "(" <> show (fmap snd mutargs) <> ")")
+          VirtualMutated _ -> throwError (DemutationError $ "It is not allowed to use the result of mutating functions as arguments in other mutating functions. " <> "\nWhen checking " <> f <> "(" <> show (fmap snd mutargs) <> ")")
+
+        return (arg' , Nothing)
+
+  -- check them
+  newArgsWithMutTeVars <- mapM checkArg mutargs
+  let newArgs = [te | (te , _) <- newArgsWithMutTeVars]
+  let muts = [m | (_ , Just m) <- newArgsWithMutTeVars]
+
+  return (newArgs, muts)
 
 
 liftNewMTC :: MTC a -> TC a
@@ -448,3 +482,14 @@ rewriteMut = undefined
 
 
 -}
+
+
+
+          -- let newType = Mutating [m | (_ , m) <- vars_mut]
+          -- let mutatedvars = [a | (a , Mutated) <- vars_mut]
+          -- newBodyWithLet <- case mutatedvars of
+          --                 [] -> impossible "In this execution there should be existing mutated variables."
+          --                 [n] -> pure (SLet (n :- JTAny) newBody _)
+          --                 xs  -> pure (TLet (ns) newBody)
+          --                           where
+          --                             ns = [n :- JTAny | n <- xs]
