@@ -559,11 +559,11 @@ checkSen' (SubGrad ps gs) scope = do
          s1 <- newSVar "s1"
          s2 <- newSVar "s2"
 
-         (gs, ps) <- msumTup ((dps <* mscale (svar s1)), (dgs <* mscale (svar s2)))
+         (ps, gs) <- msumTup ((dps <* mscale (svar s1)), (dgs <* mscale (svar s2)))
 
          -- variables for element types, norm and clip parameters and dimension
-         τgs <- newVar
          τps <- newVar
+         τgs <- newVar
          nrm <- newVar
          clp <- newVar
          m <- newVar

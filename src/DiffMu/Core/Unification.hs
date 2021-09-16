@@ -128,8 +128,10 @@ instance MonadDMTC t => Unifyᵢ (INCResT DMException t) (DMTypeOf k) where
   unifyᵢ_ (Clip k) (Clip s)             = Clip <$> unifyᵢ k s
   unifyᵢ_ (DMMat nrm1 clp1 n1 m1 τ1) (DMMat nrm2 clp2 n2 m2 τ2) =
       DMMat <$> unifyᵢ nrm1 nrm2 <*> unifyᵢ clp1 clp2 <*> unifyᵢ n1 n2 <*> unifyᵢ m1 m2 <*> unifyᵢ τ1 τ2
-
-
+  unifyᵢ_ (DMParams m1 τ1) (DMParams m2 τ2) =
+      DMParams <$> unifyᵢ m1 m2 <*> unifyᵢ τ1 τ2
+  unifyᵢ_ (DMGrads nrm1 clp1 m1 τ1) (DMGrads nrm2 clp2 m2 τ2) =
+      DMGrads <$> unifyᵢ nrm1 nrm2 <*> unifyᵢ clp1 clp2 <*> unifyᵢ m1 m2 <*> unifyᵢ τ1 τ2
   unifyᵢ_ (NoFun a) (v :∧: w)              = do
     res0 <- unifyᵢ (NoFun a) v
     res1 <- unifyᵢ res0 w
