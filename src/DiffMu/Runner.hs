@@ -65,10 +65,10 @@ typecheckFromDMTerm term = do
 
         log $ "Checking term   : " <> show term
         -- typecheck the term t5
-        term'' <- preprocessDMTerm term
-        (term' , _) <- liftNewMTC (elaborateMut def term'')
+        term' <- preprocessDMTerm term
+        -- (term' , _) <- liftNewMTC (elaborateMut def term'')
 
-        logForce $ "Mutation elaborated term is: " <> show term'
+        -- logForce $ "Mutation elaborated term is: " <> show term'
 
         let tres = checkSens (term') def
         let (tres'',_) = runState (extractDelayed def tres) def
