@@ -551,18 +551,15 @@ checkSen' (Index m i j) scope = do
 
 
 checkSen' (SubGrad ps gs) scope = do
-
       -- check indicex and set their sensitivity to infinity
       dps <- checkSens ps scope
       dgs <- checkSens gs scope
 
       done $ do
-         let handleOpArg (τ_arg, (τ, s)) = do
-                                     mscale (svar s)
-                                     return τ_arg
+         s1 <- newSVar "s1"
+         s2 <- newSVar "s2"
 
-         gs <- dgs
-         ps <- dps
+         (gs, ps) <- msumTup ((dps <* mscale (svar s1)), (dgs <* mscale (svar s2)))
 
          -- variables for element types, norm and clip parameters and dimension
          τgs <- newVar
@@ -571,12 +568,12 @@ checkSen' (SubGrad ps gs) scope = do
          clp <- newVar
          m <- newVar
 
-         -- set matrix type
-         unify gs (NoFun (DMGrads nrm clp m (Numeric τgs)))
+         -- set argument types
          unify ps (NoFun (DMParams m (Numeric τps)))
+         unify gs (NoFun (DMGrads nrm clp m (Numeric τgs)))
 
-         (res, arg_sens) <- makeTypeOp (IsBinary DMOpSub) 2
-         msumS (map handleOpArg (zip [τps, τgs] arg_sens))
+         res <- TVar <$> newTVar "τr"
+         addConstraint (Solvable (IsTypeOpResult (Binary DMOpSub ((Numeric τps):@s1, (Numeric τgs):@s2) res)))
 
          return (NoFun (DMParams m res))
 
