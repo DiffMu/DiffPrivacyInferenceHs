@@ -249,6 +249,19 @@ elaborateMut scope (SubGrad t1 t2) = do
     [newT1, newT2] -> pure (SubGrad newT1 newT2, VirtualMutated mutVars)
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
+elaborateMut scope (ClipM c t) = do
+  (argTerms, mutVars) <- elaborateMutList "clip" scope [(Mutated , t)]
+  case argTerms of
+    [newT] -> pure (ClipM c newT, VirtualMutated mutVars)
+    _ -> internalError ("Wrong number of terms after elaborateMutList")
+
+elaborateMut scope (Gauss t1 t2 t3 t4) = do
+  (argTerms, mutVars) <- elaborateMutList "gauss" scope [(NotMutated , t1), (NotMutated , t2), (NotMutated , t3), (Mutated , t4)]
+  case argTerms of
+    [newT1, newT2, newT3, newT4] -> pure (Gauss newT1 newT2 newT3 newT4, VirtualMutated mutVars)
+    _ -> internalError ("Wrong number of terms after elaborateMutList")
+
+
 elaborateMut scope t = throwError (UnsupportedTermError t)
 
 

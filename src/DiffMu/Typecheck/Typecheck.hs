@@ -493,13 +493,12 @@ checkSen' (ClipM c m) scope = do
       nrm <- newVar
       clp <- newVar
       n <- newVar
-      m <- newVar
 
       -- set correct matrix type
-      unify τb (NoFun (DMMat nrm clp n m (Numeric DMData)))
+      unify τb (NoFun (DMGrads nrm clp n (Numeric DMData)))
 
       -- change clip parameter to input
-      return (NoFun (DMMat nrm c n m (Numeric DMData)))
+      return (NoFun (DMGrads nrm c n (Numeric DMData)))
 
 
 checkSen' (Transpose m) scope = do

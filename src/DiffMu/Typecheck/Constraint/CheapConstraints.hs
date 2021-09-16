@@ -158,14 +158,14 @@ instance Solve MonadDMTC IsGaussResult (DMTypeOf MainKind, DMTypeOf MainKind) wh
   solve_ Dict _ name (IsGaussResult (τgauss, τin)) =
      case τin of
         TVar x -> pure () -- we don't know yet.
-        NoFun (DMMat nrm clp n m τ) -> do -- is mgauss
+        NoFun (DMGrads nrm clp n τ) -> do -- is mgauss
 
            iclp <- newVar -- clip of input matrix can be anything
            τv <- newVar -- input matrix element type can be anything (as long as it's numeric)
 
            -- set in- and output types as given in the mgauss rule
-           unify τin (NoFun (DMMat L2 iclp n m (Numeric (τv))))
-           unify τgauss (NoFun (DMMat LInf U n m (Numeric (NonConst DMReal))))
+           unify τin (NoFun (DMGrads L2 iclp n (Numeric (τv))))
+           unify τgauss (NoFun (DMGrads LInf U n (Numeric (NonConst DMReal))))
 
            dischargeConstraint @MonadDMTC name
         _ -> do -- regular gauss or unification errpr later
