@@ -175,6 +175,8 @@ data DMTypeOf (k :: DMKind) where
 
   -- matrices
   DMMat :: (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> Sensitivity -> DMType -> DMType
+  DMParams :: Sensitivity -> DMType -> DMType -- number of parameters and element type
+  DMGrads :: (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> DMType -> DMType -- norm/clip and number of parameters
 
   -- choices
   DMChoice :: [DMType :@ (Maybe [JuliaType], Sensitivity)] -> DMType
@@ -205,6 +207,8 @@ instance Hashable (DMTypeOf k) where
   hashWithSalt s (DMTup t) = s `hashWithSalt` t
   hashWithSalt s (Clip t) = s `hashWithSalt` t
   hashWithSalt s (DMMat n t u v w) = s `hashWithSalt` n `hashWithSalt` t `hashWithSalt` u `hashWithSalt` v `hashWithSalt` w
+  hashWithSalt s (DMParams u v) = s `hashWithSalt` u `hashWithSalt` v
+  hashWithSalt s (DMGrads n t v w) = s `hashWithSalt` n `hashWithSalt` t `hashWithSalt` v `hashWithSalt` w
   hashWithSalt s (DMChoice t) = s `hashWithSalt` t
   hashWithSalt s (ForAll n t) = s `hashWithSalt` n `hashWithSalt` t
   hashWithSalt s (Fun t) = s `hashWithSalt` t
@@ -244,6 +248,8 @@ instance Show (DMTypeOf k) where
   show U = "U"
   show (Clip n) = "Clip(" <> show n <> ")"
   show (DMMat nrm clp n m τ) = "Matrix<n: "<> show nrm <> ", c: " <> show clp <> ">[" <> show n <> " × " <> show m <> "](" <> show τ <> ")"
+  show (DMParams m τ) = "Params[" <> show m <> "](" <> show τ <> ")"
+  show (DMGrads nrm clp m τ) = "Grads<n: "<> show nrm <> ", c: " <> show clp <> ">[" <> show m <> "](" <> show τ <> ")"
   show (DMChoice cs) = "Choice{" <> show cs <> "}"
   show (ForAll vs f) = case vs of
      -- [] -> show f

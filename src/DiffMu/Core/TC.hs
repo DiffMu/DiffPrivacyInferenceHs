@@ -116,6 +116,8 @@ instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs (ForAll vs τ) = ForAll <$> (removeVars σs vs) <*> substitute σs τ
   substitute σs (DMTup τs) = DMTup <$> substitute σs τs
   substitute σs (DMMat nrm clp n m τ) = DMMat nrm clp <$> substitute σs n <*> substitute σs m <*> substitute σs τ
+  substitute σs (DMParams m τ) = DMParams <$> substitute σs m <*> substitute σs τ
+  substitute σs (DMGrads nrm clp m τ) = DMGrads nrm clp <$> substitute σs m <*> substitute σs τ
   substitute σs (DMChoice xs) = DMChoice <$> substitute σs xs
   substitute σs (NoFun (x)) = NoFun <$> substitute σs x
   substitute σs (Fun xs) = Fun <$> substitute σs xs
@@ -145,6 +147,8 @@ instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
   substitute σs (ForAll vs τ) = ForAll vs <$> substitute σs τ
   substitute σs (DMTup τs) = DMTup <$> substitute σs τs
   substitute σs (DMMat nrm clp n m τ) = DMMat nrm clp <$> substitute σs n <*> substitute σs m <*> substitute σs τ
+  substitute σs (DMParams m τ) = DMParams <$> substitute σs m <*> substitute σs τ
+  substitute σs (DMGrads nrm clp m τ) = DMGrads nrm clp <$> substitute σs m <*> substitute σs τ
   substitute σs (DMChoice xs) = DMChoice <$> substitute σs xs
   substitute σs (NoFun x) = NoFun <$> substitute σs x
   substitute σs (Fun xs) = Fun <$> substitute σs xs
@@ -211,6 +215,8 @@ instance Typeable k => FreeVars TVarOf (DMTypeOf k) where
   freeVars (ForAll vs τ) = freeVars τ \\ vs
   freeVars (DMTup τs) = freeVars τs
   freeVars (DMMat nrm clp n m τ) = freeVars nrm <> freeVars clp <> freeVars τ
+  freeVars (DMParams m τ) = freeVars τ
+  freeVars (DMGrads nrm clp m τ) = freeVars nrm <> freeVars clp <> freeVars τ
   freeVars (DMChoice choices) = freeVars choices
   freeVars (NoFun x) = freeVars x
   freeVars (Fun xs) = freeVars xs
