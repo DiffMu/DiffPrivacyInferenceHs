@@ -26,6 +26,7 @@ juliatypes (Numeric (NonConst τ)) = juliatypes τ
 juliatypes (Numeric (TVar x)) = [JTNumInt, JTNumReal]
 juliatypes DMInt = [JTNumInt]
 juliatypes DMReal = [JTNumReal]
+juliatypes (DMMat _ _ _ _ τ) = (map (\(JuliaType t) -> JuliaType ("Matrix{"<>t<>"}")) (juliatypes τ))
 juliatypes (Const _ τ) = juliatypes τ
 juliatypes (NonConst τ) = juliatypes τ
 -- TODO: This is not like in DM.jl, and another workaround should be found!

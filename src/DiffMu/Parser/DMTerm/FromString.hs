@@ -23,7 +23,7 @@ type ParserIO = ParsecT String () IO
 
 
 specialChar :: [Char]
-specialChar = "(){}, []\""
+specialChar = "(),[]\""
 
 
 pIdentifier :: Parser String
@@ -103,7 +103,7 @@ with name content = string name >> between (char '(') (char ')') content
 
 
 pSingleChoiceHash :: Parser (HashMap [JuliaType] DMTerm)
-pSingleChoiceHash = f <$> pTuple2 (pArray "DataType" pJuliaType) pDMTerm
+pSingleChoiceHash = f <$> pTuple2 (pArray "Type" pJuliaType) pDMTerm
   where f (sig, term) = H.fromList [(sig,term)]
 
 pGauss = f <$> pTuple3 pDMTerm pDMTerm pDMTerm <*､> pDMTerm
@@ -124,15 +124,15 @@ pDMTerm =
   -- <|> try ("arg"       `with` (Arg     <$> pSymbol <*､> pJuliaType))
   <|> try ("op"        `with` (Op      <$> pDMTypeOp <*､> pArray "DMTerm" pDMTerm))
   <|> try ("phi"       `with` (Phi     <$> pDMTerm <*､> pDMTerm <*､> pDMTerm))
-  <|> try ("lam"       `with` (Lam     <$> pArray "Tuple{Symbol, DataType}" (pAsgmt (:-)) <*､> pDMTerm ))
-  <|> try ("lam_star"  `with` (LamStar <$> pArray "Tuple{Tuple{Symbol, DataType}, Bool}" pAsgmtWithRel <*､> pDMTerm ))
+  <|> try ("lam"       `with` (Lam     <$> pArray "Tuple{Symbol, Type}" (pAsgmt (:-)) <*､> pDMTerm ))
+  <|> try ("lam_star"  `with` (LamStar <$> pArray "Tuple{Tuple{Symbol, Type}, Bool}" pAsgmtWithRel <*､> pDMTerm ))
   <|> try ("apply"     `with` (Apply   <$> pDMTerm <*､> pArray "DMTerm" pDMTerm))
   <|> try ("iter"      `with` (Iter    <$> pDMTerm <*､> pDMTerm <*､> pDMTerm)) -- NOTE: iter should be deprecated
   <|> try ("flet"      `with` (FLet    <$> pTeVar <*､> pDMTerm <*､> pDMTerm))
   -- no choice
   <|> try ("slet"      `with` (SLet    <$> (pAsgmt (:-)) <*､> pDMTerm <*､> pDMTerm))
   <|> try ("tup"       `with` (Tup     <$> pArray "DMTerm" pDMTerm))
-  <|> try ("tlet"      `with` (TLet    <$> pArray "Tuple{Symbol, DataType}" (pAsgmt (:-)) <*､> pDMTerm <*､> pDMTerm))
+  <|> try ("tlet"      `with` (TLet    <$> pArray "Tuple{Symbol, Type}" (pAsgmt (:-)) <*､> pDMTerm <*､> pDMTerm))
   <|> try ("loop"      `with` (pLoop))
   <|> try ("gauss"     `with` (pGauss))
   <|> try ("mcreate"   `with` (pMat))
@@ -141,7 +141,7 @@ pDMTerm =
   <|> try ("chce"      `with` (Choice  <$> pSingleChoiceHash))
 
 
--- flet(:f, DataType[Any, Any], lam(Tuple{Symbol, DataType}[(:a, Any), (:b, Any)], op(:+, DMTerm[var(:a, Any), op(:+, DMTerm[op(:*, DMTerm[var(:b, Any), var(:b, Any)]), var(:a, Any)])])), var(:f, Any))
+-- flet(:f, Type[Any, Any], lam(Tuple{Symbol, Type}[(:a, Any), (:b, Any)], op(:+, DMTerm[var(:a, Any), op(:+, DMTerm[op(:*, DMTerm[var(:b, Any), var(:b, Any)]), var(:a, Any)])])), var(:f, Any))
 
 pDMTermFromString :: String -> (Either DMException DMTerm)
 pDMTermFromString s =
