@@ -148,12 +148,8 @@ pDMTerm =
   -- NN builtins
   <|> try ("dmsubgrad" `with` (SubGrad  <$> pDMTerm <*､> pDMTerm))
 
-
   -- mutable terms
-  -- <|> try ("mut_lam"       `with` (MutLam     <$> pArray "Tuple{Symbol, DataType}" (withNothing1 $ pAsgmt (:-)) <*､> pDMTerm ))
-  -- <|> try ("mut_lam_star"  `with` (MutLamStar <$> pArray "Tuple{Tuple{Symbol, DataType}, Bool}" (withNothing2 $ pAsgmtWithRel) <*､> pDMTerm ))
-  -- <|> try ("mut_apply"     `with` (MutApply   <$> pDMTerm <*､> pArray "DMTerm" pDMTerm))
-  <|> try ("mut_slet"      `with` (MutLet    <$> pDMTerm <*､> pDMTerm))
+  -- <|> try ("mut_slet"      `with` (MutLet    <$> pDMTerm <*､> pDMTerm))
 
 
 -- flet(:f, Type[Any, Any], lam(Tuple{Symbol, Type}[(:a, Any), (:b, Any)], op(:+, DMTerm[var(:a, Any), op(:+, DMTerm[op(:*, DMTerm[var(:b, Any), var(:b, Any)]), var(:a, Any)])])), var(:f, Any))
