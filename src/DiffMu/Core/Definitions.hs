@@ -604,6 +604,13 @@ sndA (x :- τ) = τ
 --   deriving (Generic, Show)
 
 
+data ParseExtension a =
+   If a a a
+ | IfElse a a a a
+ | OpAss (Asgmt JuliaType) DMTypeOps_Binary a a
+ deriving (Show, Eq)
+
+type ParseDMTerm = PreDMTerm ParseExtension
 
 data PreDMTerm (t :: * -> *) =
     Extra (t (PreDMTerm t))
