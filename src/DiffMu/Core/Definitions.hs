@@ -1,5 +1,5 @@
 
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TemplateHaskell, UndecidableInstances #-}
 
 module DiffMu.Core.Definitions where
 
@@ -605,35 +605,50 @@ sndA (x :- τ) = τ
 
 
 
-data DMTerm =
-  Ret DMTerm
+data PreDMTerm (t :: * -> *) =
+    Extra (t (PreDMTerm t))
+  | Ret ((PreDMTerm t))
   | Sng Float JuliaType
   | Var TeVar JuliaType
   | Rnd JuliaType
   | Arg TeVar JuliaType Relevance
-  | Op DMTypeOp_Some [DMTerm]
-  | Phi DMTerm DMTerm DMTerm
-  | Lam     [Asgmt JuliaType] DMTerm
-  | LamStar [(Asgmt JuliaType, Relevance)] DMTerm
-  | Apply DMTerm [DMTerm]
-  | FLet TeVar DMTerm DMTerm
-  | Choice (HashMap [JuliaType] DMTerm)
-  | SLet (Asgmt JuliaType) DMTerm DMTerm
-  | Tup [DMTerm]
-  | TLet [(Asgmt JuliaType)] DMTerm DMTerm
-  | Gauss DMTerm DMTerm DMTerm DMTerm
-  | ConvertM DMTerm
-  | MCreate DMTerm DMTerm (TeVar, TeVar) DMTerm
-  | Transpose DMTerm
-  | Index DMTerm DMTerm DMTerm
-  | ClipM Clip DMTerm
-  | Iter DMTerm DMTerm DMTerm
-  | Loop DMTerm DMTerm (TeVar, TeVar) DMTerm
+  | Op DMTypeOp_Some [(PreDMTerm t)]
+  | Phi (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
+  | Lam     [Asgmt JuliaType] (PreDMTerm t)
+  | LamStar [(Asgmt JuliaType, Relevance)] (PreDMTerm t)
+  | Apply (PreDMTerm t) [(PreDMTerm t)]
+  | FLet TeVar (PreDMTerm t) (PreDMTerm t)
+  | Choice (HashMap [JuliaType] (PreDMTerm t))
+  | SLet (Asgmt JuliaType) (PreDMTerm t) (PreDMTerm t)
+  | Tup [(PreDMTerm t)]
+  | TLet [(Asgmt JuliaType)] (PreDMTerm t) (PreDMTerm t)
+  | Gauss (PreDMTerm t) (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
+  | ConvertM (PreDMTerm t)
+  | MCreate (PreDMTerm t) (PreDMTerm t) (TeVar, TeVar) (PreDMTerm t)
+  | Transpose (PreDMTerm t)
+  | Index (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
+  | ClipM Clip (PreDMTerm t)
+  | Iter (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
+  | Loop (PreDMTerm t) (PreDMTerm t) (TeVar, TeVar) (PreDMTerm t)
 -- Special NN builtins
-  | SubGrad DMTerm DMTerm
+  | SubGrad (PreDMTerm t) (PreDMTerm t)
 -- only used in the "mutable" code
-  | MutLet DMTerm DMTerm
-  deriving (Generic, Show, Eq)
+  | MutLet (PreDMTerm t) (PreDMTerm t)
+  deriving (Generic)
+
+deriving instance (forall a. Show a => Show (t a)) => Show (PreDMTerm t)
+deriving instance (forall a. Eq a => Eq (t a)) => Eq (PreDMTerm t)
+
+data EmptyExtension a where
+
+instance Show (EmptyExtension a) where
+  show a = undefined
+
+instance Eq (EmptyExtension a) where
+  _ == _ = True
+
+
+type DMTerm = PreDMTerm EmptyExtension
 
 --------------------------------------------------------------------------
 -- Mutable code
