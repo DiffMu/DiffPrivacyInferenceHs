@@ -604,14 +604,6 @@ sndA (x :- τ) = τ
 --   deriving (Generic, Show)
 
 
-data ParseExtension a =
-   If a a a
- | IfElse a a a a
- | OpAss (Asgmt JuliaType) DMTypeOps_Binary a a
- deriving (Show, Eq)
-
-type ParseDMTerm = PreDMTerm ParseExtension
-
 data PreDMTerm (t :: * -> *) =
     Extra (t (PreDMTerm t))
   | Ret ((PreDMTerm t))
@@ -660,12 +652,25 @@ instance Eq (EmptyExtension a) where
 
 type DMTerm = PreDMTerm EmptyExtension
 
+
+----
+-- parsing extension
+data ParseExtension a =
+   If a a a
+ | IfElse a a a a
+ | OpAss (Asgmt JuliaType) DMTypeOps_Binary a a
+ deriving (Show, Eq)
+
+type ParseDMTerm = PreDMTerm (SumExtension ParseExtension MutabilityExtension)
+
 ----
 -- mutability extension
 data MutabilityExtension a =
   MutLet a a
   | MutLoop a a (TeVar, TeVar) a
   deriving (Show, Eq)
+
+type MutDMTerm = PreDMTerm MutabilityExtension
 
 ----
 -- sum of extensions
@@ -716,6 +721,7 @@ data IsMutated = Mutated | NotMutated
 -- The different kinds of errors we can throw.
 
 data DMException where
+  UnsupportedError        :: String -> DMException
   UnsupportedTermError    :: DMTerm -> DMException
   UnificationError        :: Show a => a -> a -> DMException
   WrongNumberOfArgs       :: Show a => a -> a -> DMException
@@ -730,6 +736,7 @@ data DMException where
   UnificationShouldWaitError :: DMTypeOf k -> DMTypeOf k -> DMException
 
 instance Show DMException where
+  show (UnsupportedError t) = "The term '" <> t <> "' is currently not supported."
   show (UnsupportedTermError t) = "The term '" <> show t <> "' is currently not supported."
   show (UnificationError a b) = "Could not unify '" <> show a <> "' with '" <> show b <> "'."
   show (WrongNumberOfArgs a b) = "While unifying: the terms '" <> show a <> "' and '" <> show b <> "' have different numbers of arguments"
