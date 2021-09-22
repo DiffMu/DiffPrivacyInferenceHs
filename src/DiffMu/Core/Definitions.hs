@@ -604,15 +604,7 @@ sndA (x :- τ) = τ
 --   deriving (Generic, Show)
 
 
-data ParseExtension a =
-   If a a a
- | IfElse a a a a
- | OLFAss (TeVar, [Asgmt JuliaType]) a a
- | OLFStarAss (TeVar, [(Asgmt JuliaType, Relevance)]) a a
- | OpAss (Asgmt JuliaType) DMTypeOps_Binary a a
- deriving (Show, Eq)
 
-type ParseDMTerm = PreDMTerm ParseExtension
 
 data PreDMTerm (t :: * -> *) =
     Extra (t (PreDMTerm t))
@@ -668,6 +660,8 @@ type DMTerm = PreDMTerm EmptyExtension
 data ParseExtension a =
    If a a a
  | IfElse a a a a
+ | OLFAss (TeVar, [Asgmt JuliaType]) a a
+ | OLFStarAss (TeVar, [(Asgmt JuliaType, Relevance)]) a a
  | OpAss (Asgmt JuliaType) DMTypeOps_Binary a a
  deriving (Show, Eq)
 
@@ -694,7 +688,7 @@ liftExtension :: (t (PreDMTerm t) -> PreDMTerm s) -> PreDMTerm t -> PreDMTerm s
 liftExtension f (Extra e) = (f e)
 liftExtension f (Ret (r)) = Ret (liftExtension f r)
 liftExtension f (Sng g jt) = Sng g jt
-liftExtension f (Var v jt) = Var v jt
+liftExtension f (Var (v :- jt)) = Var (v :- jt)
 liftExtension f (Rnd jt) = Rnd jt
 liftExtension f (Arg v jt r) = Arg v jt r
 liftExtension f (Op op ts) = Op op (fmap (liftExtension f) ts)
