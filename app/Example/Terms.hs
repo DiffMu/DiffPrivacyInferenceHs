@@ -6,7 +6,7 @@ import DiffMu.Core
 
 import Foreign.Ptr
 
-var s = Var ((UserTeVar $ Symbol s)) (JTAny)
+var s = Var (((UserTeVar $ Symbol s)) :- JTAny)
 arg a = ((UserTeVar $ Symbol a) :- (JTAny))
 sng n = Sng n JTNumInt
 plus a b = Op (IsBinary DMOpAdd) [a, b]
@@ -37,7 +37,7 @@ t9 = Apply t8 [t2, t2]
 
 t10 = Lam [(UserTeVar $ Symbol "x") :- (JTNumInt), (UserTeVar $ Symbol "y") :- (JTAny)] (Phi (t3 "x") t2 (t3 "y"))
 
-vz = Var ((UserTeVar $ Symbol "z")) (JTAny)
+vz = var "z"
 t11 = SLet ((UserTeVar $ Symbol "z") :- (JTAny)) (Sng 1 JTNumInt) (SLet ((UserTeVar $ Symbol "z") :- (JTAny)) (t5 (Sng 1 JTNumInt) vz) (SLet ((UserTeVar $ Symbol "z") :- (JTAny)) (t5 (Sng 2 JTNumInt) vz) vz))
 
 t12 = LamStar [(((UserTeVar $ Symbol "x") :- (JTNumInt)), IsRelevant), (((UserTeVar $ Symbol "y") :- (JTAny)), IsRelevant)] (Ret (Phi (t3 "x") t2 (t3 "y")))
