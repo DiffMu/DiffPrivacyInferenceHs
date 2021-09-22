@@ -82,7 +82,7 @@ runExprParser str = do
   let parseAndPrint = do
         let res = parseExprFromString str'
         case res of
-          Left e -> putStrLn $ "Error: " <> e
+          Left e -> putStrLn $ "Error: " <> show e
           Right e -> putStrLn $ "Expr: " <> show e
 
   parseAndPrint `catchAny` \e -> do

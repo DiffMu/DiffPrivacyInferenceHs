@@ -104,11 +104,11 @@ elaborateMut scope (Arg x a b) = internalError "While demutating: encountered an
   -- markRead x
   -- return (Arg x a b , Pure)
 
-elaborateMut scope (Var x j) = do
+elaborateMut scope (Var (x :- j)) = do
   let τ = getValue x scope
   case τ of
     Nothing -> throwError (VariableNotInScope x)
-    Just τ  -> return (Var x j, τ)
+    Just τ  -> return (Var (x :- j), τ)
 
 elaborateMut scope (SLet (x :- τ) term body) = do
 
@@ -283,14 +283,14 @@ elaborateMutList f scope mutargs = do
         -- if the argument is given in a mutable position,
         -- it _must_ be a var
         case arg of
-          (Var x a) -> do
+          (Var (x :- a)) -> do
             -- get the type of this var from the scope
             -- this one needs to be a single arg
             case getValue x scope of
               Nothing -> throwError (VariableNotInScope x)
               Just (SingleArg y) | x == y -> do
                 markMutated y
-                return (Var x a , Just x)
+                return (Var (x :- a) , Just x)
               Just _ -> throwError (DemutationError $ "When calling the mutating function " <> f <> " found the variable " <> show x <> " as argument in a mutable-argument-position. This variable should be bound to a direct argument of the function, but it is not.")
 
           -- if argument is not a var, throw error

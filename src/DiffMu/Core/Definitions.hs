@@ -607,6 +607,8 @@ sndA (x :- τ) = τ
 data ParseExtension a =
    If a a a
  | IfElse a a a a
+ | OLFAss (TeVar, [Asgmt JuliaType]) a a
+ | OLFStarAss (TeVar, [(Asgmt JuliaType, Relevance)]) a a
  | OpAss (Asgmt JuliaType) DMTypeOps_Binary a a
  deriving (Show, Eq)
 
@@ -616,7 +618,7 @@ data PreDMTerm (t :: * -> *) =
     Extra (t (PreDMTerm t))
   | Ret ((PreDMTerm t))
   | Sng Float JuliaType
-  | Var TeVar JuliaType
+  | Var (Asgmt JuliaType)
   | Rnd JuliaType
   | Arg TeVar JuliaType Relevance
   | Op DMTypeOp_Some [(PreDMTerm t)]

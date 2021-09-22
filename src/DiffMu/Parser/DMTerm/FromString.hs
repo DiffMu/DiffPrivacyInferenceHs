@@ -23,7 +23,7 @@ type ParserIO = ParsecT String () IO
 
 
 specialChar :: [Char]
-specialChar = "(),[]\""
+specialChar = "(){}, []\""
 
 
 pIdentifier :: Parser String
@@ -103,7 +103,7 @@ with name content = string name >> between (char '(') (char ')') content
 
 
 pSingleChoiceHash :: Parser (HashMap [JuliaType] DMTerm)
-pSingleChoiceHash = f <$> pTuple2 (pArray "Type" pJuliaType) pDMTerm
+pSingleChoiceHash = f <$> pTuple2 (pArray "DataType" pJuliaType) pDMTerm
   where f (sig, term) = H.fromList [(sig,term)]
 
 pGauss = f <$> pTuple3 pDMTerm pDMTerm pDMTerm <*､> pDMTerm
@@ -115,48 +115,33 @@ pMat = f <$> pDMTerm <*､> pDMTerm <*､> pTuple2 pTeVar pTeVar <*､> pDMTerm
 pLoop = f <$> pDMTerm <*､> pDMTerm <*､> pDMTerm <*､> pTuple2 pTeVar pTeVar <*､> pDMTerm
   where f _ a b c d = Loop a b c d
 
-withNothing1 a = f <$> a
-  where f a = (a , Nothing)
-
-withNothing2 a = f <$> a
-  where f (a , b) = (a , b , Nothing)
-
 pDMTerm :: Parser DMTerm
 pDMTerm =
       try ("ret"       `with` (Ret     <$> pDMTerm))
   <|> try ("sng"       `with` (pSng))
-  <|> try ("var"       `with` (Var     <$> pTeVar <*､> pJuliaType))
+  <|> try ("var"       `with` (Var     <$> pAsgmt <*､> pJuliaType))
   <|> try ("rnd"       `with` (Rnd     <$> pJuliaType))
   -- <|> try ("arg"       `with` (Arg     <$> pSymbol <*､> pJuliaType))
   <|> try ("op"        `with` (Op      <$> pDMTypeOp <*､> pArray "DMTerm" pDMTerm))
   <|> try ("phi"       `with` (Phi     <$> pDMTerm <*､> pDMTerm <*､> pDMTerm))
-  <|> try ("lam"       `with` (Lam     <$> pArray "Tuple{Symbol, Type}" (pAsgmt (:-)) <*､> pDMTerm ))
-  <|> try ("lam_star"  `with` (LamStar <$> pArray "Tuple{Tuple{Symbol, Type}, Bool}" pAsgmtWithRel <*､> pDMTerm ))
+  <|> try ("lam"       `with` (Lam     <$> pArray "Tuple{Symbol, DataType}" (pAsgmt (:-)) <*､> pDMTerm ))
+  <|> try ("lam_star"  `with` (LamStar <$> pArray "Tuple{Tuple{Symbol, DataType}, Bool}" pAsgmtWithRel <*､> pDMTerm ))
   <|> try ("apply"     `with` (Apply   <$> pDMTerm <*､> pArray "DMTerm" pDMTerm))
   <|> try ("iter"      `with` (Iter    <$> pDMTerm <*､> pDMTerm <*､> pDMTerm)) -- NOTE: iter should be deprecated
   <|> try ("flet"      `with` (FLet    <$> pTeVar <*､> pDMTerm <*､> pDMTerm))
   -- no choice
   <|> try ("slet"      `with` (SLet    <$> (pAsgmt (:-)) <*､> pDMTerm <*､> pDMTerm))
   <|> try ("tup"       `with` (Tup     <$> pArray "DMTerm" pDMTerm))
-  <|> try ("tlet"      `with` (TLet    <$> pArray "Tuple{Symbol, Type}" (pAsgmt (:-)) <*､> pDMTerm <*､> pDMTerm))
+  <|> try ("tlet"      `with` (TLet    <$> pArray "Tuple{Symbol, DataType}" (pAsgmt (:-)) <*､> pDMTerm <*､> pDMTerm))
   <|> try ("loop"      `with` (pLoop))
   <|> try ("gauss"     `with` (pGauss))
   <|> try ("mcreate"   `with` (pMat))
   <|> try ("dmtranspose" `with` (Transpose <$> pDMTerm))
-  <|> try ("index"     `with` (Index    <$> pDMTerm <*､> pDMTerm <*､> pDMTerm))
-  <|> try ("chce"      `with` (Choice   <$> pSingleChoiceHash))
-  -- NN builtins
-  <|> try ("dmsubgrad" `with` (SubGrad  <$> pDMTerm <*､> pDMTerm))
+  <|> try ("index"     `with` (Index <$> pDMTerm <*､> pDMTerm <*､> pDMTerm))
+  <|> try ("chce"      `with` (Choice  <$> pSingleChoiceHash))
 
 
-  -- mutable terms
-  -- <|> try ("mut_lam"       `with` (MutLam     <$> pArray "Tuple{Symbol, DataType}" (withNothing1 $ pAsgmt (:-)) <*､> pDMTerm ))
-  -- <|> try ("mut_lam_star"  `with` (MutLamStar <$> pArray "Tuple{Tuple{Symbol, DataType}, Bool}" (withNothing2 $ pAsgmtWithRel) <*､> pDMTerm ))
-  -- <|> try ("mut_apply"     `with` (MutApply   <$> pDMTerm <*､> pArray "DMTerm" pDMTerm))
-  <|> try ("mut_slet"      `with` (MutLet    <$> pDMTerm <*､> pDMTerm))
-
-
--- flet(:f, Type[Any, Any], lam(Tuple{Symbol, Type}[(:a, Any), (:b, Any)], op(:+, DMTerm[var(:a, Any), op(:+, DMTerm[op(:*, DMTerm[var(:b, Any), var(:b, Any)]), var(:a, Any)])])), var(:f, Any))
+-- flet(:f, DataType[Any, Any], lam(Tuple{Symbol, DataType}[(:a, Any), (:b, Any)], op(:+, DMTerm[var(:a, Any), op(:+, DMTerm[op(:*, DMTerm[var(:b, Any), var(:b, Any)]), var(:a, Any)])])), var(:f, Any))
 
 pDMTermFromString :: String -> (Either DMException DMTerm)
 pDMTermFromString s =

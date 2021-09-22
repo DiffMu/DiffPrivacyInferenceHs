@@ -51,7 +51,7 @@ collectAllFLets (MutLet term body)  = MutLet <$> collectAllFLets term <*> collec
 
 collectAllFLets (Ret t)           = Ret <$> (collectAllFLets t)
 collectAllFLets (Sng a t)         = pure $ Sng a t
-collectAllFLets (Var a t)         = pure $ Var a t
+collectAllFLets (Var (a :- t))    = pure $ Var (a :- t)
 collectAllFLets (Rnd t)           = pure $ Rnd t
 collectAllFLets (Arg a b c)       = pure $ Arg a b c
 collectAllFLets (Op o ts)         = Op o <$> (mapM collectAllFLets ts)

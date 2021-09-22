@@ -129,7 +129,7 @@ checkSen' (Arg x dτ i) scope = done $ do
                                          setVarS x (WithRelev i (τ :@ SensitivityAnnotation oneId))
                                          return τ
 
-checkSen' (Var x dτ) scope =  -- get the term that corresponds to this variable from the scope dict
+checkSen' (Var (x :- dτ)) scope =  -- get the term that corresponds to this variable from the scope dict
    let delτ = getValue x scope
    in case delτ of
      Nothing -> done $ throwError (VariableNotInScope x)
@@ -744,7 +744,7 @@ checkPri' (FLet fname term body) scope = do
 -- TODO the names must be unique.
 checkPri' (Tup ts) scope = do
    names <- mapM newTeVar [(T.pack ("x" <> (show i))) | i <- [1..(length ts)]]
-   let body = Ret (Tup [Var n JTAny | n <- names])
+   let body = Ret (Tup [Var (n :- JTAny) | n <- names])
    let t1 = foldl (\b -> \(x, t) -> SLet (x :- JTAny) t b) body (zip names ts)
       --traceM $ "privacy Tup checking term " <> show t1
    checkPriv t1 scope
@@ -765,7 +765,7 @@ checkPri' (Tup ts) scope = do
 -- TODO tup needs to be a unique name instead.
 checkPri' (TLet xs term body) scope = do
    tupvar <- newTeVar "tup"
-   let t1 = foldl (\t -> \(x :- τj) -> SLet (x :- τj) (Ret (TLet xs (Var tupvar JTAny) (Var x τj))) t) body xs
+   let t1 = foldl (\t -> \(x :- τj) -> SLet (x :- τj) (Ret (TLet xs (Var (tupvar :- JTAny)) (Var (x :- τj)))) t) body xs
        t2 = SLet (tupvar :- (JTAny)) term t1
    checkPriv t2 scope
 
