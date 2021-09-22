@@ -79,7 +79,7 @@ markRead var = do
 
 
 
-elaborateNonmut :: Scope -> DMTerm -> MTC (DMTerm , ImmutType)
+elaborateNonmut :: Scope -> MutDMTerm -> MTC (DMTerm , ImmutType)
 elaborateNonmut scope term = do
   res <- elaborateMut scope term
 
@@ -94,9 +94,11 @@ elaborateNonmut scope term = do
 
   return res
 
-elaborateMut :: Scope -> DMTerm -> MTC (DMTerm , ImmutType)
+elaborateMut :: Scope -> MutDMTerm -> MTC (DMTerm , ImmutType)
 
-elaborateMut scope (Op op args) = pure (Op op args , Pure)
+elaborateMut scope (Op op args) = do
+  args' <- mapM (elaborateNonmut scope) args
+  pure (Op op (fst <$> args') , Pure)
 elaborateMut scope (Sng η τ) = pure (Sng η τ , Pure)
 
 elaborateMut scope (Arg x a b) = internalError "While demutating: encountered an arg term!"
@@ -226,7 +228,7 @@ elaborateMut scope (FLet fname term body) = do
 
   return (FLet fname newTerm newBody, newBodyType)
 
-elaborateMut scope (MutLet term body) = do
+elaborateMut scope (Extra (MutLet term body)) = do
 
   (newTerm, newTermType) <- elaborateMut scope term
 
@@ -268,17 +270,17 @@ elaborateMut scope (ConvertM t1) = do
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 
-elaborateMut scope t = throwError (UnsupportedTermError t)
+elaborateMut scope t = throwError (UnsupportedError (show t))
 
 
 ---------------------------------------------------
 -- recurring utilities
 
-elaborateMutList :: String -> Scope -> [(IsMutated , DMTerm)] -> MTC ([DMTerm] , [TeVar])
+elaborateMutList :: String -> Scope -> [(IsMutated , MutDMTerm)] -> MTC ([DMTerm] , [TeVar])
 elaborateMutList f scope mutargs = do
 
   -- function for typechecking a single argument
-  let checkArg :: (IsMutated , DMTerm) -> MTC (DMTerm , Maybe TeVar)
+  let checkArg :: (IsMutated , MutDMTerm) -> MTC (DMTerm , Maybe TeVar)
       checkArg (Mutated , arg) = do
         -- if the argument is given in a mutable position,
         -- it _must_ be a var
@@ -329,7 +331,7 @@ liftNewMTC a =
 --------------------------------------------------------
 -- the elaboration
 
-elaborateImmut :: DMTerm -> MTC (DMTerm , ImmutType)
+elaborateImmut :: MutDMTerm -> MTC (MutDMTerm , ImmutType)
 elaborateImmut (MutLam vars body) = do
 
   -- typecheck/infer the body
@@ -380,7 +382,7 @@ elaborateImmut t = undefined
 --------------------------
 -- the mutating part
 
-elaborateMut :: DMTerm -> MTC (DMTerm)
+elaborateMut :: MutDMTerm -> MTC (MutDMTerm)
 
 elaborateMut (MutLam vars body) = throwError (DemutationError $ "Mutating lambda are not allowed in mutated positions, when checking " <> show (MutLam vars body))
 
@@ -399,7 +401,7 @@ elaborateMut (MutApply f args) = do
     False -> throwError (DemutationError $ "Trying to call the function '" <> show f <> "' with a wrong number of arguments.")
 
   -- function for typechecking a single argument
-  let checkArg :: (IsMutated , DMTerm) -> MTC DMTerm
+  let checkArg :: (IsMutated , MutDMTerm) -> MTC MutDMTerm
       checkArg (Mutated , arg) = do
         -- if the argument is given in a mutable position,
         -- it _must_ be a var
@@ -445,11 +447,11 @@ elaborateMut t = do
 
 
 
--- elaborateMutated :: DMTerm -> (MutType , DMTerm)
+-- elaborateMutated :: MutDMTerm -> (MutType , MutDMTerm)
 -- elaborateMutated t = undefined
 
 
--- elaborateMutated :: DMTerm -> TC DMTerm
+-- elaborateMutated :: MutDMTerm -> TC MutDMTerm
 
 -- elaborateMutated (FLet var def rest) = do
 --   let FindFLetsResult defs rest' = findFLets var rest
@@ -496,7 +498,7 @@ elaborateMut t = do
 
 
 
-rewriteMut :: DMTerm -> MTC DMTerm
+rewriteMut :: MutDMTerm -> MTC MutDMTerm
 rewriteMut = undefined
 
 

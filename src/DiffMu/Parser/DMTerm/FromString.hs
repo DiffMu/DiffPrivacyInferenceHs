@@ -137,9 +137,13 @@ pDMTerm =
   <|> try ("gauss"     `with` (pGauss))
   <|> try ("mcreate"   `with` (pMat))
   <|> try ("dmtranspose" `with` (Transpose <$> pDMTerm))
-  <|> try ("index"     `with` (Index <$> pDMTerm <*､> pDMTerm <*､> pDMTerm))
-  <|> try ("chce"      `with` (Choice  <$> pSingleChoiceHash))
+  <|> try ("index"     `with` (Index    <$> pDMTerm <*､> pDMTerm <*､> pDMTerm))
+  <|> try ("chce"      `with` (Choice   <$> pSingleChoiceHash))
+  -- NN builtins
+  <|> try ("dmsubgrad" `with` (SubGrad  <$> pDMTerm <*､> pDMTerm))
 
+  -- mutable terms
+  -- <|> try ("mut_slet"      `with` (MutLet    <$> pDMTerm <*､> pDMTerm))
 
 -- flet(:f, DataType[Any, Any], lam(Tuple{Symbol, DataType}[(:a, Any), (:b, Any)], op(:+, DMTerm[var(:a, Any), op(:+, DMTerm[op(:*, DMTerm[var(:b, Any), var(:b, Any)]), var(:a, Any)])])), var(:f, Any))
 

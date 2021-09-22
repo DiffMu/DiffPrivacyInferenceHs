@@ -57,6 +57,10 @@ executeTC l r = do
 
   return x
 
+
+thisFunctionDoesNotExist :: DMTerm -> TC MutDMTerm
+thisFunctionDoesNotExist = undefined
+
 typecheckFromDMTerm :: DMTerm -> IO ()
 typecheckFromDMTerm term = do
   putStrLn "Starting DiffMu!"
@@ -65,8 +69,11 @@ typecheckFromDMTerm term = do
 
         log $ "Checking term   : " <> show term
         -- typecheck the term t5
-        term'' <- preprocessDMTerm term
-        (term' , _) <- liftNewMTC (elaborateMut def term'')
+        mt <- thisFunctionDoesNotExist term
+
+        (term'' , _) <- liftNewMTC (elaborateMut def mt)
+
+        term' <- preprocessDMTerm term''
 
         logForce $ "Mutation elaborated term is: " <> show term'
 

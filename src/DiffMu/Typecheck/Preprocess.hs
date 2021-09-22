@@ -47,7 +47,7 @@ collectAllFLets (FLet var def rest) = do
   return $ expandFLets var updatedAllDefs updatedRest
 collectAllFLets (SLet var def rest) = SLet var <$> (collectAllFLets def) <*> (collectAllFLets rest)
 collectAllFLets (TLet var def rest) = TLet var <$> (collectAllFLets def) <*> (collectAllFLets rest)
-collectAllFLets (MutLet term body)  = MutLet <$> collectAllFLets term <*> collectAllFLets body
+collectAllFLets (Extra e)  = pure $ Extra undefined
 
 collectAllFLets (Ret t)           = Ret <$> (collectAllFLets t)
 collectAllFLets (Sng a t)         = pure $ Sng a t

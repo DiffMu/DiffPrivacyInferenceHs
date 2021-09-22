@@ -641,13 +641,17 @@ data PreDMTerm (t :: * -> *) =
   | Loop (PreDMTerm t) (PreDMTerm t) (TeVar, TeVar) (PreDMTerm t)
 -- Special NN builtins
   | SubGrad (PreDMTerm t) (PreDMTerm t)
--- only used in the "mutable" code
-  | MutLet (PreDMTerm t) (PreDMTerm t)
   deriving (Generic)
 
 deriving instance (forall a. Show a => Show (t a)) => Show (PreDMTerm t)
 deriving instance (forall a. Eq a => Eq (t a)) => Eq (PreDMTerm t)
 
+
+--------------------------------------------------------------------------
+-- Extensions
+
+-----
+-- empty extension
 data EmptyExtension a where
 
 instance Show (EmptyExtension a) where
@@ -656,8 +660,63 @@ instance Show (EmptyExtension a) where
 instance Eq (EmptyExtension a) where
   _ == _ = True
 
-
 type DMTerm = PreDMTerm EmptyExtension
+
+
+----
+-- parsing extension
+data ParseExtension a =
+   If a a a
+ | IfElse a a a a
+ | OpAss (Asgmt JuliaType) DMTypeOps_Binary a a
+ deriving (Show, Eq)
+
+type ParseDMTerm = PreDMTerm (SumExtension ParseExtension MutabilityExtension)
+
+----
+-- mutability extension
+data MutabilityExtension a =
+  MutLet a a
+  | MutLoop a a (TeVar, TeVar) a
+  deriving (Show, Eq)
+
+type MutDMTerm = PreDMTerm MutabilityExtension
+
+----
+-- sum of extensions
+data SumExtension e f a = SELeft (e a) | SERight (f a)
+  deriving (Show, Eq)
+
+----
+-- functions
+
+liftExtension :: (t (PreDMTerm t) -> PreDMTerm s) -> PreDMTerm t -> PreDMTerm s
+liftExtension f (Extra e) = (f e)
+liftExtension f (Ret (r)) = Ret (liftExtension f r)
+liftExtension f (Sng g jt) = Sng g jt
+liftExtension f (Var v jt) = Var v jt
+liftExtension f (Rnd jt) = Rnd jt
+liftExtension f (Arg v jt r) = Arg v jt r
+liftExtension f (Op op ts) = Op op (fmap (liftExtension f) ts)
+liftExtension f (Phi a b c) = Phi (liftExtension f a) (liftExtension f b) (liftExtension f c)
+liftExtension f (Lam     jts a) = Lam jts (liftExtension f a)
+liftExtension f (LamStar jts a) = LamStar jts (liftExtension f a)
+liftExtension f (Apply a bs) = Apply (liftExtension f a) (fmap (liftExtension f) bs)
+liftExtension f (FLet v a b) = FLet v (liftExtension f a) (liftExtension f b)
+liftExtension f (Choice chs) = Choice (fmap (liftExtension f) chs)
+liftExtension f (SLet jt a b) = SLet jt (liftExtension f a) (liftExtension f b)
+liftExtension f (Tup as) = Tup (fmap (liftExtension f) as)
+liftExtension f (TLet jt a b) = TLet jt (liftExtension f a) (liftExtension f b)
+liftExtension f (Gauss a b c d) = Gauss (liftExtension f a) (liftExtension f b) (liftExtension f c) (liftExtension f d)
+liftExtension f (ConvertM a) = ConvertM (liftExtension f a)
+liftExtension f (MCreate a b x c ) = MCreate (liftExtension f a) (liftExtension f b) x (liftExtension f c)
+liftExtension f (Transpose a) = Transpose (liftExtension f a)
+liftExtension f (Index a b c) = Index (liftExtension f a) (liftExtension f b) (liftExtension f c)
+liftExtension f (ClipM c a) = ClipM c (liftExtension f a)
+liftExtension f (Iter a b c) = Iter (liftExtension f a) (liftExtension f b) (liftExtension f c)
+liftExtension f (Loop a b x d ) = Loop (liftExtension f a) (liftExtension f b) x (liftExtension f d)
+liftExtension f (SubGrad a b) = SubGrad (liftExtension f a) (liftExtension f b)
+
 
 --------------------------------------------------------------------------
 -- Mutable code
@@ -672,6 +731,7 @@ data IsMutated = Mutated | NotMutated
 -- The different kinds of errors we can throw.
 
 data DMException where
+  UnsupportedError        :: String -> DMException
   UnsupportedTermError    :: DMTerm -> DMException
   UnificationError        :: Show a => a -> a -> DMException
   WrongNumberOfArgs       :: Show a => a -> a -> DMException
@@ -686,6 +746,7 @@ data DMException where
   UnificationShouldWaitError :: DMTypeOf k -> DMTypeOf k -> DMException
 
 instance Show DMException where
+  show (UnsupportedError t) = "The term '" <> t <> "' is currently not supported."
   show (UnsupportedTermError t) = "The term '" <> show t <> "' is currently not supported."
   show (UnificationError a b) = "Could not unify '" <> show a <> "' with '" <> show b <> "'."
   show (WrongNumberOfArgs a b) = "While unifying: the terms '" <> show a <> "' and '" <> show b <> "' have different numbers of arguments"
