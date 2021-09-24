@@ -616,7 +616,7 @@ data PreDMTerm (t :: * -> *) =
   | Op DMTypeOp_Some [(PreDMTerm t)]
   | Phi (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
   | Lam     [Asgmt JuliaType] (PreDMTerm t)
-  | LamStar [(Asgmt JuliaType, Relevance)] (PreDMTerm t)
+  | LamStar [(Asgmt (JuliaType, Relevance))] (PreDMTerm t)
   | Apply (PreDMTerm t) [(PreDMTerm t)]
   | FLet TeVar (PreDMTerm t) (PreDMTerm t)
   | Choice (HashMap [JuliaType] (PreDMTerm t))

@@ -97,6 +97,6 @@ findFLets target t = FindFLetsResult [] t
 
 getJuliaSig :: DMTerm -> TC JuliaSig
 getJuliaSig (Lam as _) = pure $ map sndA as
-getJuliaSig (LamStar as _) = pure $ map (sndA . fst) as
+getJuliaSig (LamStar as _) = pure $ map (fst . sndA) as
 getJuliaSig _ = impossible "Expected a lam/lamstar inside an flet."
 

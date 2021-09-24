@@ -40,7 +40,7 @@ t10 = Lam [(UserTeVar $ Symbol "x") :- (JTNumInt), (UserTeVar $ Symbol "y") :- (
 vz = var "z"
 t11 = SLet ((UserTeVar $ Symbol "z") :- (JTAny)) (Sng 1 JTNumInt) (SLet ((UserTeVar $ Symbol "z") :- (JTAny)) (t5 (Sng 1 JTNumInt) vz) (SLet ((UserTeVar $ Symbol "z") :- (JTAny)) (t5 (Sng 2 JTNumInt) vz) vz))
 
-t12 = LamStar [(((UserTeVar $ Symbol "x") :- (JTNumInt)), IsRelevant), (((UserTeVar $ Symbol "y") :- (JTAny)), IsRelevant)] (Ret (Phi (t3 "x") t2 (t3 "y")))
+t12 = LamStar [((UserTeVar $ Symbol "x") :- (JTNumInt, IsRelevant)), ((UserTeVar $ Symbol "y") :- (JTAny, IsRelevant))] (Ret (Phi (t3 "x") t2 (t3 "y")))
 
 t13 = Ret (Phi (t3 "x") t2 (t3 "y"))
 
@@ -50,7 +50,7 @@ t15 = Phi t2 t13 t2
 
 t16 = Gauss t2 t2 t2 t4
 
-t16s = LamStar [(((UserTeVar $ Symbol "x") :- (JTNumInt)), IsRelevant), (((UserTeVar $ Symbol "y") :- (JTAny)), IsRelevant)] t16
+t16s = LamStar [((UserTeVar $ Symbol "x") :- (JTNumInt, IsRelevant)), ((UserTeVar $ Symbol "y") :- (JTAny, IsRelevant))] t16
 
 -- t17 = MCreate (Sng 1 JTNumInt) (Sng 1 JTNumInt) (Symbol "x1", Symbol "x2") (var "y")
 

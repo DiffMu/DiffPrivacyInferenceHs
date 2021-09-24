@@ -75,8 +75,8 @@ pRelevance :: Parser Relevance
 pRelevance = (try (string "1" *> pure IsRelevant))
              <|> (try (string "0" *> pure NotRelevant))
 
-pAsgmtWithRel :: Parser (Asgmt JuliaType, Relevance)
-pAsgmtWithRel = between (char '(') (char ')') ((,) <$> pAsgmt (:-) <*､> pRelevance)
+--pAsgmtWithRel :: Parser (Asgmt (JuliaType, Relevance))
+--pAsgmtWithRel = between (char '(') (char ')') ((,) <$> pAsgmt <*､> pRelevance)
 
 pArray :: String -> Parser a -> Parser [a]
 pArray prefix p = string prefix *> between (char '[') (char ']') (p `sepBy` (string ", "))
@@ -125,7 +125,7 @@ pDMTerm =
   <|> try ("op"        `with` (Op      <$> pDMTypeOp <*､> pArray "DMTerm" pDMTerm))
   <|> try ("phi"       `with` (Phi     <$> pDMTerm <*､> pDMTerm <*､> pDMTerm))
   <|> try ("lam"       `with` (Lam     <$> pArray "Tuple{Symbol, DataType}" (pAsgmt (:-)) <*､> pDMTerm ))
-  <|> try ("lam_star"  `with` (LamStar <$> pArray "Tuple{Tuple{Symbol, DataType}, Bool}" pAsgmtWithRel <*､> pDMTerm ))
+--  <|> try ("lam_star"  `with` (LamStar <$> pArray "Tuple{Symbol, Tuple{DataType, Bool}" pAsgmtWithRel <*､> pDMTerm ))
   <|> try ("apply"     `with` (Apply   <$> pDMTerm <*､> pArray "DMTerm" pDMTerm))
   <|> try ("iter"      `with` (Iter    <$> pDMTerm <*､> pDMTerm <*､> pDMTerm)) -- NOTE: iter should be deprecated
   <|> try ("flet"      `with` (FLet    <$> pTeVar <*､> pDMTerm <*､> pDMTerm))

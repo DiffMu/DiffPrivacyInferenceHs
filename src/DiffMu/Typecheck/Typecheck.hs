@@ -172,17 +172,17 @@ checkSen' (LamStar xτs body) scope =
   later $ \scope -> do
     -- put a special term to mark x as a function argument. those get special tratment
     -- because we're interested in their privacy. put the relevance given in the function signature, too.
-    let scope' = foldl (\sc -> (\((x :- τ), rel) -> setValue x (checkSens (Arg x τ rel) scope) sc)) scope xτs
+    let scope' = foldl (\sc -> (\(x :- (τ, rel)) -> setValue x (checkSens (Arg x τ rel) scope) sc)) scope xτs
 
 
     -- check the function body
     τr <- checkPriv body scope'
     -- extract julia signature
-    let sign = (sndA <$> fst <$> xτs)
+    let sign = (fst <$> sndA <$> xτs)
     done $ do
       restype <- τr
       -- get inferred types and privacies for the arguments
-      xrτs <- getArgList @_ @PrivacyK (fst <$> xτs)
+      xrτs <- getArgList @_ @PrivacyK [(x :- τ) | (x :- (τ, _)) <- xτs]
 
       -- variables that are annotated irrelevant can be made const in case they are
       -- numeric or tuples. that way we can express the result sensitivity/privacy
@@ -196,7 +196,7 @@ checkSen' (LamStar xτs body) scope =
                                         return ()
                  return ()
 
-      mapM addC (zip xrτs xτs)
+      mapM addC (zip xrτs (sndA <$> xτs))
 
       -- truncate function context to infinity sensitivity
       mtruncateS inftyS
