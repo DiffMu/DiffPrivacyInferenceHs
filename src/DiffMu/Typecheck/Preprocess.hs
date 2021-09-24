@@ -67,9 +67,11 @@ collectAllFLets (Transpose a)     = Transpose <$> (collectAllFLets a)
 collectAllFLets (Index a b c)     = Index <$> (collectAllFLets a) <*> (collectAllFLets b) <*> (collectAllFLets c)
 collectAllFLets (ClipM x a)       = ClipM x <$> (collectAllFLets a)
 collectAllFLets (Iter a b c)      = Iter <$> (collectAllFLets a) <*> (collectAllFLets b) <*> (collectAllFLets c)
-collectAllFLets (Loop a b x c)    = Loop <$> (collectAllFLets a) <*> (collectAllFLets b) <*> pure x <*> (collectAllFLets c)
+collectAllFLets (Loop a b x c)    = Loop <$> (collectAllFLets a) <*> (pure b) <*> pure x <*> (collectAllFLets c)
 collectAllFLets (SubGrad a b)     = SubGrad <$> collectAllFLets a <*> collectAllFLets b
 collectAllFLets (ConvertM t)      = ConvertM <$> collectAllFLets t
+collectAllFLets (Reorder a t)     = Reorder a <$> collectAllFLets t
+-- collectAllFLets (MutLet t s)      = MutLet <$> collectAllFLets t <*> collectAllFLets s
 
 expandFLets :: TeVar -> [DMTerm] -> DMTerm -> DMTerm
 expandFLets var [] rest = rest

@@ -175,5 +175,5 @@ parseExprFromString :: String -> Either DMException ParseDMTerm
 parseExprFromString input =
   let res = runParser pExpr 0 "jl-hs-communication" input
   in case res of
-    Left e  -> Left (InternalError $ "Communication Error: Could not parse ParseDMTerm from string" <> show input <> ":\n" <> show e)
+    Left e  -> Left (InternalError $ "Communication Error: Could not parse ParseDMTerm from string\n\n----------------------\n" <> input <> "\n---------------------------\n" <> show e)
     Right a -> Right a

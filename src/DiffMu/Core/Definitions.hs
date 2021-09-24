@@ -630,9 +630,12 @@ data PreDMTerm (t :: * -> *) =
   | Index (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
   | ClipM Clip (PreDMTerm t)
   | Iter (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
-  | Loop (PreDMTerm t) (PreDMTerm t) (TeVar, TeVar) (PreDMTerm t)
+  -- Loop (DMTerm : "Number of iterations") ([TeVar] : "Captured variables") (TeVar : "name of iteration var", TeVar : "name of capture variable") (DMTerm : "body")
+  | Loop (PreDMTerm t) [TeVar] (TeVar, TeVar) (PreDMTerm t)
 -- Special NN builtins
   | SubGrad (PreDMTerm t) (PreDMTerm t)
+-- Transparent tuple replacements
+  | Reorder [Int] (PreDMTerm t)
   deriving (Generic)
 
 deriving instance (forall a. Show a => Show (t a)) => Show (PreDMTerm t)
@@ -671,7 +674,9 @@ type ParseDMTerm = PreDMTerm (SumExtension ParseExtension MutabilityExtension)
 -- mutability extension
 data MutabilityExtension a =
   MutLet a a
-  | MutLoop a a (TeVar, TeVar) a
+  -- MutLoop (a : "Number of iterations") (TeVar : "name of iteration var") (a : "body")
+  | MutLoop a (TeVar) a
+  | Modify (Asgmt JuliaType) a
   deriving (Show, Eq)
 
 type MutDMTerm = PreDMTerm MutabilityExtension
@@ -708,8 +713,9 @@ liftExtension f (Transpose a) = Transpose (liftExtension f a)
 liftExtension f (Index a b c) = Index (liftExtension f a) (liftExtension f b) (liftExtension f c)
 liftExtension f (ClipM c a) = ClipM c (liftExtension f a)
 liftExtension f (Iter a b c) = Iter (liftExtension f a) (liftExtension f b) (liftExtension f c)
-liftExtension f (Loop a b x d ) = Loop (liftExtension f a) (liftExtension f b) x (liftExtension f d)
+liftExtension f (Loop a b x d ) = Loop (liftExtension f a) (b) x (liftExtension f d)
 liftExtension f (SubGrad a b) = SubGrad (liftExtension f a) (liftExtension f b)
+liftExtension f (Reorder x a) = Reorder x (liftExtension f a)
 
 
 --------------------------------------------------------------------------
