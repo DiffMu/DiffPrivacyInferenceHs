@@ -390,10 +390,14 @@ checkSen' (TLet xs term body) original_scope = do
     return τbody
 
 
-checkSen' (Loop niter cs (xi, xc) body) scope = do
+checkSen' (Loop niter cs' (xi, xc) body) scope = do
    cniter <- checkSens niter scope
 
    let scope_vars = getAllKeys scope
+
+   -- build the tup of variables
+   let cs = Tup ((\a -> Var (a :- JTAny)) <$> cs')
+   -- check it
    ccs <- checkSens cs scope
 
    -- add iteration and capture variables as args-checking-commands to the scope
@@ -818,7 +822,7 @@ checkPri' (Gauss rp εp δp f) scope =
          return τgauss
 
 
-checkPri' (Loop niter cs (xi, xc) body) scope =
+checkPri' (Loop niter cs' (xi, xc) body) scope =
    --let setInteresting :: ([Symbol],[DMMain :@ PrivacyAnnotation]) -> Sensitivity -> TC ()
    let setInteresting (xs, τps) n = do
           let τs = map fstAnn τps
@@ -846,6 +850,10 @@ checkPri' (Loop niter cs (xi, xc) body) scope =
                    mtruncateP zeroId
                    return τ
 
+      -- build the up of variables
+      let cs = Tup ((\a -> Var (a :- JTAny)) <$> cs')
+
+      -- check it
       mcaps <- checkSens cs  scope
       let mcaps' = do
                    τ <- mcaps

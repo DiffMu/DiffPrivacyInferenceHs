@@ -50,7 +50,7 @@ pJuliaType = do
 -- pJuliaNumType :: Parser JuliaNumType
 -- pJuliaNumType = undefined
 
-pSng :: Parser DMTerm
+pSng :: Parser (PreDMTerm MutabilityExtension)
 pSng = do
   n <- decFloat False
   case n of
@@ -102,8 +102,10 @@ with :: String -> Parser a -> Parser a
 with name content = string name >> between (char '(') (char ')') content
 
 
-pSingleChoiceHash :: Parser (HashMap [JuliaType] DMTerm)
-pSingleChoiceHash = f <$> pTuple2 (pArray "DataType" pJuliaType) pDMTerm
+-- pSingleChoiceHash :: Parser (HashMap [JuliaType] DMTerm)
+-- pSingleChoiceHash = f <$> pTuple2 (pArray "DataType" pJuliaType) pDMTerm
+pSingleChoiceHash :: Parser (HashMap [JuliaType] (PreDMTerm MutabilityExtension))
+pSingleChoiceHash = f <$> pTuple2 (pArray "Type" pJuliaType) pDMTerm
   where f (sig, term) = H.fromList [(sig,term)]
 
 pGauss = f <$> pTuple3 pDMTerm pDMTerm pDMTerm <*､> pDMTerm
@@ -112,10 +114,17 @@ pGauss = f <$> pTuple3 pDMTerm pDMTerm pDMTerm <*､> pDMTerm
 pMat = f <$> pDMTerm <*､> pDMTerm <*､> pTuple2 pTeVar pTeVar <*､> pDMTerm
   where f a b (c,d) e = MCreate a b (c, d) e
 
-pLoop = f <$> pDMTerm <*､> pDMTerm <*､> pDMTerm <*､> pTuple2 pTeVar pTeVar <*､> pDMTerm
+pLoop = f <$> pDMTerm <*､> pDMTerm <*､> undefined <*､> pTuple2 pTeVar pTeVar <*､> pDMTerm
   where f _ a b c d = Loop a b c d
 
-pDMTerm :: Parser DMTerm
+-- pDMTerm :: Parser DMTerm
+withNothing1 a = f <$> a
+  where f a = (a , Nothing)
+
+withNothing2 a = f <$> a
+  where f (a , b) = (a , b , Nothing)
+
+pDMTerm :: Parser (PreDMTerm MutabilityExtension )
 pDMTerm =
       try ("ret"       `with` (Ret     <$> pDMTerm))
   <|> try ("sng"       `with` (pSng))
@@ -143,11 +152,12 @@ pDMTerm =
   <|> try ("dmsubgrad" `with` (SubGrad  <$> pDMTerm <*､> pDMTerm))
 
   -- mutable terms
-  -- <|> try ("mut_slet"      `with` (MutLet    <$> pDMTerm <*､> pDMTerm))
+  <|> try ("mut_slet"      `with` ((((.).(.)) Extra MutLet)  <$> pDMTerm <*､> pDMTerm))
+
 
 -- flet(:f, DataType[Any, Any], lam(Tuple{Symbol, DataType}[(:a, Any), (:b, Any)], op(:+, DMTerm[var(:a, Any), op(:+, DMTerm[op(:*, DMTerm[var(:b, Any), var(:b, Any)]), var(:a, Any)])])), var(:f, Any))
 
-pDMTermFromString :: String -> (Either DMException DMTerm)
+pDMTermFromString :: String -> (Either DMException (PreDMTerm MutabilityExtension ))
 pDMTermFromString s =
   let res = runParser pDMTerm () "jl-hs-communication" s
   in case res of

@@ -27,6 +27,7 @@ import Debug.Trace
 -- The checking monad
 
 data ImmutType = Pure | Mutating [IsMutated] | VirtualMutated [TeVar] | SingleArg TeVar
+  deriving (Show)
 
 -- type ImmutCtx = Ctx TeVar ()
 type MutCtx = Ctx TeVar IsMutated
@@ -35,10 +36,11 @@ data MFull = MFull
   {
     -- _strongImmutTypes :: ImmutCtx
     _mutTypes :: MutCtx
+  , _termVarsOfMut :: NameCtx
   }
 
 instance Default MFull where
-  def = MFull def
+  def = MFull def def
 
 newtype MTC a = MTC {runMTC :: ((StateT MFull (ExceptT DMException (Writer DMLogMessages))) a)}
   deriving (Functor, Applicative, Monad, MonadState MFull, MonadError DMException, MonadWriter DMLogMessages)
@@ -47,6 +49,9 @@ instance MonadInternalError MTC where
   internalError = throwError . InternalError
 
 $(makeLenses ''MFull)
+
+newTeVarOfMut :: (MonadState MFull m) => Text -> m (TeVar)
+newTeVarOfMut hint = termVarsOfMut %%= (first GenTeVar . (newName hint))
 
 -- the scope
 type Scope = Ctx TeVar ImmutType
@@ -75,6 +80,12 @@ markRead var = do
   mutTypes %= (⋆! singl)
 
 
+---
+-- elaborating loops
+-- not allowed:
+-- - FLet
+-- - JuliaReturn
+-- - modify iteration variable
 
 
 
@@ -163,11 +174,17 @@ elaborateMut scope (Lam args body) = do
     --
     True -> do
       -- assert that now the context is empty
-      -- (i.e., no captures where used)
+      -- (i.e., no captures were used)
       mutTypes <- use mutTypes
       case isEmptyDict mutTypes of
-        True -> pure (Lam args newBody , Mutating vars_mut)
         False -> throwError (VariableNotInScope $ "The variables " <> show mutTypes <> " are not in scope.")
+        True ->
+          -- check that the body is a mutation result
+          -- and reorder the resulting tuple
+          case τ of
+            VirtualMutated vars -> pure (Lam args (Reorder [] newBody) , Mutating vars_mut)
+            wrongτ -> throwError (DemutationError $ "Expected the result of the body of a mutating lambda to be a virtual mutated value. But it was "
+                                  <> show wrongτ <> "\n where body is:\n" <> show body)
 
     --
     -- case II : Not Mutating
@@ -228,22 +245,75 @@ elaborateMut scope (FLet fname term body) = do
 
   return (FLet fname newTerm newBody, newBodyType)
 
-elaborateMut scope (Extra (MutLet term body)) = do
+elaborateMut scope (Extra (MutLet term1 term2)) = do
 
-  (newTerm, newTermType) <- elaborateMut scope term
+  -- elaborate the first term and get its mutated variables
+  (newTerm1, newTerm1Type) <- elaborateMut scope term1
 
-  mutNames <- case newTermType of
-    VirtualMutated mutNames -> pure mutNames
-    _ -> throwError (DemutationError $ "Found the term " <> show term <> " which is not a mutating function call in a place where only such calls make sense.")
+  mutNames1 <- case newTerm1Type of
+    VirtualMutated mutNames1 -> pure mutNames1
+    _ -> throwError (DemutationError $ "Found the term " <> show term1 <> " which is not a mutating function call in a place where only such calls make sense.")
 
-  (newBody, newBodyType) <- elaborateMut scope body
+  -- elaborate the second term and get its mutated variables
+  (newTerm2, newTerm2Type) <- elaborateMut scope term2
 
-  case mutNames of
-    [] -> throwError (DemutationError $ "Found the term " <> show term <> "which does not mutate anything.")
-    [n] -> pure (SLet (n :- JTAny) newTerm newBody , newBodyType)
-    xs  -> pure (TLet (ns) newTerm newBody , newBodyType)
+  mutNames2 <- case newTerm2Type of
+    VirtualMutated mutNames2 -> pure mutNames2
+    _ -> throwError (DemutationError $ "Found the term " <> show term1 <> " which is not a mutating function call in a place where only such calls make sense.")
+
+
+  -- build the result tuple
+  let commonMutNames = nub (mutNames1 <> mutNames2)
+  let resultTupleTerm = case commonMutNames of
+        xs -> Tup ((\a -> Var (a :- JTAny)) <$> xs)
+
+  -- build the let for the second (inner) term
+  constructedInnerTerm <- case mutNames2 of
+    xs  -> pure (TLet (ns) newTerm2 resultTupleTerm)
            where
              ns = [n :- JTAny | n <- xs]
+
+  -- build the let for the first (outer) term
+  case mutNames1 of
+    xs  -> pure (TLet (ns) newTerm1 constructedInnerTerm , VirtualMutated commonMutNames)
+           where
+             ns = [n :- JTAny | n <- xs]
+
+elaborateMut scope (Extra (MutLoop iters iterVar body)) = do
+  -- first, elaborate the iters
+  (newIters , newItersType) <- elaborateNonmut scope iters
+
+  -- now, preprocess the body,
+  -- i.e., find out which variables are getting mutated
+  -- and change their `SLet`s to `modify!` terms
+  preprocessedBody <- preprocessLoopBody scope iterVar body
+
+  -- we can now elaborate the body, and thus get the actual list
+  -- of modified variables
+  (newBody, newBodyType) <- elaborateMut scope preprocessedBody
+
+  -- we use them to build a tlet around the body,
+  -- and return that new `Loop` term
+  case newBodyType of
+    VirtualMutated mutvars -> do
+      -- the actual body term is going to look as follows:
+      --
+      --   let (c1...cn) = captureVar
+      --   in term...
+      --
+      -- where `term` is made sure to return the captured tuple
+      -- by the general demutation machinery
+      captureVar <- newTeVarOfMut "loop_capture_"
+
+      let newBodyWithLet = TLet [(v :- JTAny) | v <- mutvars] (Var (captureVar :- JTAny)) newBody
+      let newTerm = Loop newIters mutvars (iterVar , captureVar) newBodyWithLet
+
+      return (newTerm , VirtualMutated mutvars)
+
+    -- if there was no mutation,
+    -- throw error
+    other -> throwError (DemutationError $ "Expected a loop body to be mutating, but it was of type " <> show other)
+
 
 elaborateMut scope (SubGrad t1 t2) = do
   (argTerms, mutVars) <- elaborateMutList "subgrad" scope [(Mutated , t1), (NotMutated , t2)]
@@ -269,6 +339,12 @@ elaborateMut scope (ConvertM t1) = do
     [newT1] -> pure (ConvertM newT1, VirtualMutated mutVars)
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
+elaborateMut scope (Extra (Modify (v) t1)) = do
+  (argTerms, mutVars) <- elaborateMutList "internal_modify" scope [(Mutated , (Var v)) , (NotMutated , t1)]
+  case argTerms of
+    [Var (v :- jt), newT2] -> pure (newT2 , VirtualMutated mutVars)
+    [_, newT2] -> internalError ("After elaboration of an internal_modify term result was not a variable.")
+    _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 elaborateMut scope t = throwError (UnsupportedError (show t))
 
@@ -318,6 +394,46 @@ elaborateMutList f scope mutargs = do
   let muts = [m | (_ , Just m) <- newArgsWithMutTeVars]
 
   return (newArgs, muts)
+
+
+
+------------------------------------------------------------
+-- preprocessing a for loop body
+
+preprocessLoopBody :: Scope -> TeVar -> MutDMTerm -> MTC (MutDMTerm)
+
+preprocessLoopBody scope iter (SLet (v :- jt) term body) = do
+  -- it is not allowed to change the iteration variable
+  case iter == v of
+    True -> throwError (DemutationError $ "Inside for-loops the iteration variable (in this case '" <> show iter <> "') is not allowed to be mutated.")
+    False -> pure ()
+
+  -- if an slet expression binds a variable which is already in scope,
+  -- then this means we are actually mutating this variable.
+  -- thus we update the term to be a mutlet and use the builtin modify!
+  -- function for setting the variable
+  -- if the variable has not been in scope, it is a local variable,
+  -- and we do not change the term
+
+  term' <- preprocessLoopBody scope iter term
+  body' <- preprocessLoopBody scope iter body
+
+  case getValue v scope of
+    Just _  -> return (Extra (MutLet (Extra (Modify (v :- jt) term')) (body')))
+    Nothing -> return (SLet (v :- jt) term' body')
+
+preprocessLoopBody scope iter (FLet f _ _) = throwError (DemutationError $ "Function definition is not allowed in for loops. (Encountered definition of " <> show f <> ".)")
+
+-- for these terms we do nothing special
+preprocessLoopBody scope iter (Var a) = return (Var a)
+
+-- the rest is currently not supported
+preprocessLoopBody scope iter t = throwError (UnsupportedError (show t))
+
+
+
+
+
 
 
 liftNewMTC :: MTC a -> TC a
