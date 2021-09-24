@@ -10,6 +10,7 @@ import Spec.TypecheckingExamples
 import Spec.Unsafe
 import Spec.Unification
 import Spec.Issues
+import Spec.Demutation
 
 -- import Test.QuickCheck hiding (Fun)
 
@@ -26,17 +27,18 @@ defaultspec spec = do
 
 runAllTests :: (String -> IO String) -> IO ()
 runAllTests parse = defaultspec $ do
-  testUnsafe
-  testUnification
-  testSubtyping
-  testSubtyping_MaxMinCases
-  testSubtyping_Cycles
-  testSubtyping_ContractEdge
-  testSupremum
-  testCheck_Rules
-  testScoping parse
-  testCheckSens parse
-  testIssues parse
+  -- testUnsafe
+  -- testUnification
+  -- testSubtyping
+  -- testSubtyping_MaxMinCases
+  -- testSubtyping_Cycles
+  -- testSubtyping_ContractEdge
+  -- testSupremum
+  -- testCheck_Rules
+  -- testScoping parse
+  -- testCheckSens parse
+  -- testIssues parse
+  testDemutation
 
 
 
