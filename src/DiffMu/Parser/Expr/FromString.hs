@@ -14,13 +14,15 @@ import qualified Data.Text as T
 -- carry line number information as user state
 type LnParser = Parsec String Int
 
-pAss ctor varParser = do
-         (var, assignment) <- with ":(=)" ((,) <$> varParser <*､> pExpr)
-         parserTrace ("assignment: " <> show var <> "\n")
-         tail <- (sep >> pExpr)
-         parserTrace ("tail: " <> show tail <> "\n")
-         return $ (ctor var assignment tail)
+pTLet = do
+         (vars, assignment) <- with ":(=)" ((,) <$> (with ":tuple" (many pAsgmt)) <*､> pExpr)
+         tail <- pTail (Tup (Var <$> vars))
+         return $ (TLet vars assignment tail)
 
+pSLet = do
+         (var, assignment) <- with ":(=)" ((,) <$> pAsgmt <*､> pExpr)
+         tail <- pTail (Var var)
+         return $ (SLet var assignment tail)
 
 
 with :: String -> LnParser a -> LnParser a
@@ -104,33 +106,24 @@ pAsgmt = pMaybeAnn pTeVar pJuliaType JTAny
 pAsgmtRel :: LnParser (Asgmt (JuliaType, Relevance))
 pAsgmtRel = pMaybeAnn pTeVar pRelevance (JTAny, IsRelevant)
 
-pCall :: LnParser (TeVar, [Asgmt JuliaType])
-pCall = let p = do
-                   name <- pTeVar
-                   sep
-                   args <- (many pAsgmt)
-                   return (name, args)
+pCall :: LnParser s -> LnParser t -> LnParser (s, [t])
+pCall pcallee pargs = let p = do
+                               name <- pcallee
+                               sep
+                               args <- (many pargs)
+                               return (name, args)
         in (":call" `with` p)
 
-pCallStar :: LnParser (TeVar, [Asgmt (JuliaType, Relevance)])
-pCallStar = let p = do
-                   name <- pTeVar
-                   sep
-                   args <- (many pAsgmtRel)
-                   return (name, args)
-        in (":call" `with` p)
-
-
+pFunc :: LnParser (TeVar, ParseDMTerm)
 pFunc = do
-            (name, args) <- pCall
-            parserTrace (show name)
+            (name, args) <- pCall pTeVar pAsgmt
             sep
             body <- pExpr
             return (name, (Lam args body))
 
+pFuncStar :: LnParser (TeVar, ParseDMTerm)
 pFuncStar = let pStar = do
-                       sign <- pCallStar
-                       parserTrace (show sign)
+                       sign <- pCall pTeVar pAsgmtRel
                        sep
                        string ":Priv"
                        return sign
@@ -140,14 +133,26 @@ pFuncStar = let pStar = do
             body <- pExpr
             return (name, (LamStar args body))
 
+pFLet :: LnParser ParseDMTerm
 pFLet = do
-          (name, lam) <- (":function" `with` (try pFuncStar <|> try pFunc))
-          sep
-          parserTrace (show lam)
-          tail <- pExpr
+          (name, lam) <- try (":function" `with` (try pFuncStar <|> try pFunc))
+                         <|> try (":(=)" `with` (try pFuncStar <|> try pFunc))
+          tail <- pTail (Var (name :- JTAny))
           return (FLet name lam tail)
 
+pTail :: ParseDMTerm -> LnParser ParseDMTerm
+pTail noTail = try (sep >> pExpr) <|> (return noTail)
 
+pApply :: LnParser ParseDMTerm
+pApply = let pmut = do
+                         (name, args) <- pCall (string ":!" *> pIdentifier) pExpr
+                         let callee = Var (((UserTeVar . Symbol . T.pack) ("!" <> name)) :- JTAny)
+                         tail <- pTail (Extra (SERight  MutRet))
+                         return (Extra (SERight (MutLet (Apply callee args) tail)))
+             papp = do
+                         (callee, args) <- pCall pExpr pExpr
+                         return (Apply callee args) -- TODO error properly upon non-empty tail
+         in try pmut <|> try papp
 
 infixl 2 <*､>
 (<*､>) :: LnParser (a -> b) -> LnParser a -> LnParser b
@@ -157,12 +162,12 @@ pExpr :: LnParser ParseDMTerm
 pExpr =
              try (pLineNumber >> sep >> pExpr) -- put line number into user state, continue
          <|> try (":block"       `with` pExpr) -- discard :block
-         <|> try (pAss SLet pAsgmt)
-         <|> try (pAss TLet (with ":tuple" (many pAsgmt)))
-         <|> try (pAss (\s t u -> (Extra (SELeft (OLFAss s t u)))) pCall) -- one-line function assignments
-         <|> try pSng -- TODO why does this not work on begin 1 end?
-         <|> try pVar
+         <|> try pApply
+         <|> try pSLet
+         <|> try pTLet
          <|> try pFLet
+         <|> try pSng
+         <|> try pVar
 
 
 
@@ -175,5 +180,5 @@ parseExprFromString :: String -> Either DMException ParseDMTerm
 parseExprFromString input =
   let res = runParser pExpr 0 "jl-hs-communication" input
   in case res of
-    Left e  -> Left (InternalError $ "Communication Error: Could not parse ParseDMTerm from string" <> show input <> ":\n" <> show e)
+    Left e  -> Left (InternalError $ "Communication Error: Could not parse ParseDMTerm from string" <> input <> ":\n" <> show e)
     Right a -> Right a

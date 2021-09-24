@@ -672,6 +672,7 @@ type ParseDMTerm = PreDMTerm (SumExtension ParseExtension MutabilityExtension)
 data MutabilityExtension a =
   MutLet a a
   | MutLoop a a (TeVar, TeVar) a
+  | MutRet
   deriving (Show, Eq)
 
 type MutDMTerm = PreDMTerm MutabilityExtension
