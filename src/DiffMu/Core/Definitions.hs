@@ -663,9 +663,8 @@ type DMTerm = PreDMTerm EmptyExtension
 data ParseExtension a =
    If a a a
  | IfElse a a a a
- | OLFAss (TeVar, [Asgmt JuliaType]) a a
- | OLFStarAss (TeVar, [(Asgmt JuliaType, Relevance)]) a a
  | OpAss (Asgmt JuliaType) DMTypeOps_Binary a a
+ | Tail
  deriving (Show, Eq)
 
 type ParseDMTerm = PreDMTerm (SumExtension ParseExtension MutabilityExtension)
