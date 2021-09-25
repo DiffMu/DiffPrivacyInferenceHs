@@ -690,33 +690,94 @@ data SumExtension e f a = SELeft (e a) | SERight (f a)
 -- functions
 
 liftExtension :: (t (PreDMTerm t) -> PreDMTerm s) -> PreDMTerm t -> PreDMTerm s
-liftExtension f (Extra e) = (f e)
-liftExtension f (Ret (r)) = Ret (liftExtension f r)
-liftExtension f (Sng g jt) = Sng g jt
-liftExtension f (Var (v :- jt)) = Var (v :- jt)
-liftExtension f (Rnd jt) = Rnd jt
-liftExtension f (Arg v jt r) = Arg v jt r
-liftExtension f (Op op ts) = Op op (fmap (liftExtension f) ts)
-liftExtension f (Phi a b c) = Phi (liftExtension f a) (liftExtension f b) (liftExtension f c)
-liftExtension f (Lam     jts a) = Lam jts (liftExtension f a)
-liftExtension f (LamStar jts a) = LamStar jts (liftExtension f a)
-liftExtension f (Apply a bs) = Apply (liftExtension f a) (fmap (liftExtension f) bs)
-liftExtension f (FLet v a b) = FLet v (liftExtension f a) (liftExtension f b)
-liftExtension f (Choice chs) = Choice (fmap (liftExtension f) chs)
-liftExtension f (SLet jt a b) = SLet jt (liftExtension f a) (liftExtension f b)
-liftExtension f (Tup as) = Tup (fmap (liftExtension f) as)
-liftExtension f (TLet jt a b) = TLet jt (liftExtension f a) (liftExtension f b)
-liftExtension f (Gauss a b c d) = Gauss (liftExtension f a) (liftExtension f b) (liftExtension f c) (liftExtension f d)
-liftExtension f (ConvertM a) = ConvertM (liftExtension f a)
+liftExtension f (Extra e)          = (f e)
+liftExtension f (Ret (r))          = Ret (liftExtension f r)
+liftExtension f (Sng g jt)         = Sng g jt
+liftExtension f (Var (v :- jt))    = Var (v :- jt)
+liftExtension f (Rnd jt)           = Rnd jt
+liftExtension f (Arg v jt r)       = Arg v jt r
+liftExtension f (Op op ts)         = Op op (fmap (liftExtension f) ts)
+liftExtension f (Phi a b c)        = Phi (liftExtension f a) (liftExtension f b) (liftExtension f c)
+liftExtension f (Lam     jts a)    = Lam jts (liftExtension f a)
+liftExtension f (LamStar jts a)    = LamStar jts (liftExtension f a)
+liftExtension f (Apply a bs)       = Apply (liftExtension f a) (fmap (liftExtension f) bs)
+liftExtension f (FLet v a b)       = FLet v (liftExtension f a) (liftExtension f b)
+liftExtension f (Choice chs)       = Choice (fmap (liftExtension f) chs)
+liftExtension f (SLet jt a b)      = SLet jt (liftExtension f a) (liftExtension f b)
+liftExtension f (Tup as)           = Tup (fmap (liftExtension f) as)
+liftExtension f (TLet jt a b)      = TLet jt (liftExtension f a) (liftExtension f b)
+liftExtension f (Gauss a b c d)    = Gauss (liftExtension f a) (liftExtension f b) (liftExtension f c) (liftExtension f d)
+liftExtension f (ConvertM a)       = ConvertM (liftExtension f a)
 liftExtension f (MCreate a b x c ) = MCreate (liftExtension f a) (liftExtension f b) x (liftExtension f c)
-liftExtension f (Transpose a) = Transpose (liftExtension f a)
-liftExtension f (Index a b c) = Index (liftExtension f a) (liftExtension f b) (liftExtension f c)
-liftExtension f (ClipM c a) = ClipM c (liftExtension f a)
-liftExtension f (Iter a b c) = Iter (liftExtension f a) (liftExtension f b) (liftExtension f c)
-liftExtension f (Loop a b x d ) = Loop (liftExtension f a) (b) x (liftExtension f d)
-liftExtension f (SubGrad a b) = SubGrad (liftExtension f a) (liftExtension f b)
-liftExtension f (Reorder x a) = Reorder x (liftExtension f a)
+liftExtension f (Transpose a)      = Transpose (liftExtension f a)
+liftExtension f (Index a b c)      = Index (liftExtension f a) (liftExtension f b) (liftExtension f c)
+liftExtension f (ClipM c a)        = ClipM c (liftExtension f a)
+liftExtension f (Iter a b c)       = Iter (liftExtension f a) (liftExtension f b) (liftExtension f c)
+liftExtension f (Loop a b x d )    = Loop (liftExtension f a) (b) x (liftExtension f d)
+liftExtension f (SubGrad a b)      = SubGrad (liftExtension f a) (liftExtension f b)
+liftExtension f (Reorder x a)      = Reorder x (liftExtension f a)
 
+
+--------------------------------------------------------------------------
+-- pretty printing
+
+class ShowPretty a where
+  showPretty :: a -> String
+
+instance ShowPretty a => ShowPretty [a] where
+  showPretty as = "[" <> intercalate ", " (fmap showPretty as) <> "]"
+
+parenIndent :: String -> String
+parenIndent s = "\n(\n" <> unlines (fmap ("  " <>) (lines s)) <> ")"
+
+indent :: String -> String
+indent s = unlines (fmap ("  " <>) (lines s))
+
+instance ShowPretty (TeVar) where
+  showPretty (v) = show v
+
+instance ShowPretty (Asgmt a) where
+  showPretty (a :- _) = showPretty a
+
+instance ShowPretty (DMTypeOp_Some) where
+  showPretty (IsBinary op) = show op
+  showPretty (IsUnary op) = show op
+
+instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t) where
+  showPretty (Extra e)          = showPretty e
+  showPretty (Ret (r))          = "Ret (" <>  showPretty r <> ")"
+  showPretty (Sng g jt)         = show g
+  showPretty (Var (v :- jt))    = show v
+  showPretty (Rnd jt)           = "Rnd"
+  showPretty (Arg v jt r)       = show v
+  showPretty (Op op ts)         = showPretty op <> " " <> showPretty ts
+  showPretty (Phi a b c)        = "Phi (" <> showPretty a <> ")" <> parenIndent (showPretty b) <> parenIndent (showPretty c)
+  showPretty (Lam     jts a)    = "Lam (" <> showPretty jts <> ")" <> parenIndent (showPretty a)
+  showPretty (LamStar jts a)    = "LamStar (" <> showPretty jts <> ")" <> parenIndent (showPretty a)
+  showPretty (Apply a bs)       = (showPretty a) <> (showPretty bs)
+  showPretty (FLet v a b)       = "FLet " <> showPretty v <> " = " <> (showPretty a) <> "\n" <> (showPretty b)
+  showPretty (Choice chs)       = "Choice <..>"
+  showPretty (SLet v a b)       = "SLet " <> showPretty v <> " = " <> (showPretty a) <> "\n" <> (showPretty b)
+  showPretty (Tup as)           = "Tup " <> (showPretty as)
+  showPretty (TLet v a b)       = "TLet " <> showPretty v <> " = " <> (showPretty a) <> "\n" <> (showPretty b)
+  showPretty (Gauss a b c d)    = "Gauss (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ", " <> (showPretty d) <> ")"
+  showPretty (ConvertM a)       = "ConvertM (" <> (showPretty a) <> ")"
+  showPretty (MCreate a b x c ) = "MCreate (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> show x <> ", " <> (showPretty c) <> ")"
+  showPretty (Transpose a)      = "Transpose (" <> (showPretty a) <> ")"
+  showPretty (Index a b c)      = "Index (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> (showPretty c) <> ")"
+  showPretty (ClipM c a)        = "ClipM (" <> show c <> ", " <> (showPretty a) <> ")"
+  showPretty (Iter a b c)       = "Iter (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> (showPretty c) <> ")"
+  showPretty (SubGrad a b)      = "SubGrad (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <>  ")"
+  showPretty (Reorder x a)      = "Reorder " <> show x <> parenIndent (showPretty a)
+  showPretty (Loop a b x d )    = "Loop (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> show x <> ")" <> parenIndent (showPretty d)
+
+instance ShowPretty a => ShowPretty (MutabilityExtension a) where
+  showPretty (MutLet a b) = "MutLet" <> indent (showPretty a) <> indent (showPretty b)
+  showPretty (MutLoop a x d) = "MutLoop (" <> (showPretty a) <> ", " <> show x <> ")" <> parenIndent (showPretty d)
+  showPretty (Modify a x) = "Modify! (" <> showPretty a <> ", " <> showPretty x <> ")"
+
+instance ShowPretty (EmptyExtension a) where
+  showPretty a = undefined
 
 --------------------------------------------------------------------------
 -- Mutable code

@@ -18,10 +18,11 @@ instance Semigroup DMLogMessages where
 instance Monoid DMLogMessages where
   mempty = DMLogMessages []
 
-data DMLogLocation = Location_Unification | Location_Subst | Location_INC | Location_Constraint | Location_Check | Location_Subtyping | Location_MonadicGraph | Location_All | Location_Unknown String
+data DMLogLocation = Location_Demutation | Location_Unification | Location_Subst | Location_INC | Location_Constraint | Location_Check | Location_Subtyping | Location_MonadicGraph | Location_All | Location_Unknown String
   deriving (Eq)
 
 instance Show DMLogLocation where
+  show Location_Demutation = "Demutation"
   show Location_Unification = "Unification"
   show Location_Subst = "Subst"
   show Location_INC = "INC"
@@ -51,7 +52,7 @@ instance Ord (DMLogLocation) where
 instance Default (DMLogger) where
   def = DMLogger Debug Debug Location_All
 
-data DMLogSeverity = Debug | Info | Force
+data DMLogSeverity = Debug | Info | Warning | Force
   deriving (Eq,Ord)
 
 data DMLogMessage = DMLogMessage DMLogSeverity DMLogLocation String
@@ -60,11 +61,13 @@ blue x = "\27[34m" <> x <> "\27[0m"
 green x = "\27[32m" <> x <> "\27[0m"
 yellow x = "\27[33m" <> x <> "\27[0m"
 red x = "\27[31m" <> x <> "\27[0m"
+magenta x = "\27[35m" <> x <> "\27[0m"
 
 instance Show DMLogSeverity where
   show Debug = blue "Debug"
   show Info = blue "Info"
   show Force = yellow "Force"
+  show Warning = magenta "Warning"
 
 instance Show DMLogMessage where
   show (DMLogMessage s l m) = show s <> "[" <> show l <> "]: " <> m

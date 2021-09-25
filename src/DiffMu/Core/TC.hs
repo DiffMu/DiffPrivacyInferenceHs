@@ -559,6 +559,7 @@ instance Monad m => MonadLog (TCT m) where
   debug = logWithSeverity Debug
   info = logWithSeverity Info
   logForce = logWithSeverity Force
+  warn = logWithSeverity Warning
   withLogLocation loc action = dmWithLogLocation (fromString_DMLogLocation loc) action
 
 
