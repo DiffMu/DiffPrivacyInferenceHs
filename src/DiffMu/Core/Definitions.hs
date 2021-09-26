@@ -664,7 +664,7 @@ data ParseExtension a =
    If a a a
  | IfElse a a a a
  | OpAss (Asgmt JuliaType) DMTypeOps_Binary a a
- | Tail
+ | JuliaReturn a
  deriving (Show, Eq)
 
 type ParseDMTerm = PreDMTerm (SumExtension ParseExtension MutabilityExtension)

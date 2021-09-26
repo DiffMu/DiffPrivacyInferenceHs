@@ -157,7 +157,29 @@ pOpSym =
   <|> try (string ":(==)" >> pure (IsBinary DMOpEq))
   <|> try (string ":ceil" >> pure (IsUnary DMOpCeil))
 
+pIter ::LnParser ParseDMTerm
+pIter = do
+          (_, args) <- pCall (string ":(:)") pExpr
+          let one = (Sng 1 (JuliaType "Integer"))
+          let (start, step, end) = case args of
+                                        [s, e] -> (s, one, e)
+                                        [s, st, e] -> (s, st, e)
+          let div = IsBinary DMOpDiv
+          let sub = IsBinary DMOpSub
+          return (Op (IsUnary DMOpCeil) [Op div [Op sub [end, Op sub [start, one]], step]]) -- compute number of steps
 
+pLoop = let pit = ":(=)" `with` ((,) <$> pTeVar <*､> pIter)
+        in do
+              ((ivar, nit), body) <- ":for" `with` ((,) <$> pit <*､> pExpr)
+              return (Extra (SERight (MutLoop nit ivar body)))
+
+pReturn = do
+            ret <- ":return" `with` pExpr
+            return (Extra (SELeft (JuliaReturn ret)))
+
+pTup = do
+         ts <- (with ":tuple" (pExpr `sepBy` sep))
+         return (Tup ts)
 
 --pIf :: LnParser ParseDMTerm
 --pIf = do
@@ -170,7 +192,7 @@ pApply :: LnParser ParseDMTerm
 pApply = let pmut = do -- mutating calls annotated by !
                          (name, args) <- pCall (string ":!" *> pIdentifier) pExpr
                          let callee = Var (((UserTeVar . Symbol . T.pack) ("!" <> name)) :- JTAny)
-                         tail <- pTail (Extra (SERight  MutRet))
+                         tail <- pTail (Extra (SERight MutRet))
                          return (Extra (SERight (MutLet (Apply callee args) tail)))
              pop = do -- builtin operations
                          (op, args) <- pCall pOpSym pExpr
@@ -180,7 +202,7 @@ pApply = let pmut = do -- mutating calls annotated by !
              papp = do -- regular calls
                          (callee, args) <- pCall pExpr pExpr
                          return (Apply callee args) -- TODO error properly upon non-empty tail
-         in try pmut <|> try papp
+         in try pmut <|> try pop <|> papp
 
 infixl 2 <*､>
 (<*､>) :: LnParser (a -> b) -> LnParser a -> LnParser b
@@ -197,6 +219,9 @@ pExpr =
          <|> try pFLet
          <|> try pSng
          <|> try pVar
+         <|> try pLoop
+         <|> try pTup
+         <|> try pReturn
 
 
 
