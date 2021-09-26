@@ -109,6 +109,9 @@ pAsgmtRel = pMaybeAnn pTeVar pRelevance (JTAny, IsRelevant)
 pCall :: LnParser s -> LnParser t -> LnParser (s, [t])
 pCall pcallee pargs = (":call" `with` ((,) <$> pcallee <*､> (pargs `sepBy` sep)))
 
+pCallSign :: String -> LnParser t -> LnParser t
+pCallSign name psign = (":call" `with` ((string name) >> sep >> psign))
+
 pLam :: LnParser ParseDMTerm
 pLam = let pargs = try (":tuple" `with` (pAsgmt `sepBy` sep)) <|> ((\x->[x]) <$> pAsgmt)
        in do
@@ -157,16 +160,24 @@ pOpSym =
   <|> try (string ":(==)" >> pure (IsBinary DMOpEq))
   <|> try (string ":ceil" >> pure (IsUnary DMOpCeil))
 
+pNorm =
+     try ((string ":L1") >> pure (Clip L1))
+     <|> try ((string ":L2") >> pure (Clip L2))
+     <|> ((string ":LInf") >> pure (Clip LInf))
+
 pIter ::LnParser ParseDMTerm
-pIter = do
-          (_, args) <- pCall (string ":(:)") pExpr
-          let one = (Sng 1 (JuliaType "Integer"))
-          let (start, step, end) = case args of
-                                        [s, e] -> (s, one, e)
-                                        [s, st, e] -> (s, st, e)
-          let div = IsBinary DMOpDiv
-          let sub = IsBinary DMOpSub
-          return (Op (IsUnary DMOpCeil) [Op div [Op sub [end, Op sub [start, one]], step]]) -- compute number of steps
+pIter = let one = (Sng 1 (JuliaType "Integer"))
+            psign2 = do
+                       (start, end) <- pCallSign ":(:)" ((,) <$> pExpr <*､> pExpr)
+                       return (start, one, end)
+            psign3 = pCallSign ":(:)" ((,,) <$> pExpr <*､> pExpr <*､> pExpr)
+        in do
+          (start, step, end) <- try psign2 <|> psign3
+
+          let div = Op (IsBinary DMOpDiv)
+          let sub = Op (IsBinary DMOpSub)
+          let ceil = Op (IsUnary DMOpCeil)
+          return (ceil [div [sub [end, sub [start, one]], step]]) -- compute number of steps
 
 pLoop = let pit = ":(=)" `with` ((,) <$> pTeVar <*､> pIter)
         in do
@@ -187,7 +198,6 @@ pTup = do
 --        tail <- pTail (Extra (SELeft Tail))
 --        return (Extra (SELeft (If cond body tail)))
 
-
 pApply :: LnParser ParseDMTerm
 pApply = let pmut = do -- mutating calls annotated by !
                          (name, args) <- pCall (string ":!" *> pIdentifier) pExpr
@@ -199,10 +209,23 @@ pApply = let pmut = do -- mutating calls annotated by !
                          case op of
                             IsUnary _ -> return (Op op args)
                             IsBinary _ -> return (foldl1 (\x y -> (Op op [x,y])) args) -- fold to handle (+,a,b,c) -> (a+b)+c
+             pbuiltin = let pgauss = do
+                                      let sign = ((,,,) <$> pExpr <*､> pExpr <*､> pExpr <*､> pExpr)
+                                      (a,b,c,d) <- pCallSign ":gaussian_mechanism!" sign
+                                      return (Gauss a b c d)
+                            psubgr = do
+                                      let sign = ((,) <$> pExpr <*､> pExpr)
+                                      (a,b) <- pCallSign ":subtract_gradient!" sign
+                                      return (SubGrad a b)
+                            pclip = do
+                                      let sign = ((,) <$> pNorm <*､> pExpr)
+                                      (a,b) <- pCallSign ":clip!" sign
+                                      return (ClipM a b)
+                        in try pgauss <|> try psubgr <|> try pclip
              papp = do -- regular calls
                          (callee, args) <- pCall pExpr pExpr
                          return (Apply callee args) -- TODO error properly upon non-empty tail
-         in try pmut <|> try pop <|> papp
+         in try pmut <|> try pop <|> try pbuiltin <|> papp
 
 infixl 2 <*､>
 (<*､>) :: LnParser (a -> b) -> LnParser a -> LnParser b
