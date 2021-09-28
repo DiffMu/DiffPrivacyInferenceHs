@@ -5,9 +5,10 @@ import DiffMu.Prelude
 import DiffMu.Abstract
 import DiffMu.Core
 
-import Text.Parsec
-import Text.Parsec.String
-import Text.Parsec.Number
+import Text.Megaparsec
+import Text.Megaparsec.Char
+import Text.Megaparsec.Char.Lexer
+-- import Text.Megaparsec.Number
 -- import Text.Parsec.String.Char (anyChar)
 -- import Text.Parsec.String.Char
 -- import Text.Parsec.String.Combinator (many1)
@@ -19,6 +20,7 @@ import           Foreign.C.String
 
 -- newtype JuliaType' = JuliaType' String
 
+type Parser = Parsec () String
 type ParserIO = ParsecT String () IO
 
 
@@ -27,7 +29,7 @@ specialChar = "(){}, []\""
 
 
 pIdentifier :: Parser String
-pIdentifier = many1 (noneOf specialChar)
+pIdentifier = some (noneOf specialChar)
 
 pSymbol :: Parser Symbol
 pSymbol = (Symbol . T.pack) <$> (try (char ':' *> pIdentifier)
@@ -52,7 +54,7 @@ pJuliaType = do
 
 pSng :: Parser (PreDMTerm MutabilityExtension)
 pSng = do
-  n <- decFloat False
+  n <- float
   case n of
     Left a -> do
       let ident = "Integer"

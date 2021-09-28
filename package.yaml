@@ -42,6 +42,7 @@ library:
     - singletons
     - newtype
     - constraints
+    - megaparsec
     - parsec
     - megaparsec
     - parsec3-numbers
