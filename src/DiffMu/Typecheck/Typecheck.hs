@@ -8,6 +8,7 @@ import DiffMu.Core.Symbolic
 import DiffMu.Core.TC
 import DiffMu.Typecheck.Operations
 import DiffMu.Core.DelayedScope
+import DiffMu.Abstract.Data.Permutation
 import DiffMu.Typecheck.JuliaType
 import DiffMu.Typecheck.Constraint.IsFunctionArgument
 import DiffMu.Typecheck.Constraint.IsJuliaEqual
@@ -602,6 +603,14 @@ checkSen' (SubGrad ps gs) scope = do
          addConstraint (Solvable (IsTypeOpResult (Binary DMOpSub ((Numeric τps):@s1, (Numeric τgs):@s2) res)))
 
          return (NoFun (DMParams m res))
+
+checkSen' (Reorder σ t) scope = do
+  mτ <- checkSens t scope
+  done $ do
+    τ <- mτ
+    ρ <- newVar
+    addConstraint (Solvable (IsReorderedTuple ((σ , τ) :=: ρ)))
+    return ρ
 
 
 -- Everything else is currently not supported.

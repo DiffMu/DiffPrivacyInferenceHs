@@ -54,6 +54,9 @@ instance Substitute v x a => Substitute v x (Maybe a) where
   substitute σs (Just a) = Just <$> substitute σs a
   substitute σs (Nothing) = pure Nothing
 
+instance Substitute TVarOf DMTypeOf Int where
+  substitute σs jt = pure jt
+
 instance Substitute TVarOf DMTypeOf JuliaType where
   substitute σs jt = pure jt
 
@@ -814,6 +817,9 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
     let cs' = H.toList cs
     return [(name,c) | (name, Watched _ c) <- cs']
 
+
+instance FreeVars TVarOf Int where
+  freeVars _ = mempty
 
 instance FreeVars TVarOf (Solvable (GoodConstraint) (GoodConstraintContent) MonadDMTC) where
   freeVars (Solvable (c :: c a)) = freeVars @_ @TVarOf (runConstr c)

@@ -56,6 +56,7 @@ library
       DiffMu.Abstract.Data.MonadicPolynomial
       DiffMu.Abstract.Data.MonComCtx
       DiffMu.Abstract.Data.NameCtx
+      DiffMu.Abstract.Data.Permutation
       DiffMu.Core
       DiffMu.Core.Context
       DiffMu.Core.Definitions
@@ -158,6 +159,7 @@ library
     , singletons
     , text
     , unordered-containers
+    , void
   default-language: Haskell2010
 
 executable diffmu

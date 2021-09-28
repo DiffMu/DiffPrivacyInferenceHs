@@ -24,7 +24,7 @@ import Data.Bifunctor as All
 import Data.Semigroup as All hiding (diff, Min, Max, Any, WrapMonoid, Arg)
 import Data.Monoid as All hiding (Last, First, getLast, getFirst, WrapMonoid, Monoid)
 
-
+import Data.Void as All
 import Data.Default as All
 import Data.Constraint as All hiding (trans, (\\))
 import Data.Type.Equality as All

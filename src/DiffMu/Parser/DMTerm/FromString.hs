@@ -52,18 +52,29 @@ pJuliaType = do
 -- pJuliaNumType :: Parser JuliaNumType
 -- pJuliaNumType = undefined
 
-pSng :: Parser (PreDMTerm MutabilityExtension)
-pSng = do
-  n <- float
-  case n of
-    Left a -> do
-      let ident = "Integer"
-      -- cident <- liftIO (newCString ident)
-      return $ Sng (fromIntegral a) (JuliaType ident)
-    Right a -> do
-      let ident = "Real"
-      -- cident <- liftIO (newCString ident)
-      return $ Sng a (JuliaType ident)
+-- pSng :: Parser (PreDMTerm MutabilityExtension)
+-- pSng = do
+--   n <- (Left <$> float) <|> (Right <$> decimal)
+--   case n of
+--     Left a -> do
+--       let ident = "Integer"
+--       -- cident <- liftIO (newCString ident)
+--       return $ Sng (fromIntegral a) (JuliaType ident)
+--     Right a -> do
+--       let ident = "Real"
+--       -- cident <- liftIO (newCString ident)
+--       return $ Sng a (JuliaType ident)
+
+pSng :: Parser (MutDMTerm )
+pSng = let pInt = do
+                    n <- decimal
+                    let ident = "Integer"
+                    return $ Sng (fromIntegral n) (JuliaType ident)
+           pReal = do
+                    n <- float
+                    let ident = "Real"
+                    return $ Sng n (JuliaType ident)
+       in try pInt <|> pReal
 
 
 infixl 2 <*､>
@@ -161,7 +172,7 @@ pDMTerm =
 
 pDMTermFromString :: String -> (Either DMException (PreDMTerm MutabilityExtension ))
 pDMTermFromString s =
-  let res = runParser pDMTerm () "jl-hs-communication" s
+  let res = runParser pDMTerm "jl-hs-communication" s
   in case res of
     Left e  -> Left (InternalError $ "Communication Error: Could not parse DMTerm from string:\n" <> show e)
     Right a -> Right a

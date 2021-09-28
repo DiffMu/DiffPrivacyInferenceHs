@@ -3,6 +3,7 @@ module DiffMu.Typecheck.Constraint.CheapConstraints where
 
 import DiffMu.Prelude
 import DiffMu.Abstract
+import DiffMu.Abstract.Data.Permutation
 import DiffMu.Core.Definitions
 import DiffMu.Core.Context
 import DiffMu.Core.TC
@@ -176,3 +177,31 @@ instance Solve MonadDMTC IsGaussResult (DMTypeOf MainKind, DMTypeOf MainKind) wh
            unify τgauss (NoFun (Numeric (NonConst DMReal)))
 
            dischargeConstraint @MonadDMTC name
+
+
+--------------------------------------------------
+-- reordering of tuples
+
+newtype IsReorderedTuple a = IsReorderedTuple a deriving Show
+
+instance FixedVars TVarOf (IsReorderedTuple (([Int], DMTypeOf MainKind) :=: DMTypeOf MainKind)) where
+  fixedVars (IsReorderedTuple (_ :=: ρ)) = freeVars ρ
+
+instance TCConstraint IsReorderedTuple where
+  constr = IsReorderedTuple
+  runConstr (IsReorderedTuple c) = c
+
+instance Solve MonadDMTC IsReorderedTuple (([Int], DMTypeOf MainKind) :=: DMTypeOf MainKind) where
+  solve_ Dict _ name (IsReorderedTuple ((σ , τ) :=: ρ)) = f τ
+    where
+      f :: MonadDMTC t => DMTypeOf MainKind -> t ()
+      f (TVar _) = pure ()
+      f (NoFun (TVar _)) = pure ()
+      f (NoFun (DMTup τs)) = do
+        unify ρ (NoFun (DMTup (permute σ τs)))
+        dischargeConstraint name
+        pure ()
+      f (τs) = throwError (TypeMismatchError $ "Expected the type " <> show τ <> " to be a tuple type.")
+
+
+

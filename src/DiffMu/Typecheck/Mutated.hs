@@ -9,6 +9,7 @@ import DiffMu.Core
 import DiffMu.Core.Symbolic
 import DiffMu.Core.TC
 import DiffMu.Core.Logging
+import DiffMu.Abstract.Data.Permutation
 import DiffMu.Typecheck.Operations
 import DiffMu.Core.DelayedScope
 import DiffMu.Typecheck.JuliaType
@@ -181,15 +182,18 @@ elaborateMut scope (Lam args body) = do
   let isMutatingFunction = or [a == Mutated | a <- ctxElems]
 
   -- remove the arguments to this lambda from the context
-  let getVar :: (Asgmt JuliaType) -> MTC (IsMutated)
+  let getVar :: (Asgmt JuliaType) -> MTC ((TeVar, IsMutated))
       getVar (a :- t) = do
         mut <- mutTypes %%= popValue a
         case mut of
-          Nothing -> pure (NotMutated)
-          Just mut -> pure (mut)
+          Nothing -> pure (a , NotMutated)
+          Just mut -> pure (a , mut)
 
   -- call this function on all args given in the signature
-  vars_mut <- mapM getVar args
+  -- and extract those vars taht 
+  vars_mutationState <- mapM getVar args
+  let mutVars = [v | (v , Mutated) <- vars_mutationState]
+  let mutationsStates = snd <$> vars_mutationState
 
 
   -- now, depending on whether we have a mutating lambda,
@@ -209,7 +213,13 @@ elaborateMut scope (Lam args body) = do
           -- check that the body is a mutation result
           -- and reorder the resulting tuple
           case τ of
-            VirtualMutated vars -> pure (Lam args (Reorder [] newBody) , Mutating vars_mut)
+            VirtualMutated vars -> do
+              -- get the permutation which tells us how to go
+              -- from the order in which the vars are returned by the body
+              -- to the order in which the lambda arguments are given
+              σ <- getPermutation vars mutVars
+              pure (Lam args (Reorder σ newBody) , Mutating mutationsStates)
+
             wrongτ -> throwError (DemutationError $ "Expected the result of the body of a mutating lambda to be a virtual mutated value. But it was "
                                   <> show wrongτ <> "\n where body is:\n" <> showPretty body)
 
@@ -492,10 +502,17 @@ preprocessLoopBody scope iter (SLet (v :- jt) term body) = do
 
 preprocessLoopBody scope iter (FLet f _ _) = throwError (DemutationError $ "Function definition is not allowed in for loops. (Encountered definition of " <> show f <> ".)")
 
+-- mutlets make use recurse
+preprocessLoopBody scope iter (Extra (MutLet t1 t2)) = do
+  (t1',v1) <- preprocessLoopBody scope iter t1
+  (t2',v2) <- preprocessLoopBody scope iter t2
+  return (Extra (MutLet t1' t2') , v1 <> v2)
+
 -- for these terms we do nothing special
 preprocessLoopBody scope iter (Var a) = return (Var a, [])
 preprocessLoopBody scope iter (Op a ts) = return (Op a ts, [])
 preprocessLoopBody scope iter (Sng a ts) = return (Sng a ts, [])
+preprocessLoopBody scope iter (ConvertM a) = return (ConvertM a, [])
 
 -- the rest is currently not supported
 preprocessLoopBody scope iter t = throwError (UnsupportedError (showPretty t))

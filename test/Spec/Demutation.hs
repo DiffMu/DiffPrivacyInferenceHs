@@ -32,8 +32,8 @@ checkMutTerm term = do
 
   -- these are the locations from which the logs will be shown
   let logging_locations = [
-        Location_Check
-        -- Location_Constraint,
+        Location_Check,
+        Location_Constraint
         -- Location_Subst
         -- Location_INC,
         -- Location_MonadicGraph,
@@ -49,7 +49,29 @@ checkMutTerm term = do
 
 testDemutation = do
   describe "loop demutation" $ do
-    it "works for simple loops" $ do
+    -- it "example 1" $ do
+    --   let v s = UserTeVar (Symbol s)
+    --   let n i = (Sng i (JuliaType "Integer"))
+    --   let term = FLet (v "f")
+    --              (
+    --                Lam [(v "a" :- JTAny) , (v "b" :- JTAny)]
+    --                (
+    --                  Extra (MutLoop (n 7) (v "i")
+    --                        (
+    --                          SLet (v "a" :- JTAny) (Op (IsBinary DMOpAdd) [Var (v "a" :- JTAny) , n 1])
+    --                          (
+    --                            Var (v "a" :- JTAny)
+    --                          )
+    --                        )
+    --                        )
+    --                )
+    --              )
+    --              (Var (v "f" :- JTAny))
+
+    --   (checkMutTerm term) `shouldReturn` True
+
+
+    it "example 2" $ do
       let v s = UserTeVar (Symbol s)
       let n i = (Sng i (JuliaType "Integer"))
       let term = FLet (v "f")
@@ -57,13 +79,15 @@ testDemutation = do
                    Lam [(v "a" :- JTAny) , (v "b" :- JTAny)]
                    (
                      Extra (MutLoop (n 7) (v "i")
-                           (
-                             SLet (v "a" :- JTAny) (Op (IsBinary DMOpAdd) [Var (v "a" :- JTAny) , n 1])
-                             (
-                               Var (v "a" :- JTAny)
-                             )
-                           )
-                           )
+                     (
+                       Extra (MutLet (ConvertM (Var (v "b" :- JTAny)))
+                       (
+                         SLet (v "a" :- JTAny) (Op (IsBinary DMOpAdd) [Var (v "a" :- JTAny) , n 1])
+                         (
+                           Var (v "a" :- JTAny)
+                         )
+                       ))
+                     ))
                    )
                  )
                  (Var (v "f" :- JTAny))
