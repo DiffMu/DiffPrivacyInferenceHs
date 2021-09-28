@@ -108,6 +108,19 @@ markRead var = do
 -- - modify iteration variable
 
 
+demutate :: MutDMTerm -> MTC (DMTerm)
+demutate term = do
+  logForce $ "Term before mutation elaboration:\n" <> showPretty term
+
+  (res , _) <- elaborateMut def term
+  logForce $ "-----------------------------------"
+  logForce $ "Mutation elaborated term is:\n" <> showPretty res
+
+  let optimized = optimizeTLet res
+  logForce $ "-----------------------------------"
+  logForce $ "TLet optimized term is:\n" <> showPretty optimized
+
+  return optimized
 
 
 elaborateNonmut :: Scope -> MutDMTerm -> MTC (DMTerm , ImmutType)
@@ -527,6 +540,108 @@ liftNewMTC :: MTC a -> TC a
 liftNewMTC a =
   let s = runStateT (runMTC a) def
   in TCT (StateT (\t -> fmap (\(a,_) -> (a,def)) s))
+
+
+--------------------------------------------------------
+-- removing unnecessary tlets
+
+--
+-- Walk through the tlet sequence in `term` until
+-- the last 'in', and check if this returns `αs`
+-- as a tuple. If it does, replace it by `replacement`
+-- and return the new term.
+-- Else, return nothing.
+replaceTLetIn :: [TeVar] -> DMTerm -> DMTerm -> Maybe DMTerm
+
+-- If we have found our final `in` term, check that the tuple
+-- is correct
+replaceTLetIn αs replacement (TLet βs t1 (Tup t2s)) =
+
+  let isvar :: (TeVar, DMTerm) -> Bool
+      isvar (v, Var (w :- _)) | v == w = True
+      isvar _ = False
+
+  in case and (isvar <$> zip αs t2s) of
+    -- if it does fit our pattern, replace by a single TLet
+    -- and recursively call ourselves again
+    True -> Just (TLet βs t1 replacement)
+
+    -- if this does not fit our pattern, recurse into term and body
+    False -> Nothing
+
+-- if we have a next tlet, continue with it
+replaceTLetIn αs replacement (TLet βs t1 (TLet γs t2 t3)) = TLet βs t1 <$> rest
+  where
+    rest = replaceTLetIn αs replacement (TLet γs t2 t3)
+
+-- if the term is different, we cannot do anything
+replaceTLetIn αs replacement _ = Nothing
+
+
+
+
+optimizeTLet :: DMTerm -> DMTerm
+-- the interesting case
+optimizeTLet (TLet (αs) (term) t3) =
+  -- if we have two tlets inside each other, where
+  -- one of them returns the exactly the variables
+  -- captured by the other, i.e:
+  --
+  -- > tlet αs... = tlet βs = t1
+  -- >              in (αs...)
+  -- > in t3
+  --
+  -- then we can change it to
+  --
+  -- > tlet βs = t1
+  -- > in t3
+  --
+  --
+  -- But, there is one complication, namely:
+  -- It could be that the tlet with `in (αs...)`
+  -- is not directly inside of our term, but
+  -- further nested inside a tlet sequence.
+  -- Thus we do search for the `in` using `replaceTLetIn`.
+  case replaceTLetIn (fstA <$> αs) t3 term of
+
+    -- if we were successfull, we simply use the returned
+    -- term (after recursing on it)
+    Just replaced -> optimizeTLet replaced
+
+    -- if not successfull, we recurse
+    Nothing -> TLet (αs) (optimizeTLet term) (optimizeTLet t3)
+
+
+
+-- the recursion cases
+optimizeTLet (SLet jt a b)      = SLet jt (optimizeTLet a) (optimizeTLet b)
+optimizeTLet (FLet v a b)       = FLet v (optimizeTLet a) (optimizeTLet b)
+optimizeTLet (Extra e)          = Extra e
+optimizeTLet (Ret (r))          = Ret (optimizeTLet r)
+optimizeTLet (Sng g jt)         = Sng g jt
+optimizeTLet (Var (v :- jt))    = Var (v :- jt)
+optimizeTLet (Rnd jt)           = Rnd jt
+optimizeTLet (Arg v jt r)       = Arg v jt r
+optimizeTLet (Op op ts)         = Op op (fmap (optimizeTLet) ts)
+optimizeTLet (Phi a b c)        = Phi (optimizeTLet a) (optimizeTLet b) (optimizeTLet c)
+optimizeTLet (Lam     jts a)    = Lam jts (optimizeTLet a)
+optimizeTLet (LamStar jts a)    = LamStar jts (optimizeTLet a)
+optimizeTLet (Apply a bs)       = Apply (optimizeTLet a) (fmap (optimizeTLet) bs)
+optimizeTLet (Choice chs)       = Choice (fmap (optimizeTLet) chs)
+optimizeTLet (Tup as)           = Tup (fmap (optimizeTLet) as)
+optimizeTLet (Gauss a b c d)    = Gauss (optimizeTLet a) (optimizeTLet b) (optimizeTLet c) (optimizeTLet d)
+optimizeTLet (ConvertM a)       = ConvertM (optimizeTLet a)
+optimizeTLet (MCreate a b x c ) = MCreate (optimizeTLet a) (optimizeTLet b) x (optimizeTLet c)
+optimizeTLet (Transpose a)      = Transpose (optimizeTLet a)
+optimizeTLet (Index a b c)      = Index (optimizeTLet a) (optimizeTLet b) (optimizeTLet c)
+optimizeTLet (ClipM c a)        = ClipM c (optimizeTLet a)
+optimizeTLet (Iter a b c)       = Iter (optimizeTLet a) (optimizeTLet b) (optimizeTLet c)
+optimizeTLet (Loop a b x d )    = Loop (optimizeTLet a) (b) x (optimizeTLet d)
+optimizeTLet (SubGrad a b)      = SubGrad (optimizeTLet a) (optimizeTLet b)
+optimizeTLet (Reorder x a)      = Reorder x (optimizeTLet a)
+
+
+
 
 
 

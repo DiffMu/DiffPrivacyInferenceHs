@@ -14,11 +14,10 @@ checkMutTerm term = do
         -- typecheck the term t5
         -- mt <- thisFunctionDoesNotExist term
 
-        (term'' , _) <- liftNewMTC (elaborateMut def term)
+        term'' <- liftNewMTC (demutate term)
 
         term' <- preprocessDMTerm term''
 
-        logForce $ "Mutation elaborated term is:\n" <> showPretty term'
 
         let tres = checkSens (term') def
         let (tres'',_) = runState (extractDelayed def tres) def
@@ -49,6 +48,44 @@ checkMutTerm term = do
 
 testDemutation = do
   describe "loop demutation" $ do
+  --   it "example 0" $ do
+  --     let v s = UserTeVar (Symbol s)
+  --     let n i = (Sng i (JuliaType "Integer"))
+  --     let term = FLet (v "f")
+  --                (
+  --                  Lam [(v "a" :- JTAny) , (v "b" :- JTAny)]
+  --                  (
+  --                    Extra (MutLet (ConvertM (Var (v "b" :- JTAny)))
+  --                    (
+  --                      SLet (v "a" :- JTAny) (Op (IsBinary DMOpAdd) [Var (v "a" :- JTAny) , n 1])
+  --                      (
+  --                        Var (v "a" :- JTAny)
+  --                      )
+  --                    ))
+  --                  )
+  --                )
+  --                (Var (v "f" :- JTAny))
+
+  --     (checkMutTerm term) `shouldReturn` True
+
+    -- it "example 0.2" $ do
+    --   let v s = UserTeVar (Symbol s)
+    --   let n i = (Sng i (JuliaType "Integer"))
+    --   let term = FLet (v "f")
+    --              (
+    --                Lam [(v "a" :- JTAny) , (v "b" :- JTAny)]
+    --                (
+    --                  Extra (MutLet (ConvertM (Var (v "b" :- JTAny)))
+    --                  (
+    --                    (Op (IsBinary DMOpAdd) [Var (v "a" :- JTAny) , n 1])
+    --                  ))
+    --                )
+    --              )
+    --              (Var (v "f" :- JTAny))
+
+    --   (checkMutTerm term) `shouldReturn` True
+
+
     -- it "example 1" $ do
     --   let v s = UserTeVar (Symbol s)
     --   let n i = (Sng i (JuliaType "Integer"))
@@ -76,16 +113,22 @@ testDemutation = do
       let n i = (Sng i (JuliaType "Integer"))
       let term = FLet (v "f")
                  (
-                   Lam [(v "a" :- JTAny) , (v "b" :- JTAny)]
+                   Lam [(v "a" :- JTAny) , (v "b" :- JTAny) , (v "c" :- JTAny)]
                    (
                      Extra (MutLoop (n 7) (v "i")
                      (
                        Extra (MutLet (ConvertM (Var (v "b" :- JTAny)))
                        (
-                         SLet (v "a" :- JTAny) (Op (IsBinary DMOpAdd) [Var (v "a" :- JTAny) , n 1])
-                         (
-                           Var (v "a" :- JTAny)
-                         )
+                        Extra (MutLet (ConvertM (Var (v "c" :- JTAny)))
+                        (
+                          SLet (v "a" :- JTAny) (Op (IsBinary DMOpAdd) [Var (v "a" :- JTAny) , n 1])
+                          (
+                            SLet (v "b" :- JTAny) (Op (IsBinary DMOpAdd) [Var (v "a" :- JTAny) , Var (v "b" :- JTAny)])
+                            (
+                              Var (v "b" :- JTAny)
+                            )
+                          )
+                        ))
                        ))
                      ))
                    )
