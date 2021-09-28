@@ -43,6 +43,7 @@ library:
     - newtype
     - constraints
     - parsec
+    - megaparsec
     - parsec3-numbers
     - pomaps
     - lattices

@@ -5,14 +5,14 @@ import DiffMu.Prelude
 import DiffMu.Abstract
 import DiffMu.Core
 
-import Text.Parsec
-import Text.Parsec.String
-import Text.Parsec.Number
+import Text.Megaparsec
+import Text.Megaparsec.Char
+import Text.Megaparsec.Char.Lexer
 
 import qualified Data.Text as T
 
 -- carry line number information as user state
-type LnParser = Parsec String Int
+type LnParser = ParsecT () String (DiffMu.Prelude.State Int)
 
 pTLet = do
          (vars, assignment) <- with ":(=)" ((,) <$> (with ":tuple" (pAsgmt `sepBy` sep)) <*､> pExpr)
@@ -28,7 +28,9 @@ pSLet = do
 with :: String -> LnParser a -> LnParser a
 with name content = between (wskip '(') (wskip ')') (((string name) >> sep) >> content)
 
-skippable = (many (oneOf " \n"))
+skippable :: LnParser String
+skippable = (many (oneOf @[] " \n"))
+
 wskip c = between skippable skippable (char c)
 
 sep :: LnParser Char
@@ -37,28 +39,28 @@ sep = wskip ','
 
 pLineNumber :: LnParser ()
 pLineNumber =
-   let p = (char ':') >> (between (string "(#= ") (string " =#)") ((string "none:") >> nat))
+   let p = (char ':') >> (between (string "(#= ") (string " =#)") ((string "none:") >> decimal))
    in do
       ln <- p
-      putState ln
+      put ln
       return ()
 
 
 
 pSng :: LnParser ParseDMTerm
-pSng = do
-  n <- decFloat False
-  case n of
-    Left a -> do
-      let ident = "Integer"
-      return $ Sng (fromIntegral a) (JuliaType ident)
-    Right a -> do
-      let ident = "Real"
-      return $ Sng a (JuliaType ident)
+pSng = let pInt = do
+                    n <- decimal
+                    let ident = "Integer"
+                    return $ Sng (fromIntegral n) (JuliaType ident)
+           pReal = do
+                    n <- float
+                    let ident = "Real"
+                    return $ Sng n (JuliaType ident)
+       in try pInt <|> pReal
 
 
 pIdentifier :: LnParser String
-pIdentifier = many1 (noneOf "(),[]\"")
+pIdentifier = some (noneOf @[] "(),[]\"")
 
 pSymbol :: LnParser Symbol
 pSymbol = (Symbol . T.pack) <$> (try (char ':' *> pIdentifier)
@@ -255,7 +257,7 @@ pExpr =
 
 parseExprFromString :: String -> Either DMException ParseDMTerm
 parseExprFromString input =
-  let res = runParser pExpr 0 "jl-hs-communication" input
+  let (res, _) = runState (runParserT pExpr "jl-hs-communication" input) 0
   in case res of
     Left e  -> Left (InternalError $ "Communication Error: Could not parse ParseDMTerm from string\n\n----------------------\n" <> input <> "\n---------------------------\n" <> show e)
     Right a -> Right a
