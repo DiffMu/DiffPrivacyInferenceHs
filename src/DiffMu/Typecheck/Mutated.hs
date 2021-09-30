@@ -402,8 +402,64 @@ elaborateMut scope (Extra (MutLoop iters iterVar body)) = do
 elaborateMut scope (Extra (MutRet)) = do
   return (Tup [] , VirtualMutated [])
 
-elaborateMut scope (Phi cond t1 t2) = do
-  return undefined
+elaborateMut scope term@(Phi cond t1 t2) = do
+  -- elaborate all subterms
+  (newCond , newCondType) <- elaborateNonmut scope cond
+  (newT1 , newT1Type) <- elaborateMut scope t1
+  (newT2 , newT2Type) <- elaborateMut scope t2
+
+  ----
+  -- mutated if case
+  let buildMutatedPhi :: [TeVar] -> [TeVar] -> MTC (DMTerm , ImmutType)
+      buildMutatedPhi m1 m2 = do
+
+        -- the common mutated vars are
+        let mutvars = nub (m1 <> m2)
+
+        -- build local tlets which unify the mutated variables of both branches
+        -- if term1/term2 do not mutate anything, their branch becomes empty
+        unifiedT1 <- case m1 of
+          [] -> do warn ("Found the term " <> showPretty t1
+                         <> " which does not mutate anything in the first branch of a mutating if expression.\n"
+                         <> " => In the term:\n" <> parenIndent (showPretty term) <> "\n"
+                         <> " => Conclusion: This computated value is not allowed to be used in the computation, \nand accordingly, it is ignored in the privacy analysis.")
+                   pure $ (Tup [Var (v :- JTAny) | v <- mutvars])
+          _ ->     pure $ TLet [(v :- JTAny) | v <- m1] newT1 (Tup [Var (v :- JTAny) | v <- mutvars])
+
+        unifiedT2 <- case m2 of
+          [] -> do warn ("Found the term " <> showPretty t2
+                         <> " which does not mutate anything in the second branch of a mutating if expression.\n"
+                         <> " => In the term:\n" <> parenIndent (showPretty term) <> "\n"
+                         <> " => Conclusion: This computated value is not allowed to be used in the computation, \nand accordingly, it is ignored in the privacy analysis.")
+                   pure $ (Tup [Var (v :- JTAny) | v <- mutvars])
+          _ ->     pure $ TLet [(v :- JTAny) | v <- m2] newT2 (Tup [Var (v :- JTAny) | v <- mutvars])
+
+        return (Phi newCond unifiedT1 unifiedT2 , VirtualMutated mutvars)
+
+  -- mutated if case end
+  ----
+
+  -- depending on the types of the branches,
+  -- do the following
+  case (newT1Type, newT2Type) of
+    -- We do not allow either of the branches to
+    -- define a mutating function. This would require
+    -- us to "unify" the types of those functions
+    (τ1@(Mutating _), _) -> throwError (DemutationError $ "In the term\n" <> showPretty term <> "\nthe first branch is a mutating function of type " <> show τ1 <> ". This is currently not allowed.")
+    (_, τ1@(Mutating _)) -> throwError (DemutationError $ "In the term\n" <> showPretty term <> "\nthe second branch is a mutating function of type " <> show τ1 <> ". This is currently not allowed.")
+
+
+    -- if either of the cases is mutating,
+    -- we assume that the if expression is meant to be mutating,
+    -- and require to ignore the (possibly) computed and returned value
+    (VirtualMutated m1, VirtualMutated m2) -> buildMutatedPhi m1 m2
+    (VirtualMutated m1, _) -> buildMutatedPhi m1 []
+    (_, VirtualMutated m2) -> buildMutatedPhi [] m2
+
+    -- if both branches are not mutating, ie. var or pure, then we have a pure
+    -- if statement. The result term is the elaborated phi expression
+    (_,_) -> return (Phi newCond newT1 newT2 , Pure)
+
 
 
 ----
@@ -495,7 +551,9 @@ elaborateMutList f scope mutargs = do
 -- preprocessing a for loop body
 
 runPreprocessLoopBody :: Scope -> TeVar -> MutDMTerm -> MTC (MutDMTerm, [TeVar])
-runPreprocessLoopBody scope iter t = runWriterT (preprocessLoopBody scope iter t)
+runPreprocessLoopBody scope iter t = do
+  (a,x) <- runWriterT (preprocessLoopBody scope iter t)
+  return (a, nub x)
 
 -- | Walks through the loop term and changes SLet's to `modify!`
 --   calls if such a variable is already in scope.

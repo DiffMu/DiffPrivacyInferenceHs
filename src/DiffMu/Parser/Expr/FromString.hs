@@ -166,7 +166,9 @@ pLoop = let pit = ":(=)" `with` ((,) <$> pSymbol <*､> pJExpr)
 
 
 pJExpr :: Parser JExpr
-pJExpr = dbg "parseing expr" (try pLineNumber
+pJExpr = -- dbg
+  -- "parseing expr"
+  (try pLineNumber
                           <|> try (":block" `with` (JEBlock <$> (pJExpr `sepBy` sep)))
                         --  <|> try (":return" `with` (JEReturn <$> pJExpr))
                           <|> try ((uncurry JECall) <$> (pCall (JESymbol <$> pSymbol) pJExpr))
@@ -186,7 +188,7 @@ pJExpr = dbg "parseing expr" (try pLineNumber
 
 parseJExprFromString :: String -> Either DMException JExpr
 parseJExprFromString input =
-  let res = runParser pJExpr "jl-hs-communication" input
+  let res = runParser pJExpr "jl-hs-communication" (trace ("Parsing input:\n------------\n" <> input <> "\n---------------") input)
   in case res of
     Left e  -> Left (InternalError $ "Communication Error: Could not parse JExpr from string\n\n----------------------\n" <> input <> "\n---------------------------\n" <> errorBundlePretty e)
     Right a -> Right a
