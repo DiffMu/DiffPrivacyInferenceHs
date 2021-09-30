@@ -699,7 +699,6 @@ optimizeTLet (MCreate a b x c ) = MCreate (optimizeTLet a) (optimizeTLet b) x (o
 optimizeTLet (Transpose a)      = Transpose (optimizeTLet a)
 optimizeTLet (Index a b c)      = Index (optimizeTLet a) (optimizeTLet b) (optimizeTLet c)
 optimizeTLet (ClipM c a)        = ClipM c (optimizeTLet a)
-optimizeTLet (Iter a b c)       = Iter (optimizeTLet a) (optimizeTLet b) (optimizeTLet c)
 optimizeTLet (Loop a b x d )    = Loop (optimizeTLet a) (b) x (optimizeTLet d)
 optimizeTLet (SubGrad a b)      = SubGrad (optimizeTLet a) (optimizeTLet b)
 optimizeTLet (Reorder x a)      = Reorder x (optimizeTLet a)

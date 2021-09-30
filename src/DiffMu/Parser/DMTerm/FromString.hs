@@ -149,7 +149,7 @@ pDMTerm =
   <|> try ("lam"       `with` (Lam     <$> pArray "Tuple{Symbol, DataType}" (pAsgmt (:-)) <*､> pDMTerm ))
 --  <|> try ("lam_star"  `with` (LamStar <$> pArray "Tuple{Symbol, Tuple{DataType, Bool}" pAsgmtWithRel <*､> pDMTerm ))
   <|> try ("apply"     `with` (Apply   <$> pDMTerm <*､> pArray "DMTerm" pDMTerm))
-  <|> try ("iter"      `with` (Iter    <$> pDMTerm <*､> pDMTerm <*､> pDMTerm)) -- NOTE: iter should be deprecated
+  -- <|> try ("iter"      `with` (Iter    <$> pDMTerm <*､> pDMTerm <*､> pDMTerm)) -- NOTE: iter should be deprecated
   <|> try ("flet"      `with` (FLet    <$> pTeVar <*､> pDMTerm <*､> pDMTerm))
   -- no choice
   <|> try ("slet"      `with` (SLet    <$> (pAsgmt (:-)) <*､> pDMTerm <*､> pDMTerm))

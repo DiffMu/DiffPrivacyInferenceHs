@@ -629,7 +629,6 @@ data PreDMTerm (t :: * -> *) =
   | Transpose (PreDMTerm t)
   | Index (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
   | ClipM Clip (PreDMTerm t)
-  | Iter (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
   -- Loop (DMTerm : "Number of iterations") ([TeVar] : "Captured variables") (TeVar : "name of iteration var", TeVar : "name of capture variable") (DMTerm : "body")
   | Loop (PreDMTerm t) [TeVar] (TeVar, TeVar) (PreDMTerm t)
 -- Special NN builtins
@@ -713,7 +712,6 @@ liftExtension f (MCreate a b x c ) = MCreate (liftExtension f a) (liftExtension 
 liftExtension f (Transpose a)      = Transpose (liftExtension f a)
 liftExtension f (Index a b c)      = Index (liftExtension f a) (liftExtension f b) (liftExtension f c)
 liftExtension f (ClipM c a)        = ClipM c (liftExtension f a)
-liftExtension f (Iter a b c)       = Iter (liftExtension f a) (liftExtension f b) (liftExtension f c)
 liftExtension f (Loop a b x d )    = Loop (liftExtension f a) (b) x (liftExtension f d)
 liftExtension f (SubGrad a b)      = SubGrad (liftExtension f a) (liftExtension f b)
 liftExtension f (Reorder x a)      = Reorder x (liftExtension f a)
@@ -743,7 +741,6 @@ recDMTermM f h (MCreate a b x c ) = MCreate <$> (recDMTermM f h a) <*> (recDMTer
 recDMTermM f h (Transpose a)      = Transpose <$> (recDMTermM f h a)
 recDMTermM f h (Index a b c)      = Index <$> (recDMTermM f h a) <*> (recDMTermM f h b) <*> (recDMTermM f h c)
 recDMTermM f h (ClipM c a)        = ClipM c <$> (recDMTermM f h a)
-recDMTermM f h (Iter a b c)       = Iter <$> (recDMTermM f h a) <*> (recDMTermM f h b) <*> (recDMTermM f h c)
 recDMTermM f h (Loop a b x d )    = Loop <$> (recDMTermM f h a) <*> pure b <*> pure x <*> (recDMTermM f h d)
 recDMTermM f h (SubGrad a b)      = SubGrad <$> (recDMTermM f h a) <*> (recDMTermM f h b)
 recDMTermM f h (Reorder x a)      = Reorder x <$> (recDMTermM f h a)
@@ -798,7 +795,6 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (Transpose a)      = "Transpose (" <> (showPretty a) <> ")"
   showPretty (Index a b c)      = "Index (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> (showPretty c) <> ")"
   showPretty (ClipM c a)        = "ClipM (" <> show c <> ", " <> (showPretty a) <> ")"
-  showPretty (Iter a b c)       = "Iter (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> (showPretty c) <> ")"
   showPretty (SubGrad a b)      = "SubGrad (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <>  ")"
   showPretty (Reorder x a)      = "Reorder " <> show x <> parenIndent (showPretty a)
   showPretty (Loop a b x d )    = "Loop (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> show x <> ")" <> parenIndent (showPretty d)
