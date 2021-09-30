@@ -108,7 +108,7 @@ testDemutation = do
     --   (checkMutTerm term) `shouldReturn` True
 
 
-    it "example 2" $ do
+    it "example 2 (loop)" $ do
       let v s = UserTeVar (Symbol s)
       let n i = (Sng i (JuliaType "Integer"))
       let term = FLet (v "f")
@@ -121,15 +121,62 @@ testDemutation = do
                        (
                         Extra (MutLet (ConvertM (Var (v "c" :- JTAny)))
                         (
-                          SLet (v "a" :- JTAny) (Op (IsBinary DMOpAdd) [Var (v "a" :- JTAny) , n 1])
-                          (
-                            SLet (v "b" :- JTAny) (Op (IsBinary DMOpAdd) [Var (v "a" :- JTAny) , Var (v "b" :- JTAny)])
-                            (
-                              Var (v "b" :- JTAny)
-                            )
-                          )
+                         Extra (MutLet (SLet (v "a" :- JTAny) (Op (IsBinary DMOpAdd) [Var (v "a" :- JTAny) , n 1])
+                                        (
+                                          Var (v "b" :- JTAny)
+                                        ))
+                         (
+                           Extra MutRet
+                         ))
                         ))
                        ))
+                     ))
+                   )
+                 )
+                 (Var (v "f" :- JTAny))
+
+      (checkMutTerm term) `shouldReturn` True
+
+    it "example 3 (if)" $ do
+      let v s = UserTeVar (Symbol s)
+      let n i = (Sng i (JuliaType "Integer"))
+      let term = FLet (v "f")
+                 (
+                   Lam [(v "cond" :- JTAny), (v "a" :- JTAny) , (v "b" :- JTAny) , (v "c" :- JTAny)]
+                   (
+                     Phi (Var (v "cond" :- JTAny))
+                     -- branch 1
+                     (Extra (MutLet (ConvertM (Var (v "b" :- JTAny)))
+                     (
+                       ConvertM (Var (v "a" :- JTAny))))
+                     )
+
+                     -- branch 2
+                     (ConvertM (Var (v "c" :- JTAny)))
+                   )
+                 )
+                 (Var (v "f" :- JTAny))
+
+      (checkMutTerm term) `shouldReturn` True
+
+    it "example 3.1 (if with non mutating branch)" $ do
+      let v s = UserTeVar (Symbol s)
+      let n i = (Sng i (JuliaType "Integer"))
+      let term = FLet (v "f")
+                 (
+                   Lam [(v "cond" :- JTAny), (v "a" :- JTAny) , (v "b" :- JTAny) , (v "c" :- JTAny)]
+                   (
+                     Phi (Var (v "cond" :- JTAny))
+                     -- branch 1
+                     (Extra (MutLet (ConvertM (Var (v "b" :- JTAny)))
+                     (
+                       ConvertM (Var (v "a" :- JTAny))))
+                     )
+
+                     -- branch 2
+                     (SLet (v "a" :- JTAny) (Op (IsBinary DMOpAdd) [Var (v "a" :- JTAny) , n 1])
+                     (
+                       Var (v "a" :- JTAny)
                      ))
                    )
                  )

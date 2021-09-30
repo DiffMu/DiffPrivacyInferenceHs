@@ -137,6 +137,9 @@ library
       TypeFamilyDependencies
       RoleAnnotations
       PartialTypeSignatures
+      DeriveFunctor
+      DeriveTraversable
+      DeriveFoldable
   build-depends:
       HUnit
     , QuickCheck

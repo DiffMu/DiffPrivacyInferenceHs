@@ -203,7 +203,7 @@ elaborateMut scope (Lam args body) = do
           Just mut -> pure (a , mut)
 
   -- call this function on all args given in the signature
-  -- and extract those vars taht 
+  -- and extract those vars that are mutated
   vars_mutationState <- mapM getVar args
   let mutVars = [v | (v , Mutated) <- vars_mutationState]
   let mutationsStates = snd <$> vars_mutationState
@@ -367,7 +367,7 @@ elaborateMut scope (Extra (MutLoop iters iterVar body)) = do
   -- now, preprocess the body,
   -- i.e., find out which variables are getting mutated
   -- and change their `SLet`s to `modify!` terms
-  (preprocessedBody, modifyVars) <- preprocessLoopBody scope iterVar body
+  (preprocessedBody, modifyVars) <- runPreprocessLoopBody scope iterVar body
 
   -- we add these variables to the scope as args, since they are allowed
   -- to occur in mutated positions
@@ -399,6 +399,71 @@ elaborateMut scope (Extra (MutLoop iters iterVar body)) = do
     -- throw error
     other -> throwError (DemutationError $ "Expected a loop body to be mutating, but it was of type " <> show other)
 
+elaborateMut scope (Extra (MutRet)) = do
+  return (Tup [] , VirtualMutated [])
+
+elaborateMut scope term@(Phi cond t1 t2) = do
+  -- elaborate all subterms
+  (newCond , newCondType) <- elaborateNonmut scope cond
+  (newT1 , newT1Type) <- elaborateMut scope t1
+  (newT2 , newT2Type) <- elaborateMut scope t2
+
+  ----
+  -- mutated if case
+  let buildMutatedPhi :: [TeVar] -> [TeVar] -> MTC (DMTerm , ImmutType)
+      buildMutatedPhi m1 m2 = do
+
+        -- the common mutated vars are
+        let mutvars = nub (m1 <> m2)
+
+        -- build local tlets which unify the mutated variables of both branches
+        -- if term1/term2 do not mutate anything, their branch becomes empty
+        unifiedT1 <- case m1 of
+          [] -> do warn ("Found the term " <> showPretty t1
+                         <> " which does not mutate anything in the first branch of a mutating if expression.\n"
+                         <> " => In the term:\n" <> parenIndent (showPretty term) <> "\n"
+                         <> " => Conclusion: This computated value is not allowed to be used in the computation, \nand accordingly, it is ignored in the privacy analysis.")
+                   pure $ (Tup [Var (v :- JTAny) | v <- mutvars])
+          _ ->     pure $ TLet [(v :- JTAny) | v <- m1] newT1 (Tup [Var (v :- JTAny) | v <- mutvars])
+
+        unifiedT2 <- case m2 of
+          [] -> do warn ("Found the term " <> showPretty t2
+                         <> " which does not mutate anything in the second branch of a mutating if expression.\n"
+                         <> " => In the term:\n" <> parenIndent (showPretty term) <> "\n"
+                         <> " => Conclusion: This computated value is not allowed to be used in the computation, \nand accordingly, it is ignored in the privacy analysis.")
+                   pure $ (Tup [Var (v :- JTAny) | v <- mutvars])
+          _ ->     pure $ TLet [(v :- JTAny) | v <- m2] newT2 (Tup [Var (v :- JTAny) | v <- mutvars])
+
+        return (Phi newCond unifiedT1 unifiedT2 , VirtualMutated mutvars)
+
+  -- mutated if case end
+  ----
+
+  -- depending on the types of the branches,
+  -- do the following
+  case (newT1Type, newT2Type) of
+    -- We do not allow either of the branches to
+    -- define a mutating function. This would require
+    -- us to "unify" the types of those functions
+    (τ1@(Mutating _), _) -> throwError (DemutationError $ "In the term\n" <> showPretty term <> "\nthe first branch is a mutating function of type " <> show τ1 <> ". This is currently not allowed.")
+    (_, τ1@(Mutating _)) -> throwError (DemutationError $ "In the term\n" <> showPretty term <> "\nthe second branch is a mutating function of type " <> show τ1 <> ". This is currently not allowed.")
+
+
+    -- if either of the cases is mutating,
+    -- we assume that the if expression is meant to be mutating,
+    -- and require to ignore the (possibly) computed and returned value
+    (VirtualMutated m1, VirtualMutated m2) -> buildMutatedPhi m1 m2
+    (VirtualMutated m1, _) -> buildMutatedPhi m1 []
+    (_, VirtualMutated m2) -> buildMutatedPhi [] m2
+
+    -- if both branches are not mutating, ie. var or pure, then we have a pure
+    -- if statement. The result term is the elaborated phi expression
+    (_,_) -> return (Phi newCond newT1 newT2 , Pure)
+
+
+
+----
+-- the mutating builtin cases
 
 elaborateMut scope (SubGrad t1 t2) = do
   (argTerms, mutVars) <- elaborateMutList "subgrad" scope [(Mutated , t1), (NotMutated , t2)]
@@ -485,12 +550,17 @@ elaborateMutList f scope mutargs = do
 ------------------------------------------------------------
 -- preprocessing a for loop body
 
+runPreprocessLoopBody :: Scope -> TeVar -> MutDMTerm -> MTC (MutDMTerm, [TeVar])
+runPreprocessLoopBody scope iter t = do
+  (a,x) <- runWriterT (preprocessLoopBody scope iter t)
+  return (a, nub x)
+
 -- | Walks through the loop term and changes SLet's to `modify!`
 --   calls if such a variable is already in scope.
 --   Also makes sure that the iteration variable `iter` is not assigned,
 --   and that no `FLet`s are found.
 --   Returns the variables which were changed to `modify!`.
-preprocessLoopBody :: Scope -> TeVar -> MutDMTerm -> MTC (MutDMTerm, [TeVar])
+preprocessLoopBody :: Scope -> TeVar -> MutDMTerm -> WriterT [TeVar] MTC MutDMTerm
 
 preprocessLoopBody scope iter (SLet (v :- jt) term body) = do
   -- it is not allowed to change the iteration variable
@@ -505,32 +575,26 @@ preprocessLoopBody scope iter (SLet (v :- jt) term body) = do
   -- if the variable has not been in scope, it is a local variable,
   -- and we do not change the term
 
-  (term', termVars) <- preprocessLoopBody scope iter term
-  (body', bodyVars) <- preprocessLoopBody scope iter body
-  let newVars = nub (termVars <> bodyVars)
+  (term') <- preprocessLoopBody scope iter term
+  (body') <- preprocessLoopBody scope iter body
+  -- let newVars = nub (termVars <> bodyVars)
 
   case getValue v scope of
-    Just _  -> return (Extra (MutLet (Extra (Modify (v :- jt) term')) (body')), nub (v : newVars))
-    Nothing -> return (SLet (v :- jt) term' body', newVars)
+    Just _  -> tell [v] >> return (Extra (MutLet (Extra (Modify (v :- jt) term')) (body')))
+    Nothing -> return (SLet (v :- jt) term' body')
 
 preprocessLoopBody scope iter (FLet f _ _) = throwError (DemutationError $ "Function definition is not allowed in for loops. (Encountered definition of " <> show f <> ".)")
 
 -- mutlets make use recurse
 preprocessLoopBody scope iter (Extra (MutLet t1 t2)) = do
-  (t1',v1) <- preprocessLoopBody scope iter t1
-  (t2',v2) <- preprocessLoopBody scope iter t2
-  return (Extra (MutLet t1' t2') , v1 <> v2)
+  (t1') <- preprocessLoopBody scope iter t1
+  (t2') <- preprocessLoopBody scope iter t2
+  return (Extra (MutLet t1' t2'))
 
--- for these terms we do nothing special
-preprocessLoopBody scope iter (Var a) = return (Var a, [])
-preprocessLoopBody scope iter (Op a ts) = return (Op a ts, [])
-preprocessLoopBody scope iter (Sng a ts) = return (Sng a ts, [])
-preprocessLoopBody scope iter (ConvertM a) = return (ConvertM a, [])
-
--- the rest is currently not supported
-preprocessLoopBody scope iter t = throwError (UnsupportedError (showPretty t))
-
-
+-- for the rest we simply recurse
+preprocessLoopBody scope iter t = do
+  x <- recDMTermM (preprocessLoopBody scope iter) (\x -> x) t
+  return x
 
 
 
@@ -546,11 +610,11 @@ liftNewMTC a =
 -- removing unnecessary tlets
 
 --
--- Walk through the tlet sequence in `term` until
--- the last 'in', and check if this returns `αs`
--- as a tuple. If it does, replace it by `replacement`
--- and return the new term.
--- Else, return nothing.
+-- | Walk through the tlet sequence in `term` until
+--  the last 'in', and check if this returns `αs`
+--  as a tuple. If it does, replace it by `replacement`
+--  and return the new term.
+--  Else, return nothing.
 replaceTLetIn :: [TeVar] -> DMTerm -> DMTerm -> Maybe DMTerm
 
 -- If we have found our final `in` term, check that the tuple
@@ -635,7 +699,6 @@ optimizeTLet (MCreate a b x c ) = MCreate (optimizeTLet a) (optimizeTLet b) x (o
 optimizeTLet (Transpose a)      = Transpose (optimizeTLet a)
 optimizeTLet (Index a b c)      = Index (optimizeTLet a) (optimizeTLet b) (optimizeTLet c)
 optimizeTLet (ClipM c a)        = ClipM c (optimizeTLet a)
-optimizeTLet (Iter a b c)       = Iter (optimizeTLet a) (optimizeTLet b) (optimizeTLet c)
 optimizeTLet (Loop a b x d )    = Loop (optimizeTLet a) (b) x (optimizeTLet d)
 optimizeTLet (SubGrad a b)      = SubGrad (optimizeTLet a) (optimizeTLet b)
 optimizeTLet (Reorder x a)      = Reorder x (optimizeTLet a)

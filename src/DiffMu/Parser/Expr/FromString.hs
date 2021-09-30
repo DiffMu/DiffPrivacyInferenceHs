@@ -171,7 +171,7 @@ pJExpr =       try pLineNumber
 
 parseJExprFromString :: String -> Either DMException JExpr
 parseJExprFromString input =
-  let res = runParser pJExpr "jl-hs-communication" input
+  let res = runParser pJExpr "jl-hs-communication" (trace ("Parsing input:\n------------\n" <> input <> "\n---------------") input)
   in case res of
     Left e  -> Left (InternalError $ "Communication Error: Could not parse JExpr from string\n\n----------------------\n" <> input <> "\n---------------------------\n" <> errorBundlePretty e)
     Right a -> Right a
