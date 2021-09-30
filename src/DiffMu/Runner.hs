@@ -71,7 +71,7 @@ typecheckFromDMTerm term = do
         -- typecheck the term t5
         -- mt <- thisFunctionDoesNotExist term
 
-        (term'' , _) <- liftNewMTC (elaborateMut def term)
+        term'' <- liftNewMTC (demutate term)
 
         term' <- preprocessDMTerm term''
 
