@@ -11,24 +11,25 @@ import Text.Megaparsec.Debug
 import Text.Megaparsec.Char.Lexer
 
 import qualified Data.Text as T
-import Debug.Trace(trace)
 
 data JExpr =
-     JECall JExpr [JExpr]
-   | JEBlock [JExpr]
-   | JELineNumber String Int
-   | JESymbol Symbol
-   | JETypeAnnotation JExpr JuliaType
-   | JEInteger Int
+     JEInteger Int
    | JEReal Float
+   | JESymbol Symbol
+   | JELineNumber String Int
+   | JEUnsupported String
+   | JECall JExpr [JExpr]
+   | JEBlock [JExpr]
+   | JETypeAnnotation JExpr JuliaType
    | JEIter JExpr JExpr JExpr
-   | JELoop Symbol JExpr JExpr
-   | JELam [(JExpr, JuliaType)] JExpr
-   | JELamStar [(JExpr, (JuliaType, Relevance))] JExpr
-   | JEFunction Symbol JExpr
+   | JELoop JExpr JExpr JExpr
+   | JELam [JExpr] JExpr
+   | JELamStar [JExpr] JExpr
+   | JEFunction JExpr JExpr
    | JEReturn JExpr
    | JEAssignment JExpr JExpr
    | JETupAssignemnt [JExpr] JExpr
+   | JEIfElse JExpr JExpr JExpr
    deriving Show
 
 
@@ -54,7 +55,7 @@ pIdentifier = some (noneOf @[] "(),[]=#:\"")
 
 pJuliaType :: Parser JuliaType
 pJuliaType = do
-  ident <- pIdentifier
+  ident <- char ':' *> pIdentifier
   return (JuliaType ident)
 
 
@@ -63,7 +64,7 @@ pSymbol = (Symbol . T.pack) <$> (try (char ':' *> pIdentifier)
                                  <|> try (string "Symbol" *> between (string "(\"") (string "\")") pIdentifier))
 
 pTypeAnnotation :: Parser JExpr
-pTypeAnnotation = (uncurry JETypeAnnotation) <$> (pMaybeAnn pJExpr pJuliaType JTAny)
+pTypeAnnotation = ":(::)" `with` (JETypeAnnotation <$> pJExpr <*､> pJuliaType)
 
 pLineNumber :: Parser JExpr
 pLineNumber = let pLocation = do
@@ -81,34 +82,6 @@ pCall pcallee pargs = (":call" `with` ((,) <$> pcallee <*､> (pargs `sepBy` sep
 pCallSign :: String -> Parser t -> Parser t
 pCallSign name psign = (":call" `with` ((string name) >> sep >> psign))
 
-
-pMaybeAnn pAssignee pAnnotation noAnn = let pAnn = do
-                                              name <- trace "parsing name" pAssignee
-                                              sep
-                                              typ <- trace "parsing annotation" pAnnotation
-                                              return (name, typ)
-                                            pNoAnn = do
-                                                       name <- pAssignee
-                                                       return (name, noAnn)
-                      in     try (":(::)" `with` pAnn)
-                         <|> try pNoAnn
-
-
-pAsgmt :: Parser (JExpr, JuliaType)
---pAsgmt = pMaybeAnn pJExpr pJuliaType JTAny
-pAsgmt = pMaybeAnn (JESymbol <$> pSymbol) pJuliaType JTAny
-
-pRelevance :: Parser (JuliaType, Relevance)
-pRelevance = let tupl τ = pure (τ, IsRelevant)
-                 tupln τ = pure (τ, NotRelevant)
-          in
-             try (":call" `with` (((string ":NoData") >> sep >> pJuliaType >>= tupln)))
-             <|> try ((string ":NoData") >> (return (JTAny, NotRelevant)))
-             <|> (pJuliaType >>= tupl)
-
-pAsgmtRel :: Parser (JExpr, (JuliaType, Relevance))
-pAsgmtRel = pMaybeAnn pJExpr pRelevance (JTAny, IsRelevant)
-
 pTLet = do
          (vars, assignment) <- with ":(=)" ((,) <$> (with ":tuple" (pJExpr `sepBy` sep)) <*､> pJExpr)
          return $ (JETupAssignemnt vars assignment)
@@ -118,19 +91,19 @@ pSLet = do
          return $ (JEAssignment var assignment)
 
 pLam :: Parser JExpr
-pLam = let pargs = try (":tuple" `with` (pAsgmt `sepBy` sep)) <|> ((\x->[x]) <$> pAsgmt)
+pLam = let pargs = try (":tuple" `with` (pJExpr `sepBy` sep)) <|> ((\x->[x]) <$> pJExpr)
        in do
          (args, body) <- (":->" `with` ((,) <$> pargs <*､> pJExpr))
          return (JELam args body)
 
 pFLet :: Parser JExpr
 pFLet = let pFunc = do
-                        (name, args) <- pCall pSymbol pAsgmt
+                        (name, args) <- pCall pJExpr pJExpr
                         sep
                         body <- pJExpr
                         return (name, (JELam args body))
             pFuncStar = let pStar = do
-                                       sign <- pCall pSymbol pAsgmtRel
+                                       sign <- pCall pJExpr pJExpr
                                        sep
                                        string ":Priv"
                                        return sign
@@ -159,26 +132,38 @@ pIter = let psign2 = do
              return (JEIter start step end)
 
 
-pLoop = let pit = ":(=)" `with` ((,) <$> pSymbol <*､> pJExpr)
+pLoop = let pit = ":(=)" `with` ((,) <$> pJExpr <*､> pJExpr)
         in do
               ((ivar, iter), body) <- ":for" `with` ((,) <$> pit <*､> pJExpr)
               return (JELoop ivar iter body)
 
+pIf = ":if" `with` (JEIfElse <$> pJExpr <*､> pJExpr <*､> pJExpr)
+pEIf = ":elseif" `with` (JEIfElse <$> pJExpr <*､> pJExpr <*､> pJExpr)
+
+pUnsupported = let someExpr = (((char ':' >> pIdentifier) <* sep) <* pJExpr `sepBy` sep)
+               in JEUnsupported <$> (between (wskip '(') (wskip ')') someExpr)
+
+                 
+
 
 pJExpr :: Parser JExpr
-pJExpr = dbg "parseing expr" (try pLineNumber
-                          <|> try (":block" `with` (JEBlock <$> (pJExpr `sepBy` sep)))
-                        --  <|> try (":return" `with` (JEReturn <$> pJExpr))
-                          <|> try ((uncurry JECall) <$> (pCall (JESymbol <$> pSymbol) pJExpr))
-                         -- <|> try ((uncurry JECall) <$> (pCall pJExpr pJExpr))
-                          <|> try (JESymbol <$> pSymbol)
-                        --  <|> try (JEInteger <$> decimal) -- these two cannot be switched which is weird
-                        --  <|> try (JEReal <$> float)
-                        --  <|> try pLoop
-                        --  <|> try pIter
-                        --  <|> try pFLet
-                          <|> try pLam
-                          <|> try pTypeAnnotation)
+pJExpr =       try pLineNumber
+           <|> try (":block" `with` (JEBlock <$> (pJExpr `sepBy` sep)))
+           <|> try (":return" `with` (JEReturn <$> pJExpr))
+           <|> try (JESymbol <$> pSymbol)
+           <|> try (JEInteger <$> decimal) -- these two cannot be switched which is weird
+           <|> try (JEReal <$> float)
+           <|> try pLam
+           <|> try pLoop
+           <|> try pIter
+           <|> try pFLet
+           <|> try pSLet
+           <|> try pIf
+           <|> try pEIf
+           <|> try pTypeAnnotation
+           <|> try ((uncurry JECall) <$> (pCall pJExpr pJExpr))
+           <|> pUnsupported
+
 
 
 
