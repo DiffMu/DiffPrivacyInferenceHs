@@ -80,7 +80,7 @@ runExprParser str = do
   str' <- peekCString str
 
   let parseAndPrint = do
-        let res = parseExprFromString str'
+        let res = parseJExprFromString str'
         case res of
           Left e -> putStrLn $ "Error: " <> show e
           Right e -> putStrLn $ "Expr: " <> show e
