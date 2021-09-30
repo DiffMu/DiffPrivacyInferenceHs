@@ -648,6 +648,7 @@ deriving instance (forall a. Eq a => Eq (t a)) => Eq (PreDMTerm t)
 -----
 -- empty extension
 data EmptyExtension a where
+ deriving (Functor, Foldable, Traversable)
 
 instance Show (EmptyExtension a) where
   show a = undefined
@@ -665,7 +666,7 @@ data ParseExtension a =
  | IfElse a a a a
  | OpAss (Asgmt JuliaType) DMTypeOps_Binary a a
  | JuliaReturn a
- deriving (Show, Eq)
+ deriving (Show, Eq, Functor, Foldable, Traversable)
 
 type ParseDMTerm = PreDMTerm (SumExtension ParseExtension MutabilityExtension)
 
@@ -677,14 +678,14 @@ data MutabilityExtension a =
   | MutLoop a (TeVar) a
   | Modify (Asgmt JuliaType) a
   | MutRet
-  deriving (Show, Eq)
+  deriving (Show, Eq, Functor, Foldable, Traversable)
 
 type MutDMTerm = PreDMTerm MutabilityExtension
 
 ----
 -- sum of extensions
 data SumExtension e f a = SELeft (e a) | SERight (f a)
-  deriving (Show, Eq)
+  deriving (Show, Eq, Functor, Foldable, Traversable)
 
 ----
 -- functions
@@ -716,6 +717,37 @@ liftExtension f (Iter a b c)       = Iter (liftExtension f a) (liftExtension f b
 liftExtension f (Loop a b x d )    = Loop (liftExtension f a) (b) x (liftExtension f d)
 liftExtension f (SubGrad a b)      = SubGrad (liftExtension f a) (liftExtension f b)
 liftExtension f (Reorder x a)      = Reorder x (liftExtension f a)
+
+-- recursing into a dmterm
+
+recDMTermM :: forall t m s. (Monad m, Traversable t) => (PreDMTerm t -> m (PreDMTerm s)) -> (forall a. t a -> s a) -> PreDMTerm t -> m (PreDMTerm s)
+recDMTermM f h (Extra e)          = Extra <$> fmap h (mapM f e)
+recDMTermM f h (Ret (r))          = Ret <$> (recDMTermM f h r)
+recDMTermM f h (Sng g jt)         = pure $ Sng g jt
+recDMTermM f h (Var (v :- jt))    = pure $ Var (v :- jt)
+recDMTermM f h (Rnd jt)           = pure $ Rnd jt
+recDMTermM f h (Arg v jt r)       = pure $ Arg v jt r
+recDMTermM f h (Op op ts)         = Op op <$> (mapM (recDMTermM f h) ts)
+recDMTermM f h (Phi a b c)        = Phi <$> (recDMTermM f h a) <*> (recDMTermM f h b) <*> (recDMTermM f h c)
+recDMTermM f h (Lam     jts a)    = Lam jts <$> (recDMTermM f h a)
+recDMTermM f h (LamStar jts a)    = LamStar jts <$> (recDMTermM f h a)
+recDMTermM f h (Apply a bs)       = Apply <$> (recDMTermM f h a) <*> (mapM (recDMTermM f h) bs)
+recDMTermM f h (FLet v a b)       = FLet v <$> (recDMTermM f h a) <*> (recDMTermM f h b)
+recDMTermM f h (Choice chs)       = Choice <$> (mapM (recDMTermM f h) chs)
+recDMTermM f h (SLet jt a b)      = SLet jt <$> (recDMTermM f h a) <*> (recDMTermM f h b)
+recDMTermM f h (Tup as)           = Tup <$> (mapM (recDMTermM f h) as)
+recDMTermM f h (TLet jt a b)      = TLet jt <$> (recDMTermM f h a) <*> (recDMTermM f h b)
+recDMTermM f h (Gauss a b c d)    = Gauss <$> (recDMTermM f h a) <*> (recDMTermM f h b) <*> (recDMTermM f h c) <*> (recDMTermM f h d)
+recDMTermM f h (ConvertM a)       = ConvertM <$> (recDMTermM f h a)
+recDMTermM f h (MCreate a b x c ) = MCreate <$> (recDMTermM f h a) <*> (recDMTermM f h b) <*> pure x <*> (recDMTermM f h c)
+recDMTermM f h (Transpose a)      = Transpose <$> (recDMTermM f h a)
+recDMTermM f h (Index a b c)      = Index <$> (recDMTermM f h a) <*> (recDMTermM f h b) <*> (recDMTermM f h c)
+recDMTermM f h (ClipM c a)        = ClipM c <$> (recDMTermM f h a)
+recDMTermM f h (Iter a b c)       = Iter <$> (recDMTermM f h a) <*> (recDMTermM f h b) <*> (recDMTermM f h c)
+recDMTermM f h (Loop a b x d )    = Loop <$> (recDMTermM f h a) <*> pure b <*> pure x <*> (recDMTermM f h d)
+recDMTermM f h (SubGrad a b)      = SubGrad <$> (recDMTermM f h a) <*> (recDMTermM f h b)
+recDMTermM f h (Reorder x a)      = Reorder x <$> (recDMTermM f h a)
+
 
 
 --------------------------------------------------------------------------

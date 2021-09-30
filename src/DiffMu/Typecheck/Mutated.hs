@@ -203,7 +203,7 @@ elaborateMut scope (Lam args body) = do
           Just mut -> pure (a , mut)
 
   -- call this function on all args given in the signature
-  -- and extract those vars taht 
+  -- and extract those vars that are mutated
   vars_mutationState <- mapM getVar args
   let mutVars = [v | (v , Mutated) <- vars_mutationState]
   let mutationsStates = snd <$> vars_mutationState
@@ -367,7 +367,7 @@ elaborateMut scope (Extra (MutLoop iters iterVar body)) = do
   -- now, preprocess the body,
   -- i.e., find out which variables are getting mutated
   -- and change their `SLet`s to `modify!` terms
-  (preprocessedBody, modifyVars) <- preprocessLoopBody scope iterVar body
+  (preprocessedBody, modifyVars) <- runPreprocessLoopBody scope iterVar body
 
   -- we add these variables to the scope as args, since they are allowed
   -- to occur in mutated positions
@@ -399,6 +399,15 @@ elaborateMut scope (Extra (MutLoop iters iterVar body)) = do
     -- throw error
     other -> throwError (DemutationError $ "Expected a loop body to be mutating, but it was of type " <> show other)
 
+elaborateMut scope (Extra (MutRet)) = do
+  return (Tup [] , VirtualMutated [])
+
+elaborateMut scope (Phi cond t1 t2) = do
+  return undefined
+
+
+----
+-- the mutating builtin cases
 
 elaborateMut scope (SubGrad t1 t2) = do
   (argTerms, mutVars) <- elaborateMutList "subgrad" scope [(Mutated , t1), (NotMutated , t2)]
@@ -485,12 +494,15 @@ elaborateMutList f scope mutargs = do
 ------------------------------------------------------------
 -- preprocessing a for loop body
 
+runPreprocessLoopBody :: Scope -> TeVar -> MutDMTerm -> MTC (MutDMTerm, [TeVar])
+runPreprocessLoopBody scope iter t = runWriterT (preprocessLoopBody scope iter t)
+
 -- | Walks through the loop term and changes SLet's to `modify!`
 --   calls if such a variable is already in scope.
 --   Also makes sure that the iteration variable `iter` is not assigned,
 --   and that no `FLet`s are found.
 --   Returns the variables which were changed to `modify!`.
-preprocessLoopBody :: Scope -> TeVar -> MutDMTerm -> MTC (MutDMTerm, [TeVar])
+preprocessLoopBody :: Scope -> TeVar -> MutDMTerm -> WriterT [TeVar] MTC MutDMTerm
 
 preprocessLoopBody scope iter (SLet (v :- jt) term body) = do
   -- it is not allowed to change the iteration variable
@@ -505,32 +517,26 @@ preprocessLoopBody scope iter (SLet (v :- jt) term body) = do
   -- if the variable has not been in scope, it is a local variable,
   -- and we do not change the term
 
-  (term', termVars) <- preprocessLoopBody scope iter term
-  (body', bodyVars) <- preprocessLoopBody scope iter body
-  let newVars = nub (termVars <> bodyVars)
+  (term') <- preprocessLoopBody scope iter term
+  (body') <- preprocessLoopBody scope iter body
+  -- let newVars = nub (termVars <> bodyVars)
 
   case getValue v scope of
-    Just _  -> return (Extra (MutLet (Extra (Modify (v :- jt) term')) (body')), nub (v : newVars))
-    Nothing -> return (SLet (v :- jt) term' body', newVars)
+    Just _  -> tell [v] >> return (Extra (MutLet (Extra (Modify (v :- jt) term')) (body')))
+    Nothing -> return (SLet (v :- jt) term' body')
 
 preprocessLoopBody scope iter (FLet f _ _) = throwError (DemutationError $ "Function definition is not allowed in for loops. (Encountered definition of " <> show f <> ".)")
 
 -- mutlets make use recurse
 preprocessLoopBody scope iter (Extra (MutLet t1 t2)) = do
-  (t1',v1) <- preprocessLoopBody scope iter t1
-  (t2',v2) <- preprocessLoopBody scope iter t2
-  return (Extra (MutLet t1' t2') , v1 <> v2)
+  (t1') <- preprocessLoopBody scope iter t1
+  (t2') <- preprocessLoopBody scope iter t2
+  return (Extra (MutLet t1' t2'))
 
--- for these terms we do nothing special
-preprocessLoopBody scope iter (Var a) = return (Var a, [])
-preprocessLoopBody scope iter (Op a ts) = return (Op a ts, [])
-preprocessLoopBody scope iter (Sng a ts) = return (Sng a ts, [])
-preprocessLoopBody scope iter (ConvertM a) = return (ConvertM a, [])
-
--- the rest is currently not supported
-preprocessLoopBody scope iter t = throwError (UnsupportedError (showPretty t))
-
-
+-- for the rest we simply recurse
+preprocessLoopBody scope iter t = do
+  x <- recDMTermM (preprocessLoopBody scope iter) (\x -> x) t
+  return x
 
 
 
@@ -546,11 +552,11 @@ liftNewMTC a =
 -- removing unnecessary tlets
 
 --
--- Walk through the tlet sequence in `term` until
--- the last 'in', and check if this returns `αs`
--- as a tuple. If it does, replace it by `replacement`
--- and return the new term.
--- Else, return nothing.
+-- | Walk through the tlet sequence in `term` until
+--  the last 'in', and check if this returns `αs`
+--  as a tuple. If it does, replace it by `replacement`
+--  and return the new term.
+--  Else, return nothing.
 replaceTLetIn :: [TeVar] -> DMTerm -> DMTerm -> Maybe DMTerm
 
 -- If we have found our final `in` term, check that the tuple

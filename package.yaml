@@ -91,6 +91,9 @@ library:
     - TypeFamilyDependencies
     - RoleAnnotations
     - PartialTypeSignatures
+    - DeriveFunctor
+    - DeriveTraversable
+    - DeriveFoldable
 
 verbatim: |
   foreign-library diffmu-wrapper

@@ -121,13 +121,13 @@ testDemutation = do
                        (
                         Extra (MutLet (ConvertM (Var (v "c" :- JTAny)))
                         (
-                          SLet (v "a" :- JTAny) (Op (IsBinary DMOpAdd) [Var (v "a" :- JTAny) , n 1])
-                          (
-                            SLet (v "b" :- JTAny) (Op (IsBinary DMOpAdd) [Var (v "a" :- JTAny) , Var (v "b" :- JTAny)])
-                            (
-                              Var (v "b" :- JTAny)
-                            )
-                          )
+                         Extra (MutLet (SLet (v "a" :- JTAny) (Op (IsBinary DMOpAdd) [Var (v "a" :- JTAny) , n 1])
+                                        (
+                                          Var (v "b" :- JTAny)
+                                        ))
+                         (
+                           Extra MutRet
+                         ))
                         ))
                        ))
                      ))

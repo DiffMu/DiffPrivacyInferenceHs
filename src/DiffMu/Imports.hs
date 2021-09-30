@@ -32,6 +32,7 @@ import Type.Reflection as All (Typeable, typeRep, someTypeRep, typeOf) -- hiding
 import Data.Coerce as All
 import Data.Singletons as All
 import Data.Containers.ListUtils as All
+import Data.Foldable as All (Foldable)
 -- import Data.Typeable as All
 
 import GHC.Generics as All (Generic)
