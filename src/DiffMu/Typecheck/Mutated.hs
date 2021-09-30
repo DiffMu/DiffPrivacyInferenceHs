@@ -152,11 +152,7 @@ elaborateMut scope (Op op args) = do
   args' <- mapM (elaborateNonmut scope) args
   pure (Op op (fst <$> args') , Pure)
 elaborateMut scope (Sng η τ) = pure (Sng η τ , Pure)
-
-elaborateMut scope (Arg x a b) = internalError "While demutating: encountered an arg term!"
-  -- do
-  -- markRead x
-  -- return (Arg x a b , Pure)
+elaborateMut scope (Rnd jt) = pure (Rnd jt , Pure)
 
 elaborateMut scope (Var (x :- j)) = do
   let τ = getValue x scope
@@ -179,69 +175,29 @@ elaborateMut scope (SLet (x :- τ) term body) = do
 
   return (SLet (x :- τ) newTerm newBody , newBodyType)
 
+elaborateMut scope (TLet vars term body) = do
+
+  (newTerm , newTermType) <- elaborateMut scope term
+
+  case newTermType of
+    Pure -> pure ()
+    Mutating _ -> pure ()
+    VirtualMutated _ -> throwError (DemutationError $ "Found an assignment " <> show vars <> " = " <> showPretty term <> " where RHS is a mutating call. This is not allowed.")
+    SingleArg _ -> pure ()
+
+  -- add all values as pure to the scope
+  let scope' = foldr (\(v :- _) s -> setValue v (Pure) s) scope (vars)
+  (newBody , newBodyType) <- elaborateMut scope' body
+
+  return (TLet vars newTerm newBody , newBodyType)
+
+elaborateMut scope (LamStar args body) = do
+  (newBody, newBodyType) <- elaborateLambda scope [(v :- x) | (v :- (x , _)) <- args] body
+  return (LamStar args newBody, newBodyType)
+
 elaborateMut scope (Lam args body) = do
-
-  -- add args as vars to the scope
-  let scope' = foldr (\(a :- _) -> setValue a (SingleArg a))
-                     scope
-                     args
-
-  -- check the body
-  (newBody,τ) <- elaborateMut scope' body
-
-  -- get the context and check if some variables are now mutated
-  ctx <- use mutTypes
-  let ctxElems = getAllElems ctx
-  let isMutatingFunction = or [a == Mutated | a <- ctxElems]
-
-  -- remove the arguments to this lambda from the context
-  let getVar :: (Asgmt JuliaType) -> MTC ((TeVar, IsMutated))
-      getVar (a :- t) = do
-        mut <- mutTypes %%= popValue a
-        case mut of
-          Nothing -> pure (a , NotMutated)
-          Just mut -> pure (a , mut)
-
-  -- call this function on all args given in the signature
-  -- and extract those vars that are mutated
-  vars_mutationState <- mapM getVar args
-  let mutVars = [v | (v , Mutated) <- vars_mutationState]
-  let mutationsStates = snd <$> vars_mutationState
-
-
-  -- now, depending on whether we have a mutating lambda,
-  -- do the following
-
-  case isMutatingFunction of
-    --
-    -- case I : Mutating
-    --
-    True -> do
-      -- assert that now the context is empty
-      -- (i.e., no captures were used)
-      mutTypes <- use mutTypes
-      case isEmptyDict mutTypes of
-        False -> throwError (VariableNotInScope $ "The variables " <> show mutTypes <> " are not in scope.")
-        True ->
-          -- check that the body is a mutation result
-          -- and reorder the resulting tuple
-          case τ of
-            VirtualMutated vars -> do
-              -- get the permutation which tells us how to go
-              -- from the order in which the vars are returned by the body
-              -- to the order in which the lambda arguments are given
-              σ <- getPermutation vars mutVars
-              pure (Lam args (Reorder σ newBody) , Mutating mutationsStates)
-
-            wrongτ -> throwError (DemutationError $ "Expected the result of the body of a mutating lambda to be a virtual mutated value. But it was "
-                                  <> show wrongτ <> "\n where body is:\n" <> showPretty body)
-
-    --
-    -- case II : Not Mutating
-    --
-    False -> do
-      -- simply say that this function is not mutating
-      pure (Lam args newBody , Pure)
+  (newBody, newBodyType) <- elaborateLambda scope args body
+  return (Lam args newBody, newBodyType)
 
 elaborateMut scope (Apply f args) = do
 
@@ -399,6 +355,17 @@ elaborateMut scope (Extra (MutLoop iters iterVar body)) = do
     -- throw error
     other -> throwError (DemutationError $ "Expected a loop body to be mutating, but it was of type " <> show other)
 
+
+-- the loop-body-preprocessing creates these modify! terms
+-- they get elaborated into tlet assignments again.
+elaborateMut scope (Extra (Modify (v) t1)) = do
+  (argTerms, mutVars) <- elaborateMutList "internal_modify" scope [(Mutated , (Var v)) , (NotMutated , t1)]
+  case argTerms of
+    [Var (v :- jt), newT2] -> pure (Tup [newT2] , VirtualMutated mutVars)
+    [_, newT2] -> internalError ("After elaboration of an internal_modify term result was not a variable.")
+    _ -> internalError ("Wrong number of terms after elaborateMutList")
+
+
 elaborateMut scope (Extra (MutRet)) = do
   return (Tup [] , VirtualMutated [])
 
@@ -489,18 +456,114 @@ elaborateMut scope (ConvertM t1) = do
     [newT1] -> pure (ConvertM newT1, VirtualMutated mutVars)
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
-elaborateMut scope (Extra (Modify (v) t1)) = do
-  (argTerms, mutVars) <- elaborateMutList "internal_modify" scope [(Mutated , (Var v)) , (NotMutated , t1)]
-  case argTerms of
-    [Var (v :- jt), newT2] -> pure (Tup [newT2] , VirtualMutated mutVars)
-    [_, newT2] -> internalError ("After elaboration of an internal_modify term result was not a variable.")
-    _ -> internalError ("Wrong number of terms after elaborateMutList")
+elaborateMut scope (Transpose t1) = do
+  (newT1, newT1Type) <- elaborateNonmut scope t1
+  return (Transpose newT1 , Pure)
 
-elaborateMut scope t = throwError (UnsupportedError (showPretty t))
+-- the non mutating builtin cases
+elaborateMut scope (Ret t1) = do
+  (newT1, newT1Type) <- elaborateNonmut scope t1
+  return (Ret newT1 , Pure)
+elaborateMut scope (Tup t1s) = do
+  newT1s <- fmap fst <$> mapM (elaborateNonmut scope) t1s
+  return (Tup newT1s , Pure)
+elaborateMut scope (MCreate t1 t2 t3 t4) = do
+  (newT1, newT1Type) <- elaborateNonmut scope t1
+  (newT2, newT2Type) <- elaborateNonmut scope t2
+  (newT4, newT4Type) <- elaborateNonmut scope t4
+  return (MCreate newT1 newT2 t3 newT4 , Pure)
+elaborateMut scope (Index t1 t2 t3) = do
+  (newT1, newT1Type) <- elaborateNonmut scope t1
+  (newT2, newT2Type) <- elaborateNonmut scope t2
+  (newT3, newT3Type) <- elaborateNonmut scope t3
+  return (Index newT1 newT2 newT3 , Pure)
+
+
+-- the unsupported terms
+elaborateMut scope term@(Choice t1)        = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
+elaborateMut scope term@(Loop t1 t2 t3 t4) = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
+elaborateMut scope term@(Reorder t1 t2)    = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
+elaborateMut scope term@(Arg x a b)        = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
+
 
 
 ---------------------------------------------------
 -- recurring utilities
+
+
+
+-------------
+-- elaborating a lambda term
+--
+
+elaborateLambda :: Scope ->  [Asgmt JuliaType] -> MutDMTerm -> MTC (DMTerm , ImmutType)
+elaborateLambda scope args body = do
+  -- add args as vars to the scope
+  let scope' = foldr (\(a :- _) -> setValue a (SingleArg a))
+                     scope
+                     args
+
+  -- check the body
+  (newBody,τ) <- elaborateMut scope' body
+
+  -- get the context and check if some variables are now mutated
+  ctx <- use mutTypes
+  let ctxElems = getAllElems ctx
+  let isMutatingFunction = or [a == Mutated | a <- ctxElems]
+
+  -- remove the arguments to this lambda from the context
+  let getVar :: (Asgmt JuliaType) -> MTC ((TeVar, IsMutated))
+      getVar (a :- t) = do
+        mut <- mutTypes %%= popValue a
+        case mut of
+          Nothing -> pure (a , NotMutated)
+          Just mut -> pure (a , mut)
+
+  -- call this function on all args given in the signature
+  -- and extract those vars that are mutated
+  vars_mutationState <- mapM getVar args
+  let mutVars = [v | (v , Mutated) <- vars_mutationState]
+  let mutationsStates = snd <$> vars_mutationState
+
+
+  -- now, depending on whether we have a mutating lambda,
+  -- do the following
+
+  case isMutatingFunction of
+    --
+    -- case I : Mutating
+    --
+    True -> do
+      -- assert that now the context is empty
+      -- (i.e., no captures were used)
+      mutTypes <- use mutTypes
+      case isEmptyDict mutTypes of
+        False -> throwError (VariableNotInScope $ "The variables " <> show mutTypes <> " are not in scope.")
+        True ->
+          -- check that the body is a mutation result
+          -- and reorder the resulting tuple
+          case τ of
+            VirtualMutated vars -> do
+              -- get the permutation which tells us how to go
+              -- from the order in which the vars are returned by the body
+              -- to the order in which the lambda arguments are given
+              σ <- getPermutation vars mutVars
+              pure ((Reorder σ newBody) , Mutating mutationsStates)
+
+            wrongτ -> throwError (DemutationError $ "Expected the result of the body of a mutating lambda to be a virtual mutated value. But it was "
+                                  <> show wrongτ <> "\n where body is:\n" <> showPretty body)
+
+    --
+    -- case II : Not Mutating
+    --
+    False -> do
+      -- simply say that this function is not mutating
+      pure (newBody , Pure)
+
+
+-------------
+-- elaborating a list of terms which are used in individually either mutating, or not mutating places
+--
 
 elaborateMutList :: String -> Scope -> [(IsMutated , MutDMTerm)] -> MTC ([DMTerm] , [TeVar])
 elaborateMutList f scope mutargs = do
