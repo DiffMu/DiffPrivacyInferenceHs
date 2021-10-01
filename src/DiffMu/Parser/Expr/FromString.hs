@@ -21,6 +21,7 @@ data JExpr =
    | JECall JExpr [JExpr]
    | JEBlock [JExpr]
    | JETypeAnnotation JExpr JuliaType
+   | JENotRelevant JExpr JuliaType
    | JEIter JExpr JExpr JExpr
    | JELoop JExpr JExpr JExpr
    | JELam [JExpr] JExpr
@@ -64,8 +65,15 @@ pSymbol :: Parser Symbol
 pSymbol = (Symbol . T.pack) <$> (try (char ':' *> pIdentifier)
                                  <|> try (string "Symbol" *> between (string "(\"") (string "\")") pIdentifier))
 
-pTypeAnnotation :: Parser JExpr
-pTypeAnnotation = ":(::)" `with` (JETypeAnnotation <$> pJExpr <*､> pJuliaType)
+pAnnotation :: Parser JExpr
+pAnnotation = let pNoData :: Parser JuliaType
+                  pNoData = try (":call" `with` ((string ":NoData") >> sep >> pJuliaType))
+                            <|> try ((":call" `with` ((string ":NoData") >> sep >> skippable)) >> (return JTAny))
+                            <|> ((string ":NoData") >> (return JTAny))
+                  pTyp :: Parser JExpr
+                  pTyp = (JETypeAnnotation <$> pJExpr <*､> pJuliaType)
+              in ":(::)" `with` (try (JENotRelevant <$> pJExpr <*､> pNoData) <|> pTyp) -- careful order is important
+
 
 pLineNumber :: Parser JExpr
 pLineNumber = let pLocation = do
@@ -145,7 +153,6 @@ pUnsupported = let someExpr = (((char ':' >> pIdentifier) <* sep) <* pJExpr `sep
                in JEUnsupported <$> (between (wskip '(') (wskip ')') someExpr)
 
 
-
 pJExpr :: Parser JExpr
 pJExpr =       try pLineNumber
            <|> try (":block" `with` (JEBlock <$> (pJExpr `sepBy` sep)))
@@ -161,7 +168,7 @@ pJExpr =       try pLineNumber
            <|> try pSLet
            <|> try pIf
            <|> try pEIf
-           <|> try pTypeAnnotation
+           <|> try pAnnotation
            <|> try ((uncurry JECall) <$> (pCall pJExpr pJExpr))
            <|> pUnsupported
 
