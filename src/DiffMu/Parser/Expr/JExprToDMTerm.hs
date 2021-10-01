@@ -215,4 +215,12 @@ pCall term args = Apply <$> pSingle term <*> mapM pSingle args
                -- JETupAssignment [JExpr] JExpr
                -- JEIfElse JExpr JExpr JExpr
 
+parseDMTermFromJExpr :: JExpr -> Either DMException ParseDMTerm
+parseDMTermFromJExpr expr =
+  let x = runStateT (pSingle expr) ("unknown",0)
+      y = case runExcept x of
+        Left err -> Left err
+        Right (term, _) -> Right term
+  in y
+
 

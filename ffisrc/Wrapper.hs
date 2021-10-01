@@ -28,6 +28,7 @@ import DiffMu.Runner
 import DiffMu.Core.Definitions
 import DiffMu.Typecheck.JuliaType
 import DiffMu.Parser.Expr.FromString
+import DiffMu.Parser.Expr.JExprToDMTerm
 
 import Spec
 
@@ -80,7 +81,7 @@ runExprParser str = do
   str' <- peekCString str
 
   let parseAndPrint = do
-        let res = parseJExprFromString str'
+        let res = parseJExprFromString str' >>= parseDMTermFromJExpr
         case res of
           Left e -> putStrLn $ "Error: " <> show e
           Right e -> putStrLn $ "Expr: " <> show e
