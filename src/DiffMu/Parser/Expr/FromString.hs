@@ -2,7 +2,6 @@
 module DiffMu.Parser.Expr.FromString where
 
 import DiffMu.Prelude
---import DiffMu.Abstract
 import DiffMu.Core
 
 import Text.Megaparsec
@@ -11,9 +10,10 @@ import Text.Megaparsec.Debug
 import Text.Megaparsec.Char.Lexer
 
 import qualified Data.Text as T
+import Debug.Trace(trace)
 
 data JExpr =
-     JEInteger Int
+     JEInteger Float
    | JEReal Float
    | JESymbol Symbol
    | JELineNumber String Int
@@ -28,6 +28,7 @@ data JExpr =
    | JEFunction JExpr JExpr
    | JEReturn JExpr
    | JEAssignment JExpr JExpr
+   | JETup [JExpr]
    | JETupAssignemnt [JExpr] JExpr
    | JEIfElse JExpr JExpr JExpr
    deriving Show
@@ -143,15 +144,15 @@ pEIf = ":elseif" `with` (JEIfElse <$> pJExpr <*､> pJExpr <*､> pJExpr)
 pUnsupported = let someExpr = (((char ':' >> pIdentifier) <* sep) <* pJExpr `sepBy` sep)
                in JEUnsupported <$> (between (wskip '(') (wskip ')') someExpr)
 
-                 
 
 
 pJExpr :: Parser JExpr
 pJExpr =       try pLineNumber
            <|> try (":block" `with` (JEBlock <$> (pJExpr `sepBy` sep)))
            <|> try (":return" `with` (JEReturn <$> pJExpr))
+           <|> try (":tuple" `with` (JETup <$> (pJExpr `sepBy` sep)))
            <|> try (JESymbol <$> pSymbol)
-           <|> try (JEInteger <$> decimal) -- these two cannot be switched which is weird
+           <|> try ((JEInteger . fromIntegral) <$> decimal) -- these two cannot be switched which is weird
            <|> try (JEReal <$> float)
            <|> try pLam
            <|> try pLoop
