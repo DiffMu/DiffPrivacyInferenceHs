@@ -834,6 +834,7 @@ data DMException where
   NoChoiceFoundError      :: String -> DMException
   DemutationError         :: String -> DMException
   UnificationShouldWaitError :: DMTypeOf k -> DMTypeOf k -> DMException
+  ParseError              :: String -> String -> Int -> DMException -- error message, filename, line number
 
 instance Show DMException where
   show (UnsupportedError t) = "The term '" <> t <> "' is currently not supported."
@@ -849,6 +850,7 @@ instance Show DMException where
   show (NoChoiceFoundError e) = "No choice found: " <> e
   show (UnificationShouldWaitError a b) = "Trying to unify types " <> show a <> " and " <> show b <> " with unresolved infimum (∧)."
   show (DemutationError e) = "While trying to demutate, the following error was encountered:\n " <> e
+  show (ParseError e file line) = "Unsupported julia expression in file " <> file <> ", line " <> show line <> ":\n " <> e
 
 instance Eq DMException where
   UnsupportedTermError    a        == UnsupportedTermError    b       = True
@@ -862,6 +864,7 @@ instance Eq DMException where
   TypeMismatchError       a        == TypeMismatchError       b       = True
   NoChoiceFoundError      a        == NoChoiceFoundError      b       = True
   UnificationShouldWaitError a a2  == UnificationShouldWaitError b b2 = True
+  ParseError e1 file1 line1        == ParseError e2 file2 line2       = True
   _ == _ = False
 
 
