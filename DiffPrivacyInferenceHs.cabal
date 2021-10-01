@@ -67,7 +67,9 @@ library
       DiffMu.Core.Unification
       DiffMu.Imports
       DiffMu.Parser.DMTerm.FromString
+      DiffMu.Parser.Expr.ExprToDMTerm
       DiffMu.Parser.Expr.FromString
+      DiffMu.Parser.Expr.JExprToDMTerm
       DiffMu.Prelude
       DiffMu.Prelude.Algebra
       DiffMu.Prelude.Data
