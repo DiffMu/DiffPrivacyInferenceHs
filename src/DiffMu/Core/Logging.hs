@@ -55,7 +55,12 @@ instance Default (DMLogger) where
 data DMLogSeverity = Debug | Info | Warning | Force
   deriving (Eq,Ord)
 
+data IsFollowUpMessage = FollowUpMessage | NotFollowUpMessage
+  deriving (Eq)
+
 data DMLogMessage = DMLogMessage DMLogSeverity DMLogLocation String
+
+data DMLogMessageFU = DMLogMessageFU IsFollowUpMessage DMLogMessage
 
 blue x = "\27[34m" <> x <> "\27[0m"
 green x = "\27[32m" <> x <> "\27[0m"
@@ -73,6 +78,21 @@ instance Show DMLogMessage where
   show (DMLogMessage s l m) = show s <> "[" <> show l <> "]: " <> m
     -- "[" <> blue (show l) <> "]\t" <> s <> blue ": \t" <> m
 
+instance Show DMLogMessageFU where
+  show (DMLogMessageFU x (DMLogMessage s l m)) = prefix' <> m
+    where
+      showSevNoColor :: DMLogSeverity -> String
+      showSevNoColor Debug   = "Debug"
+      showSevNoColor Info    = "Info"
+      showSevNoColor Force   = "Force"
+      showSevNoColor Warning = "Warning"
+
+      prefix        = show s           <> "[" <> show l <> "]: "
+      prefixNoColor = showSevNoColor s <> "[" <> show l <> "]: "
+      prefix' = case x of
+        FollowUpMessage -> (\_ -> ' ') <$> prefixNoColor
+        NotFollowUpMessage -> prefix
+
 data DMLogger = DMLogger
   {
     _loggerBackupSeverity :: DMLogSeverity,
@@ -85,10 +105,18 @@ data DMLogger = DMLogger
 $(makeLenses ''DMLogger)
 
 
+markFollowup :: Maybe DMLogMessage -> [DMLogMessage] -> [DMLogMessageFU]
+markFollowup Nothing [] = []
+markFollowup Nothing (x:xs) = (DMLogMessageFU NotFollowUpMessage x) : markFollowup (Just x) xs
+markFollowup (Just top) [] = []
+markFollowup (Just m1@(DMLogMessage s1 l1 t1)) (m2@(DMLogMessage s2 l2 t2):xs) = case and [s1 == s2 , l1 == l2] of
+  True  -> DMLogMessageFU FollowUpMessage m2    : markFollowup (Just m2) xs
+  False -> DMLogMessageFU NotFollowUpMessage m2 : markFollowup (Just m2) xs
+
 getLogMessages :: DMLogMessages -> DMLogSeverity -> [DMLogLocation] -> String
 getLogMessages (DMLogMessages messages) sevR locsR =
   let filtered = [DMLogMessage s l m | DMLogMessage s l m <- messages, or [sevR <= s, or ((l <=) <$> locsR)]]
       reversed = reverse filtered
-  in intercalate "\n" (show <$> reversed)
+  in intercalate "\n" (show <$> (markFollowup Nothing reversed))
 
 
