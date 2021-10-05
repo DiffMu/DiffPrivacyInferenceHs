@@ -233,7 +233,7 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
   -- other symbols
   --
   -- all other symbols turn into calls on TeVars
-  (sym, args) -> trace ("Adding non-op function call to " <> show sym <> ", " <> show args) (Apply (Var (UserTeVar (Symbol sym) :- JTAny)) <$> mapM pSingle args)
+  (sym, args) -> (Apply (Var (UserTeVar (Symbol sym) :- JTAny)) <$> mapM pSingle args)
 
 -- all other terms turn into calls
 pJCall term args = Apply <$> pSingle term <*> mapM pSingle args
