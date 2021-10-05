@@ -26,6 +26,8 @@ pList (s : tail) = case s of
                         JEAssignment aee amt -> pJSLet aee amt tail
                         JEIfElse _ _ _ -> throwError (InternalError "Conditionals should not have tails!")
                         JEUnsupported s -> parseError ("Unsupported expression " <> show s)
+                        JETupAssignment aee amt -> pJTLet aee amt tail
+                        JEFunction name term -> pJFLet name term tail
 
 pJLam args body = let pArg arg = case arg of
                                       JESymbol s -> return ((UserTeVar s) :- JTAny)
@@ -58,10 +60,6 @@ pJSLet assignee assignment tail =
         _ -> parseError ("Invalid assignee " <> (show assignee) <> ", must be a variable.")
 
 
-
-
-
-
 pJLoop ivar iter body =
   let pIter start step end = do
        dstart <- pSingle start
@@ -81,11 +79,27 @@ pJLoop ivar iter body =
        i -> parseError ("Invalid iteration variable " <> (show i) <> ".")
 
 
+pJTLet assignees assignment tail = do
+  -- make sure that all assignees are simply symbols
+  let ensureSymbol (JESymbol s) = return s
+      ensureSymbol (JETypeAnnotation _ _) = parseError "Type annotations on variables are not supported."
+      ensureSymbol (JENotRelevant _ _) = parseError "Type annotations on variables are not supported."
+      ensureSymbol x = parseError ("Invalid assignee " <> (show x) <> ", must be a variable.")
 
+  assignee_vars <- mapM ensureSymbol assignees
 
-               -- JEIter JExpr JExpr JExpr
-               -- JELoop JExpr JExpr JExpr
+  -- parse assignment, tail; and build term
+  dasgmt <- pSingle assignment
+  dtail <- pList tail
+  return (TLet [(UserTeVar s) :- JTAny | s <- assignee_vars] dasgmt dtail)
 
+pJFLet name assignment tail =
+  case name of
+    JESymbol name -> do
+                       dasgmt <- pSingle assignment
+                       dtail <- pList tail
+                       return (FLet (UserTeVar name) dasgmt dtail)
+    _ -> parseError $ "Invalid function name expression " <> show name <> ", must be a symbol."
 
 pSingle :: JExpr -> ParseState ParseDMTerm
 pSingle e = case e of
@@ -100,6 +114,8 @@ pSingle e = case e of
                  JEAssignment aee amt -> pJSLet aee amt [aee]
                  JEIfElse cond ifb elseb -> (Phi <$> pSingle cond <*> pSingle ifb <*> pSingle elseb)
                  JELoop ivar iter body -> pJLoop ivar iter body
+                 JETupAssignment aee amt -> pJTLet aee amt [JETup aee]
+                 JEFunction name term -> pJFLet name term [name]
 
 pClip :: JExpr -> ParseState (DMTypeOf ClipKind)
 pClip (JESymbol (Symbol ":L1"))   = pure (Clip L1)
@@ -115,6 +131,9 @@ pCall (JESymbol (Symbol sym)) args = case (sym,args) of
 
   -----------------
   -- binding builtins (use lambdas)
+  --
+  -- NOTE: This is term is currently not generated on the julia side
+  --
   (t@":mcreate", [a1, a2, a3]) -> f <$> pSingle a1 <*> pSingle a2 <*> extractLambdaArgs a3
     where
       f a b (c,d) = MCreate a b c d
@@ -218,7 +237,15 @@ pCall term args = Apply <$> pSingle term <*> mapM pSingle args
                -- JELamStar [JExpr] JExpr
                -- JEFunction JExpr JExpr
                -- JEAssignment JExpr JExpr
-               -- JETupAssignemnt [JExpr] JExpr
+               -- JETupAssignment [JExpr] JExpr
                -- JEIfElse JExpr JExpr JExpr
+
+parseDMTermFromJExpr :: JExpr -> Either DMException ParseDMTerm
+parseDMTermFromJExpr expr =
+  let x = runStateT (pSingle expr) ("unknown",0)
+      y = case runExcept x of
+        Left err -> Left err
+        Right (term, _) -> Right term
+  in y
 
 

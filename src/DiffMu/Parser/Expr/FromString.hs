@@ -30,7 +30,7 @@ data JExpr =
    | JEReturn JExpr
    | JEAssignment JExpr JExpr
    | JETup [JExpr]
-   | JETupAssignemnt [JExpr] JExpr
+   | JETupAssignment [JExpr] JExpr
    | JEIfElse JExpr JExpr JExpr
    deriving Show
 
@@ -93,7 +93,7 @@ pCallSign name psign = (":call" `with` ((string name) >> sep >> psign))
 
 pTLet = do
          (vars, assignment) <- with ":(=)" ((,) <$> (with ":tuple" (pJExpr `sepBy` sep)) <*､> pJExpr)
-         return $ (JETupAssignemnt vars assignment)
+         return $ (JETupAssignment vars assignment)
 
 pSLet = do
          (var, assignment) <- with ":(=)" ((,) <$> pJExpr <*､> pJExpr)
@@ -183,3 +183,5 @@ parseJExprFromString input =
   in case res of
     Left e  -> Left (InternalError $ "Communication Error: Could not parse JExpr from string\n\n----------------------\n" <> input <> "\n---------------------------\n" <> errorBundlePretty e)
     Right a -> Right a
+
+
