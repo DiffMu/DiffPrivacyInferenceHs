@@ -132,7 +132,7 @@ checkSen' (Arg x dτ i) scope = done $ do
 
 checkSen' (Var (x :- dτ)) scope =  -- get the term that corresponds to this variable from the scope dict
    let delτ = getValue x scope
-   in case delτ oft pu
+   in case delτ of
      Nothing -> done $ throwError (VariableNotInScope x)
      Just delτ ->
          case dτ of
