@@ -51,6 +51,7 @@ pList (s : tail) = case s of
                         JECall name args -> pMutLet (pJCall name args) tail
                         JEIfElse _ _ _ -> throwError (InternalError "Conditionals should not have tails!")
                         JEUnsupported s -> parseError ("Unsupported expression " <> show s)
+                        _ -> parseError ("Expression " <> show s <> " does not have any effect.")
 
 
 pMutLet m tail = do
