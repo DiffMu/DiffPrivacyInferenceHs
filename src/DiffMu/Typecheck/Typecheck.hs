@@ -912,4 +912,12 @@ checkPri' (Loop niter cs' (xi, xc) body) scope =
 
          return τbnc
 
+checkPri' (Reorder σ t) scope = do
+  mτ <- checkPriv t scope
+  done $ do
+    τ <- mτ
+    ρ <- newVar
+    addConstraint (Solvable (IsReorderedTuple ((σ , τ) :=: ρ)))
+    return ρ
+
 checkPri' t scope = checkPriv (Ret t) scope -- secretly return if the term has the wrong color.
