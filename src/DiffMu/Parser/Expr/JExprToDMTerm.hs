@@ -24,6 +24,8 @@ pList (s : tail) = case s of
                                                     return s
                         JEReturn ret -> pSingle ret -- drop tail, just end the expression
                         JEAssignment aee amt -> pJSLet aee amt tail
+                        JEIfElse _ _ _ -> throwError (InternalError "Conditionals should not have tails!")
+                        JEUnsupported s -> parseError ("Unsupported expression " <> show s)
 
 pJLam args body = let pArg arg = case arg of
                                       JESymbol s -> return ((UserTeVar s) :- JTAny)
@@ -55,8 +57,39 @@ pJSLet assignee assignment tail =
         JENotRelevant _ _ -> parseError "Type annotations on variables are not supported."
         _ -> parseError ("Invalid assignee " <> (show assignee) <> ", must be a variable.")
 
+
+
+
+
+
+pJLoop ivar iter body =
+  let pIter start step end = do
+       dstart <- pSingle start
+       dstep <- pSingle step
+       dend <- pSingle end
+       let div = Op (IsBinary DMOpDiv)
+       let sub = Op (IsBinary DMOpSub)
+       let ceil = Op (IsUnary DMOpCeil)
+       return (ceil [div [sub [dend, sub [dstart, (Sng 1 (JuliaType "Integer"))]], dstep]]) -- compute number of steps
+  in case ivar of
+       JESymbol i -> case iter of
+                          JEIter start step end -> do
+                                                     dbody <- pSingle body
+                                                     nit <- pIter start step end
+                                                     return (Extra (SERight (MutLoop nit (UserTeVar $ i) dbody)))
+                          it -> parseError ("Invalid iterator " <> show it <> ", must be a range.")
+       i -> parseError ("Invalid iteration variable " <> (show i) <> ".")
+
+
+
+
+               -- JEIter JExpr JExpr JExpr
+               -- JELoop JExpr JExpr JExpr
+
+
 pSingle :: JExpr -> ParseState ParseDMTerm
 pSingle e = case e of
+                 JEUnsupported s -> parseError ("Unsupported expression " <> show s)
                  JEBlock stmts -> pList stmts
                  JEInteger n -> pure $ Sng n (JuliaType "Integer")
                  JEReal r -> pure $ Sng r (JuliaType "Real")
@@ -65,6 +98,8 @@ pSingle e = case e of
                  JELam args body -> pJLam args body
                  JELamStar args body -> pJLamStar args body
                  JEAssignment aee amt -> pJSLet aee amt [aee]
+                 JEIfElse cond ifb elseb -> (Phi <$> pSingle cond <*> pSingle ifb <*> pSingle elseb)
+                 JELoop ivar iter body -> pJLoop ivar iter body
 
 pClip :: JExpr -> ParseState (DMTypeOf ClipKind)
 pClip (JESymbol (Symbol ":L1"))   = pure (Clip L1)
