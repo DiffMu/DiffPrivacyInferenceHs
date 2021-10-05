@@ -132,7 +132,7 @@ checkSen' (Arg x dτ i) scope = done $ do
 
 checkSen' (Var (x :- dτ)) scope =  -- get the term that corresponds to this variable from the scope dict
    let delτ = getValue x scope
-   in case delτ of
+   in case delτ oft pu
      Nothing -> done $ throwError (VariableNotInScope x)
      Just delτ ->
          case dτ of
@@ -754,9 +754,8 @@ checkPri' (FLet fname term body) scope = do
 --
 -- this way if t1 and t2 are privacy terms, they can be checked in privcacy mode
 -- but the tuple is still a sensitivity term.
--- TODO the names must be unique.
 checkPri' (Tup ts) scope = do
-   names <- mapM newTeVar [(T.pack ("x" <> (show i))) | i <- [1..(length ts)]]
+   names <- mapM newTeVar [(T.pack ("x" <> (show i))) | i <- [1..(length ts)]] -- make unique new names for the elements.
    let body = Ret (Tup [Var (n :- JTAny) | n <- names])
    let t1 = foldl (\b -> \(x, t) -> SLet (x :- JTAny) t b) body (zip names ts)
       --traceM $ "privacy Tup checking term " <> show t1
@@ -775,9 +774,8 @@ checkPri' (Tup ts) scope = do
 -- in ...
 --
 -- this way we can do the projections in sensitivity mode while the body can still be a privacy term.
--- TODO tup needs to be a unique name instead.
 checkPri' (TLet xs term body) scope = do
-   tupvar <- newTeVar "tup"
+   tupvar <- newTeVar "tup" -- make a new unique name for the tup
    let t1 = foldl (\t -> \(x :- τj) -> SLet (x :- τj) (Ret (TLet xs (Var (tupvar :- JTAny)) (Var (x :- τj)))) t) body xs
        t2 = SLet (tupvar :- (JTAny)) term t1
    checkPriv t2 scope
