@@ -27,5 +27,23 @@ getPermutation xs ys = mapM (findPos ys) xs
 
 
 
+-- apply the dropping permutation given by the integer list
+permuteWithDrop :: [Maybe Int] -> [a] -> [a]
+permuteWithDrop (Just i:is) as = as !! i : permuteWithDrop is as
+permuteWithDrop (Nothing:is) as = permuteWithDrop is as
+permuteWithDrop [] as = []
+
+-- for every element in as, we find the position
+-- at which it is in bs. If the element does not exist, we mark this position with `Nothing`
+--
+-- this means that we have `permuteWithDrop (getPermutationWithDrop as bs) as == bs`
+getPermutationWithDrop :: forall a. (Eq a, Show a) => [a] -> [a] -> [Int]
+getPermutationWithDrop xs ys = let xs' = fmap (findPos xs) ys
+                               in [x | Just x <- xs']
+  where
+    findPos :: [a] -> a -> Maybe Int
+    findPos (b:bs) a | a == b    = pure 0
+    findPos (b:bs) a | otherwise = (1 P.+) <$> findPos bs a
+    findPos []     a             = Nothing
 
 

@@ -537,18 +537,26 @@ elaborateLambda scope args body = do
     True -> do
       -- assert that now the context is empty
       -- (i.e., no captures were used)
-      mutTypes <- use mutTypes
-      case isEmptyDict mutTypes of
-        False -> throwError (VariableNotInScope $ "The variables " <> show mutTypes <> " are not in scope.")
-        True ->
+      -- mutTypes <- use mutTypes
+      -- case isEmptyDict mutTypes of
+      --   False -> throwError (VariableNotInScope $ "The variables " <> show mutTypes <> " are not in scope.")
+      --   True ->
           -- check that the body is a mutation result
           -- and reorder the resulting tuple
+          --
+          -- Force the context to be empty
+          mutTypes %= (\_ -> def)
           case τ of
             VirtualMutated vars -> do
               -- get the permutation which tells us how to go
               -- from the order in which the vars are returned by the body
               -- to the order in which the lambda arguments are given
-              σ <- getPermutation vars mutVars
+              --
+              -- EDIT: We first filter the vars for those which are
+              -- actually bound in this lambda
+              -- let vars' = [v | v <- vars , v `elem` mutVars]
+              let σ = getPermutationWithDrop vars mutVars
+              logForce $ "Found permutation " <> show vars <> " ↦ " <> show mutVars <>". It is: " <> show σ
               pure ((Reorder σ newBody) , Mutating mutationsStates)
 
             wrongτ -> throwError (DemutationError $ "Expected the result of the body of a mutating lambda to be a virtual mutated value. But it was "
@@ -582,6 +590,9 @@ elaborateMutList f scope mutargs = do
               Nothing -> throwError (VariableNotInScope x)
               Just (SingleArg y) | x == y -> do
                 markMutated y
+                return (Var (x :- a) , Just x)
+              Just (Pure) -> do
+                markMutated x
                 return (Var (x :- a) , Just x)
               Just _ -> throwError (DemutationError $ "When calling the mutating function " <> f <> " found the variable " <> show x <> " as argument in a mutable-argument-position. This variable should be bound to a direct argument of the function, but it is not.")
 
@@ -700,6 +711,16 @@ replaceTLetIn αs replacement (TLet βs t1 (Tup t2s)) =
 
 -- if we have a next tlet, continue with it
 replaceTLetIn αs replacement (TLet βs t1 (TLet γs t2 t3)) = TLet βs t1 <$> rest
+  where
+    rest = replaceTLetIn αs replacement (TLet γs t2 t3)
+
+-- if we have an intermiediate slet, also continue
+replaceTLetIn αs replacement (SLet βs t1 (TLet γs t2 t3)) = SLet βs t1 <$> rest
+  where
+    rest = replaceTLetIn αs replacement (TLet γs t2 t3)
+
+-- if we have an intermiediate flet, also continue
+replaceTLetIn αs replacement (FLet βs t1 (TLet γs t2 t3)) = FLet βs t1 <$> rest
   where
     rest = replaceTLetIn αs replacement (TLet γs t2 t3)
 
