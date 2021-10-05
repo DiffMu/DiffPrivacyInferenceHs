@@ -327,7 +327,8 @@ elaborateMut scope (Extra (MutLoop iters iterVar body)) = do
 
   -- we add these variables to the scope as args, since they are allowed
   -- to occur in mutated positions
-  let scope' = foldr (\v s -> setValue v (SingleArg v) s) scope modifyVars
+  let scope0 = foldr (\v s -> setValue v (SingleArg v) s) scope modifyVars
+  let scope' = setValue iterVar (SingleArg iterVar) scope0
 
   -- we can now elaborate the body, and thus get the actual list
   -- of modified variables
