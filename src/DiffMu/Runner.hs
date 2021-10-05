@@ -16,6 +16,8 @@ import DiffMu.Typecheck.Typecheck
 import DiffMu.Typecheck.Preprocess
 import DiffMu.Typecheck.Mutated
 import DiffMu.Parser.DMTerm.FromString
+import DiffMu.Parser.Expr.FromString
+import DiffMu.Parser.Expr.JExprToDMTerm
 
 import DiffMu.Typecheck.JuliaType
 
@@ -30,7 +32,7 @@ run = putStrLn "Hello?"
 
 typecheckFromString_DMTerm :: String -> IO ()
 typecheckFromString_DMTerm term = do
- let res = pDMTermFromString term
+ let res = parseJExprFromString term >>= parseDMTermFromJExpr
  case res of
    Left err -> putStrLn $ "Error while parsing DMTerm from string: " <> show err
    Right term -> typecheckFromDMTerm term

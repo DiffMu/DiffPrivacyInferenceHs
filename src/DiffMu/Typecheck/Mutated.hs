@@ -647,6 +647,7 @@ preprocessLoopBody scope iter (SLet (v :- jt) term body) = do
     Nothing -> return (SLet (v :- jt) term' body')
 
 preprocessLoopBody scope iter (FLet f _ _) = throwError (DemutationError $ "Function definition is not allowed in for loops. (Encountered definition of " <> show f <> ".)")
+preprocessLoopBody scope iter (Ret t) = throwError (DemutationError $ "Return is not allowed in for loops. (Encountered " <> show (Ret t) <> ".)")
 
 -- mutlets make use recurse
 preprocessLoopBody scope iter (Extra (MutLet t1 t2)) = do
