@@ -14,7 +14,29 @@ parseError message = do
                        (file,line) <- get
                        throwError (ParseError message file line)
 
-pList :: [JExpr] -> ParseState ParseDMTerm
+pSingle :: JExpr -> ParseState MutDMTerm
+pSingle e = case e of
+                 JEBlock stmts -> pList stmts
+                 JEInteger n -> pure $ Sng n (JuliaType "Integer")
+                 JEReal r -> pure $ Sng r (JuliaType "Real")
+                 JESymbol s -> return (Var ((UserTeVar s) :- JTAny))
+                 JETup elems -> (Tup <$> (mapM pSingle elems))
+                 JELam args body -> pJLam args body
+                 JELamStar args body -> pJLamStar args body
+                 JEIfElse cond ifb elseb -> (Phi <$> pSingle cond <*> pSingle ifb <*> pSingle elseb)
+                 JELoop ivar iter body -> pJLoop ivar iter body
+                 JEAssignment aee amt -> pJSLet aee amt [aee]
+                 JETupAssignment aee amt -> pJTLet aee amt [JETup aee]
+                 JEFunction name term -> pJFLet name term [name]
+                 JECall name args -> pJCall name args
+                 JEUnsupported s -> parseError ("Unsupported expression " <> show s)
+                 JEIter _ _ _ -> parseError ("Iterators can only be used in for-loop statements directly.")
+                 JETypeAnnotation _ _ -> parseError "Type annotations are only supported on function arguments."
+                 JENotRelevant _ _ -> parseError "Type annotations are only supported on function arguments."
+                 JELineNumber _ _ -> throwError (InternalError "What now?") -- TODO
+
+
+pList :: [JExpr] -> ParseState MutDMTerm
 pList [] = error "bla"
 pList (s : []) = pSingle s
 pList (s : tail) = case s of
@@ -22,12 +44,19 @@ pList (s : tail) = case s of
                                                     put (file, line)
                                                     s <- (pList tail)
                                                     return s
-                        JEReturn ret -> pSingle ret -- drop tail, just end the expression
                         JEAssignment aee amt -> pJSLet aee amt tail
-                        JEIfElse _ _ _ -> throwError (InternalError "Conditionals should not have tails!")
-                        JEUnsupported s -> parseError ("Unsupported expression " <> show s)
                         JETupAssignment aee amt -> pJTLet aee amt tail
                         JEFunction name term -> pJFLet name term tail
+                        JELoop ivar iter body -> pMutLet (pJLoop ivar iter body) tail
+                        JECall name args -> pMutLet (pJCall name args) tail
+                        JEIfElse _ _ _ -> throwError (InternalError "Conditionals should not have tails!")
+                        JEUnsupported s -> parseError ("Unsupported expression " <> show s)
+
+
+pMutLet m tail = do
+                   assignee <- m
+                   dtail <- pList tail
+                   return (Extra (MutLet assignee dtail))
 
 pJLam args body = let pArg arg = case arg of
                                       JESymbol s -> return ((UserTeVar s) :- JTAny)
@@ -74,7 +103,7 @@ pJLoop ivar iter body =
                           JEIter start step end -> do
                                                      dbody <- pSingle body
                                                      nit <- pIter start step end
-                                                     return (Extra (SERight (MutLoop nit (UserTeVar $ i) dbody)))
+                                                     return (Extra (MutLoop nit (UserTeVar $ i) dbody))
                           it -> parseError ("Invalid iterator " <> show it <> ", must be a range.")
        i -> parseError ("Invalid iteration variable " <> (show i) <> ".")
 
@@ -101,22 +130,6 @@ pJFLet name assignment tail =
                        return (FLet (UserTeVar name) dasgmt dtail)
     _ -> parseError $ "Invalid function name expression " <> show name <> ", must be a symbol."
 
-pSingle :: JExpr -> ParseState ParseDMTerm
-pSingle e = case e of
-                 JEUnsupported s -> parseError ("Unsupported expression " <> show s)
-                 JEBlock stmts -> pList stmts
-                 JEInteger n -> pure $ Sng n (JuliaType "Integer")
-                 JEReal r -> pure $ Sng r (JuliaType "Real")
-                 JEReturn ret -> pSingle ret
-                 JESymbol s -> return (Var ((UserTeVar s) :- JTAny))
-                 JELam args body -> pJLam args body
-                 JELamStar args body -> pJLamStar args body
-                 JEAssignment aee amt -> pJSLet aee amt [aee]
-                 JEIfElse cond ifb elseb -> (Phi <$> pSingle cond <*> pSingle ifb <*> pSingle elseb)
-                 JELoop ivar iter body -> pJLoop ivar iter body
-                 JETupAssignment aee amt -> pJTLet aee amt [JETup aee]
-                 JEFunction name term -> pJFLet name term [name]
-
 pClip :: JExpr -> ParseState (DMTypeOf ClipKind)
 pClip (JESymbol (Symbol ":L1"))   = pure (Clip L1)
 pClip (JESymbol (Symbol ":L2"))   = pure (Clip L2)
@@ -124,10 +137,10 @@ pClip (JESymbol (Symbol ":LInf")) = pure (Clip LInf)
 pClip term = parseError $ "The term " <> show term <> "is not a valid clip value."
 
 
-pCall :: JExpr -> [JExpr] -> ParseState ParseDMTerm
+pJCall :: JExpr -> [JExpr] -> ParseState MutDMTerm
 -- if the term is a symbol, we check if it
 -- is a builtin/op, if so, we construct the appropriate DMTerm
-pCall (JESymbol (Symbol sym)) args = case (sym,args) of
+pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
 
   -----------------
   -- binding builtins (use lambdas)
@@ -221,26 +234,10 @@ pCall (JESymbol (Symbol sym)) args = case (sym,args) of
   (sym, args) -> Apply (Var (UserTeVar (Symbol sym) :- JTAny)) <$> mapM pSingle args
 
 -- all other terms turn into calls
-pCall term args = Apply <$> pSingle term <*> mapM pSingle args
+pJCall term args = Apply <$> pSingle term <*> mapM pSingle args
 
 
-                 -- JECall JExpr [JExpr]
-               --  JESymbol Symbol
-               --  JELineNumber file line -> putState (file, line)
-               -- JEUnsupported String
-               -- JEBlock [JExpr]
-               -- JETypeAnnotation JExpr JuliaType
-               -- JENotRelevant JExpr JuliaType
-               -- JEIter JExpr JExpr JExpr
-               -- JELoop JExpr JExpr JExpr
-               -- JELam [JExpr] JExpr
-               -- JELamStar [JExpr] JExpr
-               -- JEFunction JExpr JExpr
-               -- JEAssignment JExpr JExpr
-               -- JETupAssignment [JExpr] JExpr
-               -- JEIfElse JExpr JExpr JExpr
-
-parseDMTermFromJExpr :: JExpr -> Either DMException ParseDMTerm
+parseDMTermFromJExpr :: JExpr -> Either DMException MutDMTerm
 parseDMTermFromJExpr expr =
   let x = runStateT (pSingle expr) ("unknown",0)
       y = case runExcept x of

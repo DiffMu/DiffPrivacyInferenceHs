@@ -657,18 +657,6 @@ instance Eq (EmptyExtension a) where
 
 type DMTerm = PreDMTerm EmptyExtension
 
-
-----
--- parsing extension
-data ParseExtension a =
-   If a a a
- | IfElse a a a a
- | OpAss (Asgmt JuliaType) DMTypeOps_Binary a a
- | JuliaReturn a
- deriving (Show, Eq, Functor, Foldable, Traversable)
-
-type ParseDMTerm = PreDMTerm (SumExtension ParseExtension MutabilityExtension)
-
 ----
 -- mutability extension
 data MutabilityExtension a =

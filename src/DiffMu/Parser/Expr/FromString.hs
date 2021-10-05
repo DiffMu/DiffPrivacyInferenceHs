@@ -27,7 +27,6 @@ data JExpr =
    | JELam [JExpr] JExpr
    | JELamStar [JExpr] JExpr
    | JEFunction JExpr JExpr
-   | JEReturn JExpr
    | JEAssignment JExpr JExpr
    | JETup [JExpr]
    | JETupAssignment [JExpr] JExpr
@@ -156,7 +155,6 @@ pUnsupported = let someExpr = (((char ':' >> pIdentifier) <* sep) <* pJExpr `sep
 pJExpr :: Parser JExpr
 pJExpr =       try pLineNumber
            <|> try (":block" `with` (JEBlock <$> (pJExpr `sepBy` sep)))
-           <|> try (":return" `with` (JEReturn <$> pJExpr))
            <|> try (":tuple" `with` (JETup <$> (pJExpr `sepBy` sep)))
            <|> try (JESymbol <$> pSymbol)
            <|> try ((JEInteger . fromIntegral) <$> decimal) -- these two cannot be switched which is weird
