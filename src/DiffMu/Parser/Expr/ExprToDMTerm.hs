@@ -51,7 +51,7 @@ pLineNumber =
 
 
 
-pSng :: LnParser ParseDMTerm
+pSng :: LnParser MutDMTerm
 pSng = let pInt = do
                     n <- decimal
                     let ident = "Integer"
@@ -69,7 +69,7 @@ pIdentifier = some (noneOf @[] "(),[]\"")
 pSymbol :: LnParser Symbol
 pSymbol = (Symbol . T.pack) <$> (try (char ':' *> pIdentifier)
                                  <|> try (string "Symbol" *> between (string "(\"") (string "\")") pIdentifier))
-pVar :: LnParser ParseDMTerm
+pVar :: LnParser MutDMTerm
 pVar = do
          s <- pSymbol
          return (Var ((UserTeVar $ s) :- JTAny))
@@ -118,21 +118,21 @@ pCall pcallee pargs = (":call" `with` ((,) <$> pcallee <*､> (pargs `sepBy` sep
 pCallSign :: String -> LnParser t -> LnParser t
 pCallSign name psign = (":call" `with` ((string name) >> sep >> psign))
 
-pLam :: LnParser ParseDMTerm
+pLam :: LnParser MutDMTerm
 pLam = let pargs = try (":tuple" `with` (pAsgmt `sepBy` sep)) <|> ((\x->[x]) <$> pAsgmt)
        in do
          (args, body) <- (":->" `with` ((,) <$> pargs <*､> pExpr))
          return (Lam args body)
 
 
-pFunc :: LnParser (TeVar, ParseDMTerm)
+pFunc :: LnParser (TeVar, MutDMTerm)
 pFunc = do
             (name, args) <- pCall pTeVar pAsgmt
             sep
             body <- pExpr
             return (name, (Lam args body))
 
-pFuncStar :: LnParser (TeVar, ParseDMTerm)
+pFuncStar :: LnParser (TeVar, MutDMTerm)
 pFuncStar = let pStar = do
                        sign <- pCall pTeVar pAsgmtRel
                        sep
@@ -144,14 +144,14 @@ pFuncStar = let pStar = do
             body <- pExpr
             return (name, (LamStar args body))
 
-pFLet :: LnParser ParseDMTerm
+pFLet :: LnParser MutDMTerm
 pFLet = do
           (name, lam) <- try (":function" `with` (try pFuncStar <|> try pFunc))
                          <|> try (":(=)" `with` (try pFuncStar <|> try pFunc))
           tail <- pTail (Var (name :- JTAny))
           return (FLet name lam tail)
 
-pTail :: ParseDMTerm -> LnParser ParseDMTerm
+pTail :: MutDMTerm -> LnParser MutDMTerm
 pTail noTail = try (sep >> pExpr) <|> (return noTail)
 
 --pTail1 = try (sep >> pExpr) <|> (unexpected "bla")
@@ -171,7 +171,7 @@ pNorm =
      <|> try ((string ":L2") >> pure (Clip L2))
      <|> ((string ":LInf") >> pure (Clip LInf))
 
-pIter ::LnParser ParseDMTerm
+pIter ::LnParser MutDMTerm
 pIter = let one = (Sng 1 (JuliaType "Integer"))
             psign2 = do
                        (start, end) <- pCallSign ":(:)" ((,) <$> pExpr <*､> pExpr)
@@ -188,28 +188,28 @@ pIter = let one = (Sng 1 (JuliaType "Integer"))
 pLoop = let pit = ":(=)" `with` ((,) <$> pTeVar <*､> pIter)
         in do
               ((ivar, nit), body) <- ":for" `with` ((,) <$> pit <*､> pExpr)
-              return (Extra (SERight (MutLoop nit ivar body)))
+              return (Extra ((MutLoop nit ivar body)))
 
-pReturn = do
-            ret <- ":return" `with` pExpr
-            return (Extra (SELeft (JuliaReturn ret)))
+-- pReturn = do
+--             ret <- ":return" `with` pExpr
+--             return (Extra (SELeft (JuliaReturn ret)))
 
 pTup = do
          ts <- (with ":tuple" (pExpr `sepBy` sep))
          return (Tup ts)
 
---pIf :: LnParser ParseDMTerm
+--pIf :: LnParser MutDMTerm
 --pIf = do
 --        (cond, body) <- (":if" `with` ((,) <$> pExpr <*､> pExpr))
 --        tail <- pTail (Extra (SELeft Tail))
 --        return (Extra (SELeft (If cond body tail)))
 
-pApply :: LnParser ParseDMTerm
+pApply :: LnParser MutDMTerm
 pApply = let pmut = do -- mutating calls annotated by !
                          (name, args) <- pCall (string ":!" *> pIdentifier) pExpr
                          let callee = Var (((UserTeVar . Symbol . T.pack) ("!" <> name)) :- JTAny)
-                         tail <- pTail (Extra (SERight MutRet))
-                         return (Extra (SERight (MutLet (Apply callee args) tail)))
+                         tail <- pTail (Extra (MutRet))
+                         return (Extra ((MutLet (Apply callee args) tail)))
              pop = do -- builtin operations
                          (op, args) <- pCall pOpSym pExpr
                          case op of
@@ -237,7 +237,7 @@ infixl 2 <*､>
 (<*､>) :: LnParser (a -> b) -> LnParser a -> LnParser b
 (<*､>) f a = (f <* sep) <*> a
 
-pExpr :: LnParser ParseDMTerm
+pExpr :: LnParser MutDMTerm
 pExpr =
              try (pLineNumber >> sep >> pExpr) -- put line number into user state, continue
          <|> try (":block"       `with` pExpr) -- discard :block
@@ -250,7 +250,7 @@ pExpr =
          <|> try pVar
          <|> try pLoop
          <|> try pTup
-         <|> try pReturn
+         -- <|> try pReturn
 
 
 
@@ -259,9 +259,9 @@ pExpr =
 
 
 
-parseExprFromString :: String -> Either DMException ParseDMTerm
+parseExprFromString :: String -> Either DMException MutDMTerm
 parseExprFromString input =
   let (res, _) = runState (runParserT pExpr "jl-hs-communication" input) 0
   in case res of
-    Left e  -> Left (InternalError $ "Communication Error: Could not parse ParseDMTerm from string\n\n----------------------\n" <> input <> "\n---------------------------\n" <> show e)
+    Left e  -> Left (InternalError $ "Communication Error: Could not parse MutDMTerm from string\n\n----------------------\n" <> input <> "\n---------------------------\n" <> show e)
     Right a -> Right a
