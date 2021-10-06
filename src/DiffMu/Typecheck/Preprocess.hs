@@ -58,6 +58,7 @@ collectAllFLets (Op o ts)         = Op o <$> (mapM collectAllFLets ts)
 collectAllFLets (Phi a b c)       = Phi <$> (collectAllFLets a) <*> (collectAllFLets b) <*> (collectAllFLets c)
 collectAllFLets (Lam a t)         = Lam a <$> (collectAllFLets t)
 collectAllFLets (LamStar a t)     = LamStar a <$> (collectAllFLets t)
+collectAllFLets (BlackBox a)      = pure $ (BlackBox a)
 collectAllFLets (Apply t ts)      = Apply <$> (collectAllFLets t) <*> (mapM collectAllFLets ts)
 collectAllFLets (Choice m)        = Choice <$> (mapM collectAllFLets m)
 collectAllFLets (Tup ts)          = Tup <$> (mapM collectAllFLets ts)
@@ -97,6 +98,7 @@ findFLets target t = FindFLetsResult [] t
 
 
 getJuliaSig :: DMTerm -> TC JuliaSig
+getJuliaSig (BlackBox as) = pure $ map sndA as
 getJuliaSig (Lam as _) = pure $ map sndA as
 getJuliaSig (LamStar as _) = pure $ map (fst . sndA) as
 getJuliaSig _ = impossible "Expected a lam/lamstar inside an flet."

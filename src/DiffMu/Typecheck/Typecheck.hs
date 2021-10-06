@@ -89,6 +89,17 @@ checkSen' (Sng η τ) scope = done $ do
   res <- Numeric <$> (Const (constCoeff (Fin η)) <$> (createDMTypeNum τ))
   return (NoFun res)
 
+checkSen' (BlackBox xτs) scope =
+   let handleArg (_ :- τ) = do
+                              dτ <- createDMType τ
+                              return (dτ :@ inftyS)
+   in done $ do
+               xrτs' <- mapM handleArg xτs
+               let sign = sndA <$> xτs
+               res <- newVar
+               let τ = (xrτs' :->: (NoFun res))
+               let frees = []
+               return (Fun [(ForAll frees τ :@ (Just sign))])
 
 -- typechecking an op
 checkSen' (Op op args) scope = do
@@ -630,7 +641,6 @@ checkPri' (Ret t) scope = do
       log $ "checking privacy " <> show (Ret t) <> ", type is " <> show τ
       return τ
 
-
 checkPri' (Rnd t) scope = do
    done $ do
       τ <- (createDMTypeNum t)
@@ -824,9 +834,9 @@ checkPri' (Gauss rp εp δp f) scope =
          (τf, _) <- msumTup (mf, msum3Tup (mr, mε, mδ))
 
          τgauss <- newVar
-         addConstraint (Solvable (IsGaussResult (τgauss, τf))) -- we decide later if its gauss or mgauss according to return type
+         addConstraint (Solvable (IsGaussResult ((NoFun τgauss), τf))) -- we decide later if its gauss or mgauss according to return type
 
-         return τgauss
+         return (NoFun (DMTup [τgauss]))
 
 
 checkPri' (Loop niter cs' (xi, xc) body) scope =

@@ -20,6 +20,7 @@ data JExpr =
    | JEUnsupported String
    | JECall JExpr [JExpr]
    | JEBlock [JExpr]
+   | JEBlackBox [JExpr]
    | JETypeAnnotation JExpr JuliaType
    | JENotRelevant JExpr JuliaType
    | JEIter JExpr JExpr JExpr
@@ -110,22 +111,22 @@ pFLet = let pFunc = do
                         sep
                         body <- pJExpr
                         return (name, (JELam args body))
-            pFuncStar = let pStar = do
-                                       sign <- pCall pJExpr pJExpr
-                                       sep
-                                       string ":Priv"
-                                       return sign
-                        in do
-                              (name, args) <- (":(::)" `with` pStar)
-                              sep
-                              body <- pJExpr
-                              return (name, (JELamStar args body))
+            pStar = try (string ":Priv") <|> (":call" `with` ((string ":Priv") <* sep <* (pJExpr `sepBy` sep)))
+            pBox = try (string ":BlackBox") <|> (":call" `with` ((string ":BlackBox") <* sep <* (pJExpr `sepBy` sep)))
+            pFuncStar = do
+                        (name, args) <- (":(::)" `with` ((pCall pJExpr pJExpr) <* sep <* pStar))
+                        sep
+                        body <- pJExpr
+                        return (name, (JELamStar args body))
+            pBlackBox = do
+                        (name, args) <- (":(::)" `with` ((pCall pJExpr pJExpr) <* sep <* pBox))
+                        sep
+                        pJExpr
+                        return (name, JEBlackBox args)
         in do
-          (name, lam) <- try (":function" `with` (try pFuncStar <|> try pFunc))
-                         <|> try (":(=)" `with` (try pFuncStar <|> try pFunc))
+          (name, lam) <- try (":function" `with` (try pFuncStar <|> try pBlackBox <|> try pFunc))
+                         <|> try (":(=)" `with` (try pFuncStar <|> try pBlackBox <|> try pFunc))
           return (JEFunction name lam)
-
-
 
 
 

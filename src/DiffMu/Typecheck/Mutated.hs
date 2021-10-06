@@ -153,6 +153,7 @@ elaborateMut scope (Op op args) = do
   pure (Op op (fst <$> args') , Pure)
 elaborateMut scope (Sng η τ) = pure (Sng η τ , Pure)
 elaborateMut scope (Rnd jt) = pure (Rnd jt , Pure)
+elaborateMut scope (BlackBox args) = pure (BlackBox args, Pure)
 
 elaborateMut scope (Var (x :- j)) = do
   let τ = getValue x scope
@@ -776,6 +777,7 @@ optimizeTLet (Op op ts)         = Op op (fmap (optimizeTLet) ts)
 optimizeTLet (Phi a b c)        = Phi (optimizeTLet a) (optimizeTLet b) (optimizeTLet c)
 optimizeTLet (Lam     jts a)    = Lam jts (optimizeTLet a)
 optimizeTLet (LamStar jts a)    = LamStar jts (optimizeTLet a)
+optimizeTLet (BlackBox jts)     = BlackBox jts
 optimizeTLet (Apply a bs)       = Apply (optimizeTLet a) (fmap (optimizeTLet) bs)
 optimizeTLet (Choice chs)       = Choice (fmap (optimizeTLet) chs)
 optimizeTLet (Tup as)           = Tup (fmap (optimizeTLet) as)

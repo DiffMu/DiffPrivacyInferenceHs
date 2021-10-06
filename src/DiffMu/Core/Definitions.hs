@@ -617,6 +617,7 @@ data PreDMTerm (t :: * -> *) =
   | Phi (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
   | Lam     [Asgmt JuliaType] (PreDMTerm t)
   | LamStar [(Asgmt (JuliaType, Relevance))] (PreDMTerm t)
+  | BlackBox [Asgmt JuliaType]
   | Apply (PreDMTerm t) [(PreDMTerm t)]
   | FLet TeVar (PreDMTerm t) (PreDMTerm t)
   | Choice (HashMap [JuliaType] (PreDMTerm t))
@@ -688,6 +689,7 @@ liftExtension f (Op op ts)         = Op op (fmap (liftExtension f) ts)
 liftExtension f (Phi a b c)        = Phi (liftExtension f a) (liftExtension f b) (liftExtension f c)
 liftExtension f (Lam     jts a)    = Lam jts (liftExtension f a)
 liftExtension f (LamStar jts a)    = LamStar jts (liftExtension f a)
+liftExtension f (BlackBox jts)     = BlackBox jts
 liftExtension f (Apply a bs)       = Apply (liftExtension f a) (fmap (liftExtension f) bs)
 liftExtension f (FLet v a b)       = FLet v (liftExtension f a) (liftExtension f b)
 liftExtension f (Choice chs)       = Choice (fmap (liftExtension f) chs)
@@ -717,6 +719,7 @@ recDMTermM f h (Op op ts)         = Op op <$> (mapM (recDMTermM f h) ts)
 recDMTermM f h (Phi a b c)        = Phi <$> (recDMTermM f h a) <*> (recDMTermM f h b) <*> (recDMTermM f h c)
 recDMTermM f h (Lam     jts a)    = Lam jts <$> (recDMTermM f h a)
 recDMTermM f h (LamStar jts a)    = LamStar jts <$> (recDMTermM f h a)
+recDMTermM f h (BlackBox jts)     = pure $ (BlackBox jts)
 recDMTermM f h (Apply a bs)       = Apply <$> (recDMTermM f h a) <*> (mapM (recDMTermM f h) bs)
 recDMTermM f h (FLet v a b)       = FLet v <$> (recDMTermM f h a) <*> (recDMTermM f h b)
 recDMTermM f h (Choice chs)       = Choice <$> (mapM (recDMTermM f h) chs)
@@ -771,6 +774,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (Phi a b c)        = "Phi (" <> showPretty a <> ")" <> parenIndent (showPretty b) <> parenIndent (showPretty c)
   showPretty (Lam     jts a)    = "Lam (" <> showPretty jts <> ")" <> parenIndent (showPretty a)
   showPretty (LamStar jts a)    = "LamStar (" <> showPretty jts <> ")" <> parenIndent (showPretty a)
+  showPretty (BlackBox     jts) = "BlackBox (" <> showPretty jts <> ")"
   showPretty (Apply a bs)       = (showPretty a) <> (showPretty bs)
   showPretty (FLet v a b)       = "FLet " <> showPretty v <> " = " <> (showPretty a) <> "\n" <> (showPretty b)
   showPretty (Choice chs)       = "Choice <..>"

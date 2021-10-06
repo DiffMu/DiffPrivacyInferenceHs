@@ -21,6 +21,7 @@ pSingle e = case e of
                  JEBlock stmts -> pList stmts
                  JEInteger n -> pure $ Sng n (JuliaType "Integer")
                  JEReal r -> pure $ Sng r (JuliaType "Real")
+                 JEBlackBox args -> BlackBox <$> mapM pArg args
                  JESymbol s -> return (Var ((UserTeVar s) :- JTAny))
                  JETup elems -> (Tup <$> (mapM pSingle elems))
                  JELam args body -> pJLam args body
@@ -61,25 +62,28 @@ pMutLet m tail = do
                    dtail <- pList tail
                    return (Extra (MutLet assignee dtail))
 
-pJLam args body = let pArg arg = case arg of
-                                      JESymbol s -> return ((UserTeVar s) :- JTAny)
-                                      JETypeAnnotation (JESymbol s) τ -> return ((UserTeVar s) :- τ)
-                                      a -> parseError ("Invalid function argument " <> show a)
-                  in do
-                       dargs <- mapM pArg args
-                       dbody <- pSingle body
-                       return (Lam dargs dbody)
+pArg arg = case arg of
+                     JESymbol s -> return ((UserTeVar s) :- JTAny)
+                     JETypeAnnotation (JESymbol s) τ -> return ((UserTeVar s) :- τ)
+                     JENotRelevant _ _ -> parseError ("Relevance annotation on a sensitivity function is not permitted.")
+                     a -> parseError ("Invalid function argument " <> show a)
 
-pJLamStar args body =
-   let pArg arg = case arg of
+pArgRel arg = case arg of
                        JESymbol s -> return ((UserTeVar s) :- (JTAny, IsRelevant))
                        JETypeAnnotation (JESymbol s) τ -> return ((UserTeVar s) :- (τ, IsRelevant))
                        JENotRelevant (JESymbol s) τ -> return ((UserTeVar s) :- (τ, NotRelevant))
                        a -> parseError ("Invalid function argument " <> show a)
-   in do
-        dargs <- mapM pArg args
-        dbody <- pSingle body
-        return (LamStar dargs dbody)
+
+
+pJLam args body = do
+                   dargs <- mapM pArg args
+                   dbody <- pSingle body
+                   return (Lam dargs dbody)
+
+pJLamStar args body = do
+                       dargs <- mapM pArgRel args
+                       dbody <- pSingle body
+                       return (LamStar dargs dbody)
 
 pJSLet assignee assignment tail =
    case assignee of

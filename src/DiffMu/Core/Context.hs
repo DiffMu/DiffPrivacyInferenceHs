@@ -22,13 +22,26 @@ import Debug.Trace
 scale :: Sensitivity -> TypeCtxSP -> TypeCtxSP
 scale η (Left γ) = Left (f <$> γ)
   where f (WithRelev i (τ :@ SensitivityAnnotation x)) = WithRelev i (τ :@ SensitivityAnnotation (η ⋅! x))
-  -- where f (WithRelev i (τ :@ s)) = WithRelev i (τ :@ (η ⋅! s))
 scale η (Right γ) = Right (f <$> γ)
   where f (WithRelev i (τ :@ PrivacyAnnotation (ε,δ))) = WithRelev i (τ :@ PrivacyAnnotation (η ⋅! ε, η ⋅! δ))
 
 -- Scales the current type context living in our typechecking-state monad by a given `η`.
 mscale :: MonadDMTC t => Sensitivity -> t ()
 mscale η = types %= scale η
+
+-- A helper function which sets all annotations in any type context to infinity.
+setInf :: TypeCtxSP -> TypeCtxSP
+setInf (Left γ) = Left (f <$> γ)
+  where f :: WithRelev SensitivityK -> WithRelev SensitivityK
+        f (WithRelev i (τ :@ SensitivityAnnotation _)) = WithRelev i (τ :@ SensitivityAnnotation inftyS)
+setInf (Right γ) = Right (f <$> γ)
+  where f :: WithRelev PrivacyK -> WithRelev PrivacyK
+        f (WithRelev i (τ :@ PrivacyAnnotation _)) = WithRelev i (τ :@ PrivacyAnnotation inftyP)
+
+-- sets all ennotations in the current context to infinity.
+msetInf :: MonadDMTC t => t ()
+msetInf = types %= setInf
+
 
 zeroWithRelevation :: (MonadDMTC t, Default e) => t e
 zeroWithRelevation = return def
@@ -46,12 +59,12 @@ instance (CMonoidM t a, CMonoidM t b) => CMonoidM t (a,b)
 truncate_impl :: forall f e. (DMExtra e, DMExtra f) => Annotation f -> TypeCtx e -> TypeCtx f
 truncate_impl η γ = truncate_annotation <$> γ
    where
-      truncate_annotation :: (WithRelev e) -> (WithRelev f)
-      truncate_annotation (WithRelev i (τ :@ _)) = WithRelev i (τ :@ η)
-      -- truncate_annotation (WithRelev i (τ :@ annotation)) =
-      --   (case annotation == zeroId of
-      --       True -> WithRelev i (τ :@ zeroId)
-      --       _    -> WithRelev i (τ :@ η))
+      --truncate_annotation :: (WithRelev e) -> (WithRelev f)
+      --truncate_annotation (WithRelev i (τ :@ _)) = WithRelev i (τ :@ η)
+       truncate_annotation (WithRelev i (τ :@ annotation)) =
+         (case annotation == zeroId of
+             True -> WithRelev i (τ :@ zeroId)
+             _    -> WithRelev i (τ :@ η))
 
 truncateS :: Sensitivity -> TypeCtxSP -> TypeCtxSP
 truncateS η (Left γ) = Left (truncate_impl (SensitivityAnnotation η) γ)
