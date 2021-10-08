@@ -27,7 +27,10 @@ import Debug.Trace
 ---------------------------------------------------------
 -- The checking monad
 
-data ImmutType = Pure | Mutating [IsMutated] | VirtualMutated [TeVar] | SingleArg TeVar
+data IsLocalMutation = LocalMutation | NotLocalMutation
+  deriving (Show, Eq)
+
+data ImmutType = Pure | Mutating [IsMutated] | VirtualMutated [(TeVar , IsLocalMutation)] | SingleArg TeVar
   deriving (Show)
 
 -- type ImmutCtx = Ctx TeVar ()
@@ -287,32 +290,32 @@ elaborateMut scope (Extra (MutLet term1 term2)) = do
 
     -- only term1 is mutating
     (mutNames,[]) ->
-      let ns1 = [n :- JTAny | n <- mutNames1]
+      let ns1 = [n :- JTAny | (n, _) <- mutNames1]
           term = TLet ns1 newTerm1
                 (
-                  Tup ((\a -> Var (a :- JTAny)) <$> mutNames1)
+                  Tup ((\(a, _) -> Var (a :- JTAny)) <$> mutNames1)
                 )
       in pure (term , VirtualMutated mutNames1)
 
     -- only term2 is mutating
     ([],mutNames) ->
-      let ns2 = [n :- JTAny | n <- mutNames2]
+      let ns2 = [n :- JTAny | (n, _) <- mutNames2]
           term = TLet ns2 newTerm2
                 (
-                  Tup ((\a -> Var (a :- JTAny)) <$> mutNames2)
+                  Tup ((\(a, _) -> Var (a :- JTAny)) <$> mutNames2)
                 )
       in pure (term , VirtualMutated mutNames2)
 
     -- both are mutating
     (_,_) ->
       let commonMutNames = nub (mutNames1 <> mutNames2)
-          ns1 = [n :- JTAny | n <- mutNames1]
-          ns2 = [n :- JTAny | n <- mutNames2]
+          ns1 = [n :- JTAny | (n, _) <- mutNames1]
+          ns2 = [n :- JTAny | (n, _) <- mutNames2]
           term = TLet ns1 newTerm1
                 (
                   TLet ns2 newTerm2
                   (
-                    Tup ((\a -> Var (a :- JTAny)) <$> commonMutNames)
+                    Tup ((\(a, _) -> Var (a :- JTAny)) <$> commonMutNames)
                   )
                 )
       in pure (term , VirtualMutated commonMutNames)
@@ -328,8 +331,8 @@ elaborateMut scope (Extra (MutLoop iters iterVar body)) = do
 
   -- we add these variables to the scope as args, since they are allowed
   -- to occur in mutated positions
-  let scope0 = foldr (\v s -> setValue v (SingleArg v) s) scope modifyVars
-  let scope' = setValue iterVar (SingleArg iterVar) scope0
+  -- let scope0 = foldr (\v s -> setValue v (Pure) s) scope modifyVars
+  let scope' = setValue iterVar (Pure) scope
 
   -- we can now elaborate the body, and thus get the actual list
   -- of modified variables
@@ -346,17 +349,19 @@ elaborateMut scope (Extra (MutLoop iters iterVar body)) = do
       --
       -- where `term` is made sure to return the captured tuple
       -- by the general demutation machinery
-      captureVar <- newTeVarOfMut "loop_capture_"
+      captureVar <- newTeVarOfMut "loop_capture"
 
-      let newBodyWithLet = TLet [(v :- JTAny) | v <- mutvars] (Var (captureVar :- JTAny)) newBody
-      let newTerm = Loop newIters mutvars (iterVar , captureVar) newBodyWithLet
+      -- NOTE: WIP/test -v-
+      let allVars = [v | (v,_) <- mutvars]
+
+      let newBodyWithLet = TLet [(v :- JTAny) | (v,_) <- mutvars] (Var (captureVar :- JTAny)) newBody
+      let newTerm = Loop newIters {-mutvars-} allVars (iterVar , captureVar) newBodyWithLet
 
       return (newTerm , VirtualMutated mutvars)
 
     -- if there was no mutation,
     -- throw error
     other -> throwError (DemutationError $ "Expected a loop body to be mutating, but it was of type " <> show other)
-
 
 -- the loop-body-preprocessing creates these modify! terms
 -- they get elaborated into tlet assignments again.
@@ -371,7 +376,9 @@ elaborateMut scope (Extra (Modify (v) t1)) = do
 elaborateMut scope (Extra (MutRet)) = do
   return (Tup [] , VirtualMutated [])
 
-elaborateMut scope term@(Phi cond t1 t2) = do
+elaborateMut scope term@(Phi cond t1 t2) = throwError (UnsupportedError $ show term)
+  -- undefined -- do
+  {-
   -- elaborate all subterms
   (newCond , newCondType) <- elaborateNonmut scope cond
   (newT1 , newT1Type) <- elaborateMut scope t1
@@ -428,7 +435,7 @@ elaborateMut scope term@(Phi cond t1 t2) = do
     -- if both branches are not mutating, ie. var or pure, then we have a pure
     -- if statement. The result term is the elaborated phi expression
     (_,_) -> return (Phi newCond newT1 newT2 , Pure)
-
+-}
 
 
 ----
@@ -556,7 +563,19 @@ elaborateLambda scope args body = do
               -- EDIT: We first filter the vars for those which are
               -- actually bound in this lambda
               -- let vars' = [v | v <- vars , v `elem` mutVars]
-              let σ = getPermutationWithDrop vars mutVars
+
+              -- NOTE: WIP/test -v-
+              -- we also check that there is not a mixture of local/nonlocal mutated variable
+              let bothVars = [(v) | (v, NotLocalMutation) <- vars , (w,LocalMutation) <- vars, v == w]
+              case bothVars of
+                [] -> pure ()
+                xs -> throwError (DemutationError $ "The variable names " <> show xs <> " are used for both locally mutated and not locally mutated things. This is not allowed. ")
+
+              -- NOTE: WIP/test -v-
+              -- let vars' = [v | (v , NotLocalMutation) <- vars]
+              let mutVars' = [(v , NotLocalMutation) | v <- mutVars]
+
+              let σ = getPermutationWithDrop vars mutVars'
               logForce $ "Found permutation " <> show vars <> " ↦ " <> show mutVars <>". It is: " <> show σ
               pure ((Reorder σ newBody) , Mutating mutationsStates)
 
@@ -575,11 +594,11 @@ elaborateLambda scope args body = do
 -- elaborating a list of terms which are used in individually either mutating, or not mutating places
 --
 
-elaborateMutList :: String -> Scope -> [(IsMutated , MutDMTerm)] -> MTC ([DMTerm] , [TeVar])
+elaborateMutList :: String -> Scope -> [(IsMutated , MutDMTerm)] -> MTC ([DMTerm] , [(TeVar, IsLocalMutation)])
 elaborateMutList f scope mutargs = do
 
   -- function for typechecking a single argument
-  let checkArg :: (IsMutated , MutDMTerm) -> MTC (DMTerm , Maybe TeVar)
+  let checkArg :: (IsMutated , MutDMTerm) -> MTC (DMTerm , Maybe (TeVar, IsLocalMutation))
       checkArg (Mutated , arg) = do
         -- if the argument is given in a mutable position,
         -- it _must_ be a var
@@ -591,14 +610,15 @@ elaborateMutList f scope mutargs = do
               Nothing -> throwError (VariableNotInScope x)
               Just (SingleArg y) | x == y -> do
                 markMutated y
-                return (Var (x :- a) , Just x)
+                return (Var (x :- a) , Just (x, NotLocalMutation))
+              Just (SingleArg y) -> throwError (DemutationError $ "When calling the mutating function " <> f <> " found the variable " <> show x <> " as argument in a mutable-argument-position. It is bound to the function argument " <> show y <> ", but it is not allowed to use renamed function arguments in such a position.")
               Just (Pure) -> do
                 markMutated x
-                return (Var (x :- a) , Just x)
-              Just _ -> throwError (DemutationError $ "When calling the mutating function " <> f <> " found the variable " <> show x <> " as argument in a mutable-argument-position. This variable should be bound to a direct argument of the function, but it is not.")
+                return (Var (x :- a) , Just (x, LocalMutation))
+              Just res -> throwError (DemutationError $ "When calling the mutating function " <> f <> " found the variable " <> show x <> " as argument in a mutable-argument-position. It has the type " <> show res)
 
           -- if argument is not a var, throw error
-          _ -> throwError (DemutationError $ "When calling the mutating function " <> f <> " found the term " <> showPretty arg <> " as argument in a mutable-argument-position. Only function arguments themselves are allowed here.")
+          _ -> throwError (DemutationError $ "When calling the mutating function " <> f <> " found the term " <> showPretty arg <> " as argument in a mutable-argument-position. Only variables are allowed here.")
 
       checkArg (NotMutated , arg) = do
         -- if the argument is given in an immutable position,

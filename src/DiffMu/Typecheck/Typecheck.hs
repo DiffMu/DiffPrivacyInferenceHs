@@ -867,7 +867,7 @@ checkPri' (Loop niter cs' (xi, xc) body) scope =
                    mtruncateP zeroId
                    return τ
 
-      -- build the up of variables
+      -- build the tup of variables
       let cs = Tup ((\a -> Var (a :- JTAny)) <$> cs')
 
       -- check it
