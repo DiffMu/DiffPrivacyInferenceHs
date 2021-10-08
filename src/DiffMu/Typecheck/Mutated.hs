@@ -277,6 +277,8 @@ elaborateMut scope (Extra (MutLet term1 term2)) = do
 
   case (newTerm1Type , newTerm2Type) of
 
+    -----------------------------------
+    -- SINGLE GLOBAL, and irrelevant
     -- only term1 is mutating
     (VirtualMutated mutNames1, VirtualMutated []) -> do
 
@@ -292,6 +294,7 @@ elaborateMut scope (Extra (MutLet term1 term2)) = do
                   Tup ((\(a, _) -> Var (a :- JTAny)) <$> mutNames1)
                 )
       pure (term , VirtualMutated mutNames1)
+
 
     -- only term2 is mutating
     (VirtualMutated [], VirtualMutated mutNames2) -> do
@@ -309,6 +312,8 @@ elaborateMut scope (Extra (MutLet term1 term2)) = do
                 )
       pure (term , VirtualMutated mutNames2)
 
+    -------------------------------------------
+    -- DOUBLE GLOBAL
     -- both are mutating
     (VirtualMutated mutNames1, VirtualMutated mutNames2) ->
       let commonMutNames = nub (mutNames1 <> mutNames2)
@@ -323,6 +328,9 @@ elaborateMut scope (Extra (MutLet term1 term2)) = do
                 )
       in pure (term , VirtualMutated commonMutNames)
 
+    -------------------------------------------
+    -- ONLY LOCAL MUTATION
+    --
     -- the first command has only locally mutated variables,
     -- and the second one is pure
     (VirtualMutated mutNames1', GloballyPure mutNames2)
@@ -351,6 +359,31 @@ elaborateMut scope (Extra (MutLet term1 term2)) = do
                 )
       pure (term , GloballyPure mutNames1)
 
+    ------------------------------------
+    -- GLOBAL & LOCAL
+    -- only term1 is mutating
+    (VirtualMutated mutNames1, GloballyPure mutNames2') -> do
+
+      case mutNames2' of
+        [] -> warn ("Found the term " <> showPretty term2
+                     <> " which is not mutating in a place where only mutating terms make sense.\n"
+                     <> " => It has the type " <> show (GloballyPure mutNames2') <> "\n"
+                     <> " => In the term:\n" <> parenIndent (showPretty (Extra (MutLet term1 term2))) <> "\n"
+                     <> " => Conclusion: It is ignored in the privacy analysis.")
+        _ -> return ()
+
+      let mutNames2 = [(v, LocalMutation) | v <- mutNames2']
+          commonMutNames = nub (mutNames1 <> mutNames2)
+          ns1 = [n :- JTAny | (n, _) <- mutNames1]
+
+          term = TLet ns1 newTerm1
+                (
+                  Tup ((\(a, _) -> Var (a :- JTAny)) <$> mutNames1)
+                )
+      pure (term , VirtualMutated commonMutNames)
+
+    ------------------------------------
+    -- UNSUPPORTED
     -- neither term1 nor term2 are mutating
     (ty1, ty2) -> throwError (DemutationError $ "Encountered a MutLet where the two commands have the following types: " <> show (ty1, ty2)
                                                 <> "\nThis is not supported."
