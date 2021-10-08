@@ -122,7 +122,7 @@ typecheckFromDMTerm term = do
          --Location_All
         ]
 
-  x <- executeTC (DoShowLog Force logging_locations) r
+  x <- executeTC (DoShowLog Warning logging_locations) r
 
   case x of
     Left err -> putStrLn $ "Encountered error: " <> show err
