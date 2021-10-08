@@ -9,23 +9,34 @@ import qualified Data.Text as T
 
 import Debug.Trace
 
-type ParseState = (StateT (String,Int) (Except DMException))
+-- parse state is (filename, line number, are we inside a function)
+type ParseState = (StateT (String,Int,Bool) (Except DMException))
 
 parseError :: String -> ParseState a
 parseError message = do
-                       (file,line) <- get
+                       (file,line,_) <- get
                        throwError (ParseError message file line)
+
+enter = do
+          (file, line, _) <- get
+          put (file, line, True)
+
+exit = do
+          (file, line, _) <- get
+          put (file, line, False)
+
+
 
 pSingle :: JExpr -> ParseState MutDMTerm
 pSingle e = case e of
                  JEBlock stmts -> pList stmts
                  JEInteger n -> pure $ Sng n (JuliaType "Integer")
                  JEReal r -> pure $ Sng r (JuliaType "Real")
-                 JEBlackBox args -> BlackBox <$> mapM pArg args
                  JESymbol s -> return (Var ((UserTeVar s) :- JTAny))
                  JETup elems -> (Tup <$> (mapM pSingle elems))
                  JELam args body -> pJLam args body
                  JELamStar args body -> pJLamStar args body
+                 JEBlackBox args -> pJBlackBox args
                  JEIfElse cond ifb elseb -> (Phi <$> pSingle cond <*> pSingle ifb <*> pSingle elseb)
                  JELoop ivar iter body -> pJLoop ivar iter body
                  JEAssignment aee amt -> pJSLet aee amt [aee]
@@ -44,7 +55,8 @@ pList [] = error "bla"
 pList (s : []) = pSingle s
 pList (s : tail) = case s of
                         JELineNumber file line -> do
-                                                    put (file, line)
+                                                    (_,_,d) <- get
+                                                    put (file, line, d)
                                                     s <- (pList tail)
                                                     return s
                         JEAssignment aee amt -> pJSLet aee amt tail
@@ -77,13 +89,25 @@ pArgRel arg = case arg of
 
 pJLam args body = do
                    dargs <- mapM pArg args
+                   enter
                    dbody <- pSingle body
+                   exit
                    return (Lam dargs dbody)
 
 pJLamStar args body = do
                        dargs <- mapM pArgRel args
+                       enter
                        dbody <- pSingle body
+                       exit
                        return (LamStar dargs dbody)
+
+pJBlackBox args = do
+                    (_,_,insideFunction) <- get
+                    case insideFunction of
+                         True -> parseError ("Black boxes can only be defined on top-level scope.")
+                         False -> do
+                                    pargs <- mapM pArg args
+                                    return (BlackBox pargs)
 
 pJSLet assignee assignment tail =
    case assignee of
@@ -246,7 +270,7 @@ pJCall term args = Apply <$> pSingle term <*> mapM pSingle args
 
 parseDMTermFromJExpr :: JExpr -> Either DMException MutDMTerm
 parseDMTermFromJExpr expr =
-  let x = runStateT (pSingle expr) ("unknown",0)
+  let x = runStateT (pSingle expr) ("unknown",0,False)
       y = case runExcept x of
         Left err -> Left err
         Right (term, _) -> Right term
