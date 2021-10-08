@@ -68,7 +68,7 @@ pSymbol = (Symbol . T.pack) <$> (try (char ':' *> pIdentifier)
 pAnnotation :: Parser JExpr
 pAnnotation = let pNoData :: Parser JuliaType
                   pNoData = try (":call" `with` ((string ":NoData") >> sep >> pJuliaType))
-                            <|> try ((":call" `with` ((string ":NoData") >> sep >> skippable)) >> (return JTAny))
+                            <|> try ((":call" `with` (string ":NoData")) >> (return JTAny))
                             <|> ((string ":NoData") >> (return JTAny))
                   pTyp :: Parser JExpr
                   pTyp = (JETypeAnnotation <$> pJExpr <*､> pJuliaType)
@@ -86,7 +86,8 @@ pLineNumber = let pLocation = do
                    return (JELineNumber filename n)
 
 pCall :: Parser s -> Parser t -> Parser (s, [t])
-pCall pcallee pargs = (":call" `with` ((,) <$> pcallee <*､> (pargs `sepBy` sep)))
+pCall pcallee pargs = try (":call" `with` ((,) <$> pcallee <*､> (pargs `sepBy` sep)))
+                      <|> ((\x -> (x, [])) <$> (":call" `with` pcallee))
 
 pCallSign :: String -> Parser t -> Parser t
 pCallSign name psign = (":call" `with` ((string name) >> sep >> psign))
@@ -111,8 +112,8 @@ pFLet = let pFunc = do
                         sep
                         body <- pJExpr
                         return (name, (JELam args body))
-            pStar = try (string ":Priv") <|> (":call" `with` ((string ":Priv") <* sep <* (pJExpr `sepBy` sep)))
-            pBox = try (string ":BlackBox") <|> (":call" `with` ((string ":BlackBox") <* sep <* (pJExpr `sepBy` sep)))
+            pStar = try (string ":Priv") <|> (pCall (string ":Priv") (pJExpr `sepBy` sep) >> return "")
+            pBox = try (string ":BlackBox") <|> (pCall (string ":BlackBox") (pJExpr `sepBy` sep) >> return "")
             pFuncStar = do
                         (name, args) <- (":(::)" `with` ((pCall pJExpr pJExpr) <* sep <* pStar))
                         sep
