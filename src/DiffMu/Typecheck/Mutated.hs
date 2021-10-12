@@ -457,9 +457,7 @@ elaborateMut scope (Extra (Modify (v :- _) t1)) = do
 elaborateMut scope (Extra (MutRet)) = do
   return (Tup [] , VirtualMutated [])
 
-elaborateMut scope term@(Phi cond t1 t2) = throwError (UnsupportedError $ show term)
-  -- undefined -- do
-  {-
+elaborateMut scope term@(Phi cond t1 t2) = do
   -- elaborate all subterms
   (newCond , newCondType) <- elaborateNonmut scope cond
   (newT1 , newT1Type) <- elaborateMut scope t1
@@ -467,7 +465,7 @@ elaborateMut scope term@(Phi cond t1 t2) = throwError (UnsupportedError $ show t
 
   ----
   -- mutated if case
-  let buildMutatedPhi :: [TeVar] -> [TeVar] -> MTC (DMTerm , ImmutType)
+  let buildMutatedPhi :: [(TeVar, IsLocalMutation)] -> [(TeVar,IsLocalMutation)] -> MTC (DMTerm , ImmutType)
       buildMutatedPhi m1 m2 = do
 
         -- the common mutated vars are
@@ -480,16 +478,16 @@ elaborateMut scope term@(Phi cond t1 t2) = throwError (UnsupportedError $ show t
                          <> " which does not mutate anything in the first branch of a mutating if expression.\n"
                          <> " => In the term:\n" <> parenIndent (showPretty term) <> "\n"
                          <> " => Conclusion: This computated value is not allowed to be used in the computation, \nand accordingly, it is ignored in the privacy analysis.")
-                   pure $ (Tup [Var (v :- JTAny) | v <- mutvars])
-          _ ->     pure $ TLet [(v :- JTAny) | v <- m1] newT1 (Tup [Var (v :- JTAny) | v <- mutvars])
+                   pure $ (Tup [Var (v :- JTAny) | (v, _) <- mutvars])
+          _ ->     pure $ TLet [(v :- JTAny) | (v, _) <- m1] newT1 (Tup [Var (v :- JTAny) | (v, _) <- mutvars])
 
         unifiedT2 <- case m2 of
           [] -> do warn ("Found the term " <> showPretty t2
                          <> " which does not mutate anything in the second branch of a mutating if expression.\n"
                          <> " => In the term:\n" <> parenIndent (showPretty term) <> "\n"
                          <> " => Conclusion: This computated value is not allowed to be used in the computation, \nand accordingly, it is ignored in the privacy analysis.")
-                   pure $ (Tup [Var (v :- JTAny) | v <- mutvars])
-          _ ->     pure $ TLet [(v :- JTAny) | v <- m2] newT2 (Tup [Var (v :- JTAny) | v <- mutvars])
+                   pure $ (Tup [Var (v :- JTAny) | (v, _) <- mutvars])
+          _ ->     pure $ TLet [(v :- JTAny) | (v, _) <- m2] newT2 (Tup [Var (v :- JTAny) | (v, _) <- mutvars])
 
         return (Phi newCond unifiedT1 unifiedT2 , VirtualMutated mutvars)
 
@@ -510,13 +508,17 @@ elaborateMut scope term@(Phi cond t1 t2) = throwError (UnsupportedError $ show t
     -- we assume that the if expression is meant to be mutating,
     -- and require to ignore the (possibly) computed and returned value
     (VirtualMutated m1, VirtualMutated m2) -> buildMutatedPhi m1 m2
-    (VirtualMutated m1, _) -> buildMutatedPhi m1 []
-    (_, VirtualMutated m2) -> buildMutatedPhi [] m2
+    (VirtualMutated m1, GloballyPure p2) -> buildMutatedPhi m1 [(v,LocalMutation) | v <- p2]
+    (VirtualMutated m1, SingleArg _) -> buildMutatedPhi m1 []
+    (GloballyPure p1, VirtualMutated m2) -> buildMutatedPhi [(v,LocalMutation) | v <- p1] m2
+    (SingleArg _, VirtualMutated m2) -> buildMutatedPhi [] m2
 
     -- if both branches are not mutating, ie. var or pure, then we have a pure
     -- if statement. The result term is the elaborated phi expression
-    (_,_) -> return (Phi newCond newT1 newT2 , GloballyPure [])
--}
+    (GloballyPure p1, GloballyPure p2) -> return (Phi newCond newT1 newT2 , GloballyPure (nub (p1 <> p2)))
+    (GloballyPure p1, SingleArg _) -> return (Phi newCond newT1 newT2 , GloballyPure p1)
+    (SingleArg _, GloballyPure p2) -> return (Phi newCond newT1 newT2 , GloballyPure p2)
+    (SingleArg _, SingleArg _) -> return (Phi newCond newT1 newT2 , GloballyPure [])
 
 
 ----

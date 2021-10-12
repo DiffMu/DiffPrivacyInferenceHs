@@ -157,9 +157,9 @@ pUnsupported = let someExpr = (((char ':' >> pIdentifier) <* sep) <* pJExpr `sep
 
 pJExpr :: Parser JExpr
 pJExpr =       try pLineNumber
-           <|> try (":block" `with` (JEBlock <$> (pJExpr `sepBy` sep)))
-           <|> try (":tuple" `with` (JETup <$> (pJExpr `sepBy` sep)))
-           <|> try (JESymbol <$> pSymbol)
+           -- <|> try (":block" `with` (JEBlock <$> (pJExpr `sepBy` sep)))
+           -- <|> try (":tuple" `with` (JETup <$> (pJExpr `sepBy` sep)))
+           -- <|> try (JESymbol <$> pSymbol)
            <|> try ((JEInteger . fromIntegral) <$> decimal) -- these two cannot be switched which is weird
            <|> try (JEReal <$> float)
            <|> try (JESize <$> (pCallSign ":size" (pJExpr `sepBy` sep)))

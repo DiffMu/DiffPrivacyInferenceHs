@@ -214,7 +214,7 @@ convertSubtypingToSupremum name (lower, TVar upper) = do
       logForce ("What happens is that we convert the subtyping constraint of " <> show (lower, TVar upper) <> " into the supremum " <> show ((lower, lower') :=: TVar upper))
       logForce "Whyever that is supposed to be correct..."
       return ()
-    ((name',lower'):xs) -> error "Not implemented yet: When more than two subtyping constrs are merged to a single supremum. Don't worry, this case shouldn't be hard!"
+    ((name',lower'):xs) -> internalError $ "Not implemented yet: When more than two subtyping constrs are merged to a single supremum. Don't worry, this case shouldn't be hard!"
 convertSubtypingToSupremum name _                   = pure ()
 
 -- The actual solving is done here.
