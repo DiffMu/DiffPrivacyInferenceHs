@@ -467,29 +467,31 @@ elaborateMut scope term@(Phi cond t1 t2) = do
   -- mutated if case
   let buildMutatedPhi :: [(TeVar, IsLocalMutation)] -> [(TeVar,IsLocalMutation)] -> MTC (DMTerm , ImmutType)
       buildMutatedPhi m1 m2 = do
+        let globalM1 = [v | (v , NotLocalMutation) <- m1]
+        let globalM2 = [v | (v , NotLocalMutation) <- m2]
 
         -- the common mutated vars are
-        let mutvars = nub (m1 <> m2)
+        let mutvars = nub (globalM1 <> globalM2)
 
         -- build local tlets which unify the mutated variables of both branches
         -- if term1/term2 do not mutate anything, their branch becomes empty
-        unifiedT1 <- case m1 of
-          -- [] -> do warn ("Found the term " <> showPretty t1
-          --                <> " which does not mutate anything in the first branch of a mutating if expression.\n"
-          --                <> " => In the term:\n" <> parenIndent (showPretty term) <> "\n"
-          --                <> " => Conclusion: This computated value is not allowed to be used in the computation, \nand accordingly, it is ignored in the privacy analysis.")
-          --          pure $ (Tup [Var (v :- JTAny) | (v, _) <- mutvars])
-          _ ->     pure $ TLet [(v :- JTAny) | (v, _) <- m1] newT1 (Tup [Var (v :- JTAny) | (v, _) <- mutvars])
+        unifiedT1 <- case globalM1 of
+          [] -> do warn ("Found the term " <> showPretty t1
+                         <> " which does not mutate any function arguments in the first branch of a mutating if expression.\n"
+                         <> " => In the term:\n" <> parenIndent (showPretty term) <> "\n"
+                         <> " => Conclusion: This computated value is not allowed to be used in the computation, \nand accordingly, it is ignored in the privacy analysis.")
+                   pure $ (Tup [Var (v :- JTAny) | (v) <- mutvars])
+          _ ->     pure $ TLet [(v :- JTAny) | (v, _) <- m1] newT1 (Tup [Var (v :- JTAny) | (v) <- mutvars])
 
-        unifiedT2 <- case m2 of
-          -- [] -> do warn ("Found the term " <> showPretty t2
-          --                <> " which does not mutate anything in the second branch of a mutating if expression.\n"
-          --                <> " => In the term:\n" <> parenIndent (showPretty term) <> "\n"
-          --                <> " => Conclusion: This computated value is not allowed to be used in the computation, \nand accordingly, it is ignored in the privacy analysis.")
-          --          pure $ (Tup [Var (v :- JTAny) | (v, _) <- mutvars])
-          _ ->     pure $ TLet [(v :- JTAny) | (v, _) <- m2] newT2 (Tup [Var (v :- JTAny) | (v, _) <- mutvars])
+        unifiedT2 <- case globalM2 of
+          [] -> do warn ("Found the term " <> showPretty t2
+                         <> " which does not mutate any function arguments in the second branch of a mutating if expression.\n"
+                         <> " => In the term:\n" <> parenIndent (showPretty term) <> "\n"
+                         <> " => Conclusion: This computated value is not allowed to be used in the computation, \nand accordingly, it is ignored in the privacy analysis.")
+                   pure $ (Tup [Var (v :- JTAny) | (v) <- mutvars])
+          _ ->     pure $ TLet [(v :- JTAny) | (v, _) <- m2] newT2 (Tup [Var (v :- JTAny) | (v) <- mutvars])
 
-        return (Phi newCond unifiedT1 unifiedT2 , VirtualMutated mutvars)
+        return (Phi newCond unifiedT1 unifiedT2 , VirtualMutated ([(v , NotLocalMutation) | v <- mutvars]))
 
   -- mutated if case end
   ----
