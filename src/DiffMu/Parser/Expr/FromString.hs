@@ -32,6 +32,7 @@ data JExpr =
    | JETup [JExpr]
    | JETupAssignment [JExpr] JExpr
    | JEIfElse JExpr JExpr JExpr
+   | JESize [JExpr]
    deriving Show
 
 
@@ -161,10 +162,12 @@ pJExpr =       try pLineNumber
            <|> try (JESymbol <$> pSymbol)
            <|> try ((JEInteger . fromIntegral) <$> decimal) -- these two cannot be switched which is weird
            <|> try (JEReal <$> float)
+           <|> try (JESize <$> (pCallSign ":size" (pJExpr `sepBy` sep)))
            <|> try pLam
            <|> try pLoop
            <|> try pIter
            <|> try pFLet
+           <|> try pTLet
            <|> try pSLet
            <|> try pIf
            <|> try pEIf

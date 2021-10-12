@@ -499,6 +499,25 @@ checkSen' (MCreate n m (x1, x2) body) scope =
           nrm <- newVar -- variable for norm
           return (NoFun (DMMat nrm U nv mv τ))
 
+checkSen' (Size m) scope = do
+    md <- checkSens m scope
+    done $ do
+        mt <- md
+        
+        -- variables for matrix dimension
+        nv <- newVar
+        mv <- newVar
+
+        -- and matrix entries
+        τ <- newVar
+
+        nrm <- newVar -- variable for norm
+        clp <- newVar -- variable for clip
+        unify mt (NoFun (DMMat nrm clp nv mv τ))
+
+        mscale zeroId
+
+        return (NoFun (DMTup [Numeric (Const nv DMInt), Numeric (Const mv DMInt)]))
 
 checkSen' (ClipM c m) scope = do
    mb <- checkSens m scope -- check the matrix

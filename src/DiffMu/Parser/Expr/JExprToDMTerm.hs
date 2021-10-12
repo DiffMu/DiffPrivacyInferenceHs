@@ -42,6 +42,7 @@ pSingle e = case e of
                  JEAssignment aee amt -> pJSLet aee amt [aee]
                  JETupAssignment aee amt -> pJTLet aee amt [JETup aee]
                  JEFunction name term -> pJFLet name term [name]
+                 JESize args -> pJSize args
                  JECall name args -> pJCall name args
                  JEUnsupported s -> parseError ("Unsupported expression " <> show s)
                  JEIter _ _ _ -> parseError ("Iterators can only be used in for-loop statements directly.")
@@ -167,6 +168,9 @@ pClip (JESymbol (Symbol "L2"))   = pure (Clip L2)
 pClip (JESymbol (Symbol "LInf")) = pure (Clip LInf)
 pClip term = parseError $ "The term " <> show term <> "is not a valid clip value."
 
+pJSize args = case args of
+                   (a:[]) -> Size <$> (pSingle a)
+                   _ -> parseError "Invalid number of arguments for size."
 
 pJCall :: JExpr -> [JExpr] -> ParseState MutDMTerm
 -- if the term is a symbol, we check if it

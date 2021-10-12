@@ -628,6 +628,7 @@ data PreDMTerm (t :: * -> *) =
   | ConvertM (PreDMTerm t)
   | MCreate (PreDMTerm t) (PreDMTerm t) (TeVar, TeVar) (PreDMTerm t)
   | Transpose (PreDMTerm t)
+  | Size (PreDMTerm t)
   | Index (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
   | ClipM Clip (PreDMTerm t)
   -- Loop (DMTerm : "Number of iterations") ([TeVar] : "Captured variables") (TeVar : "name of iteration var", TeVar : "name of capture variable") (DMTerm : "body")
@@ -700,6 +701,7 @@ liftExtension f (Gauss a b c d)    = Gauss (liftExtension f a) (liftExtension f 
 liftExtension f (ConvertM a)       = ConvertM (liftExtension f a)
 liftExtension f (MCreate a b x c ) = MCreate (liftExtension f a) (liftExtension f b) x (liftExtension f c)
 liftExtension f (Transpose a)      = Transpose (liftExtension f a)
+liftExtension f (Size a)      = Size (liftExtension f a)
 liftExtension f (Index a b c)      = Index (liftExtension f a) (liftExtension f b) (liftExtension f c)
 liftExtension f (ClipM c a)        = ClipM c (liftExtension f a)
 liftExtension f (Loop a b x d )    = Loop (liftExtension f a) (b) x (liftExtension f d)
@@ -730,6 +732,7 @@ recDMTermM f h (Gauss a b c d)    = Gauss <$> (recDMTermM f h a) <*> (recDMTermM
 recDMTermM f h (ConvertM a)       = ConvertM <$> (recDMTermM f h a)
 recDMTermM f h (MCreate a b x c ) = MCreate <$> (recDMTermM f h a) <*> (recDMTermM f h b) <*> pure x <*> (recDMTermM f h c)
 recDMTermM f h (Transpose a)      = Transpose <$> (recDMTermM f h a)
+recDMTermM f h (Size a)      = Size <$> (recDMTermM f h a)
 recDMTermM f h (Index a b c)      = Index <$> (recDMTermM f h a) <*> (recDMTermM f h b) <*> (recDMTermM f h c)
 recDMTermM f h (ClipM c a)        = ClipM c <$> (recDMTermM f h a)
 recDMTermM f h (Loop a b x d )    = Loop <$> (recDMTermM f h a) <*> pure b <*> pure x <*> (recDMTermM f h d)
@@ -785,6 +788,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (ConvertM a)       = "ConvertM (" <> (showPretty a) <> ")"
   showPretty (MCreate a b x c ) = "MCreate (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> show x <> ", " <> (showPretty c) <> ")"
   showPretty (Transpose a)      = "Transpose (" <> (showPretty a) <> ")"
+  showPretty (Size a)           = "Size (" <> (showPretty a) <> ")"
   showPretty (Index a b c)      = "Index (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> (showPretty c) <> ")"
   showPretty (ClipM c a)        = "ClipM (" <> show c <> ", " <> (showPretty a) <> ")"
   showPretty (SubGrad a b)      = "SubGrad (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <>  ")"
