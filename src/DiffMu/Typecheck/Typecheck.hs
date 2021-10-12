@@ -632,7 +632,48 @@ checkSen' (SubGrad ps gs) scope = do
          res <- TVar <$> newTVar "τr"
          addConstraint (Solvable (IsTypeOpResult (Binary DMOpSub ((Numeric τps):@s1, (Numeric τgs):@s2) res)))
 
-         return (NoFun (DMParams m res))
+         return (NoFun (DMTup [DMParams m res]))
+
+checkSen' (ScaleGrad scalar grad) scope = do
+
+  dscalar <- checkSens scalar scope
+  dgrad <- checkSens grad scope
+
+  done $ do
+
+    -- Create sensitivity / type variables for the
+    -- multiplication
+    --
+    (τres , types_sens) <- makeTypeOp (IsBinary DMOpMul) 2
+
+    ((τ1,s1),(τ2,s2)) <- case types_sens of
+      [(τ1,s1),(τ2,s2)] -> pure ((τ1,s1),(τ2,s2))
+      _ -> impossible "Wrong array return size of makeTypeOp"
+
+    -- Create variables for the matrix type
+    -- (norm and clip parameters and dimension)
+    nrm <- newVar
+    clp <- newVar
+    m <- newVar
+
+    -- infer the types of the scalar and the gradient
+    -- we get
+    -- `Γ₁ ⋅ s₁ ⋅ m + Γ₂ ⋅ s₂`
+    --   where (s₁,s₂) ⩯ tscalar ⋅ tgrad
+    (tscalar, tgrad) <- msumTup ((dscalar <* mscale (svar s1) <* mscale m), (dgrad <* mscale (svar s2)))
+
+    -- set τ1 to the actual type of the scalar
+    unify tscalar (NoFun τ1)
+
+    -- and τ2 to the actual content type of the dmgrads
+    -- (we allow any kind of annotation on the dmgrads here)
+    unify tgrad (NoFun (DMGrads nrm clp m τ2))
+
+    -- the return type is the same matrix, but
+    -- the clipping is now changed to unbounded
+    -- and the content type is the result of the multiplication
+    return (NoFun (DMTup [(DMGrads nrm U m τres)]))
+
 
 checkSen' (Reorder σ t) scope = do
   mτ <- checkSens t scope

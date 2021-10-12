@@ -635,6 +635,7 @@ data PreDMTerm (t :: * -> *) =
   | Loop (PreDMTerm t) [TeVar] (TeVar, TeVar) (PreDMTerm t)
 -- Special NN builtins
   | SubGrad (PreDMTerm t) (PreDMTerm t)
+  | ScaleGrad (PreDMTerm t) (PreDMTerm t) -- scale (a : Scalar) (g : Mutating Gradient)
 -- Transparent tuple replacements
   | Reorder [Int] (PreDMTerm t)
   deriving (Generic)
@@ -706,6 +707,7 @@ liftExtension f (Index a b c)      = Index (liftExtension f a) (liftExtension f 
 liftExtension f (ClipM c a)        = ClipM c (liftExtension f a)
 liftExtension f (Loop a b x d )    = Loop (liftExtension f a) (b) x (liftExtension f d)
 liftExtension f (SubGrad a b)      = SubGrad (liftExtension f a) (liftExtension f b)
+liftExtension f (ScaleGrad a b)    = ScaleGrad (liftExtension f a) (liftExtension f b)
 liftExtension f (Reorder x a)      = Reorder x (liftExtension f a)
 
 -- recursing into a dmterm
@@ -737,6 +739,7 @@ recDMTermM f h (Index a b c)      = Index <$> (recDMTermM f h a) <*> (recDMTermM
 recDMTermM f h (ClipM c a)        = ClipM c <$> (recDMTermM f h a)
 recDMTermM f h (Loop a b x d )    = Loop <$> (recDMTermM f h a) <*> pure b <*> pure x <*> (recDMTermM f h d)
 recDMTermM f h (SubGrad a b)      = SubGrad <$> (recDMTermM f h a) <*> (recDMTermM f h b)
+recDMTermM f h (ScaleGrad a b)    = ScaleGrad <$> (recDMTermM f h a) <*> (recDMTermM f h b)
 recDMTermM f h (Reorder x a)      = Reorder x <$> (recDMTermM f h a)
 
 
@@ -791,7 +794,8 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (Size a)           = "Size (" <> (showPretty a) <> ")"
   showPretty (Index a b c)      = "Index (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> (showPretty c) <> ")"
   showPretty (ClipM c a)        = "ClipM (" <> show c <> ", " <> (showPretty a) <> ")"
-  showPretty (SubGrad a b)      = "SubGrad (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <>  ")"
+  showPretty (SubGrad a b)      = "SubGrad (" <> (showPretty a) <> ", " <> (showPretty b) <>  ")"
+  showPretty (ScaleGrad a b)    = "ScaleGrad (" <> (showPretty a) <> ", " <> (showPretty b) <>  ")"
   showPretty (Reorder x a)      = "Reorder " <> show x <> parenIndent (showPretty a)
   showPretty (Loop a b x d )    = "Loop (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> show x <> ")" <> parenIndent (showPretty d)
 

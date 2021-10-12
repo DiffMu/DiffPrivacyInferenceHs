@@ -530,6 +530,12 @@ elaborateMut scope (SubGrad t1 t2) = do
     [newT1, newT2] -> pure (SubGrad newT1 newT2, VirtualMutated mutVars)
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
+elaborateMut scope (ScaleGrad scalar grads) = do
+  (argTerms, mutVars) <- elaborateMutList "scalegrad" scope [(NotMutated , scalar), (Mutated , grads)]
+  case argTerms of
+    [newT1, newT2] -> pure (ScaleGrad newT1 newT2, VirtualMutated mutVars)
+    _ -> internalError ("Wrong number of terms after elaborateMutList")
+
 elaborateMut scope (ClipM c t) = do
   (argTerms, mutVars) <- elaborateMutList "clip" scope [(Mutated , t)]
   case argTerms of
@@ -905,6 +911,7 @@ optimizeTLet (Index a b c)      = Index (optimizeTLet a) (optimizeTLet b) (optim
 optimizeTLet (ClipM c a)        = ClipM c (optimizeTLet a)
 optimizeTLet (Loop a b x d )    = Loop (optimizeTLet a) (b) x (optimizeTLet d)
 optimizeTLet (SubGrad a b)      = SubGrad (optimizeTLet a) (optimizeTLet b)
+optimizeTLet (ScaleGrad a b)    = ScaleGrad (optimizeTLet a) (optimizeTLet b)
 optimizeTLet (Reorder x a)      = Reorder x (optimizeTLet a)
 
 
