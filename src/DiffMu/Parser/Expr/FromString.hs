@@ -16,6 +16,7 @@ data JExpr =
      JEInteger Float
    | JEReal Float
    | JESymbol Symbol
+   | JEColon
    | JELineNumber String Int
    | JEUnsupported String
    | JECall JExpr [JExpr]
@@ -32,7 +33,7 @@ data JExpr =
    | JETup [JExpr]
    | JETupAssignment [JExpr] JExpr
    | JEIfElse JExpr JExpr JExpr
-   | JESize [JExpr]
+   | JERef JExpr [JExpr]
    deriving Show
 
 
@@ -54,7 +55,7 @@ sep :: Parser Char
 sep = wskip ','
 
 pIdentifier :: Parser String
-pIdentifier = some (noneOf @[] "(),[]=#:\"")
+pIdentifier = skippable *> some (noneOf @[] "(),[]=#:\" \n") <* skippable
 
 pJuliaType :: Parser JuliaType
 pJuliaType = do
@@ -151,6 +152,10 @@ pLoop = let pit = ":(=)" `with` ((,) <$> pJExpr <*､> pJExpr)
 pIf = ":if" `with` (JEIfElse <$> pJExpr <*､> pJExpr <*､> pJExpr)
 pEIf = ":elseif" `with` (JEIfElse <$> pJExpr <*､> pJExpr <*､> pJExpr)
 
+pRef = do
+       (name, refs) <- ":ref" `with` ((,) <$> pJExpr <*､> (pJExpr `sepBy` sep))
+       return (JERef name refs)
+
 pUnsupported = let someExpr = (((char ':' >> pIdentifier) <* sep) <* pJExpr `sepBy` sep)
                in JEUnsupported <$> (between (wskip '(') (wskip ')') someExpr)
 
@@ -159,10 +164,11 @@ pJExpr :: Parser JExpr
 pJExpr =       try pLineNumber
            <|> try (":block" `with` (JEBlock <$> (pJExpr `sepBy` sep)))
            <|> try (":tuple" `with` (JETup <$> (pJExpr `sepBy` sep)))
+           <|> try ((string ":(:)") >> return JEColon)
            <|> try (JESymbol <$> pSymbol)
            <|> try ((JEInteger . fromIntegral) <$> decimal) -- these two cannot be switched which is weird
            <|> try (JEReal <$> float)
-           <|> try (JESize <$> (pCallSign ":size" (pJExpr `sepBy` sep)))
+           <|> try pRef
            <|> try pLam
            <|> try pLoop
            <|> try pIter

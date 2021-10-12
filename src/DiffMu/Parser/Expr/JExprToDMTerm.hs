@@ -42,17 +42,18 @@ pSingle e = case e of
                  JEAssignment aee amt -> pJSLet aee amt [aee]
                  JETupAssignment aee amt -> pJTLet aee amt [JETup aee]
                  JEFunction name term -> pJFLet name term [name]
-                 JESize args -> pJSize args
+                 JERef name refs -> pJRef name refs
                  JECall name args -> pJCall name args
                  JEUnsupported s -> parseError ("Unsupported expression " <> show s)
                  JEIter _ _ _ -> parseError ("Iterators can only be used in for-loop statements directly.")
+                 JEColon -> parseError "Colon (:) can only be used to access matrix rows like in M[1,:]."
                  JETypeAnnotation _ _ -> parseError "Type annotations are only supported on function arguments."
                  JENotRelevant _ _ -> parseError "Type annotations are only supported on function arguments."
                  JELineNumber _ _ -> throwError (InternalError "What now?") -- TODO
 
 
 pList :: [JExpr] -> ParseState MutDMTerm
-pList [] = error "bla"
+pList [] = error "bla" -- TODO
 pList (s : []) = pSingle s
 pList (s : tail) = case s of
                         JELineNumber file line -> do
@@ -74,6 +75,20 @@ pMutLet m tail = do
                    assignee <- m
                    dtail <- pList tail
                    return (Extra (MutLet assignee dtail))
+
+pJRef name refs = case refs of
+                       [i1,JEColon] -> do
+                                       t1 <- pSingle i1
+                                       referee <- pSingle name
+                                       return (Row referee t1)
+                       [i1,i2] -> do
+                                  t1 <- pSingle i1
+                                  t2 <- pSingle i2
+                                  referee <- pSingle name
+                                  return (Index referee t1 t2)
+                       [JEColon,_] -> parseError "Acessing columns of matrices as Vectors is not permitted."
+                       _ -> parseError ("Only double indexing to matrix elements supported, but you gave " <> show refs)
+                
 
 pArg arg = case arg of
                      JESymbol s -> return ((UserTeVar s) :- JTAny)
@@ -168,10 +183,6 @@ pClip (JESymbol (Symbol "L2"))   = pure (Clip L2)
 pClip (JESymbol (Symbol "LInf")) = pure (Clip LInf)
 pClip term = parseError $ "The term " <> show term <> "is not a valid clip value."
 
-pJSize args = case args of
-                   (a:[]) -> Size <$> (pSingle a)
-                   _ -> parseError "Invalid number of arguments for size."
-
 pJCall :: JExpr -> [JExpr] -> ParseState MutDMTerm
 -- if the term is a symbol, we check if it
 -- is a builtin/op, if so, we construct the appropriate DMTerm
@@ -238,6 +249,12 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
 
   (t@"transpose", [a1]) -> Transpose <$> pSingle a1
   (t@"transpose", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
+
+  (t@"size", [a1]) -> Size <$> pSingle a1
+  (t@"size", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
+
+  (t@"length", [a1]) -> Length <$> pSingle a1
+  (t@"length", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
 
   ----------------------
   -- the ops

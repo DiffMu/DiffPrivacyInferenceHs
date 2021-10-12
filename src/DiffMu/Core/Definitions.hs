@@ -174,6 +174,7 @@ data DMTypeOf (k :: DMKind) where
   Clip :: DMTypeOf NormKind -> DMTypeOf ClipKind
 
   -- matrices
+  DMVec :: (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> DMType -> DMType
   DMMat :: (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> Sensitivity -> DMType -> DMType
   DMParams :: Sensitivity -> DMType -> DMType -- number of parameters and element type
   DMGrads :: (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> DMType -> DMType -- norm/clip and number of parameters
@@ -206,6 +207,7 @@ instance Hashable (DMTypeOf k) where
   hashWithSalt s (n :->*: t) = s `hashWithSalt` n `hashWithSalt` t
   hashWithSalt s (DMTup t) = s `hashWithSalt` t
   hashWithSalt s (Clip t) = s `hashWithSalt` t
+  hashWithSalt s (DMVec n t u v) = s `hashWithSalt` n `hashWithSalt` t `hashWithSalt` u `hashWithSalt` v
   hashWithSalt s (DMMat n t u v w) = s `hashWithSalt` n `hashWithSalt` t `hashWithSalt` u `hashWithSalt` v `hashWithSalt` w
   hashWithSalt s (DMParams u v) = s `hashWithSalt` u `hashWithSalt` v
   hashWithSalt s (DMGrads n t v w) = s `hashWithSalt` n `hashWithSalt` t `hashWithSalt` v `hashWithSalt` w
@@ -247,6 +249,7 @@ instance Show (DMTypeOf k) where
   show LInf = "L∞"
   show U = "U"
   show (Clip n) = "Clip(" <> show n <> ")"
+  show (DMVec nrm clp n τ) = "Vector<n: "<> show nrm <> ", c: " <> show clp <> ">[" <> show n <> "](" <> show τ <> ")"
   show (DMMat nrm clp n m τ) = "Matrix<n: "<> show nrm <> ", c: " <> show clp <> ">[" <> show n <> " × " <> show m <> "](" <> show τ <> ")"
   show (DMParams m τ) = "Params[" <> show m <> "](" <> show τ <> ")"
   show (DMGrads nrm clp m τ) = "Grads<n: "<> show nrm <> ", c: " <> show clp <> ">[" <> show m <> "](" <> show τ <> ")"
@@ -303,6 +306,7 @@ instance Eq (DMTypeOf k) where
   DMTup xs == DMTup ys = xs == ys
 
   -- matrices
+  DMVec a b c d == DMVec a2 b2 c2 d2 = and [a == a2, b == b2, c == c2, d == d2]
   DMMat a b c d e == DMMat a2 b2 c2 d2 e2 = and [a == a2, b == b2, c == c2, d == d2, e == e2]
 
   -- choices
@@ -628,8 +632,10 @@ data PreDMTerm (t :: * -> *) =
   | ConvertM (PreDMTerm t)
   | MCreate (PreDMTerm t) (PreDMTerm t) (TeVar, TeVar) (PreDMTerm t)
   | Transpose (PreDMTerm t)
-  | Size (PreDMTerm t)
+  | Size (PreDMTerm t) -- matrix dimensions, returns a tuple of two numbers
+  | Length (PreDMTerm t) -- vector dimension, returns a number
   | Index (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
+  | Row (PreDMTerm t) (PreDMTerm t)
   | ClipM Clip (PreDMTerm t)
   -- Loop (DMTerm : "Number of iterations") ([TeVar] : "Captured variables") (TeVar : "name of iteration var", TeVar : "name of capture variable") (DMTerm : "body")
   | Loop (PreDMTerm t) [TeVar] (TeVar, TeVar) (PreDMTerm t)
@@ -702,8 +708,10 @@ liftExtension f (Gauss a b c d)    = Gauss (liftExtension f a) (liftExtension f 
 liftExtension f (ConvertM a)       = ConvertM (liftExtension f a)
 liftExtension f (MCreate a b x c ) = MCreate (liftExtension f a) (liftExtension f b) x (liftExtension f c)
 liftExtension f (Transpose a)      = Transpose (liftExtension f a)
-liftExtension f (Size a)      = Size (liftExtension f a)
+liftExtension f (Size a)           = Size (liftExtension f a)
+liftExtension f (Length a)           = Length (liftExtension f a)
 liftExtension f (Index a b c)      = Index (liftExtension f a) (liftExtension f b) (liftExtension f c)
+liftExtension f (Row a b)          = Row (liftExtension f a) (liftExtension f b)
 liftExtension f (ClipM c a)        = ClipM c (liftExtension f a)
 liftExtension f (Loop a b x d )    = Loop (liftExtension f a) (b) x (liftExtension f d)
 liftExtension f (SubGrad a b)      = SubGrad (liftExtension f a) (liftExtension f b)
@@ -734,8 +742,10 @@ recDMTermM f h (Gauss a b c d)    = Gauss <$> (recDMTermM f h a) <*> (recDMTermM
 recDMTermM f h (ConvertM a)       = ConvertM <$> (recDMTermM f h a)
 recDMTermM f h (MCreate a b x c ) = MCreate <$> (recDMTermM f h a) <*> (recDMTermM f h b) <*> pure x <*> (recDMTermM f h c)
 recDMTermM f h (Transpose a)      = Transpose <$> (recDMTermM f h a)
-recDMTermM f h (Size a)      = Size <$> (recDMTermM f h a)
+recDMTermM f h (Size a)           = Size <$> (recDMTermM f h a)
+recDMTermM f h (Length a)         = Length <$> (recDMTermM f h a)
 recDMTermM f h (Index a b c)      = Index <$> (recDMTermM f h a) <*> (recDMTermM f h b) <*> (recDMTermM f h c)
+recDMTermM f h (Row a b)          = Row <$> (recDMTermM f h a) <*> (recDMTermM f h b)
 recDMTermM f h (ClipM c a)        = ClipM c <$> (recDMTermM f h a)
 recDMTermM f h (Loop a b x d )    = Loop <$> (recDMTermM f h a) <*> pure b <*> pure x <*> (recDMTermM f h d)
 recDMTermM f h (SubGrad a b)      = SubGrad <$> (recDMTermM f h a) <*> (recDMTermM f h b)
@@ -792,7 +802,9 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (MCreate a b x c ) = "MCreate (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> show x <> ", " <> (showPretty c) <> ")"
   showPretty (Transpose a)      = "Transpose (" <> (showPretty a) <> ")"
   showPretty (Size a)           = "Size (" <> (showPretty a) <> ")"
+  showPretty (Length a)         = "Length (" <> (showPretty a) <> ")"
   showPretty (Index a b c)      = "Index (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> (showPretty c) <> ")"
+  showPretty (Row a b)          = "Row (" <> (showPretty a) <> ", " <> (showPretty b) <> ")"
   showPretty (ClipM c a)        = "ClipM (" <> show c <> ", " <> (showPretty a) <> ")"
   showPretty (SubGrad a b)      = "SubGrad (" <> (showPretty a) <> ", " <> (showPretty b) <>  ")"
   showPretty (ScaleGrad a b)    = "ScaleGrad (" <> (showPretty a) <> ", " <> (showPretty b) <>  ")"

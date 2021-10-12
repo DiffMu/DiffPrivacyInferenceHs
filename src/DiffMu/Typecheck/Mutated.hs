@@ -575,10 +575,16 @@ elaborateMut scope (Index t1 t2 t3) = do
   (newT2, newT2Type) <- elaborateNonmut scope t2
   (newT3, newT3Type) <- elaborateNonmut scope t3
   return (Index newT1 newT2 newT3 , GloballyPure [])
+elaborateMut scope (Row t1 t2) = do
+  (newT1, newT1Type) <- elaborateNonmut scope t1
+  (newT2, newT2Type) <- elaborateNonmut scope t2
+  return (Row newT1 newT2, GloballyPure [])
 elaborateMut scope (Size t1) = do
   (newT1, newT1Type) <- elaborateMut scope t1
   return (Size newT1, GloballyPure [])
-
+elaborateMut scope (Length t1) = do
+  (newT1, newT1Type) <- elaborateMut scope t1
+  return (Length newT1, GloballyPure [])
 
 -- the unsupported terms
 elaborateMut scope term@(Choice t1)        = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
@@ -906,8 +912,10 @@ optimizeTLet (Gauss a b c d)    = Gauss (optimizeTLet a) (optimizeTLet b) (optim
 optimizeTLet (ConvertM a)       = ConvertM (optimizeTLet a)
 optimizeTLet (MCreate a b x c ) = MCreate (optimizeTLet a) (optimizeTLet b) x (optimizeTLet c)
 optimizeTLet (Size a)      = Size (optimizeTLet a)
+optimizeTLet (Length a)      = Length (optimizeTLet a)
 optimizeTLet (Transpose a)      = Transpose (optimizeTLet a)
 optimizeTLet (Index a b c)      = Index (optimizeTLet a) (optimizeTLet b) (optimizeTLet c)
+optimizeTLet (Row a b)      = Row (optimizeTLet a) (optimizeTLet b)
 optimizeTLet (ClipM c a)        = ClipM c (optimizeTLet a)
 optimizeTLet (Loop a b x d )    = Loop (optimizeTLet a) (b) x (optimizeTLet d)
 optimizeTLet (SubGrad a b)      = SubGrad (optimizeTLet a) (optimizeTLet b)

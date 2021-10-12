@@ -558,7 +558,7 @@ checkSen' (ConvertM m) scope = do
 
 --------------------
 
-
+{- TODO check issue #78
 checkSen' (Transpose m) scope = do
    mb <- checkSens m scope -- check the matrix
    done $ do
@@ -575,7 +575,7 @@ checkSen' (Transpose m) scope = do
 
       -- change clip parameter to input
       return (NoFun (DMMat L1 U m n (Numeric τ)))
-
+-}
 
 checkSen' (Index m i j) scope = do
 
@@ -602,9 +602,38 @@ checkSen' (Index m i j) scope = do
          -- set matrix type
          unify τm (NoFun (DMMat nrm clp n m (Numeric τ)))
 
-         -- TODO maybe restrict index size?
+         -- we don't restrict matrix dimension or index size, but leave that to the runtime errors...
 
          return (NoFun (Numeric τ))
+
+
+checkSen' (Row m i) scope = do
+
+      -- check index and set their sensitivity to infinity
+      di <- checkSens i scope
+      let dx = do
+                   _ <- di
+                   mscale inftyS
+                   return ()
+
+      dm <- checkSens m scope -- check the matrix
+
+      done $ do
+         (τm, _) <- msumTup (dm, dx)
+
+         -- variables for element type, norm and clip parameters and dimension
+         τ <- newVar
+         nrm <- newVar
+         clp <- newVar
+         n <- newVar
+         m <- newVar
+
+         -- set matrix type
+         unify τm (NoFun (DMMat nrm clp n m (Numeric τ)))
+
+         -- we don't restrict matrix dimension or index size, but leave that to the runtime errors...
+
+         return (NoFun (DMVec nrm clp m (Numeric τ))) -- returns Vector type to accomodate julia behaviour
 
 
 checkSen' (SubGrad ps gs) scope = do

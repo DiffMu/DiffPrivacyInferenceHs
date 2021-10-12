@@ -119,6 +119,9 @@ solveBinary op (τ1, τ2) = f op τ1 τ2
     f DMOpEq (Numeric (NonConst t1)) (Numeric (Const s2 t2)) = ret oneId  zeroId (pure $ Numeric (NonConst DMInt))
     f DMOpEq (Numeric (NonConst t1)) (Numeric (NonConst t2)) = ret oneId  oneId  (pure $ Numeric (NonConst DMInt))
 
+    f op (DMVec n cl c t) t2 = f op (DMMat n cl oneId c t) t2 -- for vectors its the same as fot 1-row matrices
+    f op t2 (DMVec n cl c t) = f op t2 (DMMat n cl oneId c t)
+
     f _ _ _                            = return Nothing
 
 makeNonConstType :: (IsT MonadDMTC t) => DMType -> t DMType
@@ -137,6 +140,7 @@ makeNonConstType (Numeric (TVar a)) = do
 makeNonConstType (Numeric (NonConst t)) = pure $ Numeric (NonConst t)
 makeNonConstType (Numeric (Const s t)) = pure $ Numeric (Const s t)
 makeNonConstType (Numeric DMData) = pure $ (Numeric DMData) -- TODO: Check, we do nothing with DMData?
+makeNonConstType (DMVec a b c e)  = (DMVec a b c) <$> (makeNonConstType e)
 makeNonConstType (DMMat a b c d e)  = (DMMat a b c d) <$> (makeNonConstType e)
 makeNonConstType (TVar a)  = pure $ (TVar a) -- TODO: Check, we do nothing with TVar?
 makeNonConstType (Deleted) = internalError "A deleted value tried to escape. We catched it when it was about to become NonConst."
