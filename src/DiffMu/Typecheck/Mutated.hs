@@ -798,7 +798,7 @@ preprocessLoopBody scope iter (Extra (MutLet t1 t2)) = do
 
 -- for the rest we simply recurse
 preprocessLoopBody scope iter t = do
-  x <- recDMTermM (preprocessLoopBody scope iter) (\x -> x) t
+  x <- recDMTermMSameExtension (preprocessLoopBody scope iter) t
   return x
 
 
