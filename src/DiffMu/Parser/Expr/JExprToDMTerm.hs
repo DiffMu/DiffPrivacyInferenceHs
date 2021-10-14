@@ -39,9 +39,9 @@ pSingle e = case e of
                  JEBlackBox args -> pJBlackBox args
                  JEIfElse cond ifb elseb -> (Phi <$> pSingle cond <*> pSingle ifb <*> pSingle elseb)
                  JELoop ivar iter body -> pJLoop ivar iter body
-                 JEAssignment aee amt -> pJSLet aee amt [aee]
-                 JETupAssignment aee amt -> pJTLet aee amt [JETup aee]
-                 JEFunction name term -> pJFLet name term [name]
+                 JEAssignment aee amt -> pJSLet aee amt [aee] (Extra . DefaultRet)
+                 JETupAssignment aee amt -> pJTLet aee amt [JETup aee] (Extra . DefaultRet)
+                 JEFunction name term -> pJFLet name term [name] (Extra . DefaultRet)
                  JERef name refs -> pJRef name refs
                  JECall name args -> pJCall name args
                  JEUnsupported s -> parseError ("Unsupported expression " <> show s)
@@ -61,9 +61,9 @@ pList (s : tail) = case s of
                                                     put (file, line, d)
                                                     s <- (pList tail)
                                                     return s
-                        JEAssignment aee amt -> pJSLet aee amt tail
-                        JETupAssignment aee amt -> pJTLet aee amt tail
-                        JEFunction name term -> pJFLet name term tail
+                        JEAssignment aee amt -> pJSLet aee amt tail (\x -> x)
+                        JETupAssignment aee amt -> pJTLet aee amt tail (\x -> x)
+                        JEFunction name term -> pJFLet name term tail (\x -> x)
                         JELoop ivar iter body -> pMutLet (pJLoop ivar iter body) tail
                         JECall name args -> pMutLet (pJCall name args) tail
                         JEIfElse _ _ _ -> throwError (InternalError "Conditionals should not have tails!")
@@ -88,7 +88,6 @@ pJRef name refs = case refs of
                                   return (Index referee t1 t2)
                        [JEColon,_] -> parseError "Acessing columns of matrices as Vectors is not permitted."
                        _ -> parseError ("Only double indexing to matrix elements supported, but you gave " <> show refs)
-                
 
 pArg arg = case arg of
                      JESymbol s -> return ((UserTeVar s) :- JTAny)
@@ -125,12 +124,12 @@ pJBlackBox args = do
                                     pargs <- mapM pArg args
                                     return (BlackBox pargs)
 
-pJSLet assignee assignment tail =
+pJSLet assignee assignment tail wrapper =
    case assignee of
         JESymbol s -> do
                         dasgmt <- pSingle assignment
                         dtail <- pList tail
-                        return (SLet ((UserTeVar s) :- JTAny) dasgmt dtail)
+                        return (SLet ((UserTeVar s) :- JTAny) dasgmt (wrapper dtail))
         JETypeAnnotation _ _ -> parseError "Type annotations on variables are not supported."
         JENotRelevant _ _ -> parseError "Type annotations on variables are not supported."
         _ -> parseError ("Invalid assignee " <> (show assignee) <> ", must be a variable.")
@@ -155,7 +154,7 @@ pJLoop ivar iter body =
        i -> parseError ("Invalid iteration variable " <> (show i) <> ".")
 
 
-pJTLet assignees assignment tail = do
+pJTLet assignees assignment tail wrapper = do
   -- make sure that all assignees are simply symbols
   let ensureSymbol (JESymbol s) = return s
       ensureSymbol (JETypeAnnotation _ _) = parseError "Type annotations on variables are not supported."
@@ -167,14 +166,14 @@ pJTLet assignees assignment tail = do
   -- parse assignment, tail; and build term
   dasgmt <- pSingle assignment
   dtail <- pList tail
-  return (TLet [(UserTeVar s) :- JTAny | s <- assignee_vars] dasgmt dtail)
+  return (TLet [(UserTeVar s) :- JTAny | s <- assignee_vars] dasgmt (wrapper dtail))
 
-pJFLet name assignment tail =
+pJFLet name assignment tail wrapper =
   case name of
     JESymbol name -> do
                        dasgmt <- pSingle assignment
                        dtail <- pList tail
-                       return (FLet (UserTeVar name) dasgmt dtail)
+                       return (FLet (UserTeVar name) dasgmt (wrapper dtail))
     _ -> parseError $ "Invalid function name expression " <> show name <> ", must be a symbol."
 
 pClip :: JExpr -> ParseState (DMTypeOf ClipKind)

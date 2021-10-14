@@ -674,6 +674,7 @@ data MutabilityExtension a =
   | MutLoop a (TeVar) a
   | Modify (Asgmt JuliaType) a
   | MutRet
+  | DefaultRet a
   deriving (Show, Eq, Functor, Foldable, Traversable)
 
 type MutDMTerm = PreDMTerm MutabilityExtension
@@ -829,6 +830,7 @@ instance ShowPretty a => ShowPretty (MutabilityExtension a) where
   showPretty (MutLoop a x d) = "MutLoop (" <> (showPretty a) <> ", " <> show x <> ")" <> parenIndent (showPretty d)
   showPretty (Modify a x) = "Modify! (" <> showPretty a <> ", " <> showPretty x <> ")"
   showPretty (MutRet) = "MutRet"
+  showPretty (DefaultRet x) = "DefaultRet (" <> showPretty x <> ")"
 
 instance ShowPretty (EmptyExtension a) where
   showPretty a = undefined

@@ -33,8 +33,15 @@ data IsLocalMutation = LocalMutation | NotLocalMutation
 onlyLocallyMutatedVariables :: [(TeVar,IsLocalMutation)] -> Bool
 onlyLocallyMutatedVariables xs = [v | (v, NotLocalMutation) <- xs] == []
 
-data ImmutType = Pure | Mutating [IsMutated] | VirtualMutated [(TeVar , IsLocalMutation)] | SingleArg TeVar
+data PureType = UserValue | DefaultValue | SingleArg TeVar
   deriving (Show)
+
+data ImmutType = Pure PureType | Mutating [IsMutated] | VirtualMutated [(TeVar , IsLocalMutation)]
+  deriving (Show)
+
+consumeDefaultValue :: ImmutType -> ImmutType
+consumeDefaultValue (Pure DefaultValue) = Pure UserValue
+consumeDefaultValue a = a
 
 -- type ImmutCtx = Ctx TeVar ()
 type MutCtx = Ctx TeVar IsMutated
@@ -145,10 +152,9 @@ elaborateNonmut scope term = do
   -- make sure that the result is not a mutation result
 
   case resType of
-    Pure -> pure ()
+    Pure _ -> pure ()
     VirtualMutated mutvars -> throwError (DemutationError $ "expected that the term " <> showPretty term <> " does not mutate anything, but it mutates the following variables: " <> show mutvars)
     Mutating _ -> pure ()
-    SingleArg _ -> pure ()
 
   return (resTerm , resType)
 
@@ -156,10 +162,10 @@ elaborateMut :: Scope -> MutDMTerm -> MTC (DMTerm , ImmutType)
 
 elaborateMut scope (Op op args) = do
   args' <- mapM (elaborateNonmut scope) args
-  pure (Op op (fst <$> args') , Pure)
-elaborateMut scope (Sng η τ) = pure (Sng η τ , Pure)
-elaborateMut scope (Rnd jt) = pure (Rnd jt , Pure)
-elaborateMut scope (BlackBox args) = pure (BlackBox args, Pure)
+  pure (Op op (fst <$> args') , Pure UserValue)
+elaborateMut scope (Sng η τ) = pure (Sng η τ , Pure UserValue)
+elaborateMut scope (Rnd jt) = pure (Rnd jt , Pure UserValue)
+elaborateMut scope (BlackBox args) = pure (BlackBox args, Pure UserValue)
 
 elaborateMut scope (Var (x :- j)) = do
   let τ = getValue x scope
@@ -172,31 +178,29 @@ elaborateMut scope (SLet (x :- τ) term body) = do
   (newTerm , newTermType) <- elaborateMut scope term
 
   case newTermType of
-    Pure -> pure ()
+    Pure _ -> pure ()
     Mutating _ -> pure ()
     VirtualMutated _ -> throwError (DemutationError $ "Found an assignment " <> show x <> " = " <> showPretty term <> " where RHS is a mutating call. This is not allowed.")
-    SingleArg _ -> pure ()
 
   let scope'  = setValue x newTermType scope
   (newBody , newBodyType) <- elaborateMut scope' body
 
-  return (SLet (x :- τ) newTerm newBody , newBodyType)
+  return (SLet (x :- τ) newTerm newBody , consumeDefaultValue newBodyType)
 
 elaborateMut scope (TLet vars term body) = do
 
   (newTerm , newTermType) <- elaborateMut scope term
 
   case newTermType of
-    Pure -> pure ()
+    Pure _ -> pure ()
     Mutating _ -> pure ()
     VirtualMutated _ -> throwError (DemutationError $ "Found an assignment " <> show vars <> " = " <> showPretty term <> " where RHS is a mutating call. This is not allowed.")
-    SingleArg _ -> pure ()
 
   -- add all values as pure to the scope
-  let scope' = foldr (\(v :- _) s -> setValue v (Pure) s) scope (vars)
+  let scope' = foldr (\(v :- _) s -> setValue v (Pure UserValue) s) scope (vars)
   (newBody , newBodyType) <- elaborateMut scope' body
 
-  return (TLet vars newTerm newBody , newBodyType)
+  return (TLet vars newTerm newBody , consumeDefaultValue newBodyType)
 
 elaborateMut scope (LamStar args body) = do
   (newBody, newBodyType) <- elaborateLambda scope [(v :- x) | (v :- (x , _)) <- args] body
@@ -216,12 +220,12 @@ elaborateMut scope (Apply f args) = do
   --
   -- also set the return type
   (muts , retType) <- case τ of
-        Pure -> pure ((take (length args) (repeat NotMutated)) , \_ -> Pure)
+        Pure _ -> pure ((take (length args) (repeat NotMutated)) , \_ -> Pure UserValue)
         Mutating muts -> pure (muts , VirtualMutated)
         VirtualMutated _ -> throwError (DemutationError $ "Trying to call the result of a mutating call " <> showPretty f <> ". This is not allowed.")
 
         -- for calls to arguments we assume that they are pure
-        SingleArg _ -> pure ((take (length args) (repeat NotMutated)) , \_ -> Pure)
+        -- SingleArg _ -> pure ((take (length args) (repeat NotMutated)) , \_ -> Pure)
 
   -- make sure that there are as many arguments as the function requires
   case length muts == length args of
@@ -247,16 +251,17 @@ elaborateMut scope (FLet fname term body) = do
   -- existing
   scope' <- case ftype of
         Nothing -> pure $ setValue fname newTermType scope
-        Just (Pure) -> pure $ scope
         Just (Mutating _) -> throwError (DemutationError $ "")
-        Just (SingleArg _) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
+        Just (Pure UserValue) -> pure $ scope
+        Just (Pure DefaultValue) -> pure $ scope
+        Just (Pure (SingleArg _)) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
         Just (VirtualMutated _) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
 
   -- check the body with this new scope
 
   (newBody, newBodyType) <- elaborateMut scope' body
 
-  return (FLet fname newTerm newBody, newBodyType)
+  return (FLet fname newTerm newBody, consumeDefaultValue newBodyType)
 
 elaborateMut scope (Extra (MutLet term1 term2)) = do
 
@@ -268,7 +273,7 @@ elaborateMut scope (Extra (MutLet term1 term2)) = do
   let locmutvars1 = case newTerm1Type of
         VirtualMutated xs -> [x | (x,LocalMutation) <- xs]
         _ -> []
-  let scope' = foldr (\v s -> setValue v (Pure) s) scope (locmutvars1)
+  let scope' = foldr (\v s -> setValue v (Pure UserValue) s) scope (locmutvars1)
 
 
   -- elaborate the second term and get its mutated variables
@@ -332,19 +337,25 @@ elaborateMut scope (Extra (MutLet term1 term2)) = do
     --
     -- the first command has only locally mutated variables,
     -- and the second one is pure
-    (VirtualMutated mutNames1', Pure) -> do
-      -- -- | onlyLocallyMutatedVariables mutNames1' -> do
+    (VirtualMutated mutNames1', Pure (p))
+      | onlyLocallyMutatedVariables mutNames1' -> do
 
-      -- let mutNames1 = [v | (v, LocalMutation) <- mutNames1']
-          -- commonMutNames = nub (mutNames1)
-          -- ns1 = [n :- JTAny | (n) <- mutNames1]
-          -- ns2 = [n :- JTAny | (n) <- mutNames2]
-          -- term = newTerm1
-      pure (newTerm1 , VirtualMutated mutNames1')
+      let mutNames1 = fst <$> mutNames1'
+      let ns1 = [n :- JTAny | (n) <- mutNames1]
+
+          valterm = TLet ns1 newTerm1
+                (
+                  newTerm2
+                )
+
+      case p of
+        UserValue -> pure (valterm , Pure UserValue)
+        SingleArg _ -> pure (valterm , Pure UserValue)
+        DefaultValue -> pure (newTerm1 , VirtualMutated mutNames1')
 
     -- the first command has only locally mutated variables,
     -- and the second one is a single arg
-    (VirtualMutated mutNames1', SingleArg _) -> do
+    -- (VirtualMutated mutNames1', Pure (SingleArg _)) -> do
       -- -- | onlyLocallyMutatedVariables mutNames1' -> do
 
       -- let mutNames1 = [v | (v, LocalMutation) <- mutNames1']
@@ -354,30 +365,33 @@ elaborateMut scope (Extra (MutLet term1 term2)) = do
       --               newTerm2
       --           )
       -- pure (term , GloballyPure mutNames1)
-      pure (newTerm1 , VirtualMutated mutNames1')
+      -- pure (newTerm1 , VirtualMutated mutNames1')
 
     ------------------------------------
-    -- GLOBAL & LOCAL
-    -- only term1 is mutating
-    -- (VirtualMutated mutNames1, GloballyPure mutNames2') -> do
+    -- GLOBAL & PURE
+    -- term1 is globally! mutating
+    --
+    -- this means that we cannot turn this into a pure term
+    -- thus the second term has to be ignored
+    (VirtualMutated mutNames1, Pure p) -> do
 
-    --   case mutNames2' of
-    --     [] -> warn ("Found the term " <> showPretty term2
-    --                  <> " which is not mutating in a place where only mutating terms make sense.\n"
-    --                  <> " => It has the type " <> show (GloballyPure mutNames2') <> "\n"
-    --                  <> " => In the term:\n" <> parenIndent (showPretty (Extra (MutLet term1 term2))) <> "\n"
-    --                  <> " => Conclusion: It is ignored in the privacy analysis.")
-    --     _ -> return ()
+      case p of
+        DefaultValue -> return ()
+        _ -> warn ("Found the term " <> showPretty term2
+                     <> " which is not mutating in a place where only mutating terms make sense.\n"
+                     <> " => It has the type " <> show (Pure p) <> "\n"
+                     <> " => In the term:\n" <> parenIndent (showPretty (Extra (MutLet term1 term2))) <> "\n"
+                     <> " => Conclusion: It is ignored in the privacy analysis.")
 
-    --   let mutNames2 = [(v, LocalMutation) | v <- mutNames2']
-    --       commonMutNames = nub (mutNames1 <> mutNames2)
-    --       ns1 = [n :- JTAny | (n, _) <- mutNames1]
+      -- let mutNames2 = [(v, LocalMutation) | v <- mutNames2']
+      --     commonMutNames = nub (mutNames1 <> mutNames2)
+      --     ns1 = [n :- JTAny | (n, _) <- mutNames1]
 
-    --       term = TLet ns1 newTerm1
-    --             (
-    --               Tup ((\(a, _) -> Var (a :- JTAny)) <$> mutNames1)
-    --             )
-    --   pure (term , VirtualMutated commonMutNames)
+      --     term = TLet ns1 newTerm1
+      --           (
+      --             Tup ((\(a, _) -> Var (a :- JTAny)) <$> mutNames1)
+      --           )
+      pure (newTerm1 , VirtualMutated mutNames1)
 
     ------------------------------------
     -- UNSUPPORTED
@@ -401,7 +415,7 @@ elaborateMut scope (Extra (MutLoop iters iterVar body)) = do
   -- we add these variables to the scope as args, since they are allowed
   -- to occur in mutated positions
   -- let scope0 = foldr (\v s -> setValue v (Pure) s) scope modifyVars
-  let scope' = setValue iterVar (Pure) scope
+  let scope' = setValue iterVar (Pure UserValue) scope
 
   -- we can now elaborate the body, and thus get the actual list
   -- of modified variables
@@ -442,7 +456,7 @@ elaborateMut scope (Extra (MutLoop iters iterVar body)) = do
     -- case I
     -- the loop only mutates local variables,
     -- and returns a pure value
-    Pure -> throwError (DemutationError $ "Expected a loop body to be mutating, but it was of type " <> show (Pure))
+    Pure p -> throwError (DemutationError $ "Expected a loop body to be mutating, but it was of type " <> show (Pure p))
     --   -> case xs of
     -- GloballyPure xs -> case xs of
       -- [] -> throwError (DemutationError $ "Expected a loop body to be mutating, but it was of type " <> show (Pure))
@@ -482,6 +496,17 @@ elaborateMut scope (Extra (Modify (v :- _) t1)) = do
 
 elaborateMut scope (Extra (MutRet)) = do
   return (Tup [] , VirtualMutated [])
+
+elaborateMut scope (Extra (DefaultRet x)) = do
+  (newX,newXType) <- elaborateNonmut scope x
+  case newXType of
+    -- if the term is pure, then we annotate
+    -- it to say that it is default
+    Pure a -> return (newX , Pure DefaultValue)
+
+    -- if it is not pure, it makes not sense
+    -- to say that it is default: we keep the actual type
+    t -> return (newX , t)
 
 elaborateMut scope term@(Phi cond t1 t2) = do
   -- elaborate all subterms
@@ -537,18 +562,16 @@ elaborateMut scope term@(Phi cond t1 t2) = do
     -- and require to ignore the (possibly) computed and returned value
     (VirtualMutated m1, VirtualMutated m2) -> buildMutatedPhi m1 m2
     -- (VirtualMutated m1, GloballyPure p2) -> buildMutatedPhi m1 [(v,LocalMutation) | v <- p2]
-    (VirtualMutated m1, Pure) -> buildMutatedPhi m1 []
-    (VirtualMutated m1, SingleArg _) -> buildMutatedPhi m1 []
+    (VirtualMutated m1, Pure _) -> buildMutatedPhi m1 []
     -- (GloballyPure p1, VirtualMutated m2) -> buildMutatedPhi [(v,LocalMutation) | v <- p1] m2
-    (Pure, VirtualMutated m2) -> buildMutatedPhi [] m2
-    (SingleArg _, VirtualMutated m2) -> buildMutatedPhi [] m2
+    (Pure _, VirtualMutated m2) -> buildMutatedPhi [] m2
 
     -- if both branches are not mutating, ie. var or pure, then we have a pure
     -- if statement. The result term is the elaborated phi expression
     -- (GloballyPure p1, GloballyPure p2) -> return (Phi newCond newT1 newT2 , GloballyPure (nub (p1 <> p2)))
     -- (GloballyPure p1, SingleArg _) -> return (Phi newCond newT1 newT2 , GloballyPure p1)
     -- (SingleArg _, GloballyPure p2) -> return (Phi newCond newT1 newT2 , GloballyPure p2)
-    (_, _) -> return (Phi newCond newT1 newT2 , Pure)
+    (_, _) -> return (Phi newCond newT1 newT2 , Pure UserValue)
 
 
 ----
@@ -586,35 +609,35 @@ elaborateMut scope (ConvertM t1) = do
 
 elaborateMut scope (Transpose t1) = do
   (newT1, newT1Type) <- elaborateNonmut scope t1
-  return (Transpose newT1 , Pure)
+  return (Transpose newT1 , Pure UserValue)
 
 -- the non mutating builtin cases
 elaborateMut scope (Ret t1) = do
   (newT1, newT1Type) <- elaborateNonmut scope t1
-  return (Ret newT1 , Pure)
+  return (Ret newT1 , Pure UserValue)
 elaborateMut scope (Tup t1s) = do
   newT1s <- fmap fst <$> mapM (elaborateNonmut scope) t1s
-  return (Tup newT1s , Pure)
+  return (Tup newT1s , Pure UserValue)
 elaborateMut scope (MCreate t1 t2 t3 t4) = do
   (newT1, newT1Type) <- elaborateNonmut scope t1
   (newT2, newT2Type) <- elaborateNonmut scope t2
   (newT4, newT4Type) <- elaborateNonmut scope t4
-  return (MCreate newT1 newT2 t3 newT4 , Pure)
+  return (MCreate newT1 newT2 t3 newT4 , Pure UserValue)
 elaborateMut scope (Index t1 t2 t3) = do
   (newT1, newT1Type) <- elaborateNonmut scope t1
   (newT2, newT2Type) <- elaborateNonmut scope t2
   (newT3, newT3Type) <- elaborateNonmut scope t3
-  return (Index newT1 newT2 newT3 , Pure)
+  return (Index newT1 newT2 newT3 , Pure UserValue)
 elaborateMut scope (Row t1 t2) = do
   (newT1, newT1Type) <- elaborateNonmut scope t1
   (newT2, newT2Type) <- elaborateNonmut scope t2
-  return (Row newT1 newT2, Pure)
+  return (Row newT1 newT2, Pure UserValue)
 elaborateMut scope (Size t1) = do
   (newT1, newT1Type) <- elaborateMut scope t1
-  return (Size newT1, Pure)
+  return (Size newT1, Pure UserValue)
 elaborateMut scope (Length t1) = do
   (newT1, newT1Type) <- elaborateMut scope t1
-  return (Length newT1, Pure)
+  return (Length newT1, Pure UserValue)
 
 -- the unsupported terms
 elaborateMut scope term@(Choice t1)        = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
@@ -636,7 +659,7 @@ elaborateMut scope term@(Arg x a b)        = throwError (UnsupportedError ("When
 elaborateLambda :: Scope ->  [Asgmt JuliaType] -> MutDMTerm -> MTC (DMTerm , ImmutType)
 elaborateLambda scope args body = do
   -- add args as vars to the scope
-  let scope' = foldr (\(a :- _) -> setValue a (SingleArg a))
+  let scope' = foldr (\(a :- _) -> setValue a (Pure (SingleArg a)))
                      scope
                      args
 
@@ -713,7 +736,7 @@ elaborateLambda scope args body = do
     -- case II : Not Mutating
     --
     -- simply say that this function is not mutating
-    Pure -> pure (newBody , Pure)
+    Pure _ -> pure (newBody , Pure UserValue)
 
     --
     -- case III : locally mutating without return value
@@ -746,11 +769,11 @@ elaborateMutList f scope mutargs = do
             -- this one needs to be a single arg
             case getValue x scope of
               Nothing -> throwError (VariableNotInScope x)
-              Just (SingleArg y) | x == y -> do
+              Just (Pure (SingleArg y)) | x == y -> do
                 markMutated y
                 return (Var (x :- a) , Just (x, NotLocalMutation))
-              Just (SingleArg y) -> throwError (DemutationError $ "When calling the mutating function " <> f <> " found the variable " <> show x <> " as argument in a mutable-argument-position. It is bound to the function argument " <> show y <> ", but it is not allowed to use renamed function arguments in such a position.")
-              Just (Pure) -> do
+              Just (Pure (SingleArg y)) -> throwError (DemutationError $ "When calling the mutating function " <> f <> " found the variable " <> show x <> " as argument in a mutable-argument-position. It is bound to the function argument " <> show y <> ", but it is not allowed to use renamed function arguments in such a position.")
+              Just (Pure _) -> do
                 markMutated x
                 return (Var (x :- a) , Just (x, LocalMutation))
               Just res -> throwError (DemutationError $ "When calling the mutating function " <> f <> " found the variable " <> show x <> " as argument in a mutable-argument-position. It has the type " <> show res)
@@ -765,8 +788,7 @@ elaborateMutList f scope mutargs = do
 
         -- we require the argument to be of pure type
         case τ of
-          Pure -> pure ()
-          SingleArg _ -> pure ()
+          Pure _ -> pure ()
           Mutating _ -> throwError (DemutationError $ "It is not allowed to pass mutating functions as arguments. " <> "\nWhen checking " <> f <> "(" <> show (fmap snd mutargs) <> ")")
           VirtualMutated _ -> throwError (DemutationError $ "It is not allowed to use the result of mutating functions as arguments in other mutating functions. " <> "\nWhen checking " <> f <> "(" <> show (fmap snd mutargs) <> ")")
 
@@ -1022,7 +1044,7 @@ elaborateMut (MutApply f args) = do
 
   -- make sure that it is a mutating function, and get the type
   muts <- case τ of
-    Pure -> throwError (DemutationError $ "Trying to call the pure function '" <> show f <> "' using a mutating call.")
+    Pure _ -> throwError (DemutationError $ "Trying to call the pure function '" <> show f <> "' using a mutating call.")
     Mutating muts -> pure muts
 
   -- make sure that there are as many arguments as the function requires
@@ -1051,7 +1073,7 @@ elaborateMut (MutApply f args) = do
 
         -- we require the argument to be of pure type
         case τ of
-          Pure -> pure ()
+          Pure _ -> pure ()
           _ -> throwError (DemutationError $ "It is not allowed to pass mutating functions as arguments. " <> "\nWhen checking '" <> show (MutApply f args) <> "'")
 
         return arg'
@@ -1070,7 +1092,7 @@ elaborateMut t = do
   (t' , τ) <- elaborateImmut t
 
   case τ of
-    Pure -> pure t'
+    Pure _ -> pure t'
     (Mutating τ') -> internalError $ "Did not expect to get the mutating type " <> show τ'
 
 
