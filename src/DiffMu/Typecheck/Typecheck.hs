@@ -533,7 +533,7 @@ checkSen' (ClipM c m) scope = do
       unify τb (NoFun (DMGrads nrm clp n (Numeric DMData)))
 
       -- change clip parameter to input
-      return (NoFun (DMGrads nrm c n (Numeric DMData)))
+      return (NoFun (DMTup [DMGrads nrm c n (Numeric DMData)]))
 
 
 --------------------
