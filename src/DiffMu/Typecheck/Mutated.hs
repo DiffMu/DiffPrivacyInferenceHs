@@ -411,34 +411,61 @@ elaborateMut scope (Extra (MutLoop iters iterVar body)) = do
   (newBody, newBodyType) <- elaborateMut scope' preprocessedBody
 
   -- we accept a full virtual mutated, or a globally pure value
-  mutvars <- case newBodyType of
-    VirtualMutated a -> return a
+  case newBodyType of
+    ----------
+    -- case I
+    -- the loop is really mutating
+    VirtualMutated mutvars -> do
+
+      -- we use the mutvars to build a tlet around the body,
+      -- and return that new `Loop` term
+      --
+      -- the actual body term is going to look as follows:
+      --
+      --   let (c1...cn) = captureVar
+      --   in term...
+      --
+      -- where `term` is made sure to return the captured tuple
+      -- by the general demutation machinery
+      captureVar <- newTeVarOfMut "loop_capture"
+
+      let inScope v = case getValue v scope of
+                        Just _ -> True
+                        Nothing -> False
+
+      let globalMutVars = filter (inScope . fst) mutvars
+      let bodyProjection = getPermutationWithDrop mutvars globalMutVars
+
+      let newBodyWithLet = TLet [(v :- JTAny) | (v,_) <- globalMutVars] (Var (captureVar :- JTAny)) (Reorder bodyProjection newBody)
+      let newTerm = Loop newIters (fst <$> globalMutVars) (iterVar , captureVar) newBodyWithLet
+
+      return (newTerm , VirtualMutated globalMutVars)
+
+    ----------
+    -- case I
+    -- the loop only mutates local variables,
+    -- and returns a pure value
     GloballyPure xs -> case xs of
-      [] -> throwError (DemutationError "")
-      xs -> return [(x, LocalMutation) | x <- xs]
+      [] -> throwError (DemutationError $ "Expected a loop body to be mutating, but it was of type " <> show (GloballyPure []))
+      mutvars -> do
+        captureVar <- newTeVarOfMut "loop_capture"
+
+        let inScope v = case getValue v scope of
+                          Just _ -> True
+                          Nothing -> False
+
+        let globalMutVars = filter (inScope) mutvars
+        let bodyProjection = getPermutationWithDrop mutvars globalMutVars
+
+        let newBodyWithLet = TLet [(v :- JTAny) | (v) <- globalMutVars] (Var (captureVar :- JTAny)) (newBody)
+        let newTerm = Loop newIters (globalMutVars) (iterVar , captureVar) newBodyWithLet
+
+        return (newTerm , VirtualMutated ([(v , LocalMutation) | v <- globalMutVars]))
+
 
     -- if there was no mutation, throw error
     other -> throwError (DemutationError $ "Expected a loop body to be mutating, but it was of type " <> show other)
 
-  -- we use them to build a tlet around the body,
-  -- and return that new `Loop` term
-  --
-  -- the actual body term is going to look as follows:
-  --
-  --   let (c1...cn) = captureVar
-  --   in term...
-  --
-  -- where `term` is made sure to return the captured tuple
-  -- by the general demutation machinery
-  captureVar <- newTeVarOfMut "loop_capture"
-
-  -- NOTE: WIP/test -v-
-  let allVars = [v | (v,_) <- mutvars]
-
-  let newBodyWithLet = TLet [(v :- JTAny) | (v,_) <- mutvars] (Var (captureVar :- JTAny)) newBody
-  let newTerm = Loop newIters {-mutvars-} allVars (iterVar , captureVar) newBodyWithLet
-
-  return (newTerm , VirtualMutated mutvars)
 
 
 -- the loop-body-preprocessing creates these modify! terms
