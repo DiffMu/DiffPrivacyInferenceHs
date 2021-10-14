@@ -77,7 +77,7 @@ typecheckFromDMTerm term = do
 
         term' <- preprocessDMTerm term''
 
-        logForce $ "Mutation elaborated term is: " <> show term'
+        logForce $ "Mutation elaborated and flet-preprocessed term is:\n" <> showPretty term'
 
         let tres = checkSens (term') def
         let (tres'',_) = runState (extractDelayed def tres) def
