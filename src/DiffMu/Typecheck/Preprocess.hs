@@ -49,33 +49,8 @@ collectAllFLets (SLet var def rest) = SLet var <$> (collectAllFLets def) <*> (co
 collectAllFLets (TLet var def rest) = TLet var <$> (collectAllFLets def) <*> (collectAllFLets rest)
 collectAllFLets (Extra e)  = pure $ Extra undefined
 
-collectAllFLets rest = recDMTermM collectAllFLets (\x -> x) rest
+collectAllFLets rest = recDMTermMSameExtension collectAllFLets rest
 
--- collectAllFLets (Ret t)           = Ret <$> (collectAllFLets t)
--- collectAllFLets (Sng a t)         = pure $ Sng a t
--- collectAllFLets (Var (a :- t))    = pure $ Var (a :- t)
--- collectAllFLets (Rnd t)           = pure $ Rnd t
--- collectAllFLets (Arg a b c)       = pure $ Arg a b c
--- collectAllFLets (Op o ts)         = Op o <$> (mapM collectAllFLets ts)
--- collectAllFLets (Phi a b c)       = Phi <$> (collectAllFLets a) <*> (collectAllFLets b) <*> (collectAllFLets c)
--- collectAllFLets (Lam a t)         = Lam a <$> (collectAllFLets t)
--- collectAllFLets (LamStar a t)     = LamStar a <$> (collectAllFLets t)
--- collectAllFLets (BlackBox a)      = pure $ (BlackBox a)
--- collectAllFLets (Apply t ts)      = Apply <$> (collectAllFLets t) <*> (mapM collectAllFLets ts)
--- collectAllFLets (Choice m)        = Choice <$> (mapM collectAllFLets m)
--- collectAllFLets (Tup ts)          = Tup <$> (mapM collectAllFLets ts)
--- collectAllFLets (Gauss a b c d)   = Gauss <$> (collectAllFLets a) <*> (collectAllFLets b) <*> (collectAllFLets c) <*> (collectAllFLets d)
--- collectAllFLets (MCreate a b x c) = MCreate <$> (collectAllFLets a) <*> (collectAllFLets b) <*> pure x <*> (collectAllFLets c)
--- collectAllFLets (Size a)          = Size <$> (collectAllFLets a)
--- collectAllFLets (Transpose a)     = Transpose <$> (collectAllFLets a)
--- collectAllFLets (Index a b c)     = Index <$> (collectAllFLets a) <*> (collectAllFLets b) <*> (collectAllFLets c)
--- collectAllFLets (ClipM x a)       = ClipM x <$> (collectAllFLets a)
--- collectAllFLets (Loop a b x c)    = Loop <$> (collectAllFLets a) <*> (pure b) <*> pure x <*> (collectAllFLets c)
--- collectAllFLets (SubGrad a b)     = SubGrad <$> collectAllFLets a <*> collectAllFLets b
--- collectAllFLets (ScaleGrad a b)     = ScaleGrad <$> collectAllFLets a <*> collectAllFLets b
--- collectAllFLets (ConvertM t)      = ConvertM <$> collectAllFLets t
--- collectAllFLets (Reorder a t)     = Reorder a <$> collectAllFLets t
--- collectAllFLets (MutLet t s)      = MutLet <$> collectAllFLets t <*> collectAllFLets s
 
 expandFLets :: TeVar -> [DMTerm] -> DMTerm -> DMTerm
 expandFLets var [] rest = rest
