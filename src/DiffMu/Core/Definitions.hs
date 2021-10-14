@@ -720,6 +720,8 @@ liftExtension f x = runIdentity $ recDMTermM (Identity . liftExtension f) (Ident
 -- liftExtension f (Reorder x a)      = Reorder x (liftExtension f a)
 
 -- recursing into a dmterm
+recDMTermSameExtension :: forall t. (Traversable t) => (PreDMTerm t -> (PreDMTerm t)) -> PreDMTerm t -> (PreDMTerm t)
+recDMTermSameExtension f x = runIdentity (recDMTermMSameExtension (Identity . f) x)
 
 recDMTermMSameExtension :: forall t m. (Monad m, Traversable t) => (PreDMTerm t -> m (PreDMTerm t)) -> PreDMTerm t -> m (PreDMTerm t)
 recDMTermMSameExtension f t = recDMTermM f g t

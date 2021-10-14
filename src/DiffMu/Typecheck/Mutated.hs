@@ -102,6 +102,7 @@ instance Monad m => CheckNeutral m IsMutated where
   checkNeutral (Mutated) = pure False
 
 
+-- helpers
 markMutated :: TeVar -> MTC ()
 markMutated var = do
   let singl = setValue var Mutated emptyDict
@@ -112,6 +113,11 @@ markRead var = do
   let singl = setValue var NotMutated emptyDict
   mutTypes %= (⋆! singl)
 
+wrapReorder :: (Eq a, Show a) => [a] -> [a] -> PreDMTerm t -> PreDMTerm t
+wrapReorder have want term | have == want = term
+wrapReorder have want term | otherwise    =
+  let σ = getPermutationWithDrop have want
+  in Reorder σ (term)
 
 ---
 -- elaborating loops
@@ -445,9 +451,8 @@ elaborateMut scope (Extra (MutLoop iters iterVar body)) = do
                         Nothing -> False
 
       let globalMutVars = filter (inScope . fst) mutvars
-      let bodyProjection = getPermutationWithDrop mutvars globalMutVars
 
-      let newBodyWithLet = TLet [(v :- JTAny) | (v,_) <- globalMutVars] (Var (captureVar :- JTAny)) (Reorder bodyProjection newBody)
+      let newBodyWithLet = TLet [(v :- JTAny) | (v,_) <- globalMutVars] (Var (captureVar :- JTAny)) (wrapReorder mutvars globalMutVars newBody)
       let newTerm = Loop newIters (fst <$> globalMutVars) (iterVar , captureVar) newBodyWithLet
 
       return (newTerm , VirtualMutated globalMutVars)
@@ -728,9 +733,8 @@ elaborateLambda scope args body = do
       -- let vars' = [v | (v , NotLocalMutation) <- vars]
       let mutVars' = [(v , NotLocalMutation) | v <- mutVars]
 
-      let σ = getPermutationWithDrop vars mutVars'
-      logForce $ "Found permutation " <> show vars <> " ↦ " <> show mutVars <>". It is: " <> show σ
-      pure ((Reorder σ newBody) , Mutating mutationsStates)
+      -- logForce $ "Found permutation " <> show vars <> " ↦ " <> show mutVars <>". It is: " <> show σ
+      pure ((wrapReorder vars mutVars' newBody) , Mutating mutationsStates)
 
     --
     -- case II : Not Mutating
@@ -941,38 +945,9 @@ optimizeTLet (TLet (αs) (term) t3) =
     -- if not successfull, we recurse
     Nothing -> TLet (αs) (optimizeTLet term) (optimizeTLet t3)
 
+-- the recursion case
+optimizeTLet t      = recDMTermSameExtension (optimizeTLet) t
 
-
--- the recursion cases
-optimizeTLet (SLet jt a b)      = SLet jt (optimizeTLet a) (optimizeTLet b)
-optimizeTLet (FLet v a b)       = FLet v (optimizeTLet a) (optimizeTLet b)
-optimizeTLet (Extra e)          = Extra e
-optimizeTLet (Ret (r))          = Ret (optimizeTLet r)
-optimizeTLet (Sng g jt)         = Sng g jt
-optimizeTLet (Var (v :- jt))    = Var (v :- jt)
-optimizeTLet (Rnd jt)           = Rnd jt
-optimizeTLet (Arg v jt r)       = Arg v jt r
-optimizeTLet (Op op ts)         = Op op (fmap (optimizeTLet) ts)
-optimizeTLet (Phi a b c)        = Phi (optimizeTLet a) (optimizeTLet b) (optimizeTLet c)
-optimizeTLet (Lam     jts a)    = Lam jts (optimizeTLet a)
-optimizeTLet (LamStar jts a)    = LamStar jts (optimizeTLet a)
-optimizeTLet (BlackBox jts)     = BlackBox jts
-optimizeTLet (Apply a bs)       = Apply (optimizeTLet a) (fmap (optimizeTLet) bs)
-optimizeTLet (Choice chs)       = Choice (fmap (optimizeTLet) chs)
-optimizeTLet (Tup as)           = Tup (fmap (optimizeTLet) as)
-optimizeTLet (Gauss a b c d)    = Gauss (optimizeTLet a) (optimizeTLet b) (optimizeTLet c) (optimizeTLet d)
-optimizeTLet (ConvertM a)       = ConvertM (optimizeTLet a)
-optimizeTLet (MCreate a b x c ) = MCreate (optimizeTLet a) (optimizeTLet b) x (optimizeTLet c)
-optimizeTLet (Size a)      = Size (optimizeTLet a)
-optimizeTLet (Length a)      = Length (optimizeTLet a)
-optimizeTLet (Transpose a)      = Transpose (optimizeTLet a)
-optimizeTLet (Index a b c)      = Index (optimizeTLet a) (optimizeTLet b) (optimizeTLet c)
-optimizeTLet (Row a b)      = Row (optimizeTLet a) (optimizeTLet b)
-optimizeTLet (ClipM c a)        = ClipM c (optimizeTLet a)
-optimizeTLet (Loop a b x d )    = Loop (optimizeTLet a) (b) x (optimizeTLet d)
-optimizeTLet (SubGrad a b)      = SubGrad (optimizeTLet a) (optimizeTLet b)
-optimizeTLet (ScaleGrad a b)    = ScaleGrad (optimizeTLet a) (optimizeTLet b)
-optimizeTLet (Reorder x a)      = Reorder x (optimizeTLet a)
 
 
 
