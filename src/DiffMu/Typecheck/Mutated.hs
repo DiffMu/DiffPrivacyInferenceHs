@@ -171,13 +171,19 @@ elaborateMut scope (Op op args) = do
   pure (Op op (fst <$> args') , Pure UserValue)
 elaborateMut scope (Sng η τ) = pure (Sng η τ , Pure UserValue)
 elaborateMut scope (Rnd jt) = pure (Rnd jt , Pure UserValue)
-elaborateMut scope (BlackBox args) = pure (BlackBox args, Pure UserValue)
 
 elaborateMut scope (Var (x :- j)) = do
   let τ = getValue x scope
   case τ of
     Nothing -> throwError (VariableNotInScope x)
     Just τ  -> return (Var (x :- j), τ)
+
+elaborateMut scope (BBLet name args tail) = do
+
+-- TODO is this right?
+  (newBody , newBodyType) <- elaborateMut scope tail
+
+  return (BBLet name args newBody , consumeDefaultValue newBodyType)
 
 elaborateMut scope (SLet (x :- τ) term body) = do
 

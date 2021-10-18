@@ -36,12 +36,12 @@ pSingle e = case e of
                  JETup elems -> (Tup <$> (mapM pSingle elems))
                  JELam args body -> pJLam args body
                  JELamStar args body -> pJLamStar args body
-                 JEBlackBox args -> pJBlackBox args
                  JEIfElse cond ifb elseb -> (Phi <$> pSingle cond <*> pSingle ifb <*> pSingle elseb)
                  JELoop ivar iter body -> pJLoop ivar iter body
                  JEAssignment aee amt -> pJSLet aee amt [aee] (Extra . DefaultRet)
                  JETupAssignment aee amt -> pJTLet aee amt [JETup aee] (Extra . DefaultRet)
                  JEFunction name term -> pJFLet name term [name] (Extra . DefaultRet)
+                 JEBlackBox name args -> pJBlackBox name args [name] (Extra . DefaultRet)
                  JERef name refs -> pJRef name refs
                  JECall name args -> pJCall name args
                  JEUnsupported s -> parseError ("Unsupported expression " <> show s)
@@ -64,6 +64,7 @@ pList (s : tail) = case s of
                         JEAssignment aee amt -> pJSLet aee amt tail (\x -> x)
                         JETupAssignment aee amt -> pJTLet aee amt tail (\x -> x)
                         JEFunction name term -> pJFLet name term tail (\x -> x)
+                        JEBlackBox name args -> pJBlackBox name args tail (\x -> x)
                         JELoop ivar iter body -> pMutLet (pJLoop ivar iter body) tail
                         JECall name args -> pMutLet (pJCall name args) tail
                         JEIfElse _ _ _ -> throwError (InternalError "Conditionals should not have tails!")
@@ -81,12 +82,12 @@ pJRef name refs = case refs of
                                        t1 <- pSingle i1
                                        referee <- pSingle name
                                        return (Row referee t1)
+                       [JEColon,_] -> parseError "Acessing columns of matrices as Vectors is not permitted."
                        [i1,i2] -> do
                                   t1 <- pSingle i1
                                   t2 <- pSingle i2
                                   referee <- pSingle name
                                   return (Index referee t1 t2)
-                       [JEColon,_] -> parseError "Acessing columns of matrices as Vectors is not permitted."
                        _ -> parseError ("Only double indexing to matrix elements supported, but you gave " <> show refs)
 
 pArg arg = case arg of
@@ -116,13 +117,17 @@ pJLamStar args body = do
                        exit
                        return (LamStar dargs dbody)
 
-pJBlackBox args = do
+pJBlackBox name args tail wrapper =
+  case name of
+    JESymbol pname -> do
                     (_,_,insideFunction) <- get
                     case insideFunction of
                          True -> parseError ("Black boxes can only be defined on top-level scope.")
                          False -> do
                                     pargs <- mapM pArg args
-                                    return (BlackBox pargs)
+                                    ptail <- pList tail
+                                    return (BBLet (UserTeVar pname) pargs ptail)
+    _ -> parseError $ "Invalid function name expression " <> show name <> ", must be a symbol."
 
 pJSLet assignee assignment tail wrapper =
    case assignee of

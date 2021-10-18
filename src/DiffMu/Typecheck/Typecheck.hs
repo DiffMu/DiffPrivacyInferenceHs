@@ -89,6 +89,7 @@ checkSen' (Sng η τ) scope = done $ do
   res <- Numeric <$> (Const (constCoeff (Fin η)) <$> (createDMTypeNum τ))
   return (NoFun res)
 
+{-
 checkSen' (BlackBox xτs) scope =
    let handleArg (_ :- τ) = do
                               dτ <- createDMType τ
@@ -100,6 +101,7 @@ checkSen' (BlackBox xτs) scope =
                let τ = (xrτs' :->: (NoFun res))
                let frees = []
                return (Fun [(ForAll frees τ :@ (Just sign))])
+-}
 
 -- typechecking an op
 checkSen' (Op op args) scope = do
@@ -276,9 +278,11 @@ checkSen' (Apply f args) scope =
     -- restricting function to modify variables which are
     -- also modified on an outer level
     args <- applyAllDelayedLayers scope (sequence margs)
-
+     
     -- we merge the different TC's into a single result TC
-    return (sbranch_check res args)
+    return $ do
+       logForce ("Scope is:\n" <> show (getAllKeys scope))
+       (sbranch_check res args)
 
 
 checkSen' (FLet fname term body) scope = do
@@ -290,8 +294,12 @@ checkSen' (FLet fname term body) scope = do
    result <- checkSens body scope'
 
    return $ do
+     logForce ("checking body of " <> show fname <> " in:\n" <> show (getAllKeys scope'))
+     logForce ("old scope:\n" <> show (getAllKeys scope))
      result' <- result
+     logForce ("done result:\n")
      removeVar @SensitivityK fname
+     logForce ("end:\n" <> show (getAllKeys scope))
      return result'
 
 
@@ -766,6 +774,7 @@ checkPri' (Apply f args) scope =
        -- i.e. "typecheck" means here "extracting" the result of the later computation
        res <- (applyDelayedLayer scope (checkSens f scope))
        done $ do
+                logForce ("Scope is:\n" <> show (getAllKeys scope))
                 r <- res
                 mtruncateP inftyP -- truncate f's context to ∞
                 return r

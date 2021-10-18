@@ -21,7 +21,7 @@ data JExpr =
    | JEUnsupported String
    | JECall JExpr [JExpr]
    | JEBlock [JExpr]
-   | JEBlackBox [JExpr]
+   | JEBlackBox JExpr [JExpr]
    | JETypeAnnotation JExpr JuliaType
    | JENotRelevant JExpr JuliaType
    | JEIter JExpr JExpr JExpr
@@ -115,21 +115,27 @@ pFLet = let pFunc = do
                         body <- pJExpr
                         return (name, (JELam args body))
             pStar = try (string ":Priv") <|> (pCall (string ":Priv") (pJExpr `sepBy` sep) >> return "")
-            pBox = try (string ":BlackBox") <|> (pCall (string ":BlackBox") (pJExpr `sepBy` sep) >> return "")
             pFuncStar = do
                         (name, args) <- (":(::)" `with` ((pCall pJExpr pJExpr) <* sep <* pStar))
                         sep
                         body <- pJExpr
                         return (name, (JELamStar args body))
+            pToFLet = do
+                      (name, lam) <- try (":function" `with` (try pFuncStar <|> try pFunc))
+                                     <|> try (":(=)" `with` (try pFuncStar <|> try pFunc))
+                      return (JEFunction name lam)
+            pBox = try (string ":BlackBox") <|> (pCall (string ":BlackBox") (pJExpr `sepBy` sep) >> return "")
             pBlackBox = do
                         (name, args) <- (":(::)" `with` ((pCall pJExpr pJExpr) <* sep <* pBox))
                         sep
                         pJExpr
-                        return (name, JEBlackBox args)
+                        return (name, args)
+            pToBlackBox = do
+                          (name, args) <- try (":function" `with` pBlackBox)
+                                          <|> try (":(=)" `with` pBlackBox)
+                          return (JEBlackBox name args)
         in do
-          (name, lam) <- try (":function" `with` (try pFuncStar <|> try pBlackBox <|> try pFunc))
-                         <|> try (":(=)" `with` (try pFuncStar <|> try pBlackBox <|> try pFunc))
-          return (JEFunction name lam)
+             try pToBlackBox <|> pToFLet
 
 
 

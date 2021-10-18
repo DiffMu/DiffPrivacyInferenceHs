@@ -73,11 +73,12 @@ findFLets target (SLet var def rest) = let FindFLetsResult others rest' = findFL
                                        in FindFLetsResult (others) (SLet var def rest')
 findFLets target (TLet var def rest) = let FindFLetsResult others rest' = findFLets target rest
                                        in FindFLetsResult (others) (TLet var def rest')
+findFLets target (BBLet var args rest) = let FindFLetsResult others rest' = findFLets target rest
+                                         in FindFLetsResult (others) (BBLet var args rest')
 findFLets target t = FindFLetsResult [] t
 
 
 getJuliaSig :: DMTerm -> TC JuliaSig
-getJuliaSig (BlackBox as) = pure $ map sndA as
 getJuliaSig (Lam as _) = pure $ map sndA as
 getJuliaSig (LamStar as _) = pure $ map (fst . sndA) as
 getJuliaSig _ = impossible "Expected a lam/lamstar inside an flet."
