@@ -56,13 +56,8 @@ data MFull = MFull
   , _topLevelInfo :: TopLevelInformation
   }
 
-instance Default MFull where
-  def = MFull def def def
 
--- newtype MTC a = MTC {runMTC :: ((StateT MFull (ExceptT DMException (Writer DMLogMessages))) a)}
---   deriving (Functor, Applicative, Monad, MonadState MFull, MonadError DMException, MonadWriter DMLogMessages)
-
-type MTC = LightTC DMLogLocation MFull
+type MTC = LightTC Location_PrePro_Demutation MFull
 
 $(makeLenses ''MFull)
 

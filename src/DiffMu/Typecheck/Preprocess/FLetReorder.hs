@@ -6,6 +6,7 @@ import DiffMu.Abstract
 import DiffMu.Core
 import DiffMu.Core.Symbolic
 import DiffMu.Core.TC
+import DiffMu.Core.Logging
 import DiffMu.Typecheck.Operations
 import DiffMu.Core.DelayedScope
 import DiffMu.Typecheck.JuliaType
@@ -20,9 +21,9 @@ import qualified Data.Text as T
 
 import Debug.Trace
 
+type FLetTC = LightTC Location_PrePro_FLetReorder ()
 
-
-collectAllFLets :: DMTerm -> LightTC l s DMTerm
+collectAllFLets :: DMTerm -> FLetTC DMTerm
 
 collectAllFLets (FLet var def rest) = do
   let FindFLetsResult defs rest' = findFLets var rest

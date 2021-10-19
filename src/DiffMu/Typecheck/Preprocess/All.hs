@@ -25,27 +25,27 @@ import qualified Data.Text as T
 
 import Debug.Trace
 
-preprocessAll :: MutDMTerm -> MTC (DMTerm)
+type PreProTC = LightTC Location_PreProcess ()
+
+preprocessAll :: MutDMTerm -> PreProTC (DMTerm)
 preprocessAll term = do
 
   -- top level processing
 
-  (tlinfo, term') <- liftLightTC def (checkTopLevel term)
+  (tlinfo, term') <- liftLightTC def def (checkTopLevel term)
   logForce $ "-----------------------------------"
   logForce $ "Toplevel information:\n" <> show tlinfo
 
   -- mutation processing
-  topLevelInfo %= (\_ -> tlinfo)
-  term'' <- demutate term'
+  term'' <- liftLightTC (MFull def def tlinfo) (\_ -> ()) (demutate term')
 
   -- flet processing
-  term''' <- collectAllFLets term''
+  term''' <- liftLightTC def def (collectAllFLets term'')
 
   logForce $ "-----------------------------------"
   logForce $ "FLet processed term:\n" <> showPretty term'''
 
   -- done
   return term'''
-
 
 

@@ -32,8 +32,6 @@ data TopLevelInformation = TopLevelInformation
   , globalNames :: [TeVar]
   }
 
-instance Default TopLevelInformation where
-  def = TopLevelInformation [] []
 
 instance Show TopLevelInformation where
   show (TopLevelInformation bbs gls) = "globals: " <> show gls <> "\nblack boxes: " <> show bbs <> "\n"

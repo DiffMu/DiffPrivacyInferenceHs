@@ -33,7 +33,7 @@ instance MonadInternalError (LightTC l s) where
 instance MonadImpossible (LightTC l s) where
   impossible = throwError . ImpossibleError
 
-instance MonadLog (LightTC l a) where
+instance ISing_DMLogLocation l => MonadLog (LightTC l a) where
   log = logWithSeverityOfMut Debug
   debug = logWithSeverityOfMut Debug
   info = logWithSeverityOfMut Info
@@ -43,11 +43,11 @@ instance MonadLog (LightTC l a) where
 
 
 -- logging
-logWithSeverityOfMut :: DMLogSeverity -> String -> LightTC l a ()
+logWithSeverityOfMut :: forall l a. ISing_DMLogLocation l => DMLogSeverity -> String -> LightTC l a ()
 logWithSeverityOfMut sev text = do
   -- here we split the messages at line breaks (using `lines`)
   -- in order to get consistent looking output (every line has a header)
-  let messages = DMLogMessage sev Location_Demutation <$> (reverse $ lines text)
+  let messages = DMLogMessage sev (singDMLogLocation (Proxy @l)) <$> (reverse $ lines text)
   tell (DMLogMessages messages)
 
 -- lifting
@@ -57,9 +57,9 @@ liftNewLightTC a =
   let s = runStateT (runLightTC a) def
   in TCT (StateT (\t -> fmap (\(a,_) -> (a,def)) s))
 
-liftLightTC :: Default s => (s -> t) -> LightTC l s a -> LightTC l t a
-liftLightTC f a =
-  let s = runStateT (runLightTC a) def
+liftLightTC :: s -> (s -> t) -> LightTC k s a -> LightTC l t a
+liftLightTC start f a =
+  let s = runStateT (runLightTC a) start
   in LightTC (StateT (\t -> fmap (\(a,x) -> (a,f x)) s))
 
 
