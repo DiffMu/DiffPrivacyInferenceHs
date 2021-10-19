@@ -102,6 +102,7 @@ data DMKind =
   | FunKind
   | NoFunKind
   | ForAllKind
+  | BlackBoxKind
   deriving (Typeable)
 
 -- Using the "TemplateHaskell" ghc-extension, and the following function from the singletons library,
@@ -119,6 +120,7 @@ instance Show DMKind where
   show FunKind = "Fun"
   show NoFunKind = "NoFun"
   show ForAllKind = "ForAll"
+  show BlackBoxKind = "BlackBox"
 
 --------------------
 -- 2. DMTypes
@@ -190,6 +192,9 @@ data DMTypeOf (k :: DMKind) where
   Fun :: [DMTypeOf ForAllKind :@ Maybe [JuliaType]] -> DMTypeOf MainKind
   (:∧:) :: DMTypeOf MainKind -> DMTypeOf MainKind -> DMTypeOf MainKind -- infimum
 
+  BlackBox :: [JuliaType] -> DMTypeOf BlackBoxKind
+  BlackBoxy :: DMTypeOf BlackBoxKind -> DMTypeOf MainKind
+
 instance Hashable (DMTypeOf k) where
   hashWithSalt s (Deleted) = s
   hashWithSalt s (DMInt) = s +! 1
@@ -216,6 +221,8 @@ instance Hashable (DMTypeOf k) where
   hashWithSalt s (Fun t) = s `hashWithSalt` t
   hashWithSalt s (NoFun t) = s `hashWithSalt` t
   hashWithSalt s (n :∧: t) = s `hashWithSalt` n `hashWithSalt` t
+  hashWithSalt s (BlackBox n) = s `hashWithSalt` n
+  hashWithSalt s (BlackBoxy n) = s `hashWithSalt` n
 
 instance (Hashable a, Hashable b) => Hashable (a :@ b) where
   hashWithSalt s (a:@ b) = s `hashWithSalt` a `hashWithSalt` b
@@ -262,6 +269,8 @@ instance Show (DMTypeOf k) where
   show (NoFun x) = "NoFun(" <> show x <> ")"
   show (Fun xs) = "Fun(" <> show xs <> ")"
   show (x :∧: y) = "(" <> show x <> "∧" <> show y <> ")"
+  show (BlackBox n) = "BlackBox [" <> show n <> "]"
+  show (BlackBoxy n) = "BlackBoxy [" <> show n <> "]"
 
 
 -- instance Eq (DMTypeOf NormKind) where
@@ -320,6 +329,8 @@ instance Eq (DMTypeOf k) where
   Fun ts == Fun ss = ts == ss
   (a :∧: b) == (a2 :∧: b2) = and [a == a2, b == b2]
 
+  (BlackBox n1) == (BlackBox n2) = n1 == n2
+  (BlackBoxy n1) == (BlackBoxy n2) = n1 == n2
 
   -- Error case
   _ == _ = False
@@ -621,7 +632,7 @@ data PreDMTerm (t :: * -> *) =
   | Phi (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
   | Lam     [Asgmt JuliaType] (PreDMTerm t)
   | LamStar [(Asgmt (JuliaType, Relevance))] (PreDMTerm t)
-  | BBLet TeVar [Asgmt JuliaType] (PreDMTerm t) -- name, arguments, tail
+  | BBLet TeVar [JuliaType] (PreDMTerm t) -- name, arguments, tail
   | BBApply (PreDMTerm t) [TeVar] -- term containing the application, list of captured variables.
   | Apply (PreDMTerm t) [(PreDMTerm t)]
   | FLet TeVar (PreDMTerm t) (PreDMTerm t)
@@ -809,7 +820,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (Phi a b c)        = "Phi (" <> showPretty a <> ")" <> parenIndent (showPretty b) <> parenIndent (showPretty c)
   showPretty (Lam     jts a)    = "Lam (" <> showPretty jts <> ")" <> parenIndent (showPretty a)
   showPretty (LamStar jts a)    = "LamStar (" <> showPretty jts <> ")" <> parenIndent (showPretty a)
-  showPretty (BBLet n jts b) = "BBLet " <> showPretty n <> " = (" <> showPretty jts <> " -> ?\n" <> showPretty b
+  showPretty (BBLet n jts b) = "BBLet " <> showPretty n <> " = (" <> show jts <> " -> ?\n" <> showPretty b
   showPretty (BBApply t cs) = "BBApply (" <> showPretty t <> " cap'ing " <> showPretty cs <> ")"
   showPretty (Apply a bs)       = (showPretty a) <> (showPretty bs)
   showPretty (FLet v a b)       = "FLet " <> showPretty v <> " = " <> (showPretty a) <> "\n" <> (showPretty b)

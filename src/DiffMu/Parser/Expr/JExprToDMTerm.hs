@@ -126,7 +126,7 @@ pJBlackBox name args tail wrapper =
                          False -> do
                                     pargs <- mapM pArg args
                                     ptail <- pList tail
-                                    return (BBLet (UserTeVar pname) pargs ptail)
+                                    return (BBLet (UserTeVar pname) (sndA <$> pargs) ptail)
     _ -> parseError $ "Invalid function name expression " <> show name <> ", must be a symbol."
 
 pJSLet assignee assignment tail wrapper =
