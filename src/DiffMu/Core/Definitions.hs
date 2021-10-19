@@ -102,7 +102,6 @@ data DMKind =
   | FunKind
   | NoFunKind
   | ForAllKind
-  | BlackBoxKind
   deriving (Typeable)
 
 -- Using the "TemplateHaskell" ghc-extension, and the following function from the singletons library,
@@ -120,7 +119,6 @@ instance Show DMKind where
   show FunKind = "Fun"
   show NoFunKind = "NoFun"
   show ForAllKind = "ForAll"
-  show BlackBoxKind = "BlackBox"
 
 --------------------
 -- 2. DMTypes
@@ -193,8 +191,7 @@ data DMTypeOf (k :: DMKind) where
   (:∧:) :: DMTypeOf MainKind -> DMTypeOf MainKind -> DMTypeOf MainKind -- infimum
 
   -- black box functions (and a wrapper to make them MainKind but still have a BlackBoxKind so we can have TVars of it)
-  BlackBox :: [JuliaType] -> DMTypeOf BlackBoxKind
-  BlackBoxy :: DMTypeOf BlackBoxKind -> DMTypeOf MainKind
+  BlackBox :: [JuliaType] -> DMTypeOf MainKind
 
 instance Hashable (DMTypeOf k) where
   hashWithSalt s (Deleted) = s
@@ -223,7 +220,6 @@ instance Hashable (DMTypeOf k) where
   hashWithSalt s (NoFun t) = s `hashWithSalt` t
   hashWithSalt s (n :∧: t) = s `hashWithSalt` n `hashWithSalt` t
   hashWithSalt s (BlackBox n) = s `hashWithSalt` n
-  hashWithSalt s (BlackBoxy n) = s `hashWithSalt` n
 
 instance (Hashable a, Hashable b) => Hashable (a :@ b) where
   hashWithSalt s (a:@ b) = s `hashWithSalt` a `hashWithSalt` b
@@ -271,7 +267,6 @@ instance Show (DMTypeOf k) where
   show (Fun xs) = "Fun(" <> show xs <> ")"
   show (x :∧: y) = "(" <> show x <> "∧" <> show y <> ")"
   show (BlackBox n) = "BlackBox [" <> show n <> "]"
-  show (BlackBoxy n) = "BlackBoxy [" <> show n <> "]"
 
 
 -- instance Eq (DMTypeOf NormKind) where
@@ -331,7 +326,6 @@ instance Eq (DMTypeOf k) where
   (a :∧: b) == (a2 :∧: b2) = and [a == a2, b == b2]
 
   (BlackBox n1) == (BlackBox n2) = n1 == n2
-  (BlackBoxy n1) == (BlackBoxy n2) = n1 == n2
 
   -- Error case
   _ == _ = False

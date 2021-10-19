@@ -89,20 +89,6 @@ checkSen' (Sng η τ) scope = done $ do
   res <- Numeric <$> (Const (constCoeff (Fin η)) <$> (createDMTypeNum τ))
   return (NoFun res)
 
-{-
-checkSen' (BlackBox xτs) scope =
-   let handleArg (_ :- τ) = do
-                              dτ <- createDMType τ
-                              return (dτ :@ inftyS)
-   in done $ do
-               xrτs' <- mapM handleArg xτs
-               let sign = sndA <$> xτs
-               res <- newVar
-               let τ = (xrτs' :->: (NoFun res))
-               let frees = []
-               return (Fun [(ForAll frees τ :@ (Just sign))])
--}
-
 -- typechecking an op
 checkSen' (Op op args) scope = do
   argsdel :: [TC DMMain] <- mapM (\t -> checkSens t scope) args -- check all the args in the delayed monad
@@ -240,6 +226,74 @@ checkSen' (SLet (x :- dτ) term body) scope = do
 
      result' <- result
      return result'
+
+
+
+checkSen' (BBLet name jτs tail) scope = do
+
+   -- the type of this is just a BlackBox, put it in the scope
+   let scope' = setValue name (done $ return (BlackBox jτs)) scope
+
+   -- check tail with that new scope
+   result <- checkSens tail scope'
+   done $ do
+     result' <- result
+     removeVar @SensitivityK name
+     return result'
+
+
+checkSen' (BBApply app args cs) scope =
+  let
+    checkArg arg = do
+      τ <- checkSens arg scope
+      let scaleContext :: TC (DMMain, Sensitivity)
+          scaleContext =
+            do τ' <- τ
+               s <- newVar
+               mscale s -- all args get infinite sensitivity
+               return (τ', s)
+      return (scaleContext)
+
+
+    checkCap c =
+       let delτ = getValue c scope -- see if the capture is in the current scope
+       in case delτ of
+         Nothing -> done $ return () -- if no, we don't need to do anything as it was not defined yet during this application
+         Just delτ -> do
+              mτ <- delτ -- get the computation that will give us the type of c
+              done $ do
+                 τ <- mτ -- extract the type of c
+                 mscale inftyS -- all args get infinite sensitivity
+                 return ()
+                 
+    margs = checkArg <$> args
+    mcs = checkCap <$> cs
+    mf = checkSens app scope
+
+  in do
+    -- we typecheck the function, no need to `apply` our current layer on the Later computation
+    -- because app can only be pointing to a black box and that's not delayed
+    res <- mf
+
+    -- we apply the current scope to *ALL* (!) layers.
+    -- i.e., all arguments are evaluated fully in the current scope
+    -- this only makes sense because of the parsing rule
+    -- restricting function to modify variables which are
+    -- also modified on an outer level
+    -- this should not have any impact on the sensitivity of things here tho
+    -- because everything happens inside the box and gets scaled by infty
+    args <- applyAllDelayedLayers scope (sequence margs)
+
+    _ <- applyAllDelayedLayers scope (sequence mcs) -- do the scaling for captures
+     
+    -- we merge the different TC's into a single result TC
+    return $ do
+        (τ_box :: DMMain, argτs) <- msumTup (res , msumS args) -- sum args and f's context
+        τ_ret <- newVar -- a type var for the function return type
+        addConstraint (Solvable (IsBlackBox (τ_box, fst <$> argτs))) -- constraint makes sure the signature matches the args
+        mapM (\s -> addConstraint (Solvable (IsBlackBoxReturn (τ_ret, s)))) argτs -- constraint sets the sensitivity to the right thing
+        return τ_ret
+
 
 
 checkSen' (Apply f args) scope =

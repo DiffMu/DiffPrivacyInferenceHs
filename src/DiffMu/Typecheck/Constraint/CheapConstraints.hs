@@ -151,6 +151,7 @@ instance Solve MonadDMTC IsLoopResult ((Sensitivity, Sensitivity, Sensitivity), 
         _ -> return ()
 
 
+--------------------------------------------------
 -- is it gauss or mgauss?
 instance FixedVars TVarOf (IsGaussResult (DMTypeOf MainKind, DMTypeOf MainKind)) where
   fixedVars (IsGaussResult (gauss,_)) = freeVars gauss
@@ -205,3 +206,67 @@ instance Solve MonadDMTC IsReorderedTuple (([Int], DMTypeOf MainKind) :=: DMType
 
 
 
+--------------------------------------------------
+-- black boxes
+
+newtype IsBlackBox a = IsBlackBox a deriving Show
+
+instance FixedVars TVarOf (IsBlackBox ((DMTypeOf MainKind, [DMTypeOf MainKind]))) where
+  fixedVars (IsBlackBox (b, args)) = []
+
+instance TCConstraint IsBlackBox where
+  constr = IsBlackBox
+  runConstr (IsBlackBox c) = c
+
+instance Solve MonadDMTC IsBlackBox (DMMain, [DMMain]) where
+    solve_ Dict _ name (IsBlackBox (box, args)) = 
+     case box of
+        TVar x -> pure () -- we don't know yet.
+        BlackBox jts -> do -- its a box!
+           case length jts == length args of
+                True -> let setArg :: MonadDMTC t => (JuliaType, DMMain) -> t ()
+                            setArg (jt, arg) = do
+                             case jt of
+                                 JTAny -> return ()
+                                 _ -> do djt <- createDMType jt
+                                         addConstraint (Solvable (IsLessEqual (arg, djt)))
+                                         return ()
+                        in do
+                            mapM setArg (zip jts args)
+                            dischargeConstraint @MonadDMTC name
+                False -> throwError (NoChoiceFoundError "Wrong number of arguments for black box call.")
+        _ -> impossible $ "Box Apply used with non-box!"
+
+
+
+
+newtype IsBlackBoxReturn a = IsBlackBoxReturn a deriving Show
+
+instance FixedVars TVarOf (IsBlackBoxReturn ((DMTypeOf MainKind, (DMTypeOf MainKind, Sensitivity)))) where
+  fixedVars (IsBlackBoxReturn (b, args)) = []
+
+instance TCConstraint IsBlackBoxReturn where
+  constr = IsBlackBoxReturn
+  runConstr (IsBlackBoxReturn c) = c
+
+instance Solve MonadDMTC IsBlackBoxReturn (DMMain, (DMMain, Sensitivity)) where
+    solve_ Dict _ name (IsBlackBoxReturn (ret, (argt, args))) =
+     case ret of
+          TVar _ -> pure ()
+          NoFun (DMVec LInf U _ (TVar _)) -> pure ()
+          NoFun (DMVec (TVar _) U _ (Numeric DMData)) -> pure ()
+          NoFun (DMVec LInf (TVar _) _ (Numeric DMData)) -> pure ()
+          NoFun (DMVec LInf U _ (Numeric DMData)) -> case argt of
+                    TVar _ -> pure ()
+                    NoFun (DMVec LInf U _ (TVar _)) -> pure ()
+                    NoFun (DMVec (TVar _) U _ (Numeric DMData)) -> pure ()
+                    NoFun (DMVec LInf (TVar _) _ (Numeric DMData)) -> pure ()
+                    NoFun (DMVec LInf U _ (Numeric DMData)) -> do
+                           unify args oneId
+                           dischargeConstraint @MonadDMTC name
+                    _ -> do
+                           unify args inftyS
+                           dischargeConstraint @MonadDMTC name
+          _ -> do
+                 unify args inftyS
+                 dischargeConstraint @MonadDMTC name
