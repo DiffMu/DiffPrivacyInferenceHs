@@ -265,7 +265,7 @@ checkSen' (BBApply app args cs) scope =
                  τ <- mτ -- extract the type of c
                  mscale inftyS -- all args get infinite sensitivity
                  return ()
-                 
+
     margs = checkArg <$> args
     mcs = checkCap <$> cs
     mf = checkSens app scope
@@ -285,7 +285,7 @@ checkSen' (BBApply app args cs) scope =
     args <- applyAllDelayedLayers scope (sequence margs)
 
     _ <- applyAllDelayedLayers scope (sequence mcs) -- do the scaling for captures
-     
+
     -- we merge the different TC's into a single result TC
     return $ do
         (τ_box :: DMMain, argτs) <- msumTup (res , msumS args) -- sum args and f's context
@@ -332,7 +332,7 @@ checkSen' (Apply f args) scope =
     -- restricting function to modify variables which are
     -- also modified on an outer level
     args <- applyAllDelayedLayers scope (sequence margs)
-     
+
     -- we merge the different TC's into a single result TC
     return $ do
        logForce ("Scope is:\n" <> show (getAllKeys scope))
@@ -773,6 +773,11 @@ checkSen' (Reorder σ t) scope = do
     ρ <- newVar
     addConstraint (Solvable (IsReorderedTuple ((σ , τ) :=: ρ)))
     return ρ
+
+checkSen' (LastTerm t) scope = do
+  -- typecheck the term t, and apply the current scope to it
+  applyAllDelayedLayers scope (checkSens t scope)
+
 
 
 -- Everything else is currently not supported.

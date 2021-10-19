@@ -47,12 +47,12 @@ instance Show TopLevelInformation where
 --
 -- returns (blackbox names, global names)
 
-checkTopLevel :: MutDMTerm -> TLTC (TopLevelInformation)
+checkTopLevel :: MutDMTerm -> TLTC (TopLevelInformation, MutDMTerm)
 
 -- if we have a black box
 -- make sure that the name is not already taken by anything else
 checkTopLevel (BBLet v body rest) = do
-  TopLevelInformation bbvars glvars <- checkTopLevel rest
+  (TopLevelInformation bbvars glvars, newRest) <- checkTopLevel rest
 
   case v `elem` bbvars of
     True -> throwError (BlackBoxError $ "Found multiple black boxes definitions for the name " <> show v <> ". Black boxes are only allowed to have a single implementation.")
@@ -63,30 +63,30 @@ checkTopLevel (BBLet v body rest) = do
     False -> pure ()
 
 
-  return (TopLevelInformation (v : bbvars) (v : glvars))
+  return (TopLevelInformation (v : bbvars) (v : glvars), BBLet v body newRest)
 
 -- if we have something else top level
-checkTopLevel (SLet (v :- _) body rest) = do
+checkTopLevel (SLet (v :- vt) body rest) = do
   checkNonTopLevelBB body
-  TopLevelInformation bbvars glvars <- checkTopLevel rest
+  (TopLevelInformation bbvars glvars, newRest) <- checkTopLevel rest
 
   case v `elem` bbvars of
     True -> throwError (BlackBoxError $ "Found a black box definition for the name " <> show v <> ". This is not allowed since there already is a global variable with that name.")
     False -> pure ()
 
-  return (TopLevelInformation bbvars (v : glvars))
+  return (TopLevelInformation bbvars (v : glvars), SLet (v :- vt) body newRest)
 checkTopLevel (FLet v body rest) = do
   checkNonTopLevelBB body
-  TopLevelInformation bbvars glvars <- checkTopLevel rest
+  (TopLevelInformation bbvars glvars, newRest)<- checkTopLevel rest
 
   case v `elem` bbvars of
     True -> throwError (BlackBoxError $ "Found a black box definition for the name " <> show v <> ". This is not allowed since there already is a global variable with that name.")
     False -> pure ()
 
-  return (TopLevelInformation bbvars (v : glvars))
+  return (TopLevelInformation bbvars (v : glvars), FLet v body newRest)
 checkTopLevel (TLet (vs) body rest) = do
   checkNonTopLevelBB body
-  TopLevelInformation bbvars glvars <- checkTopLevel rest
+  (TopLevelInformation bbvars glvars, newRest)<- checkTopLevel rest
 
   let letvars = fstA <$> vs
 
@@ -96,13 +96,13 @@ checkTopLevel (TLet (vs) body rest) = do
 
   mapM checkname letvars
 
-  return (TopLevelInformation bbvars (letvars <> glvars))
+  return (TopLevelInformation bbvars (letvars <> glvars) , TLet (vs) body newRest)
 
 -- all other terms mean that the top level scope is done.
 -- we make sure that there are no BBLets there
 checkTopLevel rest = do
   checkNonTopLevelBB rest
-  return (TopLevelInformation [] [])
+  return (TopLevelInformation [] [], LastTerm rest)
 
 
 -- make sure that no black box definitions are here.

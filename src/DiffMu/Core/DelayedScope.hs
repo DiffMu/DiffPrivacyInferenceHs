@@ -101,6 +101,13 @@ applyAllDelayedLayers x d = DelayedT $ do
   res <- extractDelayed x d
   return (Done $ res)
 
+tryGetDone :: Monad m => DelayedT x m a -> m (Maybe a)
+tryGetDone (DelayedT ma) = do
+  a <- ma
+  case a of
+    Done a -> return (Just a)
+    Later g -> return Nothing
+
 -- throwing an error finishes a computation
 throwDelayedError e = DelayedT (pure $ Done $ (throwError e))
 

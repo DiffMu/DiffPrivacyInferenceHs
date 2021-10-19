@@ -9,7 +9,7 @@ import DiffMu.Abstract
 data DMLogLocation = Location_Demutation | Location_Unification | Location_Subst | Location_INC | Location_Constraint | Location_Check | Location_Subtyping | Location_MonadicGraph | Location_All | Location_Unknown String
   deriving (Eq)
 
--- genSingletons[''DMLogLocation]
+
 
 data DMLogSeverity = Debug | Info | Warning | Force
   deriving (Eq,Ord)

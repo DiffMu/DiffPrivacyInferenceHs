@@ -529,6 +529,10 @@ elaborateMut scope (Extra (Modify (v :- _) t1)) = do
 elaborateMut scope (Extra (MutRet)) = do
   return (Tup [] , VirtualMutated [])
 
+elaborateMut scope (LastTerm t) = do
+  (newTerm, newType) <- elaborateMut scope t
+  return (LastTerm (newTerm), newType)
+
 elaborateMut scope (Extra (DefaultRet x)) = do
   (newX,newXType) <- elaborateNonmut scope x
   case newXType of

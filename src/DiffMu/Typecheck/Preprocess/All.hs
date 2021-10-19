@@ -30,24 +30,22 @@ preprocessAll term = do
 
   -- top level processing
 
-  tlinfo <- liftLightTC def (checkTopLevel term)
+  (tlinfo, term') <- liftLightTC def (checkTopLevel term)
   logForce $ "-----------------------------------"
   logForce $ "Toplevel information:\n" <> show tlinfo
 
   -- mutation processing
   topLevelInfo %= (\_ -> tlinfo)
-  term' <- demutate term
+  term'' <- demutate term'
 
   -- flet processing
-  term'' <- collectAllFLets term'
+  term''' <- collectAllFLets term''
 
   logForce $ "-----------------------------------"
-  logForce $ "FLet processed term:\n" <> showPretty term''
-
-  logForce $ "Mutation elaborated and flet-preprocessed term is:\n" <> showPretty term'
+  logForce $ "FLet processed term:\n" <> showPretty term'''
 
   -- done
-  return term''
+  return term'''
 
 
 

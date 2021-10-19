@@ -79,8 +79,11 @@ typecheckFromDMTerm term = do
 
 
         let tres = checkSens (term') def
-        let (tres'',_) = runState (extractDelayed def tres) def
-        tres' <- tres''
+        let (tres'',_) = runState (tryGetDone tres) def
+        tres' <- case tres'' of
+                   Nothing -> internalError "The result of typechecking was a non-applied later value.\nFrom this, no type information can be extracted."
+                   Just a -> a
+
         log $ "Type before constraint resolving: " <> show tres'
         log $ "solving constraints:"
         logPrintConstraints

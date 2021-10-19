@@ -652,6 +652,7 @@ data PreDMTerm (t :: * -> *) =
   | ScaleGrad (PreDMTerm t) (PreDMTerm t) -- scale (a : Scalar) (g : Mutating Gradient)
 -- Transparent tuple replacements
   | Reorder [Int] (PreDMTerm t)
+  | LastTerm (PreDMTerm t)
   deriving (Generic)
 
 deriving instance (forall a. Show a => Show (t a)) => Show (PreDMTerm t)
@@ -776,6 +777,7 @@ recDMTermM f h (Loop a b x d )    = Loop <$> (recDMTermM f h a) <*> pure b <*> p
 recDMTermM f h (SubGrad a b)      = SubGrad <$> (recDMTermM f h a) <*> (recDMTermM f h b)
 recDMTermM f h (ScaleGrad a b)    = ScaleGrad <$> (recDMTermM f h a) <*> (recDMTermM f h b)
 recDMTermM f h (Reorder x a)      = Reorder x <$> (recDMTermM f h a)
+recDMTermM f h (LastTerm x)       = LastTerm <$> (recDMTermM f h x)
 
 
 
@@ -836,6 +838,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (ScaleGrad a b)    = "ScaleGrad (" <> (showPretty a) <> ", " <> (showPretty b) <>  ")"
   showPretty (Reorder x a)      = "Reorder " <> show x <> parenIndent (showPretty a)
   showPretty (Loop a b x d )    = "Loop (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> show x <> ")" <> parenIndent (showPretty d)
+  showPretty (LastTerm a)      = "LastTerm " <> (showPretty a)
 
 instance ShowPretty a => ShowPretty (MutabilityExtension a) where
   showPretty (MutLet a b) = "MutLet" <> indent (showPretty a) <> indent (showPretty b)
