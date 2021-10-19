@@ -15,7 +15,7 @@ usingcabal: ffisrc/Wrapper.hs wrapper.cabal.old
 
 wrapperlib: ffisrc/Wrapper.hs package.yaml stack.yaml
 	rm DiffPrivacyInferenceHs.cabal
-	stack build
+	stack build --ghc-options -j
 	find .stack-work/ -name 'libdiffmu-wrapper.*' -exec cp {} ./capp/ \;
 
 
@@ -33,7 +33,7 @@ install: wrapperlib-install
 
 wrapperlib-install: ffisrc/Wrapper.hs package.yaml stack.yaml
 	rm DiffPrivacyInferenceHs.cabal
-	stack build
+	stack build --ghc-options -j
 	find .stack-work/ -name 'libdiffmu-wrapper.*' -exec cp {} ${LIB_INSTALL_DIR} \;
 
 # ------------------------------------
