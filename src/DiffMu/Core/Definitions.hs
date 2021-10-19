@@ -192,6 +192,7 @@ data DMTypeOf (k :: DMKind) where
   Fun :: [DMTypeOf ForAllKind :@ Maybe [JuliaType]] -> DMTypeOf MainKind
   (:∧:) :: DMTypeOf MainKind -> DMTypeOf MainKind -> DMTypeOf MainKind -- infimum
 
+  -- black box functions (and a wrapper to make them MainKind but still have a BlackBoxKind so we can have TVars of it)
   BlackBox :: [JuliaType] -> DMTypeOf BlackBoxKind
   BlackBoxy :: DMTypeOf BlackBoxKind -> DMTypeOf MainKind
 
@@ -633,7 +634,7 @@ data PreDMTerm (t :: * -> *) =
   | Lam     [Asgmt JuliaType] (PreDMTerm t)
   | LamStar [(Asgmt (JuliaType, Relevance))] (PreDMTerm t)
   | BBLet TeVar [JuliaType] (PreDMTerm t) -- name, arguments, tail
-  | BBApply (PreDMTerm t) [TeVar] -- term containing the application, list of captured variables.
+  | BBApply (PreDMTerm t) [(PreDMTerm t)] [TeVar] -- term containing the application, list of captured variables.
   | Apply (PreDMTerm t) [(PreDMTerm t)]
   | FLet TeVar (PreDMTerm t) (PreDMTerm t)
   | Choice (HashMap [JuliaType] (PreDMTerm t))
@@ -761,7 +762,7 @@ recDMTermM f h (Phi a b c)        = Phi <$> (recDMTermM f h a) <*> (recDMTermM f
 recDMTermM f h (Lam     jts a)    = Lam jts <$> (recDMTermM f h a)
 recDMTermM f h (LamStar jts a)    = LamStar jts <$> (recDMTermM f h a)
 recDMTermM f h (BBLet n jts b)    = (BBLet n jts <$> recDMTermM f h b)
-recDMTermM f h (BBApply a bs)     = BBApply <$> (recDMTermM f h a) <*> pure bs
+recDMTermM f h (BBApply a as bs)  = BBApply <$> (recDMTermM f h a) <*> (mapM (recDMTermM f h) as) <*> pure bs
 recDMTermM f h (Apply a bs)       = Apply <$> (recDMTermM f h a) <*> (mapM (recDMTermM f h) bs)
 recDMTermM f h (FLet v a b)       = FLet v <$> (recDMTermM f h a) <*> (recDMTermM f h b)
 recDMTermM f h (Choice chs)       = Choice <$> (mapM (recDMTermM f h) chs)
@@ -820,8 +821,8 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (Phi a b c)        = "Phi (" <> showPretty a <> ")" <> parenIndent (showPretty b) <> parenIndent (showPretty c)
   showPretty (Lam     jts a)    = "Lam (" <> showPretty jts <> ")" <> parenIndent (showPretty a)
   showPretty (LamStar jts a)    = "LamStar (" <> showPretty jts <> ")" <> parenIndent (showPretty a)
-  showPretty (BBLet n jts b) = "BBLet " <> showPretty n <> " = (" <> show jts <> " -> ?\n" <> showPretty b
-  showPretty (BBApply t cs) = "BBApply (" <> showPretty t <> " cap'ing " <> showPretty cs <> ")"
+  showPretty (BBLet n jts b)    = "BBLet " <> showPretty n <> " = (" <> show jts <> " -> ?\n" <> showPretty b
+  showPretty (BBApply t as cs)  = "BBApply (" <> showPretty t <> ")[" <> showPretty cs <> "](" <> showPretty as <> ")"
   showPretty (Apply a bs)       = (showPretty a) <> (showPretty bs)
   showPretty (FLet v a b)       = "FLet " <> showPretty v <> " = " <> (showPretty a) <> "\n" <> (showPretty b)
   showPretty (Choice chs)       = "Choice <..>"
