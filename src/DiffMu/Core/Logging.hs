@@ -6,6 +6,33 @@ module DiffMu.Core.Logging where
 import DiffMu.Prelude
 import DiffMu.Abstract
 
+data DMLogLocation = Location_Demutation | Location_Unification | Location_Subst | Location_INC | Location_Constraint | Location_Check | Location_Subtyping | Location_MonadicGraph | Location_All | Location_Unknown String
+  deriving (Eq)
+
+-- genSingletons[''DMLogLocation]
+
+data DMLogSeverity = Debug | Info | Warning | Force
+  deriving (Eq,Ord)
+
+data IsFollowUpMessage = FollowUpMessage | NotFollowUpMessage
+  deriving (Eq)
+
+data DMLogMessage = DMLogMessage DMLogSeverity DMLogLocation String
+
+data DMLogMessageFU = DMLogMessageFU IsFollowUpMessage DMLogMessage
+
+
+data DMLogger = DMLogger
+  {
+    _loggerBackupSeverity :: DMLogSeverity,
+    _loggerCurrentSeverity :: DMLogSeverity,
+    _loggerCurrentLocation :: DMLogLocation
+    -- _loggerMessages :: [DMLogMessage]
+  }
+  deriving (Generic)
+
+$(makeLenses ''DMLogger)
+
 instance Show (DMLogger) where
   show (DMLogger _ _ _) = "(hidden)"
     -- intercalate "\n\t" m
@@ -18,8 +45,8 @@ instance Semigroup DMLogMessages where
 instance Monoid DMLogMessages where
   mempty = DMLogMessages []
 
-data DMLogLocation = Location_Demutation | Location_Unification | Location_Subst | Location_INC | Location_Constraint | Location_Check | Location_Subtyping | Location_MonadicGraph | Location_All | Location_Unknown String
-  deriving (Eq)
+
+
 
 instance Show DMLogLocation where
   show Location_Demutation = "Demutation"
@@ -52,16 +79,6 @@ instance Ord (DMLogLocation) where
 instance Default (DMLogger) where
   def = DMLogger Debug Debug Location_All
 
-data DMLogSeverity = Debug | Info | Warning | Force
-  deriving (Eq,Ord)
-
-data IsFollowUpMessage = FollowUpMessage | NotFollowUpMessage
-  deriving (Eq)
-
-data DMLogMessage = DMLogMessage DMLogSeverity DMLogLocation String
-
-data DMLogMessageFU = DMLogMessageFU IsFollowUpMessage DMLogMessage
-
 blue x = "\27[34m" <> x <> "\27[0m"
 green x = "\27[32m" <> x <> "\27[0m"
 yellow x = "\27[33m" <> x <> "\27[0m"
@@ -93,16 +110,6 @@ instance Show DMLogMessageFU where
         FollowUpMessage -> (\_ -> ' ') <$> prefixNoColor
         NotFollowUpMessage -> prefix
 
-data DMLogger = DMLogger
-  {
-    _loggerBackupSeverity :: DMLogSeverity,
-    _loggerCurrentSeverity :: DMLogSeverity,
-    _loggerCurrentLocation :: DMLogLocation
-    -- _loggerMessages :: [DMLogMessage]
-  }
-  deriving (Generic)
-
-$(makeLenses ''DMLogger)
 
 
 markFollowup :: Maybe DMLogMessage -> [DMLogMessage] -> [DMLogMessageFU]
@@ -118,5 +125,4 @@ getLogMessages (DMLogMessages messages) sevR locsR =
   let filtered = [DMLogMessage s l m | DMLogMessage s l m <- messages, or [sevR <= s, or ((l <=) <$> locsR)]]
       reversed = reverse filtered
   in intercalate "\n" (show <$> (markFollowup Nothing reversed))
-
 

@@ -20,6 +20,8 @@ import DiffMu.Typecheck.Typecheck as All
 import DiffMu.Typecheck.Constraint.IsJuliaEqual as All
 import DiffMu.Typecheck.Preprocess.FLetReorder
 import DiffMu.Typecheck.Preprocess.Demutation
+import DiffMu.Typecheck.Preprocess.Common
+import DiffMu.Typecheck.Preprocess.All
 import DiffMu.Runner as All
 import DiffMu.Parser.DMTerm.FromString as All
 
@@ -91,8 +93,8 @@ parseEval_b dolog compstyle failOrSuccess parse desc term (expected :: TC DMMain
                    Left err -> error $ "Error while parsing DMTerm from string: " <> show err
                    Right res''  ->
                      do
-                            (res' , _) <- liftNewMTC (elaborateMut def res'' )
-                            res <- preprocessDMTerm res'
+                            (res) <- liftNewLightTC (preprocessAll res'' )
+                            -- res <- preprocessDMTerm res'
                             let tres = checkSens res def
                                   -- (do
                                   --          case dolog of

@@ -13,9 +13,10 @@ import DiffMu.Core.DelayedScope
 import DiffMu.Typecheck.Operations
 import DiffMu.Typecheck.Subtyping
 import DiffMu.Typecheck.Typecheck
-import DiffMu.Typecheck.Preprocess.BlackBox
-import DiffMu.Typecheck.Preprocess.Demutation
-import DiffMu.Typecheck.Preprocess.FLetReorder
+import DiffMu.Typecheck.Preprocess.Common
+import DiffMu.Typecheck.Preprocess.All
+-- import DiffMu.Typecheck.Preprocess.Demutation
+-- import DiffMu.Typecheck.Preprocess.FLetReorder
 import DiffMu.Parser.DMTerm.FromString
 import DiffMu.Parser.Expr.FromString
 import DiffMu.Parser.Expr.JExprToDMTerm
@@ -74,11 +75,8 @@ typecheckFromDMTerm term = do
         -- typecheck the term t5
         -- mt <- thisFunctionDoesNotExist term
 
-        term'' <- liftNewMTC (demutate term)
+        term' <- liftNewLightTC (preprocessAll term)
 
-        term' <- preprocessDMTerm term''
-
-        logForce $ "Mutation elaborated and flet-preprocessed term is:\n" <> showPretty term'
 
         let tres = checkSens (term') def
         let (tres'',_) = runState (extractDelayed def tres) def

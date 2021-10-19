@@ -3,7 +3,9 @@ module Spec.Demutation where
 
 import DiffMu.Typecheck.Preprocess.Demutation
 import DiffMu.Typecheck.Preprocess.FLetReorder
-import DiffMu.Typecheck.Preprocess.BlackBox
+import DiffMu.Typecheck.Preprocess.Demutation
+import DiffMu.Typecheck.Preprocess.Common
+import DiffMu.Typecheck.Preprocess.All
 import Spec.Base
 
 
@@ -15,9 +17,7 @@ checkMutTerm term = do
         -- typecheck the term t5
         -- mt <- thisFunctionDoesNotExist term
 
-        term'' <- liftNewMTC (demutate term)
-
-        term' <- preprocessDMTerm term''
+        term' <- liftNewLightTC (preprocessAll term)
 
 
         let tres = checkSens (term') def
