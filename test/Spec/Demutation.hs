@@ -1,8 +1,9 @@
 
 module Spec.Demutation where
 
-import DiffMu.Typecheck.Mutated
-import DiffMu.Typecheck.Preprocess
+import DiffMu.Typecheck.Preprocess.Demutation
+import DiffMu.Typecheck.Preprocess.FLetReorder
+import DiffMu.Typecheck.Preprocess.BlackBox
 import Spec.Base
 
 
