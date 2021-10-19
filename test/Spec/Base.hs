@@ -18,8 +18,8 @@ import DiffMu.Typecheck.Operations as All
 import DiffMu.Typecheck.Subtyping as All
 import DiffMu.Typecheck.Typecheck as All
 import DiffMu.Typecheck.Constraint.IsJuliaEqual as All
-import DiffMu.Typecheck.Preprocess
-import DiffMu.Typecheck.Mutated
+import DiffMu.Typecheck.Preprocess.FLetReorder
+import DiffMu.Typecheck.Preprocess.Demutation
 import DiffMu.Runner as All
 import DiffMu.Parser.DMTerm.FromString as All
 

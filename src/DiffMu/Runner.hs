@@ -13,8 +13,9 @@ import DiffMu.Core.DelayedScope
 import DiffMu.Typecheck.Operations
 import DiffMu.Typecheck.Subtyping
 import DiffMu.Typecheck.Typecheck
-import DiffMu.Typecheck.Preprocess
-import DiffMu.Typecheck.Mutated
+import DiffMu.Typecheck.Preprocess.BlackBox
+import DiffMu.Typecheck.Preprocess.Demutation
+import DiffMu.Typecheck.Preprocess.FLetReorder
 import DiffMu.Parser.DMTerm.FromString
 import DiffMu.Parser.Expr.FromString
 import DiffMu.Parser.Expr.JExprToDMTerm
