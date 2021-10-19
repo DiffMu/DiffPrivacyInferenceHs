@@ -148,7 +148,7 @@ elaborateNonmut scope term = do
     Pure _ -> pure ()
     VirtualMutated mutvars -> throwError (DemutationError $ "expected that the term " <> showPretty term <> " does not mutate anything, but it mutates the following variables: " <> show mutvars)
     Mutating _ -> pure ()
-    PureBlackBox -> throwError (DemutationError $ "The term " <> show term <> " is a pure black box, such a value is not allowed here.")
+    PureBlackBox -> pure ()
 
   return (resTerm , resType)
 
