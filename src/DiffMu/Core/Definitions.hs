@@ -101,7 +101,6 @@ data DMKind =
   | NormKind
   | FunKind
   | NoFunKind
-  | ForAllKind
   deriving (Typeable)
 
 -- Using the "TemplateHaskell" ghc-extension, and the following function from the singletons library,
@@ -118,7 +117,6 @@ instance Show DMKind where
   show NormKind = "Norm"
   show FunKind = "Fun"
   show NoFunKind = "NoFun"
-  show ForAllKind = "ForAll"
 
 --------------------
 -- 2. DMTypes
@@ -182,12 +180,9 @@ data DMTypeOf (k :: DMKind) where
   -- choices
   DMChoice :: [DMType :@ (Maybe [JuliaType], Sensitivity)] -> DMType
 
-  -- foralls
-  ForAll :: [SomeK TVarOf] -> DMTypeOf FunKind -> DMTypeOf ForAllKind
-
   -- annotations
   NoFun :: DMTypeOf NoFunKind -> DMTypeOf MainKind
-  Fun :: [DMTypeOf ForAllKind :@ Maybe [JuliaType]] -> DMTypeOf MainKind
+  Fun :: [DMTypeOf FunKind :@ Maybe [JuliaType]] -> DMTypeOf MainKind
   (:∧:) :: DMTypeOf MainKind -> DMTypeOf MainKind -> DMTypeOf MainKind -- infimum
 
   -- black box functions (and a wrapper to make them MainKind but still have a BlackBoxKind so we can have TVars of it)
@@ -215,7 +210,6 @@ instance Hashable (DMTypeOf k) where
   hashWithSalt s (DMParams u v) = s `hashWithSalt` u `hashWithSalt` v
   hashWithSalt s (DMGrads n t v w) = s `hashWithSalt` n `hashWithSalt` t `hashWithSalt` v `hashWithSalt` w
   hashWithSalt s (DMChoice t) = s `hashWithSalt` t
-  hashWithSalt s (ForAll n t) = s `hashWithSalt` n `hashWithSalt` t
   hashWithSalt s (Fun t) = s `hashWithSalt` t
   hashWithSalt s (NoFun t) = s `hashWithSalt` t
   hashWithSalt s (n :∧: t) = s `hashWithSalt` n `hashWithSalt` t
@@ -258,11 +252,6 @@ instance Show (DMTypeOf k) where
   show (DMParams m τ) = "Params[" <> show m <> "](" <> show τ <> ")"
   show (DMGrads nrm clp m τ) = "Grads<n: "<> show nrm <> ", c: " <> show clp <> ">[" <> show m <> "](" <> show τ <> ")"
   show (DMChoice cs) = "Choice{" <> show cs <> "}"
-  show (ForAll vs f) = case vs of
-     -- [] -> show f
-     [] -> "ForAll{}." <> show f
-     _ -> "ForAll {" <> show vs <> "}. " <> show f
-  -- show (NoFun x) = show x --"NoFun(" <> show x <> ")"
   show (NoFun x) = "NoFun(" <> show x <> ")"
   show (Fun xs) = "Fun(" <> show xs <> ")"
   show (x :∧: y) = "(" <> show x <> "∧" <> show y <> ")"
@@ -316,9 +305,6 @@ instance Eq (DMTypeOf k) where
 
   -- choices
   DMChoice xs == DMChoice ys = xs == ys
-
-  -- foralls
-  ForAll xs t == ForAll ys s = and [xs == ys, t == s]
 
   -- annotations
   NoFun t == NoFun s = t == s

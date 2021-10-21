@@ -21,7 +21,7 @@ test25 pp = describe "issue 25" $ do
            \ end"
 
       intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
-      ty = Fun([ForAll [] ([] :->: intc (Fin 2)) :@ Just []])
+      ty = Fun([([] :->: intc (Fin 2)) :@ Just []])
 
   parseEval pp "seems fixed (the example typechecks)" ex (pure ty)
 
@@ -32,7 +32,7 @@ test51 pp = describe "issue 53" $ do
            <>  "theta + mu \n"
            <>  "end"
       int = NoFun(Numeric (NonConst DMInt))
-      ty = Fun([ForAll [] ([int :@ (inftyP)] :->*: int) :@ Just [JuliaType "Integer"]])
+      ty = Fun([([int :@ (inftyP)] :->*: int) :@ Just [JuliaType "Integer"]])
 
   parseEval pp "seems fixed (the example typechecks)" ex (pure ty)
 
@@ -70,7 +70,7 @@ test58 pp = describe "issue 58" $ do
            -- computed by julia
 
       intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
-      ty = Fun([ForAll [] ([] :->: intc (Fin 3)) :@ Just []])
+      ty = Fun([([] :->: intc (Fin 3)) :@ Just []])
 
   parseEval pp "example variant 1" ex_1 (pure ty)
   parseEval pp "example variant 2" ex_2 (pure ty)
@@ -108,7 +108,7 @@ test59 pp = describe "issue 59" $ do
            \ end                               "
 
       intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
-      ty = Fun([ForAll [] ([] :->: intc (Fin 3)) :@ Just []])
+      ty = Fun([([] :->: intc (Fin 3)) :@ Just []])
 
   parseEval pp "example variant 1 (bad)" ex_1 (pure ty)
   parseEval pp "example variant 1 (good)" ex_1_good (pure ty)
@@ -131,7 +131,7 @@ test59 pp = describe "issue 59" $ do
              \ end                               "
 
       intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
-      ty = Fun([ForAll [] ([] :->: intc (Fin 2)) :@ Just []])
+      ty = Fun([([] :->: intc (Fin 2)) :@ Just []])
 
   parseEval pp "example variant 2" ex_2 (pure ty)
 
@@ -152,7 +152,7 @@ test60 pp = describe "issue 60" $ do
              \ end"
 
       intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
-      ty = Fun([ForAll [] ([] :->: intc (Fin 6)) :@ Just []])
+      ty = Fun([([] :->: intc (Fin 6)) :@ Just []])
 
   parseEval pp "example variant 1" ex_1 (pure ty)
 
@@ -179,7 +179,7 @@ test67 pp = describe "issue 67 (same juliatype choice overwriting)" $ do
          \ end                      "
 
       intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
-      ty = Fun([ForAll [] ([] :->: intc (Fin 1)) :@ Just []])
+      ty = Fun([([] :->: intc (Fin 1)) :@ Just []])
 
   parseEval pp "example variant 1" ex_1 (pure ty)
 
@@ -195,7 +195,7 @@ test67 pp = describe "issue 67 (same juliatype choice overwriting)" $ do
          \ end                  "
 
       intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
-      ty = Fun([ForAll [] ([] :->: intc (Fin 1)) :@ Just []])
+      ty = Fun([([] :->: intc (Fin 1)) :@ Just []])
 
   parseEval pp "example variant 2" ex_2 (pure ty)
 
@@ -214,7 +214,7 @@ test67 pp = describe "issue 67 (same juliatype choice overwriting)" $ do
          \ end                  "
 
       intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
-      ty = Fun([ForAll [] ([] :->: intc (Fin 1)) :@ Just []])
+      ty = Fun([([] :->: intc (Fin 1)) :@ Just []])
 
   parseEval pp "example variant 3" ex_3 (pure ty)
 
@@ -228,7 +228,7 @@ test21 pp = describe "issue 21 (FLet collection)" $ do
          \  end                 "
 
       intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
-      ty = Fun([ForAll [] ([] :->: intc (Fin 2)) :@ Just []])
+      ty = Fun([([] :->: intc (Fin 2)) :@ Just []])
 
   parseEval pp "example variant 1" ex_1 (pure ty)
 

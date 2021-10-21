@@ -145,13 +145,6 @@ instance MonadDMTC t => Unifyᵢ (INCResT DMException t) (DMTypeOf k) where
   unifyᵢ_ (Fun _) (v :∧: w)                = throwError Wait'
   unifyᵢ_ (v :∧: w) (Fun _)                = throwError Wait'
   unifyᵢ_ (_ :∧: _) (v :∧: w)              = throwError Wait'
-  unifyᵢ_ (ForAll xs t) (ForAll ys s)      =
-    -- NOTE: we actually have to remove all variables which were substituted
-    --       from the merged list (xs <> ys). But luckily this is done
-    --       automatically by the definition of substitution, and will happen
-    --       when the returned type is being normalized
-    --
-    ForAll (xs <> ys) <$> unifyᵢ t s
   unifyᵢ_ t s                              = throwError (Fail' $ UnificationError t s)
 
 

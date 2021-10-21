@@ -32,7 +32,7 @@ testScope01 pp = do
            -- result = 1 + 6 + 12 = 19
 
       intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
-      ty = Fun([ForAll [] ([] :->: intc (Fin 19)) :@ Just []])
+      ty = Fun([([] :->: intc (Fin 19)) :@ Just []])
 
   parseEval pp "01 works" ex (pure ty)
 
@@ -54,7 +54,7 @@ testScope02 pp = do
            -- g{103}(3) = 3 + 103 = 106
 
       intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
-      ty = Fun([ForAll [] ([] :->: intc (Fin 106)) :@ Just []])
+      ty = Fun([([] :->: intc (Fin 106)) :@ Just []])
 
   parseEval pp "02 works" ex (pure ty)
 
@@ -78,7 +78,7 @@ testScope03 pp = do
            -- g{200}(3) = 3*200 = 600
 
       intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
-      ty = Fun([ForAll [] ([] :->: intc (Fin 600)) :@ Just []])
+      ty = Fun([([] :->: intc (Fin 600)) :@ Just []])
 
   parseEval pp "03 works" ex (pure ty)
 
@@ -109,6 +109,6 @@ testScope04 pp = do
            -- computed by julia
 
       intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
-      ty = Fun([ForAll [] ([] :->: intc (Fin 138424)) :@ Just []])
+      ty = Fun([([] :->: intc (Fin 138424)) :@ Just []])
 
   parseEval pp "04 works" ex (pure ty)

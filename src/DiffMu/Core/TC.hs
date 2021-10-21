@@ -116,7 +116,6 @@ instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs (TVar x) = σs x
   substitute σs (τ1 :->: τ2) = (:->:) <$> substitute σs τ1 <*> substitute σs τ2
   substitute σs (τ1 :->*: τ2) = (:->*:) <$> substitute σs τ1 <*> substitute σs τ2
-  substitute σs (ForAll vs τ) = ForAll <$> (removeVars σs vs) <*> substitute σs τ
   substitute σs (DMTup τs) = DMTup <$> substitute σs τs
   substitute σs (DMVec nrm clp n τ) = DMVec nrm clp <$> substitute σs n <*> substitute σs τ
   substitute σs (DMMat nrm clp n m τ) = DMMat nrm clp <$> substitute σs n <*> substitute σs m <*> substitute σs τ
@@ -149,7 +148,6 @@ instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
   substitute σs (TVar x) = pure (TVar x)
   substitute σs (τ1 :->: τ2) = (:->:) <$> substitute σs τ1 <*> substitute σs τ2
   substitute σs (τ1 :->*: τ2) = (:->*:) <$> substitute σs τ1 <*> substitute σs τ2
-  substitute σs (ForAll vs τ) = ForAll vs <$> substitute σs τ
   substitute σs (DMTup τs) = DMTup <$> substitute σs τs
   substitute σs (DMVec nrm clp n τ) = DMVec nrm clp <$> substitute σs n <*> substitute σs τ
   substitute σs (DMMat nrm clp n m τ) = DMMat nrm clp <$> substitute σs n <*> substitute σs m <*> substitute σs τ
@@ -219,7 +217,6 @@ instance Typeable k => FreeVars TVarOf (DMTypeOf k) where
   freeVars (TVar x) = [SomeK x]
   freeVars (τ1 :->: τ2) = freeVars (τ1) <> freeVars τ2
   freeVars (τ1 :->*: τ2) = freeVars (τ1) <> freeVars τ2
-  freeVars (ForAll vs τ) = freeVars τ \\ vs
   freeVars (DMTup τs) = freeVars τs
   freeVars (DMVec nrm clp n τ) = freeVars nrm <> freeVars clp <> freeVars τ
   freeVars (DMMat nrm clp n m τ) = freeVars nrm <> freeVars clp <> freeVars τ
@@ -1147,7 +1144,6 @@ normalizeAnn (Fun as) = do
   let normalizeInside (f :@ annot) = (:@ annot) <$> normalizeAnn f
   Fun <$> mapM normalizeInside as
 normalizeAnn (NoFun fs) = pure $ NoFun fs
-normalizeAnn (ForAll vars t) = ForAll vars <$> normalizeAnn t
 normalizeAnn (a :∧: b) = do
   a' <- normalizeAnn a
   b' <- normalizeAnn b

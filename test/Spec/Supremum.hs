@@ -26,7 +26,7 @@ testSupremum = do
     testsup (Const (twoId) DMInt) (Const (oneId) DMInt) (Right $ NonConst DMInt)
 
     testsup (NoFun (Numeric (NonConst DMInt)))
-            (Fun [ForAll [] ([NoFun (Numeric (NonConst DMInt)) :@ oneId] :->: (NoFun (Numeric (NonConst DMInt)))) :@ Nothing])
+            (Fun [([NoFun (Numeric (NonConst DMInt)) :@ oneId] :->: (NoFun (Numeric (NonConst DMInt)))) :@ Nothing])
             (Left (UnsatisfiableConstraint "[test]"))
 
   describe "advanced supremum" $ do

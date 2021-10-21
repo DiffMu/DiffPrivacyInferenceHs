@@ -161,9 +161,7 @@ checkSen' (Lam xτs body) scope =
       xrτs <- getArgList @_ @SensitivityK xτs
       let xrτs' = [x :@ s | (x :@ SensitivityAnnotation s) <- xrτs]
       let τ = (xrτs' :->: restype)
-      -- frees <- getActuallyFreeVars τ
-      let frees = []
-      return (Fun [(ForAll frees τ :@ (Just sign))])
+      return (Fun [τ :@ (Just sign)])
 
 
 checkSen' (LamStar xτs body) scope =
@@ -203,10 +201,7 @@ checkSen' (LamStar xτs body) scope =
       -- build the type signature and proper ->* type
       let xrτs' = [x :@ p | (x :@ PrivacyAnnotation p) <- xrτs]
       let τ = (xrτs' :->*: restype)
-      -- include free variables in a ForAll
-      -- frees <- getActuallyFreeVars τ
-      let frees = []
-      return (Fun [(ForAll frees τ :@ (Just sign))])
+      return (Fun [τ :@ (Just sign)])
 
 
 checkSen' (SLet (x :- dτ) term body) scope = do
@@ -314,7 +309,7 @@ checkSen' (Apply f args) scope =
     sbranch_check mf margs = do
         (τ_sum :: DMMain, argτs) <- msumTup (mf , msumS margs) -- sum args and f's context
         τ_ret <- newVar -- a type var for the function return type
-        addConstraint (Solvable (IsFunctionArgument (τ_sum, Fun [(ForAll [] (argτs :->: τ_ret)) :@ Nothing])))
+        addConstraint (Solvable (IsFunctionArgument (τ_sum, Fun [(argτs :->: τ_ret) :@ Nothing])))
         return τ_ret
 
     margs = (\arg -> (checkArg arg scope)) <$> args
@@ -823,7 +818,7 @@ checkPri' (Apply f args) scope =
     sbranch_check mf margs = do
         (τ_sum :: DMMain, argτs) <- msumTup (mf , msumP margs) -- sum args and f's context
         τ_ret <- newVar -- a type var for the function return type
-        addConstraint (Solvable (IsFunctionArgument (τ_sum, Fun [(ForAll [] (argτs :->*: τ_ret)) :@ Nothing])))
+        addConstraint (Solvable (IsFunctionArgument (τ_sum, Fun [(argτs :->*: τ_ret) :@ Nothing])))
         return τ_ret
 
     margs = (\arg -> (checkArg arg scope)) <$> args

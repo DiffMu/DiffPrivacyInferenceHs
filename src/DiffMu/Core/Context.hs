@@ -165,6 +165,9 @@ setVarP :: MonadDMTC t => TeVar -> WithRelev PrivacyK -> t ()
 setVarP k v = types %=~ setValueM k (Right v :: Either (WithRelev SensitivityK) (WithRelev PrivacyK))
 
 
+
+
+
 -- add constraints that make sure all current context entries have sensitivity <= s.
 restrictAll :: Sensitivity -> TC ()
 restrictAll s = let
@@ -266,13 +269,6 @@ getInteresting = do
        f xs = [ (x , τ) | (x , WithRelev IsRelevant τ) <- xs ]
    return (unzip (f h))
 
--- TODO this must also forbid the free variables that appear in constraints!!11!
-getActuallyFreeVars :: DMFun -> TC [SomeK TVarOf]
-getActuallyFreeVars τ = do
-  γ <- use types
-  let τfree = freeVars @_ @TVarOf τ
-  let γfree = freeVars @_ @TVarOf γ
-  return (nub (τfree \\ γfree))
 
 ---------------------------------------------------------------------------
 -- Algebraic instances for annot

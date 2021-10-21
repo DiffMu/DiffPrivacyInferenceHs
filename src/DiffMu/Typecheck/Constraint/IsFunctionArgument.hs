@@ -60,13 +60,13 @@ solveIsFunctionArgument :: IsT MonadDMTC t => Symbol -> (DMTypeOf MainKind, DMTy
 -- if the given argument and expected argument are both functions / collections of functions
 solveIsFunctionArgument name (Fun xs, Fun ys) = do
   let wantedFunctions :: [DMTypeOf FunKind]
-      wantedFunctions = [f | ((ForAll _ f) :@ _) <- ys]  -- TODO check if ForAll is empty and signature is Nothing
-  let existingFunctions :: [([JuliaType], (DMTypeOf ForAllKind, [DMTypeOf FunKind]))]
+      wantedFunctions = [f | (f :@ _) <- ys]  -- TODO check if signature is Nothing
+  let existingFunctions :: [([JuliaType], (DMTypeOf FunKind, [DMTypeOf FunKind]))]
       existingFunctions = [(jts , (f, [])) | (f :@ Just jts) <- xs]
 
   -- We check if there were any functions in xs (those which are given by a dict), which did not have a
   -- julia type annotation
-  let existingFunctionsWithoutJuliaType :: [DMTypeOf ForAllKind]
+  let existingFunctionsWithoutJuliaType :: [DMTypeOf FunKind]
       existingFunctionsWithoutJuliaType = [f | (f :@ Nothing) <- xs]
 
   case existingFunctionsWithoutJuliaType of
@@ -104,7 +104,6 @@ solveIsFunctionArgument name (_, _) = return ()
 -- get the typevar which appears on the right hand side of the topmost arrow.
 getFunctionReturnVar :: DMTypeOf k -> [SomeK TVarOf]
 getFunctionReturnVar (Fun fs) = mconcat (getFunctionReturnVar . fstAnn <$> fs)
-getFunctionReturnVar (ForAll _ τ) = getFunctionReturnVar τ
 getFunctionReturnVar (as :->: (TVar a)) = [SomeK a]
 getFunctionReturnVar (as :->*: (TVar a)) = [SomeK a]
 getFunctionReturnVar _ = mempty
@@ -130,7 +129,7 @@ instance FixedVars TVarOf (IsChoice (ChoiceHash, [DMTypeOf FunKind])) where
   fixedVars (IsChoice (_, wantedFuns)) = mconcat (getFunctionReturnVar <$> wantedFuns)
 
 -- map Julia signature to method and the list of function calls that went to this method.
-type ChoiceHash = HashMap [JuliaType] (DMTypeOf ForAllKind, [DMTypeOf FunKind])
+type ChoiceHash = HashMap [JuliaType] (DMTypeOf FunKind, [DMTypeOf FunKind])
 
 -- hash has the existing methods, list has the required methods.
 instance Solve MonadDMTC IsChoice (ChoiceHash, [DMTypeOf FunKind]) where
@@ -210,8 +209,8 @@ solveIsChoice name (provided, required) = do
 
 
 
-resolveChoiceHash :: forall t. IsT MonadDMTC t => (DMTypeOf ForAllKind, [DMTypeOf FunKind]) -> t ()
-resolveChoiceHash ((ForAll freevs method), matches) = do
+resolveChoiceHash :: forall t. IsT MonadDMTC t => (DMTypeOf FunKind, [DMTypeOf FunKind]) -> t ()
+resolveChoiceHash (method, matches) = do
    let addC :: (Normalize t s, Unify t s) => (DMTypeOf MainKind :@ s) -> (DMTypeOf MainKind :@ s) -> t ()
        addC (τ1 :@ s1) (τ2 :@ s2) = do
                        unify s1 s2
@@ -242,28 +241,9 @@ resolveChoiceHash ((ForAll freevs method), matches) = do
                                              addC (τmeth :@ ()) (τmatch :@ ())
                                              return ()
                                           _ -> impossible $ "reached impossible case in resolving choices: " <> show (match, mmethod)
-   -- before resolving, we create copies of the method's type where all free type variables
-   -- are replaced by fresh type variables, so we can safely unify with the type of the matched function.
-   let nvs :: forall k. IsKind k => t [DMTypeOf k]
-       -- a fresh tvar for each method
-       nvs = mapM (fmap TVar . newTVar) ["free" | _ <- matches]
-   -- a multi-substitution for a variable
-   let big_asub (SomeK a) = (\x -> SomeK (a := ListK x)) <$> nvs
-   -- multisubstitutions for all free variables of the method
-   subs <- mapM big_asub freevs
-   -- a duplicate of method for each matches, with our fresh TVars
-   duplicates' <- duplicateTerm subs method
-   case duplicates' of
-      Nothing -> do -- there are no free type variables in method.
-         -- unify each match with the method
-         mapM (\match -> resolveChoice match method) matches
-         return ()
-      Just duplicates -> do
-         -- duplicate the constraints that have the free vars, as well
-         duplicateAllConstraints subs
-         -- unify all matches with their corresponding duplicate.
-         zipWithM resolveChoice matches duplicates
-         return ()
+   -- unify each match with the method
+   mapM (\match -> resolveChoice match method) matches
+   return ()
 
 resolveChoiceHash (_, matches) = impossible "invalid type for method"
 
