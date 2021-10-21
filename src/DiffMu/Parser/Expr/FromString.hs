@@ -44,15 +44,16 @@ infixl 2 <*､>
 (<*､>) f a = (f <* sep) <*> a
 
 with :: String -> Parser a -> Parser a
-with name content = between (wskip '(') (wskip ')') (((string name) >> sep) >> content)
+with name content = between (wskipc '(') (wskipc ')') (((string name) >> sep) >> content)
 
 skippable :: Parser String
 skippable = (many (oneOf @[] " \n"))
 
-wskip c = between skippable skippable (char c)
+wskip c = between skippable skippable c
+wskipc c = wskip (char c)
 
 sep :: Parser Char
-sep = wskip ','
+sep = wskipc ','
 
 pIdentifier :: Parser String
 pIdentifier = skippable *> some (noneOf @[] "(),[]=#:\" \n") <* skippable
@@ -163,17 +164,17 @@ pRef = do
        return (JERef name refs)
 
 pUnsupported = let someExpr = (((char ':' >> pIdentifier) <* sep) <* pJExpr `sepBy` sep)
-               in JEUnsupported <$> (between (wskip '(') (wskip ')') someExpr)
+               in JEUnsupported <$> (between (wskipc '(') (wskipc ')') someExpr)
 
 
 pJExpr :: Parser JExpr
-pJExpr =       try pLineNumber
+pJExpr =   try pLineNumber
            <|> try (":block" `with` (JEBlock <$> (pJExpr `sepBy` sep)))
            <|> try (":tuple" `with` (JETup <$> (pJExpr `sepBy` sep)))
            <|> try ((string ":(:)") >> return JEColon)
            <|> try (JESymbol <$> pSymbol)
-           <|> try ((JEInteger . fromIntegral) <$> decimal) -- these two cannot be switched which is weird
-           <|> try (JEReal <$> float)
+           <|> try (JEReal <$> (wskip float))
+           <|> try ((JEInteger . fromIntegral) <$> (wskip decimal))
            <|> try pRef
            <|> try pLam
            <|> try pLoop
