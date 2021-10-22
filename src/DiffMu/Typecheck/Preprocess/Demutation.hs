@@ -22,6 +22,7 @@ import DiffMu.Typecheck.Preprocess.TopLevel
 import qualified Data.HashMap.Strict as H
 
 import qualified Data.Text as T
+import Data.Foldable
 
 import Debug.Trace
 
@@ -36,10 +37,10 @@ onlyLocallyMutatedVariables :: [(TeVar,IsLocalMutation)] -> Bool
 onlyLocallyMutatedVariables xs = [v | (v, NotLocalMutation) <- xs] == []
 
 data PureType = UserValue | DefaultValue | SingleArg TeVar
-  deriving (Show)
+  deriving (Show, Eq)
 
 data ImmutType = Pure PureType | Mutating [IsMutated] | VirtualMutated [(TeVar , IsLocalMutation)] | PureBlackBox
-  deriving (Show)
+  deriving (Show, Eq)
 
 consumeDefaultValue :: ImmutType -> ImmutType
 consumeDefaultValue (Pure DefaultValue) = Pure UserValue
@@ -101,13 +102,25 @@ wrapReorder have want term | otherwise    =
   let σ = getPermutationWithDrop have want
   in Reorder σ (term)
 
+
+-- set the type of the variable in scope,
+-- but do not allow to change that value afterwards.
+safeSetValue :: TeVar -> ImmutType -> Scope -> MTC Scope
+safeSetValue var newType scope =
+  case getValue var scope of
+    Nothing -> pure $ setValue var newType scope
+    (Just oldType) -> if oldType == newType
+                      then pure scope
+                      else throwError (DemutationError $ "Found a redefinition of the variable '" <> show var <> "', where the old type (" <> show oldType <> ") and the new type (" <> show newType <> ") differ. This is not allowed.")
+
+
+
 ---
 -- elaborating loops
 -- not allowed:
 -- - FLet
 -- - JuliaReturn
 -- - modify iteration variable
-
 
 demutate :: MutDMTerm -> MTC (DMTerm)
 demutate term = do
@@ -164,7 +177,7 @@ elaborateMut scope (Var (x :- j)) = do
 elaborateMut scope (BBLet name args tail) = do
 
   -- write the black box into the scope with its type
-  let scope'  = setValue name PureBlackBox scope
+  scope'  <- safeSetValue name PureBlackBox scope
 
   -- typecheck the body in this new scope
   (newBody , newBodyType) <- elaborateMut scope' tail
@@ -181,7 +194,7 @@ elaborateMut scope (SLet (x :- τ) term body) = do
     VirtualMutated _ -> throwError (DemutationError $ "Found an assignment " <> show x <> " = " <> showPretty term <> " where RHS is a mutating call. This is not allowed.")
     PureBlackBox     -> throwError (DemutationError $ "Found an assignment " <> show x <> " = " <> showPretty term <> " where RHS is a black box. This is not allowed.")
 
-  let scope'  = setValue x newTermType scope
+  scope'  <- safeSetValue x newTermType scope
   (newBody , newBodyType) <- elaborateMut scope' body
 
   return (SLet (x :- τ) newTerm newBody , consumeDefaultValue newBodyType)
@@ -197,7 +210,7 @@ elaborateMut scope (TLet vars term body) = do
     PureBlackBox     -> throwError (DemutationError $ "Found an assignment " <> show vars <> " = " <> showPretty term <> " where RHS is a black box. This is not allowed.")
 
   -- add all values as pure to the scope
-  let scope' = foldr (\(v :- _) s -> setValue v (Pure UserValue) s) scope (vars)
+  scope' <- foldrM (\(v :- _) s -> safeSetValue v (Pure UserValue) s) scope (vars)
   (newBody , newBodyType) <- elaborateMut scope' body
 
   return (TLet vars newTerm newBody , consumeDefaultValue newBodyType)
@@ -274,13 +287,13 @@ elaborateMut scope (FLet fname term body) = do
   -- get the current type for fname from the scope
   let ftype = getValue fname scope
 
-  -- set the new scope with fname if not already
-  -- existing
+  -- set the new scope with fname if not already existing
+  -- (but only allow pure uservalue-functions, or single-definition mutating functions)
   scope' <- case ftype of
-        Nothing -> pure $ setValue fname newTermType scope
-        Just (Mutating _) -> throwError (DemutationError $ "")
-        Just (Pure UserValue) -> pure $ scope
-        Just (Pure DefaultValue) -> pure $ scope
+        Nothing -> safeSetValue fname newTermType scope
+        Just (Pure UserValue) -> safeSetValue fname newTermType scope
+        Just (Mutating _) -> throwError (DemutationError $ "We do not allow mutating functions to have multiple definitions")
+        Just (Pure DefaultValue) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
         Just (Pure (SingleArg _)) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
         Just (VirtualMutated _) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
         Just (PureBlackBox) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
@@ -443,7 +456,7 @@ elaborateMut scope (Extra (MutLoop iters iterVar body)) = do
   -- we add these variables to the scope as args, since they are allowed
   -- to occur in mutated positions
   -- let scope0 = foldr (\v s -> setValue v (Pure) s) scope modifyVars
-  let scope' = setValue iterVar (Pure UserValue) scope
+  scope' <- safeSetValue iterVar (Pure UserValue) scope
 
   -- we can now elaborate the body, and thus get the actual list
   -- of modified variables
@@ -691,6 +704,11 @@ elaborateMut scope term@(BBApply x a b)    = throwError (UnsupportedError ("When
 elaborateLambda :: Scope ->  [Asgmt JuliaType] -> MutDMTerm -> MTC (DMTerm , ImmutType)
 elaborateLambda scope args body = do
   -- add args as vars to the scope
+  --
+  -- NOTE: we do not use `safeSetValue` here, because function
+  --       arguments are allowed to have different types than
+  --       their eventually preexisting same named variables
+  --       outside of the function
   let scope' = foldr (\(a :- _) -> setValue a (Pure (SingleArg a)))
                      scope
                      args
