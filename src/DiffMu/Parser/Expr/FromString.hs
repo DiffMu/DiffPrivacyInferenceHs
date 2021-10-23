@@ -59,9 +59,12 @@ pIdentifier :: Parser String
 pIdentifier = skippable *> some (noneOf @[] "(),[]=#:\" \n") <* skippable
 
 pJuliaType :: Parser JuliaType
-pJuliaType = do
-  ident <- char ':' *> pIdentifier
-  return (JuliaType ident)
+pJuliaType = let
+    pNoP = char ':' *> pIdentifier -- simple types
+    pP = do -- parametrized types
+           (name, params) <- ":curly" `with` ((,) <$> pNoP <*､> (pJuliaType `sepBy` sep))
+           return (name ++ "{" ++ (intercalate "," [p | JuliaType p <- params]) ++ "}")
+ in (JuliaType <$> (try pNoP <|> pP))
 
 
 pSymbol :: Parser Symbol
@@ -168,7 +171,7 @@ pUnsupported = let someExpr = (((char ':' >> pIdentifier) <* sep) <* pJExpr `sep
 
 
 pJExpr :: Parser JExpr
-pJExpr =   try pLineNumber
+pJExpr =       try pLineNumber
            <|> try (":block" `with` (JEBlock <$> (pJExpr `sepBy` sep)))
            <|> try (":tuple" `with` (JETup <$> (pJExpr `sepBy` sep)))
            <|> try ((string ":(:)") >> return JEColon)
