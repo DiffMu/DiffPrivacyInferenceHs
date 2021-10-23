@@ -9,7 +9,6 @@ import DiffMu.Core.TC
 import DiffMu.Core.Symbolic
 import DiffMu.Core.Unification
 import DiffMu.Typecheck.JuliaType
---import DiffMu.Typecheck.Subtyping
 import Algebra.PartialOrd
 
 import Debug.Trace
@@ -195,7 +194,7 @@ solveIsChoice name (provided, required) = do
    -- discard or update constraint.
    case newcs of
         [] -> do -- complete resolution! set counters, discard.
-                mapM resolveChoiceHash newdict
+                mapM resolveChoiceHash (H.toList newdict)
                 dischargeConstraint name
         cs | (length required > length newcs) -> do
                 -- still not all choices resolved, just kick the resolved ones out of the constraint.
@@ -209,13 +208,18 @@ solveIsChoice name (provided, required) = do
 
 
 
-resolveChoiceHash :: forall t. IsT MonadDMTC t => (DMTypeOf FunKind, [DMTypeOf FunKind]) -> t ()
-resolveChoiceHash (method, matches) = do
-   let addC :: (Normalize t s, Unify t s) => (DMTypeOf MainKind :@ s) -> (DMTypeOf MainKind :@ s) -> t ()
-       addC (τ1 :@ s1) (τ2 :@ s2) = do
+resolveChoiceHash :: forall t. IsT MonadDMTC t => ([JuliaType], (DMTypeOf FunKind, [DMTypeOf FunKind])) -> t ()
+resolveChoiceHash (sign, (method, matches)) = do
+   let addC :: (Normalize t s, Unify t s) => (JuliaType, (DMTypeOf MainKind :@ s), (DMTypeOf MainKind :@ s)) -> t ()
+       addC (annotation, (τ1 :@ s1), (τ2 :@ s2)) = do
                        unify s1 s2
                        addConstraint (Solvable (IsFunctionArgument (τ1, τ2)))
-                       return ()
+                       case annotation of
+                      	   JTAny -> return ()
+                           _ -> do -- make sure the type of the argument that is passed is a julia-subtype of the type required by the annotation.
+                                 jt <- createDMType annotation
+                      	         addConstraint (Solvable (IsLessEqual (τ1, jt)))
+                      	         return ()
    let resolveChoice :: (DMTypeOf FunKind) -> (DMTypeOf FunKind) -> t ()
        resolveChoice match mmethod = do
                                        case (match, mmethod) of
@@ -223,9 +227,8 @@ resolveChoiceHash (method, matches) = do
                                           -- the privacy variables in match signature must hence be set to ∞ because what actually
                                           -- happened is application of a -> arrow followed by Return.
                                           (matchxs :->*: τmatch, methxs :->: τmeth) -> do
-                                             -- unify input types
-                                             --zipWithM unify [τ1 | (τ1 :@ _) <- matchxs] [τ2 | (τ2 :@ _) <- methxs]
-                                             zipWithM addC [(τ1 :@ ()) | (τ1 :@ _) <- matchxs] [(τ2 :@ ()) | (τ2 :@ _) <- methxs]
+                                             -- set new IFA constraints for arguments
+                                             mapM addC (zip3 sign [(τ1 :@ ()) | (τ1 :@ _) <- matchxs] [(τ2 :@ ()) | (τ2 :@ _) <- methxs])
                                              -- set privacies of the match to ∞
                                              mapM (\p -> unify p inftyP) [p | (_ :@ p) <- matchxs]
                                              -- unify return types
@@ -233,20 +236,17 @@ resolveChoiceHash (method, matches) = do
                                              return ()
                                           -- in the regular cases the arrows can just be unified.
                                           (matchxs :->: τmatch, methxs :->: τmeth) -> do
-                                             zipWithM addC matchxs methxs
-                                             addC (τmeth :@ ()) (τmatch :@ ())
+                                             mapM addC (zip3 sign matchxs methxs)
+                                             addC (JTAny, (τmeth :@ ()), (τmatch :@ ()))
                                              return ()
                                           (matchxs :->*: τmatch, methxs :->*: τmeth) -> do
-                                             zipWithM addC matchxs methxs
-                                             addC (τmeth :@ ()) (τmatch :@ ())
+                                             mapM addC (zip3 sign matchxs methxs)
+                                             addC (JTAny, (τmeth :@ ()), (τmatch :@ ()))
                                              return ()
                                           _ -> impossible $ "reached impossible case in resolving choices: " <> show (match, mmethod)
    -- unify each match with the method
    mapM (\match -> resolveChoice match method) matches
    return ()
-
-resolveChoiceHash (_, matches) = impossible "invalid type for method"
-
 
 -- remove dict entries whose signature is supertype of some other signature.
 -- this is only reasonable if the dmtype signature we're trying to match has no free variables,
