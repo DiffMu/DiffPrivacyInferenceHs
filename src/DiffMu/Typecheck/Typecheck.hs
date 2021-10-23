@@ -121,6 +121,7 @@ checkSen' (Arg x dτ i) scope = done $ do
                                          τ <- case dτ of
                                              JuliaType "Any" -> return τs
                                              _ -> do τc <- createDMType dτ -- TODO it's actually a subtype of dτ!
+                                                     logForce $ "checking arg:" <> show (x :- dτ) <> ", dmtype is " <> show τc
                                                      addConstraint (Solvable (IsLessEqual (τs, τc)))
                                                      return τs
 
@@ -249,20 +250,17 @@ checkSen' (BBApply app args cs) scope =
                return (τ', s)
       return (scaleContext)
 
-
+    checkCap :: TeVar -> TC ()
     checkCap c =
        let delτ = getValue c scope -- see if the capture is in the current scope
        in case delτ of
-         Nothing -> done $ return () -- if no, we don't need to do anything as it was not defined yet during this application
-         Just delτ -> do
-              mτ <- delτ -- get the computation that will give us the type of c
-              done $ do
-                 τ <- mτ -- extract the type of c
-                 mscale inftyS -- all args get infinite sensitivity
-                 return ()
+         Nothing -> return () -- if no, we don't need to do anything as it was not defined yet during this application
+         Just delτ -> do      -- if yes, we need to make sure it gets infinite sensitivity in the result context.
+                               τ <- newVar -- we achieve this by putting it into the context with some type var and inf annotation
+                               setVarS c (WithRelev NotRelevant (τ :@ SensitivityAnnotation inftyS))
+                               return ()
 
     margs = checkArg <$> args
-    mcs = checkCap <$> cs
     mf = checkSens app scope
 
   in do
@@ -279,11 +277,10 @@ checkSen' (BBApply app args cs) scope =
     -- because everything happens inside the box and gets scaled by infty
     args <- applyAllDelayedLayers scope (sequence margs)
 
-    _ <- applyAllDelayedLayers scope (sequence mcs) -- do the scaling for captures
-
     -- we merge the different TC's into a single result TC
     return $ do
-        (τ_box :: DMMain, argτs) <- msumTup (res , msumS args) -- sum args and f's context
+        let caps = checkCap <$> cs
+        (τ_box :: DMMain, argτs, _) <- msum3Tup (res , msumS args, msumS caps) -- sum args and f's context
         τ_ret <- newVar -- a type var for the function return type
         addConstraint (Solvable (IsBlackBox (τ_box, fst <$> argτs))) -- constraint makes sure the signature matches the args
         mapM (\s -> addConstraint (Solvable (IsBlackBoxReturn (τ_ret, s)))) argτs -- constraint sets the sensitivity to the right thing
