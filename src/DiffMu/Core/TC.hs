@@ -121,7 +121,6 @@ instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs (DMMat nrm clp n m τ) = DMMat nrm clp <$> substitute σs n <*> substitute σs m <*> substitute σs τ
   substitute σs (DMParams m τ) = DMParams <$> substitute σs m <*> substitute σs τ
   substitute σs (DMGrads nrm clp m τ) = DMGrads nrm clp <$> substitute σs m <*> substitute σs τ
-  substitute σs (DMChoice xs) = DMChoice <$> substitute σs xs
   substitute σs (NoFun (x)) = NoFun <$> substitute σs x
   substitute σs (Fun xs) = Fun <$> substitute σs xs
   substitute σs (x :∧: y) = (:∧:) <$> substitute σs x <*> substitute σs y
@@ -153,7 +152,6 @@ instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
   substitute σs (DMMat nrm clp n m τ) = DMMat nrm clp <$> substitute σs n <*> substitute σs m <*> substitute σs τ
   substitute σs (DMParams m τ) = DMParams <$> substitute σs m <*> substitute σs τ
   substitute σs (DMGrads nrm clp m τ) = DMGrads nrm clp <$> substitute σs m <*> substitute σs τ
-  substitute σs (DMChoice xs) = DMChoice <$> substitute σs xs
   substitute σs (NoFun x) = NoFun <$> substitute σs x
   substitute σs (Fun xs) = Fun <$> substitute σs xs
   substitute σs (x :∧: y) = (:∧:) <$> substitute σs x <*> substitute σs y
@@ -222,7 +220,6 @@ instance Typeable k => FreeVars TVarOf (DMTypeOf k) where
   freeVars (DMMat nrm clp n m τ) = freeVars nrm <> freeVars clp <> freeVars τ
   freeVars (DMParams m τ) = freeVars τ
   freeVars (DMGrads nrm clp m τ) = freeVars nrm <> freeVars clp <> freeVars τ
-  freeVars (DMChoice choices) = freeVars choices
   freeVars (NoFun x) = freeVars x
   freeVars (Fun xs) = freeVars xs
   freeVars (x :∧: y) = freeVars x <> freeVars y
@@ -1102,6 +1099,8 @@ createDMType :: MonadDMTC t => JuliaType -> t (DMTypeOf MainKind)
  -- NOTE: defaulting to non-const might or might not be what we want to do here.
 createDMType (JuliaType "Integer") = do
   return (NoFun (Numeric (NonConst DMInt)))
+createDMType (JuliaType "Real") = do
+  return (NoFun (Numeric (NonConst DMReal)))
 createDMType (JuliaType "Real") = do
   return (NoFun (Numeric (NonConst DMReal)))
 -- TODO: is it correct to create tvars for anything else?
