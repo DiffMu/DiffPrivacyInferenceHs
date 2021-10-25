@@ -37,10 +37,10 @@ onlyLocallyMutatedVariables :: [(TeVar,IsLocalMutation)] -> Bool
 onlyLocallyMutatedVariables xs = [v | (v, NotLocalMutation) <- xs] == []
 
 data PureType = UserValue | DefaultValue | SingleArg TeVar
-  deriving (Show, Eq)
+  deriving (Show)
 
 data ImmutType = Pure PureType | Mutating [IsMutated] | VirtualMutated [(TeVar , IsLocalMutation)] | PureBlackBox
-  deriving (Show, Eq)
+  deriving (Show)
 
 consumeDefaultValue :: ImmutType -> ImmutType
 consumeDefaultValue (Pure DefaultValue) = Pure UserValue
@@ -102,6 +102,12 @@ wrapReorder have want term | otherwise    =
   let σ = getPermutationWithDrop have want
   in Reorder σ (term)
 
+immutTypeEq :: ImmutType -> ImmutType -> Bool
+immutTypeEq (Pure _) (Pure _) = True
+immutTypeEq (Mutating a) (Mutating b) = a == b
+immutTypeEq (VirtualMutated a) (VirtualMutated b) = a == b
+immutTypeEq (PureBlackBox) (PureBlackBox) = True
+immutTypeEq _ _ = False
 
 -- set the type of the variable in scope,
 -- but do not allow to change that value afterwards.
@@ -109,7 +115,7 @@ safeSetValue :: TeVar -> ImmutType -> Scope -> MTC Scope
 safeSetValue var newType scope =
   case getValue var scope of
     Nothing -> pure $ setValue var newType scope
-    (Just oldType) -> if oldType == newType
+    (Just oldType) -> if immutTypeEq oldType newType
                       then pure scope
                       else throwError (DemutationError $ "Found a redefinition of the variable '" <> show var <> "', where the old type (" <> show oldType <> ") and the new type (" <> show newType <> ") differ. This is not allowed.")
 
