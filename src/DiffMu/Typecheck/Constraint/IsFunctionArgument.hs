@@ -8,6 +8,7 @@ import DiffMu.Core.Context
 import DiffMu.Core.TC
 import DiffMu.Core.Symbolic
 import DiffMu.Core.Unification
+import DiffMu.Typecheck.Subtyping
 import DiffMu.Typecheck.JuliaType
 import Algebra.PartialOrd
 

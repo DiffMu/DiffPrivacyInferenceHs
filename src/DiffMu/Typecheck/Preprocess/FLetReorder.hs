@@ -24,7 +24,6 @@ import Debug.Trace
 type FLetTC = LightTC Location_PrePro_FLetReorder ()
 
 collectAllFLets :: DMTerm -> FLetTC DMTerm
-
 collectAllFLets (FLet var def rest) = do
   let FindFLetsResult defs rest' = findFLets var rest
       alldefs = (def:defs)
@@ -36,11 +35,11 @@ collectAllFLets (FLet var def rest) = do
       -- we thread the elements through a hashmap => if we have terms with the same juliatype,
       -- the second one overwrites the first one
       alldefsWithJuliaSig' = H.elems (H.fromList alldefsWithJuliaSig)
-  debug $ "-----------------"
-  debug $ "for var " <> show var <> " found the signatures:"
-  debug $ show alldefsWithJuliaSig
-  debug $ "after removing duplicates, we have: "
-  debug $ show alldefsWithJuliaSig'
+  logForce $ "-----------------"
+  logForce $ "for var " <> show var <> " found the signatures:"
+  logForce $ show alldefsWithJuliaSig
+  logForce $ "after removing duplicates, we have: "
+  logForce $ show alldefsWithJuliaSig'
 
   updatedAllDefs <- mapM collectAllFLets alldefsWithJuliaSig'
   updatedRest <- collectAllFLets rest'
