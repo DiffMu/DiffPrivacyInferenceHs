@@ -33,6 +33,14 @@ import Debug.Trace
 data DelayedT_ x m a = Done a | Later (x -> (DelayedT x m a))
 newtype DelayedT x m a = DelayedT (m (DelayedT_ x m a))
 
+-- apply a modification described by mod to all delayed layers.
+modifyScope :: Monad m => (x -> x) -> DelayedT x m a -> DelayedT x m a
+modifyScope mod (DelayedT ma) = DelayedT $ do
+    a <- ma
+    case a of
+      Done a -> return $ Done a
+      Later g -> return $ Later $ \x -> modifyScope mod (g (mod x))
+
 
 -- we expose the original constructors as shortcuts
 done :: Monad m => a -> DelayedT x m a

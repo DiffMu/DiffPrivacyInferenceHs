@@ -151,11 +151,20 @@ checkSen' (Lam xτs body) scope =
   -- the body is checked in the toplevel scope, not the current variable scope.
   -- this reflects the julia behaviour
   later $ \scope -> do
-    -- put a special term to mark x as a function argument. those get special tratment
+    -- put a special term to mark x as a function argument. those get special treatment
     -- because we're interested in their sensitivity
-    let scope' = foldl (\sc -> (\(x :- τ) -> setValue x (checkSens (Arg x τ IsRelevant) scope) sc)) scope xτs
+    let addArgs s = foldl (\sc -> (\(x :- τ) -> setValue x (checkSens (Arg x τ IsRelevant) s) sc)) s xτs
+    let scope' = addArgs scope
 
-    τr <- checkSens body scope'
+    -- check the body in the modified scope
+    let mresult = checkSens body scope'
+
+    -- add the arguments to all delayed scopes in the result, in case this returns another delayed thing.
+    -- we want to use the current scope upon application of that delayed thing, but the argument names
+    -- must be the actual function arguments.
+    let modresult = modifyScope addArgs mresult
+
+    τr <- modresult
     let sign = (sndA <$> xτs)
     done $ do
       restype <- τr
@@ -169,14 +178,20 @@ checkSen' (LamStar xτs body) scope =
   -- the body is checked in the toplevel scope, not the current variable scope.
   -- this reflects the julia behaviour
   later $ \scope -> do
-    -- put a special term to mark x as a function argument. those get special tratment
-    -- because we're interested in their privacy. put the relevance given in the function signature, too.
-    let scope' = foldl (\sc -> (\(x :- (τ, rel)) -> setValue x (checkSens (Arg x τ rel) scope) sc)) scope xτs
+    -- put a special term to mark x as a function argument. those get special treatment
+    -- because we're interested in their sensitivity
+    let addArgs s = foldl (\sc -> (\(x :- (τ, rel)) -> setValue x (checkSens (Arg x τ rel) s) sc)) s xτs
+    let scope' = addArgs scope
 
+    -- check the body in the modified scope
+    let mresult = checkPriv body scope'
 
-    -- check the function body
-    τr <- checkPriv body scope'
-    -- extract julia signature
+    -- add the arguments to all delayed scopes in the result, in case this returns another delayed thing.
+    -- we want to use the current scope upon application of that delayed thing, but the argument names
+    -- must be the actual function arguments.
+    let modresult = modifyScope addArgs mresult
+
+    τr <- modresult
     let sign = (fst <$> sndA <$> xτs)
     done $ do
       restype <- τr
