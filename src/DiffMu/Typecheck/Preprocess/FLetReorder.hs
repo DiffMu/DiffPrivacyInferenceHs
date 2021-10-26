@@ -23,6 +23,15 @@ import Debug.Trace
 
 type FLetTC = LightTC Location_PrePro_FLetReorder ()
 
+findDuplicates :: Eq a => [a] -> [a]
+findDuplicates = findDuplicates' []
+  where
+    findDuplicates' :: Eq a => [a] -> [a] -> [a]
+    findDuplicates' good [] = []
+    findDuplicates' good (a:as) = case a `elem` good of
+      False -> findDuplicates' (a:good) as
+      True  -> a : findDuplicates' (good) as
+
 collectAllFLets :: DMTerm -> FLetTC DMTerm
 collectAllFLets (FLet var def rest) = do
   let FindFLetsResult defs rest' = findFLets var rest
@@ -30,18 +39,24 @@ collectAllFLets (FLet var def rest) = do
 
   -- we derive the julia type from the term, appending the corresponding julia types to their definitions
   allsigs <- mapM getJuliaSig alldefs
-  let alldefsWithJuliaSig = zip allsigs alldefs
 
+  -- we search for duplicate signatures,
+  -- if there are any, we throw an error
+  case findDuplicates allsigs of
+    [] -> pure ()
+    xs -> throwError $ FLetReorderError $ "The function `" <> show var <> "` has more than one definition for the following signatures: " <> show xs <> "\nThis means that the earlier definitions are going to have no effect, and as a precaution this is not allowed."
+
+  -- let alldefsWithJuliaSig = zip allsigs alldefs
       -- we thread the elements through a hashmap => if we have terms with the same juliatype,
       -- the second one overwrites the first one
-      alldefsWithJuliaSig' = H.elems (H.fromList alldefsWithJuliaSig)
-  logForce $ "-----------------"
-  logForce $ "for var " <> show var <> " found the signatures:"
-  logForce $ show alldefsWithJuliaSig
-  logForce $ "after removing duplicates, we have: "
-  logForce $ show alldefsWithJuliaSig'
+  --     alldefsWithJuliaSig' = H.elems (H.fromList alldefsWithJuliaSig)
+  -- logForce $ "-----------------"
+  -- logForce $ "for var " <> show var <> " found the signatures:"
+  -- logForce $ show alldefsWithJuliaSig
+  -- logForce $ "after removing duplicates, we have: "
+  -- logForce $ show alldefsWithJuliaSig'
 
-  updatedAllDefs <- mapM collectAllFLets alldefsWithJuliaSig'
+  updatedAllDefs <- mapM collectAllFLets alldefs
   updatedRest <- collectAllFLets rest'
   return $ expandFLets var updatedAllDefs updatedRest
 collectAllFLets (SLet var def rest) = SLet var <$> (collectAllFLets def) <*> (collectAllFLets rest)
