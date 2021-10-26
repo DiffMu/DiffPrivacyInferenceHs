@@ -27,18 +27,18 @@ defaultspec spec = do
 
 runAllTests :: (String -> IO String) -> IO ()
 runAllTests parse = defaultspec $ do
-  -- testUnsafe
-  -- testUnification
-  -- testSubtyping
-  -- testSubtyping_MaxMinCases
-  -- testSubtyping_Cycles
-  -- testSubtyping_ContractEdge
-  -- testSupremum
-  -- testCheck_Rules
-  -- testScoping parse
-  -- testCheckSens parse
-  -- testIssues parse
-  testDemutation
+  testUnsafe
+  testUnification
+  testSubtyping
+  testSubtyping_MaxMinCases
+  testSubtyping_Cycles
+  testSubtyping_ContractEdge
+  testSupremum
+  testCheck_Rules
+  testScoping parse
+  testCheckSens parse
+  testIssues parse
+  -- testDemutation
 
 
 

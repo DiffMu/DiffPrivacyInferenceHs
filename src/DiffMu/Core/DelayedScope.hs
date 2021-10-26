@@ -33,6 +33,8 @@ import Debug.Trace
 data DelayedT_ x m a = Done a | Later (x -> (DelayedT x m a))
 newtype DelayedT x m a = DelayedT (m (DelayedT_ x m a))
 
+-- modify :: Monad m => (x -> x) -> DelayedT x m a -> DelayedT x m a
+-- modify f = undefined
 
 -- we expose the original constructors as shortcuts
 done :: Monad m => a -> DelayedT x m a

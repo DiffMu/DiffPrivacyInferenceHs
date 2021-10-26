@@ -853,6 +853,7 @@ data DMException where
   NoChoiceFoundError      :: String -> DMException
   DemutationError         :: String -> DMException
   BlackBoxError           :: String -> DMException
+  FLetReorderError        :: String -> DMException
   UnificationShouldWaitError :: DMTypeOf k -> DMTypeOf k -> DMException
   ParseError              :: String -> String -> Int -> DMException -- error message, filename, line number
 
@@ -871,6 +872,7 @@ instance Show DMException where
   show (UnificationShouldWaitError a b) = "Trying to unify types " <> show a <> " and " <> show b <> " with unresolved infimum (∧)."
   show (DemutationError e) = "While demutating, the following error was encountered:\n " <> e
   show (BlackBoxError e) = "While preprocessing black boxes, the following error was encountered:\n " <> e
+  show (FLetReorderError e) = "While processing function signatures, the following error was encountered:\n " <> e
   show (ParseError e file line) = "Unsupported julia expression in file " <> file <> ", line " <> show line <> ":\n " <> e
 
 instance Eq DMException where
