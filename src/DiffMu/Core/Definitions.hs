@@ -387,30 +387,27 @@ type Privacy = PrivacyOf MainSensKind
 
 ---------------------------------------------------------
 -- Julia types
---
--- Our representation is obviously very rudimentary currently.
--- It is split into two parts because we use the `JuliaNumType`
--- to annotate singleton terms with their type.
 
--- data JuliaNumType = JTNumInt | JTNumReal
---   deriving (Generic, Show, Eq)
-
--- instance Hashable JuliaNumType
-
--- data JuliaType = JTAny | JTNum JuliaNumType
---   deriving (Generic, Show, Eq)
-
-newtype JuliaType = JuliaType String
+data JuliaType =
+    JTAny
+    | JTInt
+    | JTReal
+    | JTFunction
+    | JTTuple [JuliaType]
+    | JTVector JuliaType
+    | JTMatrix JuliaType
   deriving (Generic, Eq, Ord)
 
 instance Hashable JuliaType where
 
 instance Show JuliaType where
-  show (JuliaType str) = show str
-
-pattern JTAny = JuliaType "Any"
-pattern JTNumInt = JuliaType "Integer"
-pattern JTNumReal = JuliaType "Real"
+  show JTAny = "Any"
+  show JTInt = "Integer"
+  show JTReal = "Real"
+  show JTFunction = "Function"
+  show (JTTuple as) = "Tuple{" ++ (intercalate "," (show <$> as)) ++ "}"
+  show (JTVector t) = "Vector{" ++ show t ++ "}"
+  show (JTMatrix t) = "Matrix{" ++ show t ++ "}"
 
 --------------------------------------
 -- Tracked CString

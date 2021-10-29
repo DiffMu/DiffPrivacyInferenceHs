@@ -82,7 +82,7 @@ liftINC a = INCResT (ExceptT (fmap Right a))
 -- we define the 'incremental' version of unification
 
 instance (Monad t, HasUnificationError e JuliaType, MonadError e t) => Unifyᵢ t JuliaType where
-  unifyᵢ_ (JuliaType a) (JuliaType b) | a == b = pure (JuliaType a)
+  unifyᵢ_ a b | a == b = pure a
   unifyᵢ_ t s = throwError (unificationError' t s)
 
 instance MonadDMTC t => Unifyᵢ (INCResT e t) Sensitivity where
@@ -157,7 +157,7 @@ instance Monad t => Unify t () where
 
 
 instance MonadDMTC t => Unify t JuliaType where
-  unify_ (JuliaType a) (JuliaType b) | a == b = pure (JuliaType a)
+  unify_ a b | a == b = pure a
   unify_ t s = throwError (UnificationError t s)
 
 

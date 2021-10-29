@@ -23,7 +23,9 @@ import DiffMu.Typecheck.Preprocess.Demutation
 import DiffMu.Typecheck.Preprocess.Common
 import DiffMu.Typecheck.Preprocess.All
 import DiffMu.Runner as All
-import DiffMu.Parser.DMTerm.FromString as All
+import DiffMu.Parser.Expr.FromString as All
+import DiffMu.Parser.Expr.FromString
+import DiffMu.Parser.Expr.JExprToDMTerm
 
 import DiffMu.Typecheck.JuliaType as All
 
@@ -87,7 +89,8 @@ parseEval_b dolog compstyle failOrSuccess parse desc term (expected :: TC DMMain
   it desc $ do
     term' <- parse term
 
-    let res = pDMTermFromString term'
+    let res = parseJExprFromString term' >>= parseDMTermFromJExpr
+     
     let term'' :: TC DMMain
         term'' = case res of
                    Left err -> error $ "Error while parsing DMTerm from string: " <> show err

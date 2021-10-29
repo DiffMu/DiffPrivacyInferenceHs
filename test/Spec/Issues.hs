@@ -32,7 +32,7 @@ test51 pp = describe "issue 53" $ do
            <>  "theta + mu \n"
            <>  "end"
       int = NoFun(Numeric (NonConst DMInt))
-      ty = Fun([([int :@ (inftyP)] :->*: int) :@ Just [JuliaType "Integer"]])
+      ty = Fun([([int :@ (inftyP)] :->*: int) :@ Just [JTInt]])
 
   parseEval pp "seems fixed (the example typechecks)" ex (pure ty)
 

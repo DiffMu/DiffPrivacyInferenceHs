@@ -34,6 +34,7 @@ data JExpr =
    | JETupAssignment [JExpr] JExpr
    | JEIfElse JExpr JExpr JExpr
    | JERef JExpr [JExpr]
+   | JEModel
    deriving Show
 
 
@@ -60,11 +61,21 @@ pIdentifier = skippable *> some (noneOf @[] "(),[]=#:\" \n") <* skippable
 
 pJuliaType :: Parser JuliaType
 pJuliaType = let
-    pNoP = char ':' *> pIdentifier -- simple types
+    pNoP = let single =
+                 string "Any" *> return JTAny
+                 <|> string "Integer" *> return JTInt
+                 <|> string "Real" *> return JTReal
+                 <|> string "Function" *> return JTFunction
+                 <|> string "Vector" *> return (JTVector JTAny)
+                 <|> string "Matrix" *> return (JTMatrix JTAny)
+           in try (char ':') *> single
     pP = do -- parametrized types
-           (name, params) <- ":curly" `with` ((,) <$> pNoP <*､> (pJuliaType `sepBy` sep))
-           return (name ++ "{" ++ (intercalate "," [p | JuliaType p <- params]) ++ "}")
- in (JuliaType <$> (try pNoP <|> pP))
+           let pctor = string "Tuple" *> return (\p -> (JTTuple p))
+                       <|> string "Matrix" *> return (\(p:_) -> (JTMatrix p))
+                       <|> string "Vector" *> return (\(p:_) -> (JTVector p))
+           (ctor, params) <- ":curly" `with` ((,) <$> (char ':' *> pctor) <*､> (pJuliaType `sepBy` sep))
+           return (ctor params)
+ in (try pNoP <|> try pP)
 
 
 pSymbol :: Parser Symbol
@@ -143,7 +154,6 @@ pFLet = let pFunc = do
 
 
 
-
 pIter :: Parser JExpr
 pIter = let psign2 = do
                        (start, end) <- pCallSign ":(:)" ((,) <$> pJExpr <*､> pJExpr)
@@ -152,7 +162,6 @@ pIter = let psign2 = do
         in do 
              (start, step, end) <- (try psign2 <|> psign3)
              return (JEIter start step end)
-
 
 pLoop = let pit = ":(=)" `with` ((,) <$> pJExpr <*､> pJExpr)
         in do

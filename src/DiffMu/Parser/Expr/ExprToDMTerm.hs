@@ -1,6 +1,6 @@
 
 module DiffMu.Parser.Expr.ExprToDMTerm where
-
+{-
 import DiffMu.Prelude
 import DiffMu.Abstract
 import DiffMu.Core
@@ -265,3 +265,5 @@ parseExprFromString input =
   in case res of
     Left e  -> Left (InternalError $ "Communication Error: Could not parse MutDMTerm from string\n\n----------------------\n" <> input <> "\n---------------------------\n" <> show e)
     Right a -> Right a
+
+-}

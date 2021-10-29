@@ -111,7 +111,7 @@ testDemutation = do
 
     it "example 2 (loop)" $ do
       let v s = UserTeVar (Symbol s)
-      let n i = (Sng i (JuliaType "Integer"))
+      let n i = (Sng i (JTInt))
       let term = FLet (v "f")
                  (
                    Lam [(v "a" :- JTAny) , (v "b" :- JTAny) , (v "c" :- JTAny)]
@@ -140,7 +140,7 @@ testDemutation = do
 
     it "example 3 (if)" $ do
       let v s = UserTeVar (Symbol s)
-      let n i = (Sng i (JuliaType "Integer"))
+      let n i = (Sng i (JTInt))
       let term = FLet (v "f")
                  (
                    Lam [(v "cond" :- JTAny), (v "a" :- JTAny) , (v "b" :- JTAny) , (v "c" :- JTAny)]
@@ -162,7 +162,7 @@ testDemutation = do
 
     it "example 3.1 (if with non mutating branch)" $ do
       let v s = UserTeVar (Symbol s)
-      let n i = (Sng i (JuliaType "Integer"))
+      let n i = (Sng i (JTInt))
       let term = FLet (v "f")
                  (
                    Lam [(v "cond" :- JTAny), (v "a" :- JTAny) , (v "b" :- JTAny) , (v "c" :- JTAny)]

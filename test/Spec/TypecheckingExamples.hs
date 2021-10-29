@@ -14,7 +14,7 @@ testCheckSens parse = do
             <> "end"
     let ty   = do
           τ <- newTVar ""
-          return $ Fun([([TVar τ :@ oneId] :->: TVar τ) :@ Just [JuliaType "Any"]])
+          return $ Fun([([TVar τ :@ oneId] :->: TVar τ) :@ Just [JTAny]])
     parseEvalUnify parse "Checks the identity function" test ty
 
 

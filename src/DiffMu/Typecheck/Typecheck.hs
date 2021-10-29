@@ -119,7 +119,7 @@ checkSen' (Arg x dτ i) scope = done $ do
                                          -- the inferred type must be a subtype of the user annotation, if given.
                                          τs <- newVar
                                          τ <- case dτ of
-                                             JuliaType "Any" -> return τs
+                                             JTAny -> return τs
                                              _ -> do τc <- createDMType dτ -- TODO it's actually a subtype of dτ!
                                                      logForce $ "checking arg:" <> show (x :- dτ) <> ", dmtype is " <> show τc
                                                      addConstraint (Solvable (IsLessEqual (τs, τc)))
@@ -483,7 +483,7 @@ checkSen' (Loop niter cs' (xi, xc) body) scope = do
 
    -- add iteration and capture variables as args-checking-commands to the scope
    -- TODO: do we need to make sure that we have unique names here?
-   let scope' = setValue xi (checkSens (Arg xi JTNumInt NotRelevant) scope) scope
+   let scope' = setValue xi (checkSens (Arg xi JTInt NotRelevant) scope) scope
    let scope'' = setValue xc (checkSens (Arg xc JTAny IsRelevant) scope) scope'
 
    -- check body term in that new scope
@@ -1045,7 +1045,7 @@ checkPri' (Loop niter cs' (xi, xc) body) scope =
       -- add iteration and capture variables as args-checking-commands to the scope
       -- capture variable is not relevant bc captures get ∞ privacy anyways
       -- TODO: do we need to make sure that we have unique names here?
-      let scope' = setValue xi (checkSens (Arg xi JTNumInt NotRelevant) scope) scope
+      let scope' = setValue xi (checkSens (Arg xi JTInt NotRelevant) scope) scope
       let scope'' = setValue xc (checkSens (Arg xc JTAny NotRelevant) scope) scope'
 
       -- check body term in that new scope

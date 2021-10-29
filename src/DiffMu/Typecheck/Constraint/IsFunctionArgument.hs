@@ -8,9 +8,9 @@ import DiffMu.Core.Context
 import DiffMu.Core.TC
 import DiffMu.Core.Symbolic
 import DiffMu.Core.Unification
-import DiffMu.Typecheck.Subtyping
 import DiffMu.Typecheck.JuliaType
 import Algebra.PartialOrd
+import DiffMu.Typecheck.Constraint.CheapConstraints
 
 import Debug.Trace
 
@@ -73,7 +73,7 @@ solveIsFunctionArgument name (Fun xs, Fun ys) = do
     -- if there are none such function (everything was annotated), we can attempt to solve the IsChoice constraint
     [] -> do
       dischargeConstraint name
-      addConstraint (Solvable (IsChoice (H.fromList existingFunctions, wantedFunctions)))
+      addConstraint (Solvable (IsChoice ((H.fromListWith (\_ _ -> error "Duplicate Method!") existingFunctions), wantedFunctions)))
       return ()
 
     -- if there were functions without annotation, error out
@@ -263,7 +263,7 @@ keepLeastGeneral cs =
 
       mins' = [(k, cs H.! k) | JuliaSignature k <- mins]
   in
-      H.fromList mins'
+      H.fromListWith (\_ _ -> error "Duplicate Method!") mins'
 
 -- kick out all methods in provided that would not match τsτ.
 getMatchCandidates :: forall t. IsT MonadDMTC t => DMTypeOf FunKind -> ChoiceHash -> t (ChoiceHash, Bool)
@@ -302,4 +302,4 @@ choiceCouldMatch args cs =
 
 -- return False if this type would become a "Function" if converted to a julia type
 noJuliaFunction :: DMTypeOf MainKind -> Bool
-noJuliaFunction τ = (juliatypes τ == [JuliaType "Function"])
+noJuliaFunction τ = (juliatypes τ == [JTFunction])

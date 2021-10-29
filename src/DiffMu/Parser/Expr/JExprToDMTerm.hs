@@ -30,8 +30,8 @@ exit = do
 pSingle :: JExpr -> ParseState MutDMTerm
 pSingle e = case e of
                  JEBlock stmts -> pList stmts
-                 JEInteger n -> pure $ Sng n (JuliaType "Integer")
-                 JEReal r -> pure $ Sng r (JuliaType "Real")
+                 JEInteger n -> pure $ Sng n JTInt
+                 JEReal r -> pure $ Sng r JTReal
                  JESymbol s -> return (Var ((UserTeVar s) :- JTAny))
                  JETup elems -> (Tup <$> (mapM pSingle elems))
                  JELam args body -> pJLam args body
@@ -148,7 +148,7 @@ pJLoop ivar iter body =
        let div = Op (IsBinary DMOpDiv)
        let sub = Op (IsBinary DMOpSub)
        let ceil = Op (IsUnary DMOpCeil)
-       return (ceil [div [sub [dend, sub [dstart, (Sng 1 (JuliaType "Integer"))]], dstep]]) -- compute number of steps
+       return (ceil [div [sub [dend, sub [dstart, (Sng 1 JTInt)]], dstep]]) -- compute number of steps
   in case ivar of
        JESymbol i -> case iter of
                           JEIter start step end -> do
