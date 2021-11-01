@@ -973,6 +973,7 @@ checkPri' (Gauss rp εp δp f) scope =
       -- interesting output variables are set to (ε, δ), the rest is truncated to ∞
       mtruncateP inftyP
       (ivars, itypes) <- getInteresting
+      logForce $ ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>\nInteresting variables: " <> show ivars <> "\n<<<<<<<<<<<<<<<<" 
       mapM (\(x, (τ :@ _)) -> setVarP x (WithRelev IsRelevant (τ :@ PrivacyAnnotation (ε, δ)))) (zip ivars itypes)
       -- return type is a privacy type.
       return τf

@@ -164,6 +164,8 @@ instance Solve MonadDMTC IsGaussResult (DMTypeOf MainKind, DMTypeOf MainKind) wh
         TVar x -> pure () -- we don't know yet.
         NoFun (DMGrads nrm clp n τ) -> do -- is mgauss
 
+           logForce $ ">>>>>>>>>>>>>>>>>>>>>>>>\nIn gauss, type is " <> show (DMGrads nrm clp n τ) <> "<<<<<<<<<<<<<<<<<<<<<"
+
            iclp <- newVar -- clip of input matrix can be anything
            τv <- newVar -- input matrix element type can be anything (as long as it's numeric)
 

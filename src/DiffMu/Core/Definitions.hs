@@ -777,12 +777,21 @@ indent s = unlines (fmap ("  " <>) (lines s))
 instance ShowPretty (TeVar) where
   showPretty (v) = show v
 
-instance ShowPretty (Asgmt a) where
-  showPretty (a :- _) = showPretty a
+instance ShowPretty a => ShowPretty (Asgmt a) where
+  showPretty (a :- x) = showPretty a <> " :- " <> showPretty x
 
 instance ShowPretty (DMTypeOp_Some) where
   showPretty (IsBinary op) = show op
   showPretty (IsUnary op) = show op
+
+instance ShowPretty (JuliaType) where
+  showPretty = show
+
+instance (ShowPretty a, ShowPretty b) => ShowPretty (a,b) where
+  showPretty (a,b) = "("<> showPretty a <> ", " <> showPretty b <> ")"
+
+instance ShowPretty Relevance where
+  showPretty = show
 
 instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t) where
   showPretty (Extra e)          = showPretty e
