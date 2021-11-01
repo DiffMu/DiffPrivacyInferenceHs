@@ -396,6 +396,8 @@ data JuliaType =
     | JTTuple [JuliaType]
     | JTVector JuliaType
     | JTMatrix JuliaType
+    | JTModel
+    | JTGrads
   deriving (Generic, Eq, Ord)
 
 instance Hashable JuliaType where
@@ -408,6 +410,8 @@ instance Show JuliaType where
   show (JTTuple as) = "Tuple{" ++ (intercalate "," (show <$> as)) ++ "}"
   show (JTVector t) = "Vector{" ++ show t ++ "}"
   show (JTMatrix t) = "Matrix{" ++ show t ++ "}"
+  show (JTModel) = "DMModel"
+  show (JTGrads) = "DMGrads"
 
 --------------------------------------
 -- Tracked CString

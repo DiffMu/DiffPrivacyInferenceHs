@@ -9,6 +9,8 @@ import Text.Megaparsec.Char
 import Text.Megaparsec.Debug
 import Text.Megaparsec.Char.Lexer
 
+import Data.Either
+
 import qualified Data.Text as T
 import Debug.Trace(trace)
 
@@ -22,8 +24,8 @@ data JExpr =
    | JECall JExpr [JExpr]
    | JEBlock [JExpr]
    | JEBlackBox JExpr [JExpr]
-   | JETypeAnnotation JExpr JuliaType
-   | JENotRelevant JExpr JuliaType
+   | JETypeAnnotation JExpr (Either String JuliaType)
+   | JENotRelevant JExpr (Either String JuliaType)
    | JEIter JExpr JExpr JExpr
    | JELoop JExpr JExpr JExpr
    | JELam [JExpr] JExpr
@@ -34,11 +36,11 @@ data JExpr =
    | JETupAssignment [JExpr] JExpr
    | JEIfElse JExpr JExpr JExpr
    | JERef JExpr [JExpr]
-   | JEModel
    deriving Show
 
 
 type Parser = Parsec Void String
+
 
 infixl 2 <*､>
 (<*､>) :: Parser (a -> b) -> Parser a -> Parser b
@@ -59,23 +61,38 @@ sep = wskipc ','
 pIdentifier :: Parser String
 pIdentifier = skippable *> some (noneOf @[] "(),[]=#:\" \n") <* skippable
 
-pJuliaType :: Parser JuliaType
+pJuliaType :: Parser (Either String JuliaType)
 pJuliaType = let
     pNoP = let single =
-                 string "Any" *> return JTAny
-                 <|> string "Integer" *> return JTInt
-                 <|> string "Real" *> return JTReal
-                 <|> string "Function" *> return JTFunction
-                 <|> string "Vector" *> return (JTVector JTAny)
-                 <|> string "Matrix" *> return (JTMatrix JTAny)
+                 string "Any" *> return (Right JTAny)
+                 <|> string "Integer" *> return (Right JTInt)
+                 <|> string "Real" *> return (Right JTReal)
+                 <|> string "Function" *> return (Right JTFunction)
+                 <|> string "Vector" *> return (Right (JTVector JTAny))
+                 <|> string "Matrix" *> return (Right (JTMatrix JTAny))
+                 <|> string "DMModel" *> return (Right JTModel)
+                 <|> string "DMGrads" *> return (Right JTGrads)
+                 <|> Left <$> pIdentifier
            in try (char ':') *> single
-    pP = do -- parametrized types
-           let pctor = string "Tuple" *> return (\p -> (JTTuple p))
-                       <|> string "Matrix" *> return (\(p:_) -> (JTMatrix p))
-                       <|> string "Vector" *> return (\(p:_) -> (JTVector p))
-           (ctor, params) <- ":curly" `with` ((,) <$> (char ':' *> pctor) <*､> (pJuliaType `sepBy` sep))
-           return (ctor params)
- in (try pNoP <|> try pP)
+    pP = -- parametrized types
+           let pJTup = do
+                       ps <- ":curly" `with` ((string ":Tuple" >> sep) *> (pJuliaType `sepBy` sep))
+                       case partitionEithers ps of
+                          ([], ts) -> return (Right (JTTuple ts))
+                          (es, _) -> return (Left (intercalate ", " es))
+               pJMat = do
+                       p <- ":curly" `with` ((string ":Matrix" >> sep) *> pJuliaType)
+                       case p of
+                           Right t -> return (Right (JTMatrix t))
+                           Left s -> return (Left s)
+               pJVec = do
+                       p <- ":curly" `with` ((string ":Vector" >> sep) *> pJuliaType)
+                       case p of
+                           Right t -> return (Right (JTVector t))
+                           Left s -> return (Left s)
+
+           in pJTup <|> pJMat <|> pJVec
+ in (try pP <|> try pNoP)
 
 
 pSymbol :: Parser Symbol
@@ -83,10 +100,10 @@ pSymbol = (Symbol . T.pack) <$> (try (char ':' *> pIdentifier)
                                  <|> try (string "Symbol" *> between (string "(\"") (string "\")") pIdentifier))
 
 pAnnotation :: Parser JExpr
-pAnnotation = let pNoData :: Parser JuliaType
+pAnnotation = let pNoData :: Parser (Either String JuliaType)
                   pNoData = try (":call" `with` ((string ":NoData") >> sep >> pJuliaType))
-                            <|> try ((":call" `with` (string ":NoData")) >> (return JTAny))
-                            <|> ((string ":NoData") >> (return JTAny))
+                            <|> try ((":call" `with` (string ":NoData")) >> (return (Right JTAny)))
+                            <|> ((string ":NoData") >> (return (Right JTAny)))
                   pTyp :: Parser JExpr
                   pTyp = (JETypeAnnotation <$> pJExpr <*､> pJuliaType)
               in ":(::)" `with` (try (JENotRelevant <$> pJExpr <*､> pNoData) <|> pTyp) -- careful order is important

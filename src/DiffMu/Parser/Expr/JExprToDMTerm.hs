@@ -92,14 +92,17 @@ pJRef name refs = case refs of
 
 pArg arg = case arg of
                      JESymbol s -> return ((UserTeVar s) :- JTAny)
-                     JETypeAnnotation (JESymbol s) τ -> return ((UserTeVar s) :- τ)
+                     JETypeAnnotation (JESymbol s) (Left e) -> parseError ("Unsupported type(s) "<> show e <>" in annotation of function argument " <> show s)
+                     JETypeAnnotation (JESymbol s) (Right τ) -> return ((UserTeVar s) :- τ)
                      JENotRelevant _ _ -> parseError ("Relevance annotation on a sensitivity function is not permitted.")
                      a -> parseError ("Invalid function argument " <> show a)
 
 pArgRel arg = case arg of
                        JESymbol s -> return ((UserTeVar s) :- (JTAny, IsRelevant))
-                       JETypeAnnotation (JESymbol s) τ -> return ((UserTeVar s) :- (τ, IsRelevant))
-                       JENotRelevant (JESymbol s) τ -> return ((UserTeVar s) :- (τ, NotRelevant))
+                       JETypeAnnotation (JESymbol s) (Left e) -> parseError ("Unsupported type(s) "<> show e <>" in annotation of function argument " <> show s)
+                       JETypeAnnotation (JESymbol s) (Right τ) -> return ((UserTeVar s) :- (τ, IsRelevant))
+                       JENotRelevant (JESymbol s) (Left e) -> parseError ("Unsupported type(s) "<> show e <>" in annotation of function argument " <> show s)
+                       JENotRelevant (JESymbol s) (Right τ) -> return ((UserTeVar s) :- (τ, NotRelevant))
                        a -> parseError ("Invalid function argument " <> show a)
 
 
@@ -229,8 +232,8 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
   -- the non binding builtins
 
   -- 4 arguments
-  (t@"gaussian_mechanism!", [a1, a2, a3, a4]) -> Gauss <$> pSingle a1 <*> pSingle a2 <*> pSingle a3 <*> pSingle a4
-  (t@"gaussian_mechanism!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 4 arguments, but has been given " <> show (length args)
+  (t@"gaussian_mechanism", [a1, a2, a3, a4]) -> Gauss <$> pSingle a1 <*> pSingle a2 <*> pSingle a3 <*> pSingle a4
+  (t@"gaussian_mechanism", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 4 arguments, but has been given " <> show (length args)
 
   -- 3 arguments
   (t@"index", [a1, a2, a3]) -> Index <$> pSingle a1 <*> pSingle a2 <*> pSingle a3
@@ -238,14 +241,14 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
 
   -- 2 arguments
 
-  (t@"subtract_gradient!", [a1, a2]) -> SubGrad <$> pSingle a1 <*> pSingle a2
-  (t@"subtract_gradient!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
+  (t@"subtract_gradient", [a1, a2]) -> SubGrad <$> pSingle a1 <*> pSingle a2
+  (t@"subtract_gradient", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
 
-  (t@"scale_gradient!", [a1, a2]) -> ScaleGrad <$> pSingle a1 <*> pSingle a2
-  (t@"scale_gradient!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
+  (t@"scale_gradient", [a1, a2]) -> ScaleGrad <$> pSingle a1 <*> pSingle a2
+  (t@"scale_gradient", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
 
-  (t@"clip!", [a1,a2]) -> ClipM <$> pClip a1 <*> pSingle a2
-  (t@"clip!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
+  (t@"clip", [a1,a2]) -> ClipM <$> pClip a1 <*> pSingle a2
+  (t@"clip", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
 
   -- 1 argument
   (t@"convert!", [a1]) -> ConvertM <$> pSingle a1
