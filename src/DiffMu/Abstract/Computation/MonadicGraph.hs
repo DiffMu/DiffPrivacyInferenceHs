@@ -161,7 +161,7 @@ findPathM relevance (GraphM g) (start,goal) | otherwise     =
           -- log $ "  => relevance: " <> show (relevance e)
           case relevance e of
             IsGraphRelevant -> return (Fail (UserError e))
-            NotGraphRelevant -> throwError e
+            NotGraphRelevant -> throwOriginalError e
 
 
       checkNeutrality a = do
@@ -245,7 +245,7 @@ findSupremumM relevance (GraphM graph) ((a,b) :=: x,isShortestSup) =
           -- log $ "  => relevance: " <> show (relevance e)
           case relevance e of
             IsGraphRelevant -> return (Fail (UserError e))
-            NotGraphRelevant -> throwError e
+            NotGraphRelevant -> throwOriginalError e
       checkNeutrality a = do
         na <- checkNeutral a
         case na of

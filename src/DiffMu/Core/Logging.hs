@@ -5,7 +5,10 @@ module DiffMu.Core.Logging where
 
 import DiffMu.Prelude
 import DiffMu.Abstract
+import GHC.Stack
 
+
+import qualified Control.Monad.Except as QUAL
 
 data DMLogLocation =
   Location_PreProcess
@@ -165,4 +168,11 @@ getLogMessages (DMLogMessages messages) sevR locsR =
   let filtered = [DMLogMessage s l m | DMLogMessage s l m <- messages, or [sevR <= s, or ((l <=) <$> locsR)]]
       reversed = reverse filtered
   in intercalate "\n" (show <$> (markFollowup Nothing reversed))
+
+
+throwError :: (MonadLog m, MonadError e m) => e -> m a
+throwError e = do
+  logForce $ "-------------------------\nError information:\n-----------------------\ncallstack: " <> show callStack <> "\n"
+  QUAL.throwError e
+
 

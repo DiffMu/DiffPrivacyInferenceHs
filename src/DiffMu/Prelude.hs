@@ -16,10 +16,12 @@ module DiffMu.Prelude
   , MonadImpossible (..)
   , MonadInternalError (..)
   , TeVar (..)
+  , throwOriginalError
   )
   where
 
-import DiffMu.Imports as All hiding (msum)
+import DiffMu.Imports as All hiding (msum, throwError)
+import qualified DiffMu.Imports as QUAL (throwError)
 
 -- import DiffMu.Prelude.Algebra as All
 -- import DiffMu.Prelude.Polynomial as All
@@ -103,6 +105,13 @@ class Monad t => MonadImpossible t where
 
 class Monad t => MonadInternalError t where
   internalError :: String -> t a
+
+
+throwOriginalError :: (MonadError e m) => e -> m a
+throwOriginalError = QUAL.throwError
+
+
+
 
 
 -- import           Prelude                                 hiding

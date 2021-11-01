@@ -4,6 +4,7 @@ module DiffMu.Typecheck.Operations where
 import DiffMu.Prelude
 import DiffMu.Abstract
 import DiffMu.Core.Definitions
+import DiffMu.Core.Logging
 import DiffMu.Core.TC
 import DiffMu.Core.Symbolic
 import DiffMu.Core.Unification
