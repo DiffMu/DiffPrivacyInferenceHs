@@ -172,7 +172,7 @@ getLogMessages (DMLogMessages messages) sevR locsR =
 
 throwError :: (MonadLog m, MonadError e m) => e -> m a
 throwError e = do
-  logForce $ "-------------------------\nError information:\n-----------------------\ncallstack: " <> show callStack <> "\n"
+  -- logForce $ "-------------------------\nError information:\n-----------------------\ncallstack: " <> show callStack <> "\n"
   QUAL.throwError e
 
 
