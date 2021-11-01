@@ -36,8 +36,9 @@ preprocessAll term = do
   logForce $ "-----------------------------------"
   logForce $ "Toplevel information:\n" <> show tlinfo
 
-  -- mutation processing
+  -- -- mutation processing
   term'' <- liftLightTC (MFull def def tlinfo) (\_ -> ()) (demutate term')
+  -- term'' <- liftLightTC () (\_ -> ()) (nondemutate term')
 
   -- flet processing
   term''' <- liftLightTC def def (collectAllFLets term'')
@@ -47,5 +48,4 @@ preprocessAll term = do
 
   -- done
   return term'''
-
 

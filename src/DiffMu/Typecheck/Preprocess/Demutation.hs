@@ -630,31 +630,56 @@ elaborateMut scope term@(Phi cond t1 t2) = do
 elaborateMut scope (SubGrad t1 t2) = do
   (argTerms, mutVars) <- elaborateMutList "subgrad" scope [(Mutated , t1), (NotMutated , t2)]
   case argTerms of
-    [newT1, newT2] -> pure (SubGrad newT1 newT2, VirtualMutated mutVars)
+    -- NOTE: Because of #95, we say that this function is pure
+    --
+    [newT1, newT2] -> pure (SubGrad newT1 newT2, Pure UserValue)
+    -- [newT1, newT2] -> pure (SubGrad newT1 newT2, VirtualMutated mutVars)
+    --
+    -- END NOTE
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 elaborateMut scope (ScaleGrad scalar grads) = do
   (argTerms, mutVars) <- elaborateMutList "scalegrad" scope [(NotMutated , scalar), (Mutated , grads)]
   case argTerms of
-    [newT1, newT2] -> pure (ScaleGrad newT1 newT2, VirtualMutated mutVars)
+    -- NOTE: Because of #95, we say that this function is pure
+    --
+    [newT1, newT2] -> pure (ScaleGrad newT1 newT2, Pure UserValue)
+    -- [newT1, newT2] -> pure (ScaleGrad newT1 newT2, VirtualMutated mutVars)
+    --
+    -- END NOTE
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 elaborateMut scope (ClipM c t) = do
   (argTerms, mutVars) <- elaborateMutList "clip" scope [(Mutated , t)]
   case argTerms of
-    [newT] -> pure (ClipM c newT, VirtualMutated mutVars)
+    -- NOTE: Because of #95, we say that this function is pure
+    --
+    [newT] -> pure (ClipM c newT, Pure UserValue)
+    -- [newT] -> pure (ClipM c newT, VirtualMutated mutVars)
+    --
+    -- END NOTE
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 elaborateMut scope (Gauss t1 t2 t3 t4) = do
   (argTerms, mutVars) <- elaborateMutList "gauss" scope [(NotMutated , t1), (NotMutated , t2), (NotMutated , t3), (Mutated , t4)]
   case argTerms of
-    [newT1, newT2, newT3, newT4] -> pure (Gauss newT1 newT2 newT3 newT4, VirtualMutated mutVars)
+    -- NOTE: Because of #95, we say that this function is pure
+    --
+    [newT1, newT2, newT3, newT4] -> pure (Gauss newT1 newT2 newT3 newT4, Pure UserValue)
+    -- [newT1, newT2, newT3, newT4] -> pure (Gauss newT1 newT2 newT3 newT4, VirtualMutated mutVars)
+    --
+    -- END NOTE
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 elaborateMut scope (ConvertM t1) = do
   (argTerms, mutVars) <- elaborateMutList "convert" scope [(Mutated , t1)]
   case argTerms of
-    [newT1] -> pure (ConvertM newT1, VirtualMutated mutVars)
+    -- NOTE: Because of #95, we say that this function is pure
+    --
+    [newT1] -> pure (ConvertM newT1, Pure UserValue)
+    -- [newT1] -> pure (ConvertM newT1, VirtualMutated mutVars)
+    --
+    -- END NOTE
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 elaborateMut scope (Transpose t1) = do
@@ -811,7 +836,15 @@ elaborateLambda scope args body = do
 --
 
 elaborateMutList :: String -> Scope -> [(IsMutated , MutDMTerm)] -> MTC ([DMTerm] , [(TeVar, IsLocalMutation)])
-elaborateMutList f scope mutargs = do
+elaborateMutList f scope mutargs' = do
+  ---------
+  -- NOTE: Because of #95, currently mutation is DISABLED,
+  --       we simulate this by saying that all arguments are to be treated as non mutating
+  --
+  let mutargs = [(NotMutated,a) | (_ , a) <- mutargs']
+  --
+  -- NOTE END
+  ---------
 
   -- function for typechecking a single argument
   let checkArg :: (IsMutated , MutDMTerm) -> MTC (DMTerm , Maybe (TeVar, IsLocalMutation))
