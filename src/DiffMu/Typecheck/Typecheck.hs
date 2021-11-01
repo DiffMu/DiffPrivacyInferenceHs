@@ -602,7 +602,7 @@ checkSen' (ClipM c m) scope = do
       unify τb (NoFun (DMGrads nrm clp n (Numeric DMData)))
 
       -- change clip parameter to input
-      return (NoFun (DMTup [DMGrads nrm c n (Numeric DMData)]))
+      return (NoFun (DMGrads nrm c n (Numeric DMData)))
 
 
 --------------------
@@ -730,7 +730,7 @@ checkSen' (SubGrad ps gs) scope = do
          res <- TVar <$> newTVar "τr"
          addConstraint (Solvable (IsTypeOpResult (Binary DMOpSub ((Numeric τps):@s1, (Numeric τgs):@s2) res)))
 
-         return (NoFun (DMTup [DMParams m res]))
+         return (NoFun (DMParams m res))
 
 checkSen' (ScaleGrad scalar grad) scope = do
 
@@ -770,7 +770,7 @@ checkSen' (ScaleGrad scalar grad) scope = do
     -- the return type is the same matrix, but
     -- the clipping is now changed to unbounded
     -- and the content type is the result of the multiplication
-    return (NoFun (DMTup [(DMGrads nrm U m τres)]))
+    return (NoFun (DMGrads nrm U m τres))
 
 
 checkSen' (Reorder σ t) scope = do
@@ -1000,7 +1000,7 @@ checkPri' (Gauss rp εp δp f) scope =
          τgauss <- newVar
          addConstraint (Solvable (IsGaussResult ((NoFun τgauss), τf))) -- we decide later if its gauss or mgauss according to return type
 
-         return (NoFun (DMTup [τgauss]))
+         return (NoFun τgauss)
 
 
 checkPri' (Loop niter cs' (xi, xc) body) scope =

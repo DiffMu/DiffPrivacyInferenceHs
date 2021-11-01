@@ -1083,8 +1083,11 @@ instance (MonadDMTC t, Show a, Unify t a) => Unify t (Maybe a) where
 -- createDMTypeNum JTNumReal = DMReal
 createDMTypeNum :: MonadDMTC t => JuliaType -> t (DMTypeOf BaseNumKind)
 createDMTypeNum (JTInt) = pure DMInt
-createDMTypeNum (JTReal)  = pure  DMReal
-createDMTypeNum (t)  = throwError (TypeMismatchError $ "expected " <> show t <> " to be either Integer or Real.")
+createDMTypeNum (JTReal)  = pure DMReal
+createDMTypeNum (t) = do
+    v <- newVar
+    return v
+ --   throwError (TypeMismatchError $ "expected " <> show t <> " to be either Integer or Real.")
 
 
 createDMTypeType :: MonadDMTC t => JuliaType -> t DMType
@@ -1108,6 +1111,16 @@ createDMTypeType (JTMatrix t) = do
   n <- newVar
   m <- newVar
   return (DMMat nrm clp m n (Numeric (NonConst dt)))
+createDMTypeType (JTModel) = do
+  dt <- createDMTypeNum JTAny
+  n <- newVar
+  return (DMParams n (Numeric (NonConst dt)))
+createDMTypeType (JTGrads) = do
+  dt <- createDMTypeNum JTAny
+  nrm <- newVar
+  clp <- newVar
+  n <- newVar
+  return (DMGrads nrm clp n (Numeric (NonConst dt)))
 createDMTypeType JTAny = do
   v <- newTVar "any"
   return (TVar v)
@@ -1115,13 +1128,6 @@ createDMTypeType (t)  = throwError (TypeMismatchError $ "expected " <> show t <>
 
 -- Maps julia types to DMTypes (of main kind)
 -- (`JTAny` is turned into a new type variable.)
--- createDMType :: MonadDMTC t => JuliaType -> t (DMTypeOf NoFunKind)
---  -- NOTE: defaulting to non-const might or might not be what we want to do here.
--- createDMType (JuliaType "Integer") = pure $ Numeric (NonConst DMInt)
--- createDMType (JuliaType "Real") = pure $ Numeric (NonConst DMReal)
--- -- TODO: is it correct to create tvars for anything else?
--- createDMType _ = TVar <$> newTVar "any"
-
 createDMType :: MonadDMTC t => JuliaType -> t (DMTypeOf MainKind)
  -- NOTE: defaulting to non-const might or might not be what we want to do here.
 createDMType (JTFunction) = do
