@@ -910,7 +910,7 @@ preprocessLoopBody :: Scope -> TeVar -> MutDMTerm -> WriterT [TeVar] MTC MutDMTe
 preprocessLoopBody scope iter (SLet (v :- jt) term body) = do
   -- it is not allowed to change the iteration variable
   case iter == v of
-    True -> throwError (DemutationError $ "Inside for-loops the iteration variable (in this case '" <> show iter <> "') is not allowed to be mutated.")
+    True -> throwOriginalError (DemutationError $ "Inside for-loops the iteration variable (in this case '" <> show iter <> "') is not allowed to be mutated.")
     False -> pure ()
 
   -- if an slet expression binds a variable which is already in scope,
@@ -928,8 +928,8 @@ preprocessLoopBody scope iter (SLet (v :- jt) term body) = do
     Just _  -> tell [v] >> return (Extra (MutLet (Extra (Modify (v :- jt) term')) (body')))
     Nothing -> return (SLet (v :- jt) term' body')
 
-preprocessLoopBody scope iter (FLet f _ _) = throwError (DemutationError $ "Function definition is not allowed in for loops. (Encountered definition of " <> show f <> ".)")
-preprocessLoopBody scope iter (Ret t) = throwError (DemutationError $ "Return is not allowed in for loops. (Encountered " <> show (Ret t) <> ".)")
+preprocessLoopBody scope iter (FLet f _ _) = throwOriginalError (DemutationError $ "Function definition is not allowed in for loops. (Encountered definition of " <> show f <> ".)")
+preprocessLoopBody scope iter (Ret t) = throwOriginalError (DemutationError $ "Return is not allowed in for loops. (Encountered " <> show (Ret t) <> ".)")
 
 -- mutlets make use recurse
 preprocessLoopBody scope iter (Extra (MutLet t1 t2)) = do

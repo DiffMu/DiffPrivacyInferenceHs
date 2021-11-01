@@ -92,7 +92,7 @@ findFLets target (BBLet var args rest) = let FindFLetsResult others rest' = find
 findFLets target t = FindFLetsResult [] t
 
 
-getJuliaSig :: DMTerm -> LightTC l s JuliaSig
+getJuliaSig ::  ISing_DMLogLocation l => DMTerm -> LightTC l s JuliaSig
 getJuliaSig (Lam as _) = pure $ map sndA as
 getJuliaSig (LamStar as _) = pure $ map (fst . sndA) as
 getJuliaSig _ = impossible "Expected a lam/lamstar inside an flet."

@@ -24,7 +24,7 @@ import qualified Data.Text as T
 
 import Debug.Trace
 
-type TLTC = LightTC DMLogLocation ()
+type TLTC = LightTC Location_PrePro_Global ()
 
 data TopLevelInformation = TopLevelInformation
   {

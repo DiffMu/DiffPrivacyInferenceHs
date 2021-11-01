@@ -27,10 +27,10 @@ import Debug.Trace
 newtype LightTC l s a = LightTC {runLightTC :: ((StateT s (ExceptT DMException (Writer DMLogMessages))) a)}
   deriving (Functor, Applicative, Monad, MonadState s, MonadError DMException, MonadWriter DMLogMessages)
 
-instance MonadInternalError (LightTC l s) where
+instance ISing_DMLogLocation l => MonadInternalError (LightTC l s) where
   internalError = throwError . InternalError
 
-instance MonadImpossible (LightTC l s) where
+instance ISing_DMLogLocation l => MonadImpossible (LightTC l s) where
   impossible = throwError . ImpossibleError
 
 instance ISing_DMLogLocation l => MonadLog (LightTC l a) where

@@ -4,6 +4,7 @@ module DiffMu.Parser.Expr.JExprToDMTerm where
 import DiffMu.Prelude
 --import DiffMu.Abstract
 import DiffMu.Core
+import DiffMu.Core.Logging
 import DiffMu.Parser.Expr.FromString
 import qualified Data.Text as T
 
@@ -15,7 +16,7 @@ type ParseState = (StateT (String,Int,Bool) (Except DMException))
 parseError :: String -> ParseState a
 parseError message = do
                        (file,line,_) <- get
-                       throwError (ParseError message file line)
+                       throwOriginalError (ParseError message file line)
 
 enter = do
           (file, line, _) <- get
@@ -49,7 +50,7 @@ pSingle e = case e of
                  JEColon -> parseError "Colon (:) can only be used to access matrix rows like in M[1,:]."
                  JETypeAnnotation _ _ -> parseError "Type annotations are only supported on function arguments."
                  JENotRelevant _ _ -> parseError "Type annotations are only supported on function arguments."
-                 JELineNumber _ _ -> throwError (InternalError "What now?") -- TODO
+                 JELineNumber _ _ -> throwOriginalError (InternalError "What now?") -- TODO
 
 
 pList :: [JExpr] -> ParseState MutDMTerm
@@ -67,7 +68,7 @@ pList (s : tail) = case s of
                         JEBlackBox name args -> pJBlackBox name args tail (\x -> x)
                         JELoop ivar iter body -> pMutLet (pJLoop ivar iter body) tail
                         JECall name args -> pMutLet (pJCall name args) tail
-                        JEIfElse _ _ _ -> throwError (InternalError "Conditionals should not have tails!")
+                        JEIfElse _ _ _ -> throwOriginalError (InternalError "Conditionals should not have tails!")
                         JEUnsupported s -> parseError ("Unsupported expression " <> show s)
                         _ -> parseError ("Expression " <> show s <> " does not have any effect.")
 

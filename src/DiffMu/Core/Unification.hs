@@ -29,13 +29,26 @@ data StoppingReason e = Wait' | Fail' e
 
 newtype INCResT e m a = INCResT {runINCResT :: ExceptT (StoppingReason e) m a}
   -- Finished' (m a) | Wait' | Fail' e
-  deriving (Functor, Applicative, Monad, MonadError (StoppingReason e))
+  deriving (Functor, Applicative, Monad, MonadError (StoppingReason e), MonadLog)
 
 instance HasUnificationError DMException a where
   unificationError' = UnificationError
 
 instance HasUnificationError e a => HasUnificationError (StoppingReason e) a where
   unificationError' a b = Fail' (unificationError' a b)
+
+instance MonadLog m => MonadLog (ExceptT e m) where
+  log a = ExceptT (log a >> pure (Right ()))
+  debug a = ExceptT (debug a >> pure (Right ()))
+  info a = ExceptT (info a >> pure (Right ()))
+  warn a = ExceptT (warn a >> pure (Right ()))
+  logForce a = ExceptT (logForce a >> pure (Right ()))
+  withLogLocation s a = a -- TODO: Make this proper?
+
+    -- ExceptT (withLogLocation s a >> pure (Right ()))
+
+-- instance MonadLog m => MonadLog (INCResT e m) where
+--   log a = INCResT (log a)
 
 -- instance HasUnificationError e a => HasUnificationError (e) [a] where
 --   unificationError' a b = unificationError' a b
@@ -81,7 +94,7 @@ liftINC a = INCResT (ExceptT (fmap Right a))
 
 -- we define the 'incremental' version of unification
 
-instance (Monad t, HasUnificationError e JuliaType, MonadError e t) => Unifyᵢ t JuliaType where
+instance (Monad t, HasUnificationError e JuliaType, MonadError e t, MonadLog t) => Unifyᵢ t JuliaType where
   unifyᵢ_ a b | a == b = pure a
   unifyᵢ_ t s = throwError (unificationError' t s)
 
@@ -94,11 +107,11 @@ instance (Monad t, Unifyᵢ t a, Unifyᵢ t b) => Unifyᵢ t (a,b) where
 instance (Unifyᵢ isT a, Unifyᵢ isT b) => Unifyᵢ isT (a :@ b) where
   unifyᵢ_ (a₁ :@ e₁) (a₂ :@ e₂) = (:@) <$> unifyᵢ_ a₁ a₂ <*> unifyᵢ_ e₁ e₂
 
-instance (HasUnificationError e [a], MonadError e t, Show a, Unifyᵢ t a) => Unifyᵢ t [a] where
+instance (HasUnificationError e [a], MonadLog t, MonadError e t, Show a, Unifyᵢ t a) => Unifyᵢ t [a] where
   unifyᵢ_ xs ys | length xs == length ys = mapM (uncurry unifyᵢ_) (zip xs ys)
   unifyᵢ_ xs ys = throwError (unificationError' xs ys)
 
-instance (HasUnificationError e (Maybe a), MonadError e t, Show a, Unifyᵢ t a) => Unifyᵢ t (Maybe a) where
+instance (HasUnificationError e (Maybe a), MonadLog t, MonadError e t, Show a, Unifyᵢ t a) => Unifyᵢ t (Maybe a) where
   unifyᵢ_ Nothing Nothing = pure Nothing
   unifyᵢ_ (Just a) (Just b) = Just <$> unifyᵢ_ a b
   unifyᵢ_ t s = throwError (unificationError' t s)
@@ -196,7 +209,7 @@ instance (Unify isT a, Unify isT b) => Unify isT (a :@ b) where
 
 -- Similarly, lists of terms are unified elements wise,
 -- but they only match if they are of the same lenght:
-instance (HasUnificationError e [a], MonadError e t, Show a, Unify t a) => Unify t [a] where
+instance (HasUnificationError e [a], MonadError e t, Show a, Unify t a, MonadLog t) => Unify t [a] where
   unify_ xs ys | length xs == length ys = mapM (uncurry unify_) (zip xs ys)
   unify_ xs ys = throwError (unificationError' xs ys)
 

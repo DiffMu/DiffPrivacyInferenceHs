@@ -7,6 +7,7 @@ module DiffMu.Core.DelayedScope where
 import DiffMu.Prelude
 import DiffMu.Abstract
 import DiffMu.Core
+import DiffMu.Core.Logging
 import DiffMu.Core.Symbolic
 import DiffMu.Core.TC
 

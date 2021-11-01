@@ -3,6 +3,7 @@ module DiffMu.Typecheck.Constraint.IsFunctionArgument where
 
 import DiffMu.Prelude
 import DiffMu.Abstract
+import DiffMu.Core.Logging
 import DiffMu.Core.Definitions
 import DiffMu.Core.Context
 import DiffMu.Core.TC

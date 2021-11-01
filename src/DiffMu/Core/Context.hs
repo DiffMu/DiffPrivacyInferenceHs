@@ -5,6 +5,7 @@ module DiffMu.Core.Context where
 
 import DiffMu.Prelude
 import DiffMu.Abstract
+import DiffMu.Core.Logging
 import DiffMu.Core.Definitions
 import DiffMu.Core.TC
 import DiffMu.Core.Unification
@@ -82,7 +83,7 @@ mtruncateS η = types %= truncateS η
 mtruncateP :: MonadDMTC t => Privacy -> t ()
 mtruncateP η = types %= truncateP η
 
-instance (MonadError DMException t, SemigroupM t a, SemigroupM t b, Show a, Show b) => SemigroupM t (Either a b) where
+instance (MonadLog t, MonadError DMException t, SemigroupM t a, SemigroupM t b, Show a, Show b) => SemigroupM t (Either a b) where
   (⋆) (Left a) (Left b) = Left <$> (a ⋆ b)
   (⋆) (Right a) (Right b) = Right <$> (a ⋆ b)
   (⋆) ea eb =  throwError (ImpossibleError ("Could not match left and right. (Probably a sensitivity / privacy context mismatch between " <> show ea <> " and " <> show eb))
