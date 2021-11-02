@@ -61,6 +61,11 @@ sep = wskipc ','
 pIdentifier :: Parser String
 pIdentifier = skippable *> some (noneOf @[] "(),[]=#:\" \n") <* skippable
 
+pAnything = let someExpr = do
+                              r <- pAnything `sepBy` sep
+                              return (intercalate ", " r)
+            in try pIdentifier <|> (between (wskipc '(') (wskipc ')') someExpr)
+            
 pJuliaType :: Parser (Either String JuliaType)
 pJuliaType = let
     pNoP = let single =
@@ -72,6 +77,7 @@ pJuliaType = let
                  <|> string "Matrix" *> return (Right (JTMatrix JTAny))
                  <|> string "DMModel" *> return (Right JTModel)
                  <|> string "DMGrads" *> return (Right JTGrads)
+                 <|> Left <$> pAnything
                  <|> Left <$> pIdentifier
            in try (char ':') *> single
     pP = -- parametrized types

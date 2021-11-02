@@ -2,9 +2,7 @@
 module DiffMu.Parser.Expr.JExprToDMTerm where
 
 import DiffMu.Prelude
---import DiffMu.Abstract
 import DiffMu.Core
-import DiffMu.Core.Logging
 import DiffMu.Parser.Expr.FromString
 import qualified Data.Text as T
 
@@ -139,6 +137,10 @@ pJSLet assignee assignment tail wrapper =
                         dasgmt <- pSingle assignment
                         dtail <- pList tail
                         return (SLet ((UserTeVar s) :- JTAny) dasgmt (wrapper dtail))
+        JETypeAnnotation (JESymbol s) (Left ":Robust()") -> do
+                        dasgmt <- pSingle assignment
+                        dtail <- pList tail
+                        return (SBind ((UserTeVar s) :- JTAny) dasgmt (wrapper dtail))
         JETypeAnnotation _ _ -> parseError "Type annotations on variables are not supported."
         JENotRelevant _ _ -> parseError "Type annotations on variables are not supported."
         _ -> parseError ("Invalid assignee " <> (show assignee) <> ", must be a variable.")
