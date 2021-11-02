@@ -205,6 +205,21 @@ elaborateMut scope (SLet (x :- τ) term body) = do
 
   return (SLet (x :- τ) newTerm newBody , consumeDefaultValue newBodyType)
 
+elaborateMut scope (SBind (x :- τ) term body) = do
+
+  (newTerm , newTermType) <- elaborateMut scope term
+
+  case newTermType of
+    Pure _ -> pure ()
+    Mutating _ -> pure ()
+    VirtualMutated _ -> throwError (DemutationError $ "Found a bind " <> show x <> " <- " <> showPretty term <> " where RHS is a mutating call. This is not allowed.")
+    PureBlackBox     -> throwError (DemutationError $ "Found a assignment " <> show x <> " <- " <> showPretty term <> " where RHS is a black box. This is not allowed.")
+
+  scope'  <- safeSetValue x newTermType scope
+  (newBody , newBodyType) <- elaborateMut scope' body
+
+  return (SBind (x :- τ) newTerm newBody , consumeDefaultValue newBodyType)
+
 elaborateMut scope (TLet vars term body) = do
 
   (newTerm , newTermType) <- elaborateMut scope term

@@ -626,6 +626,7 @@ data PreDMTerm (t :: * -> *) =
   | ClipM Clip (PreDMTerm t)
   -- Loop (DMTerm : "Number of iterations") ([TeVar] : "Captured variables") (TeVar : "name of iteration var", TeVar : "name of capture variable") (DMTerm : "body")
   | Loop (PreDMTerm t) [TeVar] (TeVar, TeVar) (PreDMTerm t)
+  | SBind (Asgmt JuliaType) (PreDMTerm t) (PreDMTerm t)
 -- Special NN builtins
   | SubGrad (PreDMTerm t) (PreDMTerm t)
   | ScaleGrad (PreDMTerm t) (PreDMTerm t) -- scale (a : Scalar) (g : Mutating Gradient)
@@ -755,6 +756,7 @@ recDMTermM f h (Loop a b x d )    = Loop <$> (f a) <*> pure b <*> pure x <*> (f 
 recDMTermM f h (SubGrad a b)      = SubGrad <$> (f a) <*> (f b)
 recDMTermM f h (ScaleGrad a b)    = ScaleGrad <$> (f a) <*> (f b)
 recDMTermM f h (Reorder x a)      = Reorder x <$> (f a)
+recDMTermM f h (SBind x a b)      = SBind x <$> (f a) <*> f b
 recDMTermM f h (LastTerm x)       = LastTerm <$> (f x)
 
 
@@ -825,7 +827,8 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (ScaleGrad a b)    = "ScaleGrad (" <> (showPretty a) <> ", " <> (showPretty b) <>  ")"
   showPretty (Reorder x a)      = "Reorder " <> show x <> parenIndent (showPretty a)
   showPretty (Loop a b x d )    = "Loop (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> show x <> ")" <> parenIndent (showPretty d)
-  showPretty (LastTerm a)      = "LastTerm " <> (showPretty a)
+  showPretty (SBind x a b)      = "SBind " <> showPretty x <> " <- " <> (showPretty a) <> "\n" <> (showPretty b)
+  showPretty (LastTerm a)       = "LastTerm " <> (showPretty a)
 
 instance ShowPretty a => ShowPretty (MutabilityExtension a) where
   showPretty (MutLet a b) = "MutLet" <> indent (showPretty a) <> indent (showPretty b)

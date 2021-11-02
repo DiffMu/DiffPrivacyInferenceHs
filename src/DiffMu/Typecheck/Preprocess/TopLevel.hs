@@ -73,6 +73,15 @@ checkTopLevel (SLet (v :- vt) body rest) = do
     False -> pure ()
 
   return (TopLevelInformation bbvars (v : glvars), SLet (v :- vt) body newRest)
+checkTopLevel (SBind (v :- vt) body rest) = do
+  checkNonTopLevelBB body
+  (TopLevelInformation bbvars glvars, newRest) <- checkTopLevel rest
+
+  case v `elem` bbvars of
+    True -> throwError (BlackBoxError $ "Found a black box definition for the name " <> show v <> ". This is not allowed since there already is a global variable with that name.")
+    False -> pure ()
+
+  return (TopLevelInformation bbvars (v : glvars), SBind (v :- vt) body newRest)
 checkTopLevel (FLet v body rest) = do
   checkNonTopLevelBB body
   (TopLevelInformation bbvars glvars, newRest)<- checkTopLevel rest
