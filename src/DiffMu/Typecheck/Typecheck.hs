@@ -786,7 +786,8 @@ checkSen' (LastTerm t) scope = do
   -- typecheck the term t, and apply the current scope to it
   applyAllDelayedLayers scope (checkSens t scope)
 
-
+checkSen' term@(SBind x a b) scope = do
+  throwDelayedError (TypeMismatchError $ "Found the term\n" <> showPretty term <> "\nwhich is a privacy term because of the bind in a place where a sensitivity term was expected.")
 
 -- Everything else is currently not supported.
 checkSen' t scope = (throwDelayedError (UnsupportedTermError t))
@@ -858,9 +859,25 @@ checkPri' (Apply f args) scope =
     return (sbranch_check ff args)
 
 
-
-
 checkPri' (SLet (x :- dτ) term body) scope = do
+
+   -- put the computation to check the term into the scope
+   let scope' = setValue x (checkSens term scope) scope
+
+   -- check body with that new scope
+   result <- checkPriv body scope'
+
+   return $ do
+     log $ "checking (transparent) privacy SLet: " <> show (x :- dτ) <> " = " <> show term <> " in " <> show body
+     -- TODO
+     case dτ of
+        JTAny -> return dτ
+        dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
+
+     result' <- result
+     return result'
+
+checkPri' (SBind (x :- dτ) term body) scope = do
    -- this is the bind rule.
    -- as it does not matter what sensitivity/privacy x has in the body, we put an Arg term in the scope
    -- and later discard its annotation. we use checkSens because there are no Vars in privacy terms so
