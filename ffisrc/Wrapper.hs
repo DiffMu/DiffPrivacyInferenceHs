@@ -81,7 +81,8 @@ runExprParser str = do
   str' <- peekCString str
 
   let parseAndPrint = do
-        let res = parseJExprFromString str' >>= parseDMTermFromJExpr
+--      let res = parseJExprFromString str' >>= parseDMTermFromJExpr
+        let res = parseJTreeFromString str' >>= parseJExprFromJTree
         case res of
           Left e -> putStrLn $ "Error: " <> show e
           Right e -> putStrLn $ "Expr: " <> show e

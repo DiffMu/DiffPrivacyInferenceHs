@@ -8,8 +8,9 @@ import qualified Data.Text as T
 
 import Debug.Trace
 
+
 -- parse state is (filename, line number, are we inside a function)
-type ParseState = (StateT (String,Int,Bool) (Except DMException))
+type ParseState = (StateT (String,Int, Bool) (Except DMException))
 
 parseError :: String -> ParseState a
 parseError message = do
@@ -24,8 +25,6 @@ exit = do
           (file, line, _) <- get
           put (file, line, False)
 
-
-
 pSingle :: JExpr -> ParseState MutDMTerm
 pSingle e = case e of
                  JEBlock stmts -> pList stmts
@@ -38,6 +37,7 @@ pSingle e = case e of
                  JEIfElse cond ifb elseb -> (Phi <$> pSingle cond <*> pSingle ifb <*> pSingle elseb)
                  JELoop ivar iter body -> pJLoop ivar iter body
                  JEAssignment aee amt -> pJSLet aee amt [aee] (Extra . DefaultRet)
+                 JEBind aee amt -> pJBind aee amt [aee] (Extra . DefaultRet)
                  JETupAssignment aee amt -> pJTLet aee amt [JETup aee] (Extra . DefaultRet)
                  JEFunction name term -> pJFLet name term [name] (Extra . DefaultRet)
                  JEBlackBox name args -> pJBlackBox name args [name] (Extra . DefaultRet)
@@ -61,6 +61,7 @@ pList (s : tail) = case s of
                                                     s <- (pList tail)
                                                     return s
                         JEAssignment aee amt -> pJSLet aee amt tail (\x -> x)
+                        JEBind aee amt -> pJBind aee amt tail (\x -> x)
                         JETupAssignment aee amt -> pJTLet aee amt tail (\x -> x)
                         JEFunction name term -> pJFLet name term tail (\x -> x)
                         JEBlackBox name args -> pJBlackBox name args tail (\x -> x)
@@ -91,17 +92,14 @@ pJRef name refs = case refs of
 
 pArg arg = case arg of
                      JESymbol s -> return ((UserTeVar s) :- JTAny)
-                     JETypeAnnotation (JESymbol s) (Left e) -> parseError ("Unsupported type(s) "<> show e <>" in annotation of function argument " <> show s)
-                     JETypeAnnotation (JESymbol s) (Right τ) -> return ((UserTeVar s) :- τ)
+                     JETypeAnnotation (JESymbol s) τ -> return ((UserTeVar s) :- τ)
                      JENotRelevant _ _ -> parseError ("Relevance annotation on a sensitivity function is not permitted.")
                      a -> parseError ("Invalid function argument " <> show a)
 
 pArgRel arg = case arg of
                        JESymbol s -> return ((UserTeVar s) :- (JTAny, IsRelevant))
-                       JETypeAnnotation (JESymbol s) (Left e) -> parseError ("Unsupported type(s) "<> show e <>" in annotation of function argument " <> show s)
-                       JETypeAnnotation (JESymbol s) (Right τ) -> return ((UserTeVar s) :- (τ, IsRelevant))
-                       JENotRelevant (JESymbol s) (Left e) -> parseError ("Unsupported type(s) "<> show e <>" in annotation of function argument " <> show s)
-                       JENotRelevant (JESymbol s) (Right τ) -> return ((UserTeVar s) :- (τ, NotRelevant))
+                       JETypeAnnotation (JESymbol s) τ -> return ((UserTeVar s) :- (τ, IsRelevant))
+                       JENotRelevant (JESymbol s) τ -> return ((UserTeVar s) :- (τ, NotRelevant))
                        a -> parseError ("Invalid function argument " <> show a)
 
 
@@ -137,7 +135,14 @@ pJSLet assignee assignment tail wrapper =
                         dasgmt <- pSingle assignment
                         dtail <- pList tail
                         return (SLet ((UserTeVar s) :- JTAny) dasgmt (wrapper dtail))
-        JETypeAnnotation (JESymbol s) (Left ":Robust()") -> do
+        JETypeAnnotation _ _ -> parseError "Type annotations on variables are not supported."
+        JENotRelevant _ _ -> parseError "Type annotations on variables are not supported."
+        _ -> parseError ("Invalid assignee " <> (show assignee) <> ", must be a variable.")
+
+
+pJBind assignee assignment tail wrapper =
+   case assignee of
+        JESymbol s -> do
                         dasgmt <- pSingle assignment
                         dtail <- pList tail
                         return (SBind ((UserTeVar s) :- JTAny) dasgmt (wrapper dtail))

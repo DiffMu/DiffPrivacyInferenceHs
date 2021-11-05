@@ -34,7 +34,7 @@ run = putStrLn "Hello?"
 
 typecheckFromString_DMTerm :: String -> IO ()
 typecheckFromString_DMTerm term = do
- let res = parseJExprFromString term >>= parseDMTermFromJExpr
+ let res = parseJTreeFromString term >>= parseJExprFromJTree >>= parseDMTermFromJExpr
  case res of
    Left err -> putStrLn $ "Error while parsing DMTerm from string: " <> show err
    Right term -> typecheckFromDMTerm term

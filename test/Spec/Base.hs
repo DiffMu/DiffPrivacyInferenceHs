@@ -89,7 +89,7 @@ parseEval_b dolog compstyle failOrSuccess parse desc term (expected :: TC DMMain
   it desc $ do
     term' <- parse term
 
-    let res = parseJExprFromString term' >>= parseDMTermFromJExpr
+    let res = parseJTreeFromString term' >>= parseJExprFromJTree >>= parseDMTermFromJExpr
      
     let term'' :: TC DMMain
         term'' = case res of
