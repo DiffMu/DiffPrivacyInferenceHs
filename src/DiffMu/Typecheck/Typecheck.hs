@@ -782,6 +782,14 @@ checkSen' (Reorder σ t) scope = do
     addConstraint (Solvable (IsReorderedTuple ((σ , τ) :=: ρ)))
     return ρ
 
+checkSen' (TProject i t) scope = do
+  mτ <- checkSens t scope
+  done $ do
+    τ <- mτ
+    ρ <- newVar
+    addConstraint (Solvable (IsTProject ((i , τ) :=: ρ)))
+    return ρ
+
 checkSen' (LastTerm t) scope = do
   -- typecheck the term t, and apply the current scope to it
   applyAllDelayedLayers scope (checkSens t scope)
@@ -936,6 +944,34 @@ checkPri' (FLet fname term body) scope = do
      removeVar @PrivacyK fname
      return result'
 
+-----------------------------------
+-- "transparent" privacy tlets
+
+checkPri' curterm@(TLet xs term body) original_scope = do
+
+  -- put the computations to check the terms into the scope
+  -- (in privacy terms we use projections here, making this a "transparent" tlet)
+
+  let addarg scope (x :- _, i) = setValue x (checkSens (TProject i term) original_scope) scope
+  let scope_with_args = foldl addarg original_scope (xs `zip` [0..])
+
+  -- -- check body with that new scope
+  result <- checkPriv body scope_with_args
+
+  return $ do
+    log $ "checking (transparent) privacy SLet: " <> show xs <> " = " <> show term <> " in " <> show body
+    -- TODO
+    case and [True | (_ :- JTAny) <- xs] of
+       True  -> return ()
+       False -> throwError (ImpossibleError $ "Type annotations on variables not yet supported\n when checking " <> showPretty curterm)
+
+    result
+
+
+-----------------------------------
+-- PRIVACY TUPLE HACK
+--
+{-
 -- there are no privacy tuples. instead we transform the term:
 -- (t1, t2)
 -- becomes
@@ -971,6 +1007,7 @@ checkPri' (TLet xs term body) scope = do
    let t1 = foldl (\t -> \(x :- τj) -> SLet (x :- τj) (Ret (TLet xs (Var (tupvar :- JTAny)) (Var (x :- τj)))) t) body xs
        t2 = SLet (tupvar :- (JTAny)) term t1
    checkPriv t2 scope
+-}
 
 checkPri' (Gauss rp εp δp f) scope =
   let

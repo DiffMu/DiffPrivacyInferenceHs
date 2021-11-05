@@ -630,8 +630,10 @@ data PreDMTerm (t :: * -> *) =
 -- Special NN builtins
   | SubGrad (PreDMTerm t) (PreDMTerm t)
   | ScaleGrad (PreDMTerm t) (PreDMTerm t) -- scale (a : Scalar) (g : Mutating Gradient)
--- Transparent tuple replacements
+-- Special Tuple terms
   | Reorder [Int] (PreDMTerm t)
+  | TProject Int (PreDMTerm t)
+-- Special Scope terms
   | LastTerm (PreDMTerm t)
   deriving (Generic)
 
@@ -756,6 +758,7 @@ recDMTermM f h (Loop a b x d )    = Loop <$> (f a) <*> pure b <*> pure x <*> (f 
 recDMTermM f h (SubGrad a b)      = SubGrad <$> (f a) <*> (f b)
 recDMTermM f h (ScaleGrad a b)    = ScaleGrad <$> (f a) <*> (f b)
 recDMTermM f h (Reorder x a)      = Reorder x <$> (f a)
+recDMTermM f h (TProject x a)     = TProject x <$> f a
 recDMTermM f h (SBind x a b)      = SBind x <$> (f a) <*> f b
 recDMTermM f h (LastTerm x)       = LastTerm <$> (f x)
 
@@ -826,6 +829,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (SubGrad a b)      = "SubGrad (" <> (showPretty a) <> ", " <> (showPretty b) <>  ")"
   showPretty (ScaleGrad a b)    = "ScaleGrad (" <> (showPretty a) <> ", " <> (showPretty b) <>  ")"
   showPretty (Reorder x a)      = "Reorder " <> show x <> parenIndent (showPretty a)
+  showPretty (TProject x a)     = "Proj" <> show x <> " " <>  (showPretty a)
   showPretty (Loop a b x d )    = "Loop (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> show x <> ")" <> parenIndent (showPretty d)
   showPretty (SBind x a b)      = "SBind " <> showPretty x <> " <- " <> (showPretty a) <> "\n" <> (showPretty b)
   showPretty (LastTerm a)       = "LastTerm " <> (showPretty a)

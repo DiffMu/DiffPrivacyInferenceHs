@@ -209,6 +209,34 @@ instance Solve MonadDMTC IsReorderedTuple (([Int], DMTypeOf MainKind) :=: DMType
       f (τs) = throwError (TypeMismatchError $ "Expected the type " <> show τ <> " to be a tuple type.")
 
 
+--------------------------------------------------
+-- projecting of tuples
+
+newtype IsTProject a = IsTProject a deriving Show
+
+instance FixedVars TVarOf (IsTProject ((Int, DMTypeOf MainKind) :=: DMTypeOf MainKind)) where
+  fixedVars (IsTProject (_ :=: ρ)) = freeVars ρ
+
+instance TCConstraint IsTProject where
+  constr = IsTProject
+  runConstr (IsTProject c) = c
+
+instance Solve MonadDMTC IsTProject ((Int, DMTypeOf MainKind) :=: DMTypeOf MainKind) where
+  solve_ Dict _ name (IsTProject ((i , ρs) :=: ρ)) = f ρs
+    where
+      f :: MonadDMTC t => DMTypeOf MainKind -> t ()
+      f (TVar _) = pure ()
+      f (NoFun (TVar _)) = pure ()
+      f (NoFun (DMTup ρs)) = do
+        let ρ' = ρs ^? element i
+        case ρ' of
+          Just ρ' -> do
+            unify ρ (NoFun ρ')
+            dischargeConstraint name
+            pure ()
+          Nothing -> internalError $ "tuple index out of range\nwhere index: " <> show i <> ",tuple type: " <> show ρs
+      f (τs) = throwError (TypeMismatchError $ "Expected the type " <> show ρs <> " to be a tuple type.")
+
 
 --------------------------------------------------
 -- black boxes

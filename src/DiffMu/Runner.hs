@@ -116,8 +116,8 @@ typecheckFromDMTerm term = do
 
   -- these are the locations from which the logs will be shown
   let logging_locations = [
-        Location_Check
-        -- Location_Constraint,
+        Location_Check,
+        Location_Constraint
         -- Location_Subst
         -- Location_INC,
         -- Location_MonadicGraph,
