@@ -283,22 +283,45 @@ instance TCConstraint IsBlackBoxReturn where
 
 instance Solve MonadDMTC IsBlackBoxReturn (DMMain, (DMMain, Sensitivity)) where
     solve_ Dict _ name (IsBlackBoxReturn (ret, (argt, args))) =
-     case ret of
+     let cases (n, c, t) = case (n,c,t) of
+               (TVar _, TVar _, TVar _) -> Nothing
+               (LInf  , TVar _, TVar _) -> Nothing
+               (TVar _, U     , TVar _) -> Nothing
+               (LInf  , U     , TVar _) -> Nothing
+               (TVar _, TVar _, Numeric DMData) -> Nothing
+               (LInf  , TVar _, Numeric DMData) -> Nothing
+               (TVar _, U     , Numeric DMData) -> Nothing
+               (LInf, U, Numeric DMData) -> Just True
+               _ -> Just False
+         bothcases ((n1, c1, t1), (n2, c2, t2)) = case cases (n1, c1, t1) of
+               Nothing -> pure ()
+               Just False -> do
+                               unify args inftyS
+                               dischargeConstraint @MonadDMTC name
+               Just True -> case cases (n2, c2, t2) of
+                          Nothing -> pure ()
+                          Just False -> do
+                                          unify args inftyS
+                                          dischargeConstraint @MonadDMTC name
+                          Just True -> do
+                                          unify args oneId
+                                          dischargeConstraint @MonadDMTC name
+     in case ret of
           TVar _ -> pure ()
-          NoFun (DMVec LInf U _ (TVar _)) -> pure ()
-          NoFun (DMVec (TVar _) U _ (Numeric DMData)) -> pure ()
-          NoFun (DMVec LInf (TVar _) _ (Numeric DMData)) -> pure ()
-          NoFun (DMVec LInf U _ (Numeric DMData)) -> case argt of
-                    TVar _ -> pure ()
-                    NoFun (DMVec LInf U _ (TVar _)) -> pure ()
-                    NoFun (DMVec (TVar _) U _ (Numeric DMData)) -> pure ()
-                    NoFun (DMVec LInf (TVar _) _ (Numeric DMData)) -> pure ()
-                    NoFun (DMVec LInf U _ (Numeric DMData)) -> do
-                           unify args oneId
-                           dischargeConstraint @MonadDMTC name
-                    _ -> do
-                           unify args inftyS
-                           dischargeConstraint @MonadDMTC name
+          NoFun (DMVec nret cret _ tret) -> case argt of
+              NoFun (DMVec narg carg _ targ) -> bothcases ((nret, cret, tret), (narg, carg, targ))
+              NoFun (DMGrads narg carg _ targ) -> bothcases ((nret, cret, tret), (narg, carg, targ))
+              TVar _ -> pure ()
+              _ -> do
+                     unify args inftyS
+                     dischargeConstraint @MonadDMTC name
+          NoFun (DMGrads nret cret _ tret) -> case argt of
+              NoFun (DMVec narg carg _ targ) -> bothcases ((nret, cret, tret), (narg, carg, targ))
+              NoFun (DMGrads narg carg _ targ) -> bothcases ((nret, cret, tret), (narg, carg, targ))
+              TVar _ -> pure ()
+              _ -> do
+                     unify args inftyS
+                     dischargeConstraint @MonadDMTC name
           _ -> do
                  unify args inftyS
                  dischargeConstraint @MonadDMTC name

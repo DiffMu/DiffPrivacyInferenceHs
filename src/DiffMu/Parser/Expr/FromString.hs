@@ -73,8 +73,8 @@ pSymbolString =    (try (char ':' *> pIdentifier)
 
 -- any string that is well-paranthesised
 pAny :: Parser String
-pAny = let noParen = dbg "nop" (some (noneOf @[] "()"))
-       in dbg "any" (join <$> some (noParen <|> between (wskipc '(') (wskipc ')') pAny))
+pAny = let noParen = (some (noneOf @[] "()"))
+       in (join <$> some (noParen <|> between (wskipc '(') (wskipc ')') pAny))
 
 pWithCtor :: String -> ([JTree] -> JTree) -> Parser JTree
 pWithCtor name ctor = name `with` (ctor <$> (pTree `sepBy` sep))
