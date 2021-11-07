@@ -592,7 +592,8 @@ sndA (x :- τ) = τ
 -- data Lam_ = Lam_ [Asgmt JuliaType] DMTerm
 --   deriving (Generic, Show)
 
-
+data LetKind = PureLet | BindLet
+  deriving (Eq, Show)
 
 
 data PreDMTerm (t :: * -> *) =
@@ -611,9 +612,9 @@ data PreDMTerm (t :: * -> *) =
   | Apply (PreDMTerm t) [(PreDMTerm t)]
   | FLet TeVar (PreDMTerm t) (PreDMTerm t)
   | Choice (HashMap [JuliaType] (PreDMTerm t))
-  | SLet (Asgmt JuliaType) (PreDMTerm t) (PreDMTerm t)
+  | SLetBase LetKind (Asgmt JuliaType) (PreDMTerm t) (PreDMTerm t)
   | Tup [(PreDMTerm t)]
-  | TLet [(Asgmt JuliaType)] (PreDMTerm t) (PreDMTerm t)
+  | TLetBase LetKind [(Asgmt JuliaType)] (PreDMTerm t) (PreDMTerm t)
   | Gauss (PreDMTerm t) (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
 -- matrix related things
   | ConvertM (PreDMTerm t)
@@ -626,7 +627,6 @@ data PreDMTerm (t :: * -> *) =
   | ClipM Clip (PreDMTerm t)
   -- Loop (DMTerm : "Number of iterations") ([TeVar] : "Captured variables") (TeVar : "name of iteration var", TeVar : "name of capture variable") (DMTerm : "body")
   | Loop (PreDMTerm t) [TeVar] (TeVar, TeVar) (PreDMTerm t)
-  | SBind (Asgmt JuliaType) (PreDMTerm t) (PreDMTerm t)
 -- Special NN builtins
   | SubGrad (PreDMTerm t) (PreDMTerm t)
   | ScaleGrad (PreDMTerm t) (PreDMTerm t) -- scale (a : Scalar) (g : Mutating Gradient)
@@ -636,6 +636,16 @@ data PreDMTerm (t :: * -> *) =
 -- Special Scope terms
   | LastTerm (PreDMTerm t)
   deriving (Generic)
+
+pattern SLet a b c = SLetBase PureLet a b c
+pattern SBind a b c = SLetBase BindLet a b c
+pattern TLet a b c = TLetBase PureLet a b c
+pattern TBind a b c = TLetBase BindLet a b c
+
+{-# COMPLETE Extra, Ret, Sng, Var, Rnd, Arg, Op, Phi, Lam, LamStar, BBLet, BBApply,
+ Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, Gauss, ConvertM, MCreate, Transpose,
+ Size, Length, Index, Row, ClipM, Loop, SubGrad, ScaleGrad, Reorder, TProject, LastTerm #-}
+
 
 deriving instance (forall a. Show a => Show (t a)) => Show (PreDMTerm t)
 deriving instance (forall a. Eq a => Eq (t a)) => Eq (PreDMTerm t)
@@ -657,10 +667,11 @@ instance Eq (EmptyExtension a) where
 
 type DMTerm = PreDMTerm EmptyExtension
 
+
 ----
 -- mutability extension
 data MutabilityExtension a =
-  MutLet a a
+  MutLet LetKind a a
   -- MutLoop (a : "Number of iterations") (TeVar : "name of iteration var") (a : "body")
   | MutLoop a (TeVar) a
   | Modify (Asgmt JuliaType) a
@@ -742,9 +753,9 @@ recDMTermM f h (BBApply a as bs)  = BBApply <$> (f a) <*> (mapM (f) as) <*> pure
 recDMTermM f h (Apply a bs)       = Apply <$> (f a) <*> (mapM (f) bs)
 recDMTermM f h (FLet v a b)       = FLet v <$> (f a) <*> (f b)
 recDMTermM f h (Choice chs)       = Choice <$> (mapM (f) chs)
-recDMTermM f h (SLet jt a b)      = SLet jt <$> (f a) <*> (f b)
+recDMTermM f h (SLetBase x jt a b) = SLetBase x jt <$> (f a) <*> (f b)
 recDMTermM f h (Tup as)           = Tup <$> (mapM (f) as)
-recDMTermM f h (TLet jt a b)      = TLet jt <$> (f a) <*> (f b)
+recDMTermM f h (TLetBase x jt a b) = TLetBase x jt <$> (f a) <*> (f b)
 recDMTermM f h (Gauss a b c d)    = Gauss <$> (f a) <*> (f b) <*> (f c) <*> (f d)
 recDMTermM f h (ConvertM a)       = ConvertM <$> (f a)
 recDMTermM f h (MCreate a b x c ) = MCreate <$> (f a) <*> (f b) <*> pure x <*> (f c)
@@ -759,7 +770,6 @@ recDMTermM f h (SubGrad a b)      = SubGrad <$> (f a) <*> (f b)
 recDMTermM f h (ScaleGrad a b)    = ScaleGrad <$> (f a) <*> (f b)
 recDMTermM f h (Reorder x a)      = Reorder x <$> (f a)
 recDMTermM f h (TProject x a)     = TProject x <$> f a
-recDMTermM f h (SBind x a b)      = SBind x <$> (f a) <*> f b
 recDMTermM f h (LastTerm x)       = LastTerm <$> (f x)
 
 
@@ -817,6 +827,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (SLet v a b)       = "SLet " <> showPretty v <> " = " <> (showPretty a) <> "\n" <> (showPretty b)
   showPretty (Tup as)           = "Tup " <> (showPretty as)
   showPretty (TLet v a b)       = "TLet " <> showPretty v <> " = " <> (showPretty a) <> "\n" <> (showPretty b)
+  showPretty (TBind v a b)       = "TBind " <> showPretty v <> " <- " <> (showPretty a) <> "\n" <> (showPretty b)
   showPretty (Gauss a b c d)    = "Gauss (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ", " <> (showPretty d) <> ")"
   showPretty (ConvertM a)       = "ConvertM (" <> (showPretty a) <> ")"
   showPretty (MCreate a b x c ) = "MCreate (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> show x <> ", " <> (showPretty c) <> ")"
@@ -835,7 +846,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (LastTerm a)       = "LastTerm " <> (showPretty a)
 
 instance ShowPretty a => ShowPretty (MutabilityExtension a) where
-  showPretty (MutLet a b) = "MutLet" <> indent (showPretty a) <> indent (showPretty b)
+  showPretty (MutLet t a b) = "MutLet" <> indent (showPretty a) <> indent (showPretty b)
   showPretty (MutLoop a x d) = "MutLoop (" <> (showPretty a) <> ", " <> show x <> ")" <> parenIndent (showPretty d)
   showPretty (Modify a x) = "Modify! (" <> showPretty a <> ", " <> showPretty x <> ")"
   showPretty (MutRet) = "MutRet"

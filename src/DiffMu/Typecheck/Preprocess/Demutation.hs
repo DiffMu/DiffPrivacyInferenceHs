@@ -190,7 +190,7 @@ elaborateMut scope (BBLet name args tail) = do
 
   return (BBLet name args newBody , consumeDefaultValue newBodyType)
 
-elaborateMut scope (SLet (x :- τ) term body) = do
+elaborateMut scope (SLetBase ltype (x :- τ) term body) = do
 
   (newTerm , newTermType) <- elaborateMut scope term
 
@@ -203,24 +203,9 @@ elaborateMut scope (SLet (x :- τ) term body) = do
   scope'  <- safeSetValue x newTermType scope
   (newBody , newBodyType) <- elaborateMut scope' body
 
-  return (SLet (x :- τ) newTerm newBody , consumeDefaultValue newBodyType)
+  return (SLetBase ltype (x :- τ) newTerm newBody , consumeDefaultValue newBodyType)
 
-elaborateMut scope (SBind (x :- τ) term body) = do
-
-  (newTerm , newTermType) <- elaborateMut scope term
-
-  case newTermType of
-    Pure _ -> pure ()
-    Mutating _ -> pure ()
-    VirtualMutated _ -> throwError (DemutationError $ "Found a bind " <> show x <> " <- " <> showPretty term <> " where RHS is a mutating call. This is not allowed.")
-    PureBlackBox     -> throwError (DemutationError $ "Found a assignment " <> show x <> " <- " <> showPretty term <> " where RHS is a black box. This is not allowed.")
-
-  scope'  <- safeSetValue x newTermType scope
-  (newBody , newBodyType) <- elaborateMut scope' body
-
-  return (SBind (x :- τ) newTerm newBody , consumeDefaultValue newBodyType)
-
-elaborateMut scope (TLet vars term body) = do
+elaborateMut scope (TLetBase ltype vars term body) = do
 
   (newTerm , newTermType) <- elaborateMut scope term
 
@@ -234,7 +219,7 @@ elaborateMut scope (TLet vars term body) = do
   scope' <- foldrM (\(v :- _) s -> safeSetValue v (Pure UserValue) s) scope (vars)
   (newBody , newBodyType) <- elaborateMut scope' body
 
-  return (TLet vars newTerm newBody , consumeDefaultValue newBodyType)
+  return (TLetBase ltype vars newTerm newBody , consumeDefaultValue newBodyType)
 
 elaborateMut scope (LamStar args body) = do
   (newBody, newBodyType) <- elaborateLambda scope [(v :- x) | (v :- (x , _)) <- args] body
@@ -325,7 +310,7 @@ elaborateMut scope (FLet fname term body) = do
 
   return (FLet fname newTerm newBody, consumeDefaultValue newBodyType)
 
-elaborateMut scope (Extra (MutLet term1 term2)) = do
+elaborateMut scope (Extra (MutLet mtype term1 term2)) = do
 
   -- elaborate the first term and get its mutated variables
   (newTerm1, newTerm1Type) <- elaborateMut scope term1
@@ -351,7 +336,7 @@ elaborateMut scope (Extra (MutLet term1 term2)) = do
       warn ("Found the term " <> showPretty term2
                      <> " which is not a mutating function call in a place where only such calls make sense.\n"
                      <> " => It has the type " <> show (VirtualMutated []) <> "\n"
-                     <> " => In the term:\n" <> parenIndent (showPretty (Extra (MutLet term1 term2))) <> "\n"
+                     <> " => In the term:\n" <> parenIndent (showPretty (Extra (MutLet mtype term1 term2))) <> "\n"
                      <> " => Conclusion: It is ignored in the privacy analysis.")
 
       let ns1 = [n :- JTAny | (n, _) <- mutNames1]
@@ -368,7 +353,7 @@ elaborateMut scope (Extra (MutLet term1 term2)) = do
       warn ("Found the term " <> showPretty term1
                      <> " which is not a mutating function call in a place where only such calls make sense.\n"
                      <> " => It has the type " <> show (VirtualMutated []) <> "\n"
-                     <> " => In the term:\n" <> parenIndent (showPretty (Extra (MutLet term1 term2))) <> "\n"
+                     <> " => In the term:\n" <> parenIndent (showPretty (Extra (MutLet mtype term1 term2))) <> "\n"
                      <> " => Conclusion: It is ignored in the privacy analysis.")
 
       let ns2 = [n :- JTAny | (n, _) <- mutNames2]
@@ -442,7 +427,7 @@ elaborateMut scope (Extra (MutLet term1 term2)) = do
         _ -> warn ("Found the term " <> showPretty term2
                      <> " which is not mutating in a place where only mutating terms make sense.\n"
                      <> " => It has the type " <> show (Pure p) <> "\n"
-                     <> " => In the term:\n" <> parenIndent (showPretty (Extra (MutLet term1 term2))) <> "\n"
+                     <> " => In the term:\n" <> parenIndent (showPretty (Extra (MutLet mtype term1 term2))) <> "\n"
                      <> " => Conclusion: It is ignored in the privacy analysis.")
 
       -- let mutNames2 = [(v, LocalMutation) | v <- mutNames2']
@@ -460,7 +445,7 @@ elaborateMut scope (Extra (MutLet term1 term2)) = do
     -- neither term1 nor term2 are mutating
     (ty1, ty2) -> throwError (DemutationError $ "Encountered a MutLet where the two commands have the following types: " <> show (ty1, ty2)
                                                 <> "\nThis is not supported."
-                                                <> "\nIn the term:\n" <> showPretty (Extra (MutLet term1 term2)))
+                                                <> "\nIn the term:\n" <> showPretty (Extra (MutLet mtype term1 term2)))
 
 elaborateMut scope (Extra (MutLoop iters iterVar body)) = do
   -- first, elaborate the iters
@@ -923,7 +908,7 @@ runPreprocessLoopBody scope iter t = do
 --   Returns the variables which were changed to `modify!`.
 preprocessLoopBody :: Scope -> TeVar -> MutDMTerm -> WriterT [TeVar] MTC MutDMTerm
 
-preprocessLoopBody scope iter (SLet (v :- jt) term body) = do
+preprocessLoopBody scope iter (SLetBase ltype (v :- jt) term body) = do
   -- it is not allowed to change the iteration variable
   case iter == v of
     True -> throwOriginalError (DemutationError $ "Inside for-loops the iteration variable (in this case '" <> show iter <> "') is not allowed to be mutated.")
@@ -941,17 +926,18 @@ preprocessLoopBody scope iter (SLet (v :- jt) term body) = do
   -- let newVars = nub (termVars <> bodyVars)
 
   case getValue v scope of
-    Just _  -> tell [v] >> return (Extra (MutLet (Extra (Modify (v :- jt) term')) (body')))
-    Nothing -> return (SLet (v :- jt) term' body')
+    Just _  -> tell [v] >> return (Extra (MutLet ltype (Extra (Modify (v :- jt) term')) (body')))
+    Nothing -> return (SLetBase ltype (v :- jt) term' body')
+
 
 preprocessLoopBody scope iter (FLet f _ _) = throwOriginalError (DemutationError $ "Function definition is not allowed in for loops. (Encountered definition of " <> show f <> ".)")
 preprocessLoopBody scope iter (Ret t) = throwOriginalError (DemutationError $ "Return is not allowed in for loops. (Encountered " <> show (Ret t) <> ".)")
 
 -- mutlets make use recurse
-preprocessLoopBody scope iter (Extra (MutLet t1 t2)) = do
+preprocessLoopBody scope iter (Extra (MutLet mtype t1 t2)) = do
   (t1') <- preprocessLoopBody scope iter t1
   (t2') <- preprocessLoopBody scope iter t2
-  return (Extra (MutLet t1' t2'))
+  return (Extra (MutLet mtype t1' t2'))
 
 -- for the rest we simply recurse
 preprocessLoopBody scope iter t = do
