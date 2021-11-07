@@ -75,7 +75,7 @@ pList (s : tail) = case s of
 pMutLet m tail = do
                    assignee <- m
                    dtail <- pList tail
-                   return (Extra (MutLet assignee dtail))
+                   return (Extra (MutLet PureLet assignee dtail))
 
 pJRef name refs = case refs of
                        [i1,JEColon] -> do

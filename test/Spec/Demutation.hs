@@ -56,7 +56,7 @@ testDemutation = do
   --                (
   --                  Lam [(v "a" :- JTAny) , (v "b" :- JTAny)]
   --                  (
-  --                    Extra (MutLet (ConvertM (Var (v "b" :- JTAny)))
+  --                    Extra (MutLet PureLet (ConvertM (Var (v "b" :- JTAny)))
   --                    (
   --                      SLet (v "a" :- JTAny) (Op (IsBinary DMOpAdd) [Var (v "a" :- JTAny) , n 1])
   --                      (
@@ -76,7 +76,7 @@ testDemutation = do
     --              (
     --                Lam [(v "a" :- JTAny) , (v "b" :- JTAny)]
     --                (
-    --                  Extra (MutLet (ConvertM (Var (v "b" :- JTAny)))
+    --                  Extra (MutLet PureLet (ConvertM (Var (v "b" :- JTAny)))
     --                  (
     --                    (Op (IsBinary DMOpAdd) [Var (v "a" :- JTAny) , n 1])
     --                  ))
@@ -118,11 +118,11 @@ testDemutation = do
                    (
                      Extra (MutLoop (n 7) (v "i")
                      (
-                       Extra (MutLet (ConvertM (Var (v "b" :- JTAny)))
+                       Extra (MutLet PureLet (ConvertM (Var (v "b" :- JTAny)))
                        (
-                        Extra (MutLet (ConvertM (Var (v "c" :- JTAny)))
+                        Extra (MutLet PureLet (ConvertM (Var (v "c" :- JTAny)))
                         (
-                         Extra (MutLet (SLet (v "a" :- JTAny) (Op (IsBinary DMOpAdd) [Var (v "a" :- JTAny) , n 1])
+                         Extra (MutLet PureLet (SLet (v "a" :- JTAny) (Op (IsBinary DMOpAdd) [Var (v "a" :- JTAny) , n 1])
                                         (
                                           Var (v "b" :- JTAny)
                                         ))
@@ -147,7 +147,7 @@ testDemutation = do
                    (
                      Phi (Var (v "cond" :- JTAny))
                      -- branch 1
-                     (Extra (MutLet (ConvertM (Var (v "b" :- JTAny)))
+                     (Extra (MutLet PureLet (ConvertM (Var (v "b" :- JTAny)))
                      (
                        ConvertM (Var (v "a" :- JTAny))))
                      )
@@ -169,7 +169,7 @@ testDemutation = do
                    (
                      Phi (Var (v "cond" :- JTAny))
                      -- branch 1
-                     (Extra (MutLet (ConvertM (Var (v "b" :- JTAny)))
+                     (Extra (MutLet PureLet (ConvertM (Var (v "b" :- JTAny)))
                      (
                        ConvertM (Var (v "a" :- JTAny))))
                      )
