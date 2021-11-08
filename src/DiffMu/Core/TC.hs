@@ -117,10 +117,10 @@ instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs (τ1 :->: τ2) = (:->:) <$> substitute σs τ1 <*> substitute σs τ2
   substitute σs (τ1 :->*: τ2) = (:->*:) <$> substitute σs τ1 <*> substitute σs τ2
   substitute σs (DMTup τs) = DMTup <$> substitute σs τs
-  substitute σs (DMVec nrm clp n τ) = DMVec nrm clp <$> substitute σs n <*> substitute σs τ
-  substitute σs (DMMat nrm clp n m τ) = DMMat nrm clp <$> substitute σs n <*> substitute σs m <*> substitute σs τ
+  substitute σs (DMVec nrm clp n τ) = DMVec <$> substitute σs nrm <*> substitute σs clp <*> substitute σs n <*> substitute σs τ
+  substitute σs (DMMat nrm clp n m τ) = DMMat <$> substitute σs nrm <*> substitute σs clp <*> substitute σs n <*> substitute σs m <*> substitute σs τ
   substitute σs (DMParams m τ) = DMParams <$> substitute σs m <*> substitute σs τ
-  substitute σs (DMGrads nrm clp m τ) = DMGrads nrm clp <$> substitute σs m <*> substitute σs τ
+  substitute σs (DMGrads nrm clp m τ) = DMGrads <$> substitute σs nrm <*> substitute σs clp <*> substitute σs m <*> substitute σs τ
   substitute σs (NoFun (x)) = NoFun <$> substitute σs x
   substitute σs (Fun xs) = Fun <$> substitute σs xs
   substitute σs (x :∧: y) = (:∧:) <$> substitute σs x <*> substitute σs y
