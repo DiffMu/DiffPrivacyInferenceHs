@@ -85,7 +85,11 @@ createDMTypeBaseNum (t) = do
     return v
 
 createDMTypeNum :: MonadDMTC t => JuliaType -> t (DMTypeOf NumKind)
-createDMTypeNum x = NonConst <$> createDMTypeBaseNum x
+createDMTypeNum (JTInt) = pure (NonConst DMInt)
+createDMTypeNum (JTReal)  = pure (NonConst DMReal)
+createDMTypeNum (t) = do
+    v <- newVar
+    return v
 
 
 createDMTypeType :: MonadDMTC t => JuliaType -> t DMType
