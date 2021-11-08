@@ -310,7 +310,7 @@ elaborateMut scope (FLet fname term body) = do
 
   return (FLet fname newTerm newBody, consumeDefaultValue newBodyType)
 
-elaborateMut scope (Extra (MutLet mtype term1 term2)) = do
+elaborateMut scope (Extra (MutLet ltype term1 term2)) = do
 
   -- elaborate the first term and get its mutated variables
   (newTerm1, newTerm1Type) <- elaborateMut scope term1
@@ -336,11 +336,11 @@ elaborateMut scope (Extra (MutLet mtype term1 term2)) = do
       warn ("Found the term " <> showPretty term2
                      <> " which is not a mutating function call in a place where only such calls make sense.\n"
                      <> " => It has the type " <> show (VirtualMutated []) <> "\n"
-                     <> " => In the term:\n" <> parenIndent (showPretty (Extra (MutLet mtype term1 term2))) <> "\n"
+                     <> " => In the term:\n" <> parenIndent (showPretty (Extra (MutLet ltype term1 term2))) <> "\n"
                      <> " => Conclusion: It is ignored in the privacy analysis.")
 
       let ns1 = [n :- JTAny | (n, _) <- mutNames1]
-          term = TLet ns1 newTerm1
+          term = TLetBase ltype ns1 newTerm1
                 (
                   Tup ((\(a, _) -> Var (a :- JTAny)) <$> mutNames1)
                 )
@@ -353,11 +353,11 @@ elaborateMut scope (Extra (MutLet mtype term1 term2)) = do
       warn ("Found the term " <> showPretty term1
                      <> " which is not a mutating function call in a place where only such calls make sense.\n"
                      <> " => It has the type " <> show (VirtualMutated []) <> "\n"
-                     <> " => In the term:\n" <> parenIndent (showPretty (Extra (MutLet mtype term1 term2))) <> "\n"
+                     <> " => In the term:\n" <> parenIndent (showPretty (Extra (MutLet ltype term1 term2))) <> "\n"
                      <> " => Conclusion: It is ignored in the privacy analysis.")
 
       let ns2 = [n :- JTAny | (n, _) <- mutNames2]
-          term = TLet ns2 newTerm2
+          term = TLetBase ltype ns2 newTerm2
                 (
                   Tup ((\(a, _) -> Var (a :- JTAny)) <$> mutNames2)
                 )
@@ -370,9 +370,9 @@ elaborateMut scope (Extra (MutLet mtype term1 term2)) = do
       let commonMutNames = nub (mutNames1 <> mutNames2)
           ns1 = [n :- JTAny | (n, _) <- mutNames1]
           ns2 = [n :- JTAny | (n, _) <- mutNames2]
-          term = TLet ns1 newTerm1
+          term = TLetBase ltype ns1 newTerm1
                 (
-                  TLet ns2 newTerm2
+                  TLetBase ltype ns2 newTerm2
                   (
                     Tup ((\(a, _) -> Var (a :- JTAny)) <$> commonMutNames)
                   )
@@ -390,7 +390,7 @@ elaborateMut scope (Extra (MutLet mtype term1 term2)) = do
       let mutNames1 = fst <$> mutNames1'
       let ns1 = [n :- JTAny | (n) <- mutNames1]
 
-          valterm = TLet ns1 newTerm1
+          valterm = TLetBase ltype ns1 newTerm1
                 (
                   newTerm2
                 )
@@ -427,7 +427,7 @@ elaborateMut scope (Extra (MutLet mtype term1 term2)) = do
         _ -> warn ("Found the term " <> showPretty term2
                      <> " which is not mutating in a place where only mutating terms make sense.\n"
                      <> " => It has the type " <> show (Pure p) <> "\n"
-                     <> " => In the term:\n" <> parenIndent (showPretty (Extra (MutLet mtype term1 term2))) <> "\n"
+                     <> " => In the term:\n" <> parenIndent (showPretty (Extra (MutLet ltype term1 term2))) <> "\n"
                      <> " => Conclusion: It is ignored in the privacy analysis.")
 
       -- let mutNames2 = [(v, LocalMutation) | v <- mutNames2']
@@ -445,7 +445,7 @@ elaborateMut scope (Extra (MutLet mtype term1 term2)) = do
     -- neither term1 nor term2 are mutating
     (ty1, ty2) -> throwError (DemutationError $ "Encountered a MutLet where the two commands have the following types: " <> show (ty1, ty2)
                                                 <> "\nThis is not supported."
-                                                <> "\nIn the term:\n" <> showPretty (Extra (MutLet mtype term1 term2)))
+                                                <> "\nIn the term:\n" <> showPretty (Extra (MutLet ltype term1 term2)))
 
 elaborateMut scope (Extra (MutLoop iters iterVar body)) = do
   -- first, elaborate the iters
