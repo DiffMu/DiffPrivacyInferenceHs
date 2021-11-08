@@ -308,20 +308,28 @@ instance Solve MonadDMTC IsBlackBoxReturn (DMMain, (DMMain, Sensitivity)) where
                                           dischargeConstraint @MonadDMTC name
      in case ret of
           TVar _ -> pure ()
-          NoFun (DMVec nret cret _ tret) -> case argt of
-              NoFun (DMVec narg carg _ targ) -> bothcases ((nret, cret, tret), (narg, carg, targ))
-              NoFun (DMGrads narg carg _ targ) -> bothcases ((nret, cret, tret), (narg, carg, targ))
-              TVar _ -> pure ()
+          NoFun (DMVec nret cret n tret) -> case cret of
+              U -> case argt of
+                        NoFun (DMVec narg carg _ targ) -> bothcases ((nret, cret, tret), (narg, carg, targ))
+                        NoFun (DMGrads narg carg _ targ) -> bothcases ((nret, cret, tret), (narg, carg, targ))
+                        TVar _ -> pure ()
+                        _ -> do
+                               unify args inftyS
+                               dischargeConstraint @MonadDMTC name
               _ -> do
-                     unify args inftyS
-                     dischargeConstraint @MonadDMTC name
-          NoFun (DMGrads nret cret _ tret) -> case argt of
-              NoFun (DMVec narg carg _ targ) -> bothcases ((nret, cret, tret), (narg, carg, targ))
-              NoFun (DMGrads narg carg _ targ) -> bothcases ((nret, cret, tret), (narg, carg, targ))
-              TVar _ -> pure ()
+                      unify cret U -- output type cannot be clipped
+                      return ()
+          NoFun (DMGrads nret cret n tret) -> case cret of
+              U -> case argt of
+                        NoFun (DMVec narg carg _ targ) -> bothcases ((nret, cret, tret), (narg, carg, targ))
+                        NoFun (DMGrads narg carg _ targ) -> bothcases ((nret, cret, tret), (narg, carg, targ))
+                        TVar _ -> pure ()
+                        _ -> do
+                               unify args inftyS
+                               dischargeConstraint @MonadDMTC name
               _ -> do
-                     unify args inftyS
-                     dischargeConstraint @MonadDMTC name
+                      unify cret U -- output type cannot be clipped
+                      return ()
           _ -> do
                  unify args inftyS
                  dischargeConstraint @MonadDMTC name
