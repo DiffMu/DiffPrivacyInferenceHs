@@ -87,7 +87,7 @@ checkSen' :: DMTerm -> DMScope -> DMDelayed
 
 -- TODO: Here we assume that η really has type τ, and do not check it. Should maybe do that.
 checkSen' (Sng η τ) scope = done $ do
-  res <- Numeric <$> (Const (constCoeff (Fin η)) <$> (createDMTypeNum τ))
+  res <- Numeric <$> (Const (constCoeff (Fin η)) <$> (createDMTypeBaseNum τ))
   return (NoFun res)
 
 -- typechecking an op
@@ -116,37 +116,28 @@ checkSen' (Op op args) scope = do
 
 -- a special term for function argument variables.
 -- those get sensitivity 1, all other variables are var terms
-checkSen' (Arg x dτ i) scope = done $ do
-                                         -- the inferred type must be a subtype of the user annotation, if given.
+checkSen' (Arg x jτ i) scope = done $ do
                                          τs <- newVar
-                                         τ <- case dτ of
-                                             JTAny -> return τs
-                                             _ -> do τc <- createDMType dτ -- TODO it's actually a subtype of dτ!
-                                                     logForce $ "checking arg:" <> show (x :- dτ) <> ", dmtype is " <> show τc
-                                                     addConstraint (Solvable (IsLessEqual (τs, τc)))
-                                                     return τs
-
+                                         logForce $ "checking arg:" <> show (x :- jτ) <> ", dmtype is " <> show τs
+                                         -- the inferred type must be a subtype of the user annotation, if given.
+                                         addJuliaSubtypeConstraint τs jτ
 
                                          -- put the variable in the Γ context with sensitivity 1
-                                         setVarS x (WithRelev i (τ :@ SensitivityAnnotation oneId))
-                                         return τ
+                                         setVarS x (WithRelev i (τs :@ SensitivityAnnotation oneId))
+                                         return τs
 
 checkSen' (Var (x :- dτ)) scope =  -- get the term that corresponds to this variable from the scope dict
    let delτ = getValue x scope
    in case delτ of
      Nothing -> done $ throwError (VariableNotInScope x)
-     Just delτ ->
-         case dτ of
-           JTAny -> delτ
-           dτ -> do
-              mτ <- delτ -- get the computation that will give us the type of x
-              done $ do
-                 τ <- mτ -- extract the type of x
-                 -- if the user has given an annotation
-                 -- inferred type must be a subtype of the user annotation
-                 dτd <- createDMType dτ
-                 addConstraint (Solvable (IsLessEqual (τ, dτd)))
-                 return τ
+     Just delτ -> do
+        mτ <- delτ -- get the computation that will give us the type of x
+        done $ do
+            τ <- mτ -- extract the type of x
+            -- if the user has given an annotation
+            -- inferred type must be a subtype of the user annotation
+            addJuliaSubtypeConstraint τ dτ
+            return τ
 
 checkSen' (Lam xτs body) scope =
   -- the body is checked in the toplevel scope, not the current variable scope.
@@ -816,7 +807,7 @@ checkPri' (Ret t) scope = do
 
 checkPri' (Rnd t) scope = do
    done $ do
-      τ <- (createDMTypeNum t)
+      τ <- (createDMTypeBaseNum t)
       return (NoFun (Numeric (NonConst τ)))
 
 -- TODO it is ambiguous if this is an application of a LamStar or an application of a Lam followed by Return.

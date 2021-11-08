@@ -256,13 +256,8 @@ instance Solve MonadDMTC IsBlackBox (DMMain, [DMMain]) where
         TVar x -> pure () -- we don't know yet.
         BlackBox jts -> do -- its a box!
            case length jts == length args of
-                True -> let setArg :: MonadDMTC t => (JuliaType, DMMain) -> t ()
-                            setArg (jt, arg) = do
-                             case jt of
-                                 JTAny -> return ()
-                                 _ -> do djt <- createDMType jt
-                                         addConstraint (Solvable (IsLessEqual (arg, djt)))
-                                         return ()
+                True -> let setArg :: IsT MonadDMTC t => (JuliaType, DMMain) -> t ()
+                            setArg (jt, arg) = addJuliaSubtypeConstraint arg jt
                         in do
                             mapM setArg (zip jts args)
                             dischargeConstraint @MonadDMTC name

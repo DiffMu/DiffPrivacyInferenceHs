@@ -216,12 +216,8 @@ resolveChoiceHash (sign, (method, matches)) = do
        addC (annotation, (τ1 :@ s1), (τ2 :@ s2)) = do
                        unify s1 s2
                        addConstraint (Solvable (IsFunctionArgument (τ1, τ2)))
-                       case annotation of
-                      	   JTAny -> return ()
-                           _ -> do -- make sure the type of the argument that is passed is a julia-subtype of the type required by the annotation.
-                                 jt <- createDMType annotation
-                      	         addConstraint (Solvable (IsLessEqual (τ1, jt)))
-                      	         return ()
+                       addJuliaSubtypeConstraint τ1 annotation
+
    let resolveChoice :: (DMTypeOf FunKind) -> (DMTypeOf FunKind) -> t ()
        resolveChoice match mmethod = do
                                        case (match, mmethod) of

@@ -1077,68 +1077,6 @@ instance (MonadDMTC t, Show a, Unify t a) => Unify t (Maybe a) where
 
 
 
--- Maps julia num types to DMtypes (of basenumkind)
--- createDMTypeNum :: JuliaNumType -> DMTypeOf BaseNumKind
--- createDMTypeNum JTNumInt = DMInt
--- createDMTypeNum JTNumReal = DMReal
-createDMTypeNum :: MonadDMTC t => JuliaType -> t (DMTypeOf BaseNumKind)
-createDMTypeNum (JTInt) = pure DMInt
-createDMTypeNum (JTReal)  = pure DMReal
-createDMTypeNum (t) = do
-    v <- newVar
-    return v
- --   throwError (TypeMismatchError $ "expected " <> show t <> " to be either Integer or Real.")
-
-
-createDMTypeType :: MonadDMTC t => JuliaType -> t DMType
-createDMTypeType (JTInt) = do
-  return (Numeric (NonConst DMInt))
-createDMTypeType (JTReal) = do
-  return (Numeric (NonConst DMReal))
-createDMTypeType (JTTuple ts) = do
-  dts <- mapM createDMTypeType ts
-  return (DMTup (dts))
-createDMTypeType (JTVector t) = do
-  dt <- createDMTypeNum t
-  nrm <- newVar
-  clp <- newVar
-  n <- newVar
-  return (DMVec nrm clp n (Numeric (NonConst dt)))
-createDMTypeType (JTMatrix t) = do
-  dt <- createDMTypeNum t
-  nrm <- newVar
-  clp <- newVar
-  n <- newVar
-  m <- newVar
-  return (DMMat nrm clp m n (Numeric (NonConst dt)))
-createDMTypeType (JTModel) = do
-  dt <- createDMTypeNum JTAny
-  n <- newVar
-  return (DMParams n (Numeric (NonConst dt)))
-createDMTypeType (JTGrads) = do
-  dt <- createDMTypeNum JTAny
-  nrm <- newVar
-  clp <- newVar
-  n <- newVar
-  return (DMGrads nrm clp n (Numeric (NonConst dt)))
-createDMTypeType JTAny = do
-  v <- newTVar "any"
-  return (TVar v)
-createDMTypeType (t)  = throwError (TypeMismatchError $ "expected " <> show t <> " to not be a function.")
-
--- Maps julia types to DMTypes (of main kind)
--- (`JTAny` is turned into a new type variable.)
-createDMType :: MonadDMTC t => JuliaType -> t (DMTypeOf MainKind)
- -- NOTE: defaulting to non-const might or might not be what we want to do here.
-createDMType (JTFunction) = do
-  v <- newTVar "any"
-  return (TVar v) -- TODO can we say it's a function?
-createDMType (JTAny) = do
-  v <- newTVar "any"
-  return (TVar v)
-createDMType (t) = do
-  tt <- createDMTypeType t
-  return (NoFun tt)
 
 
 
