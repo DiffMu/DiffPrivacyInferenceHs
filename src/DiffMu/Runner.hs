@@ -89,7 +89,9 @@ typecheckFromDMTerm term = do
         logPrintConstraints
         solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
         tres'' <- normalize tres'
-        return tres''
+        solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
+        tres''' <- normalize tres''
+        return tres'''
 
         -- a <- newVar
         -- b <- newVar

@@ -120,6 +120,11 @@ tryComputeSym x = case f x of
     dmLog Infty = Infty
     dmLog (Fin a) = Fin (P.log a)
 
+    dmDiv :: SymVal -> SymVal -> Maybe SymVal
+    dmDiv Infty _ = Nothing
+    dmDiv _ (Infty) = Nothing
+    dmDiv (Fin a) (Fin b) = Just (Fin (a P./ b))
+
     f :: SymVar k -> Maybe (SymTerm MainSensKind)
     f (HonestVar _)  = Nothing
     f (Id t)         = Nothing
@@ -127,6 +132,7 @@ tryComputeSym x = case f x of
     f (Exp (a,b))    = constCoeff <$> (dmExp <$> extractVal a <*> extractVal b)
     f (Ceil a)       = constCoeff <$> (dmCeil <$> extractVal a)
     f (Sqrt a)       = constCoeff <$> (dmSqrt <$> extractVal a)
+    f (Max [])       = Nothing
     f (Max (a:as))   = case all (== a) as of
         False -> constCoeff <$> (maximum <$> mapM extractVal (a:as))
         True  -> Just a
@@ -139,7 +145,9 @@ tryComputeSym x = case f x of
     --       cannot be solved.
     --
     -- f (Minus (a, b)) = constCoeff <$> (dmMinus <$> extractVal a <*> extractVal b)
-    f (Div (a, b))   = Nothing
+    f (Div (a, b)) = case extractVal b of
+        (Just (Fin 1))  -> pure a
+        _               -> constCoeff <$> (join (dmDiv <$> extractVal a <*> extractVal b))
 
 instance Show (SymVar k) where
   show (HonestVar v) = show v
