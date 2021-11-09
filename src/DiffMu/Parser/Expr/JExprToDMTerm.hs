@@ -264,8 +264,8 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
   (t@"clip", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
 
   -- 1 argument
-  --(t@"convert", [a1]) -> ConvertM <$> pSingle a1
-  --(t@"convert", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
+  (t@"convert", [a1]) -> ConvertM <$> pSingle a1
+  (t@"convert", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
 
   (t@"transpose", [a1]) -> Transpose <$> pSingle a1
   (t@"transpose", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)

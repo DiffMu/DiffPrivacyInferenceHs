@@ -130,14 +130,6 @@ subtypingGraph =
                       a₁ <- newVar
                       a₀ ⊑! a₁
                       return ((DMVec nrm clp n a₀), (DMVec nrm clp n a₁))
-                      {-
-                 , SingleEdge $ -- this is the conv rule made implicit, for converting DMData to DMReal
-                   do nrm <- newVar
-                      clp <- newVar
-                      n <- newVar
-                      m <- newVar
-                      return ((DMMat nrm (Clip clp) n m (Numeric DMData)), (DMMat clp U n m (Numeric (NonConst DMReal))))
-                    -}
                  , SingleEdge $
                    do m <- newVar
                       a₀ <- newVar
@@ -152,6 +144,15 @@ subtypingGraph =
                       a₁ <- newVar
                       a₀ ⊑! a₁
                       return ((DMGrads nrm clp m a₀), (DMGrads nrm clp m a₁))
+                      {-
+                      {-
+                 , SingleEdge $ -- this is the conv rule made implicit, for converting DMData to DMReal
+                   do nrm <- newVar
+                      clp <- newVar
+                      n <- newVar
+                      m <- newVar
+                      return ((DMMat nrm (Clip clp) n m (Numeric DMData)), (DMMat clp U n m (Numeric (NonConst DMReal))))
+                    -}
                  , SingleEdge $ -- this is the conv rule made implicit, for converting DMData to DMReal
                    do nrm <- newVar
                       clp <- newVar
@@ -163,6 +164,7 @@ subtypingGraph =
                       t <- newVar
                       m <- newVar
                       return ((DMGrads L1 clp m (Numeric t)), (DMGrads nrm clp m (Numeric t)))
+                      -}
                   ]
             ; _ -> []
             }

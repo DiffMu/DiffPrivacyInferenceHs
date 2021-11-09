@@ -279,6 +279,25 @@ instance TCConstraint IsBlackBoxReturn where
   runConstr (IsBlackBoxReturn c) = c
 
 
+instance Solve MonadDMTC IsBlackBoxReturn (DMMain, (DMMain, Sensitivity)) where
+    solve_ Dict _ name (IsBlackBoxReturn (ret, (argt, args))) =
+     let discharge s = do
+                          unify args s
+                          dischargeConstraint @MonadDMTC name
+     in case ret of
+          TVar _ -> pure ()
+          NoFun (DMVecLike vret nret cret dret tret) -> do
+              unify ret (NoFun (DMVecLike vret LInf U dret (Numeric DMData)))
+              case argt of
+                   TVar _ -> pure ()
+                   NoFun (DMVecLike _ _ _ _ targ) -> do
+                       unify targ (Numeric DMData)
+                       discharge oneId
+                   _ -> discharge inftyS
+          _ -> discharge inftyS
+
+{-
+-- TODO for now we set output to L_inf directly
 -- black boxes have infinite sensitivity in their arguments, except for ones whose output is a vector with
 -- (L_inf, Data) norm and the argument is a vector with any Data norm. in this case the black box (as every
 -- other function with such input/output) has sensitivity 1 in that argument.
@@ -310,8 +329,6 @@ instance Solve MonadDMTC IsBlackBoxReturn (DMMain, (DMMain, Sensitivity)) where
                       unify cret U -- output type cannot be clipped
                       return ()
           _ -> discharge inftyS
-
-
 -- if the blackbox output is a vector, the black boxes sensitivity is 1 when measured using the (L_inf, Data) norm on
 -- the output vector and some Data norm on the input vector (see above).
 -- in the final typechecking stage it is likely that we won't manage to infer the vector norm, so we just set it to (L_inf, Data),
@@ -324,3 +341,4 @@ instance Solve MonadDMTC IsBlackBoxReturn (DMMain, (DMMain, Sensitivity)) where
           _ -> pure ()
           
     solve_ Dict _ name (IsBlackBoxReturn (ret, (argt, args))) = pure ()
+    -}
