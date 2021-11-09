@@ -170,7 +170,9 @@ instance Solve MonadDMTC IsGaussResult (DMTypeOf MainKind, DMTypeOf MainKind) wh
            τv <- newVar -- input matrix element type can be anything (as long as it's numeric)
 
            -- set in- and output types as given in the mgauss rule
-           unify τin (NoFun (DMGrads L2 iclp n (Numeric (τv))))
+           -- input type gets a LessEqual so convert can happen implicitly if necessary
+           -- (convert is implemented as a special subtyping rule, see there)
+           addConstraint(Solvable(IsLessEqual(τin, (NoFun (DMGrads L2 iclp n (Numeric (τv)))))))
            unify τgauss (NoFun (DMGrads LInf U n (Numeric (NonConst DMReal))))
 
            dischargeConstraint @MonadDMTC name
@@ -276,55 +278,49 @@ instance TCConstraint IsBlackBoxReturn where
   constr = IsBlackBoxReturn
   runConstr (IsBlackBoxReturn c) = c
 
+
+-- black boxes have infinite sensitivity in their arguments, except for ones whose output is a vector with
+-- (L_inf, Data) norm and the argument is a vector with any Data norm. in this case the black box (as every
+-- other function with such input/output) has sensitivity 1 in that argument.
 instance Solve MonadDMTC IsBlackBoxReturn (DMMain, (DMMain, Sensitivity)) where
-    solve_ Dict _ name (IsBlackBoxReturn (ret, (argt, args))) =
-     let cases (n, c, t) = case (n,c,t) of
-               (TVar _, TVar _, TVar _) -> Nothing
-               (LInf  , TVar _, TVar _) -> Nothing
-               (TVar _, U     , TVar _) -> Nothing
-               (LInf  , U     , TVar _) -> Nothing
-               (TVar _, TVar _, Numeric DMData) -> Nothing
-               (LInf  , TVar _, Numeric DMData) -> Nothing
-               (TVar _, U     , Numeric DMData) -> Nothing
-               (LInf, U, Numeric DMData) -> Just True
-               _ -> Just False
-         bothcases ((n1, c1, t1), (n2, c2, t2)) = case cases (n1, c1, t1) of
-               Nothing -> pure ()
-               Just False -> do
-                               unify args inftyS
-                               dischargeConstraint @MonadDMTC name
-               Just True -> case cases (n2, c2, t2) of
-                          Nothing -> pure ()
-                          Just False -> do
-                                          unify args inftyS
-                                          dischargeConstraint @MonadDMTC name
-                          Just True -> do
-                                          unify args oneId
-                                          dischargeConstraint @MonadDMTC name
+    solve_ Dict SolveSpecial name (IsBlackBoxReturn (ret, (argt, args))) =
+     let discharge s = do
+                          unify args s
+                          dischargeConstraint @MonadDMTC name
      in case ret of
           TVar _ -> pure ()
-          NoFun (DMVec nret cret n tret) -> case cret of
+          NoFun (DMVecLike _ nret cret n tret) -> case cret of
               U -> case argt of
-                        NoFun (DMVec narg carg _ targ) -> bothcases ((nret, cret, tret), (narg, carg, targ))
-                        NoFun (DMGrads narg carg _ targ) -> bothcases ((nret, cret, tret), (narg, carg, targ))
                         TVar _ -> pure ()
-                        _ -> do
-                               unify args inftyS
-                               dischargeConstraint @MonadDMTC name
+                        NoFun (DMVecLike _ narg carg _ targ) -> case (nret, tret) of
+                           (TVar _, TVar _)         -> pure ()
+                           (LInf, TVar _)           -> pure ()
+                           (TVar _, Numeric DMData) -> pure ()
+                           -- if the output norm d is (L_inf, Data) and the input norm is some norm d' on data,
+                           -- we have for every function f and all input vectors x!=y:
+                           -- d(f(x), f(y)) = 1 <= d'(x, y)
+                           -- so f is 1-sensitive using these norms.
+                           (LInf, Numeric DMData)   -> case targ of
+                              TVar _ -> pure ()
+                              (Numeric DMData) -> discharge oneId
+                              _ -> discharge inftyS
+                           _ -> discharge inftyS
+                        _ -> discharge inftyS
               _ -> do
                       unify cret U -- output type cannot be clipped
                       return ()
-          NoFun (DMGrads nret cret n tret) -> case cret of
-              U -> case argt of
-                        NoFun (DMVec narg carg _ targ) -> bothcases ((nret, cret, tret), (narg, carg, targ))
-                        NoFun (DMGrads narg carg _ targ) -> bothcases ((nret, cret, tret), (narg, carg, targ))
-                        TVar _ -> pure ()
-                        _ -> do
-                               unify args inftyS
-                               dischargeConstraint @MonadDMTC name
-              _ -> do
-                      unify cret U -- output type cannot be clipped
-                      return ()
-          _ -> do
-                 unify args inftyS
-                 dischargeConstraint @MonadDMTC name
+          _ -> discharge inftyS
+
+
+-- if the blackbox output is a vector, the black boxes sensitivity is 1 when measured using the (L_inf, Data) norm on
+-- the output vector and some Data norm on the input vector (see above).
+-- in the final typechecking stage it is likely that we won't manage to infer the vector norm, so we just set it to (L_inf, Data),
+-- risking unification errors but giving us sensitivity 1 on the black box...
+    solve_ Dict SolveFinal name (IsBlackBoxReturn (ret, (argt, args))) = case (ret, argt) of
+          (NoFun (DMVecLike vret nret cret dret tret), (NoFun (DMVecLike varg narg carg darg targ))) -> do
+              unify ret (NoFun (DMVecLike vret LInf U dret (Numeric DMData)))
+              unify targ (Numeric DMData)
+              return ()
+          _ -> pure ()
+          
+    solve_ Dict _ name (IsBlackBoxReturn (ret, (argt, args))) = pure ()

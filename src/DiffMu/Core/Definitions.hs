@@ -118,6 +118,19 @@ instance Show DMKind where
   show FunKind = "Fun"
   show NoFunKind = "NoFun"
 
+-- distinguish between vectors and gradients bc we need to do that in julia
+data VecKind =
+    Vector
+  | Gradient
+  deriving (Typeable)
+
+pattern DMVec n c d t = DMVecLike Vector n c d t
+pattern DMGrads n c d t = DMVecLike Gradient n c d t
+
+-- so we don't get incomplete pattern warnings for them
+{-# COMPLETE Deleted, DMInt, DMReal, Const, NonConst, DMData, Numeric, TVar, (:->:), (:->*:), DMTup, L1, L2, LInf, U, Clip,
+ DMVec, DMGrads, DMMat, DMParams, NoFun, Fun, (:∧:), BlackBox #-}
+
 --------------------
 -- 2. DMTypes
 
@@ -172,10 +185,9 @@ data DMTypeOf (k :: DMKind) where
   Clip :: DMTypeOf NormKind -> DMTypeOf ClipKind
 
   -- matrices
-  DMVec :: (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> DMType -> DMType
+  DMVecLike :: VecKind -> (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> DMType -> DMType
   DMMat :: (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> Sensitivity -> DMType -> DMType
   DMParams :: Sensitivity -> DMType -> DMType -- number of parameters and element type
-  DMGrads :: (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> DMType -> DMType -- norm/clip and number of parameters
 
   -- annotations
   NoFun :: DMTypeOf NoFunKind -> DMTypeOf MainKind
@@ -184,6 +196,9 @@ data DMTypeOf (k :: DMKind) where
 
   -- black box functions (and a wrapper to make them MainKind but still have a BlackBoxKind so we can have TVars of it)
   BlackBox :: [JuliaType] -> DMTypeOf MainKind
+
+
+
 
 instance Hashable (DMTypeOf k) where
   hashWithSalt s (Deleted) = s
