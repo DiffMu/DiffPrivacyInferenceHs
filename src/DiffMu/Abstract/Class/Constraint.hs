@@ -72,6 +72,7 @@ class (Monad t) => MonadConstraint isT t | t -> isT where
   logPrintConstraints :: t ()
   getConstraintsByType :: (Typeable c, Typeable a) => Proxy (c a) -> t [(Symbol, c a)]
   getAllConstraints :: t [(Symbol, Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT)]
+  clearSolvingEvents :: t [String]
   -- clearConstraints :: t (ConstraintBackup t)
   -- restoreConstraints :: ConstraintBackup t -> t ()
 
@@ -139,21 +140,43 @@ instance TCConstraint IsGaussResult where
 -- A changed constraint is marked "unchanged" if it is read by a call to `getUnsolvedConstraintMarkNormal`.
 solveAllConstraints :: forall isT t eC. (MonadImpossible t, MonadLog t, MonadConstraint isT t, MonadNormalize t, IsT isT t) => [SolvingMode] -> t ()
 solveAllConstraints modes = withLogLocation "Constr" $ do
+
+  -- get events which came before us
+  oldEvents <- clearSolvingEvents
+  case oldEvents of
+    [] -> pure ()
+    xs -> do
+      log $ "[Solver]: Before solving all constraints, the following events have accumulated unnoticed:"
+      log $ intercalate "\n" (fmap ("           - " <>) xs)
+      log ""
+
   normalizeState
   openConstr <- getUnsolvedConstraintMarkNormal modes
 
   case openConstr of
     Nothing -> return ()
     Just (name, constr, mode) -> do
-      log $ "[Solver]: currently solving " <> show name <> " : " <> show constr
-      logPrintConstraints
+      -- logPrintConstraints
       solve mode name constr
+
+      -- check whether constraint disappeared
       allCs <- getAllConstraints
       let newConstrValue = filter (\(n',val) -> n' == name) allCs
-      case newConstrValue of
-        []        -> log $ "          => " <> green "Discharged"
-        [(_,val)] -> log $ "          => " <> yellow "Wait/Update"
+      bDischarged <- case newConstrValue of
+        []        -> pure True
+        [(_,val)] -> pure False
         _ -> impossible "Found multiple constraints with the same name."
+
+      -- check for events which happened
+      events <- clearSolvingEvents
+
+      -- print if something notable happened
+      case (bDischarged, events) of
+        (False,[]) -> pure ()
+        (b,xs) -> do
+          log $ "[Solver]: solving (" <> show mode <> ") " <> show name <> " : " <> show constr
+          log $ intercalate "\n" (fmap ("             - " <>) xs)
+          log $ "          => " <> if b then green "Discharged" else yellow "Wait/Update"
 
       solveAllConstraints modes
 

@@ -467,6 +467,22 @@ type TypeCtx extra = Ctx TeVar (WithRelev extra)
 type TypeCtxSP = Either (TypeCtx SensitivityK) (TypeCtx PrivacyK)
 
 
+data SolvingEvent =
+  Event_ConstraintDischarged Symbol
+  | Event_ConstraintUpdated Symbol String
+  | Event_ConstraintCreated Symbol String
+  | Event_SubstitutionAdded String
+  | Event_ConstraintSetCreated
+  | Event_ConstraintSetMerged [Symbol]
+
+instance Show SolvingEvent where
+  show (Event_ConstraintCreated name constr) = "CREATE " <> show name <> " : " <> constr
+  show (Event_ConstraintUpdated name constr) = "UPDATE " <> show name <> " : " <> constr
+  show (Event_ConstraintDischarged name)     = "DISCHARGE " <> show name
+  show (Event_SubstitutionAdded sub)         = "SUB " <> sub
+  show (Event_ConstraintSetCreated)          = "CREATE CONSTR_SET"
+  show (Event_ConstraintSetMerged constrs)    = "MERGE CONSTR_SET : {" <> intercalate ", " (show <$> constrs) <> "}"
+
 
 data Watcher = Watcher Changed
   deriving (Generic)
@@ -486,7 +502,8 @@ data MetaCtx = MetaCtx
 data TCState = TCState
   {
     _watcher :: Watcher,
-    _logger :: DMLogger
+    _logger :: DMLogger,
+    _solvingEvents :: [SolvingEvent]
   }
   deriving (Generic)
 
@@ -592,7 +609,7 @@ instance Show Watcher where
   show (Watcher changed) = show changed
 
 instance Show (TCState) where
-  show (TCState w l) = "- watcher: " <> show w <> "\n"
+  show (TCState w l _) = "- watcher: " <> show w <> "\n"
                        <> "- messages: " <> show l <> "\n"
 
 instance Show (Full) where
@@ -645,6 +662,7 @@ instance Monad m => MonadTerm DMTypeOf (TCT m) where
     -- traceM ("/ Type: I have the subs " <> show σs <> ", and I want to add: " <> show σ)
     -- withLogLocation "Subst" $ debug ("/ Type: I have the subs " <> show σs <> ", and I want to add: " <> show σ)
     withLogLocation "Subst" $ debug ("Adding type subst: " <> show σ)
+    tcstate.solvingEvents %= (Event_SubstitutionAdded (show σ) :)
     -- logPrintConstraints
     σs' <- σs ⋆ singletonSub σ
     -- traceM ("\\ Type: I now have: " <> show σs')
@@ -665,6 +683,7 @@ instance Monad m => MonadTerm SensitivityOf (TCT m) where
   addSub σ = do
     σs <- use (meta.sensSubs)
     -- traceM ("I have the subs " <> show σs <> ", and I want to add: " <> show σ)
+    tcstate.solvingEvents %= (Event_SubstitutionAdded (show σ) :)
     σs' <- σs ⋆ singletonSub σ
     meta.sensSubs .= σs'
     meta.sensVars %= (removeNameBySubstitution σ)
@@ -745,13 +764,20 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
   type ContentConstraintOnSolvable (TCT m) = GoodConstraintContent
   type ConstraintOnSolvable (TCT m) = GoodConstraint
   addConstraint (Solvable c) = do
+
       -- compute the fixed vars of this constraint
       -- and add them to the cached list
       let newFixed = fixedVars @_ @TVarOf c
       meta.fixedTVars <>= [SingSomeK v | SomeK v <- newFixed]
 
       -- add the constraint to the constraint list
-      meta.constraints %%= (newAnnName "constr" (Watched (NormalForMode []) (Solvable c)))
+      name <- meta.constraints %%= (newAnnName "constr" (Watched (NormalForMode []) (Solvable c)))
+
+      -- log this as event
+      tcstate.solvingEvents %= (Event_ConstraintCreated name (show c) :)
+
+      return name
+
 
   getUnsolvedConstraintMarkNormal modes = do
     (Ctx (MonCom constrs)) <- use (meta.constraints.anncontent.topctx)
@@ -768,6 +794,9 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
     meta.constraints.anncontent.topctx %= (deleteValue name)
     recomputeFixedVars
 
+    -- log this as event
+    tcstate.solvingEvents %= (Event_ConstraintDischarged name :)
+
   failConstraint name = do
     (AnnNameCtx n cs) <- use (meta.constraints)
     let c = getValue name cs
@@ -777,9 +806,16 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
     meta.constraints %= (\(AnnNameCtx n cs) -> AnnNameCtx n (setValue name (Watched (NormalForMode []) c) cs))
     recomputeFixedVars
 
+    -- log this as event
+    tcstate.solvingEvents %= (Event_ConstraintUpdated name (show c) :)
+
   openNewConstraintSet = do
     (CtxStack top other) <- use (meta.constraints.anncontent)
     meta.constraints.anncontent .= (CtxStack emptyDict (top:other))
+
+    -- log this as event
+    tcstate.solvingEvents %= (Event_ConstraintSetCreated :)
+
     return ()
 
   mergeTopConstraintSet = do
@@ -789,10 +825,18 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
         False -> do
           o' <- MonCom top ⋆ o
           meta.constraints.anncontent .= (CtxStack (Ctx o') os)
+
+          -- log this as event
+          tcstate.solvingEvents %= (Event_ConstraintSetMerged (H.keys top) :)
           return ConstraintSet_WasNotEmpty
+
         True -> do
           meta.constraints.anncontent .= (CtxStack (Ctx o) os)
+
+          -- log this as event
+          tcstate.solvingEvents %= (Event_ConstraintSetMerged [] :)
           return ConstraintSet_WasEmpty
+
       [] -> error "Trying to merge top constraint set, but there are non in the stack."
 
   getConstraintsByType (Proxy :: Proxy (c a)) = do
@@ -816,6 +860,10 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
     (Ctx (MonCom cs)) <- use (meta.constraints.anncontent.topctx)
     let cs' = H.toList cs
     return [(name,c) | (name, Watched _ c) <- cs']
+
+  clearSolvingEvents = do
+    events <- tcstate.solvingEvents %%= (\ev -> (ev,[]))
+    return (show <$> (reverse events))
 
 
 instance FreeVars TVarOf Int where
