@@ -806,11 +806,11 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
         cs'' = second f <$> cs'
     return [(name,c) | (name, Just c) <- cs'' ]
 
-  logPrintConstraints = do
-    ctrs <- use (meta.constraints.anncontent)
-    log $ "## Constraints ##"
-    log $ show ctrs
-    log $ ""
+  logPrintConstraints = pure () -- do
+    -- ctrs <- use (meta.constraints.anncontent)
+    -- log $ "## Constraints ##"
+    -- log $ show ctrs
+    -- log $ ""
 
   getAllConstraints = do
     (Ctx (MonCom cs)) <- use (meta.constraints.anncontent.topctx)
