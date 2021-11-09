@@ -462,6 +462,8 @@ checkSen' (TLet xs term body) original_scope = do
     -- and we return the type of the body
     return τbody
 
+checkSen' (LoopLet cs loop tail) scope = do
+  checkSens (TLet cs loop tail) scope
 
 checkSen' (Loop niter cs' (xi, xc) body) scope = do
    cniter <- checkSens niter scope
@@ -1049,6 +1051,9 @@ checkPri' (Gauss rp εp δp f) scope =
 
          return (NoFun τgauss)
 
+
+checkPri' (LoopLet cs loop tail) scope = do
+  checkPriv (TBind cs loop tail) scope
 
 checkPri' (Loop niter cs' (xi, xc) body) scope =
    --let setInteresting :: ([Symbol],[DMMain :@ PrivacyAnnotation]) -> Sensitivity -> TC ()

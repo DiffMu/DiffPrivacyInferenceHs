@@ -65,12 +65,17 @@ pList (s : tail) = case s of
                         JETupAssignment aee amt -> pJTLet aee amt tail (\x -> x)
                         JEFunction name term -> pJFLet name term tail (\x -> x)
                         JEBlackBox name args -> pJBlackBox name args tail (\x -> x)
-                        JELoop ivar iter body -> pMutLet (pJLoop ivar iter body) tail
+                        JELoop ivar iter body -> pLoopLet (pJLoop ivar iter body) tail
                         JECall name args -> pMutLet (pJCall name args) tail
                         JEIfElse _ _ _ -> throwOriginalError (InternalError "Conditionals should not have tails!")
                         JEUnsupported s -> parseError ("Unsupported expression " <> show s)
                         _ -> parseError ("Expression " <> show s <> " does not have any effect.")
 
+
+pLoopLet m tail = do
+                   assignee <- m
+                   dtail <- pList tail
+                   return (Extra (MutLet LoopLet assignee dtail))
 
 pMutLet m tail = do
                    assignee <- m
@@ -259,8 +264,8 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
   (t@"clip", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
 
   -- 1 argument
-  (t@"convert", [a1]) -> ConvertM <$> pSingle a1
-  (t@"convert", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
+  --(t@"convert", [a1]) -> ConvertM <$> pSingle a1
+  --(t@"convert", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
 
   (t@"transpose", [a1]) -> Transpose <$> pSingle a1
   (t@"transpose", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
