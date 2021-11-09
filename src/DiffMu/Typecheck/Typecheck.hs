@@ -962,6 +962,18 @@ checkPri' curterm@(TLet xs term body) original_scope = do
 
     result
 
+checkPri' curterm@(TBind xs term body) original_scope = do
+  a <- newTeVar "tbind_var"
+  -- we check the term
+  -- ```
+  --  sbind a <- term
+  --  tlet (xs...) = a
+  --  body
+  -- ```
+  checkPri' (SBind (a :- JTAny) term
+                   (TLet xs (Var (a :- JTAny))
+                         body))
+            original_scope
 
 -----------------------------------
 -- PRIVACY TUPLE HACK
