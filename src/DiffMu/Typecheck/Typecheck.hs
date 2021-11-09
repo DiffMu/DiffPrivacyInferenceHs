@@ -462,7 +462,9 @@ checkSen' (TLet xs term body) original_scope = do
     -- and we return the type of the body
     return τbody
 
-checkSen' (LoopLet cs loop tail) scope = do
+-- a loop checked in sensitivity mode returns its captures into a TLet
+-- the term exists so in privacy mode we can use TBind
+checkSen' (LLet cs loop tail) scope = do
   checkSens (TLet cs loop tail) scope
 
 checkSen' (Loop niter cs' (xi, xc) body) scope = do
@@ -1052,7 +1054,9 @@ checkPri' (Gauss rp εp δp f) scope =
          return (NoFun τgauss)
 
 
-checkPri' (LoopLet cs loop tail) scope = do
+-- a loop checked in privacy mode returns its captures into a TBind
+-- the term exists so in sensitivity mode we can use TLet
+checkPri' (LLet cs loop tail) scope = do
   checkPriv (TBind cs loop tail) scope
 
 checkPri' (Loop niter cs' (xi, xc) body) scope =
