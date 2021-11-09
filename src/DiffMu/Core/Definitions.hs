@@ -607,7 +607,7 @@ sndA (x :- τ) = τ
 -- data Lam_ = Lam_ [Asgmt JuliaType] DMTerm
 --   deriving (Generic, Show)
 
-data LetKind = PureLet | BindLet
+data LetKind = PureLet | BindLet | LoopLet
   deriving (Eq, Show)
 
 
@@ -656,9 +656,10 @@ pattern SLet a b c = SLetBase PureLet a b c
 pattern SBind a b c = SLetBase BindLet a b c
 pattern TLet a b c = TLetBase PureLet a b c
 pattern TBind a b c = TLetBase BindLet a b c
+pattern LLet a b c = TLetBase LoopLet a b c
 
 {-# COMPLETE Extra, Ret, Sng, Var, Rnd, Arg, Op, Phi, Lam, LamStar, BBLet, BBApply,
- Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, Gauss, ConvertM, MCreate, Transpose,
+ Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, LLet, Gauss, ConvertM, MCreate, Transpose,
  Size, Length, Index, Row, ClipM, Loop, SubGrad, ScaleGrad, Reorder, TProject, LastTerm #-}
 
 
@@ -843,6 +844,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (Tup as)           = "Tup " <> (showPretty as)
   showPretty (TLet v a b)       = "TLet " <> showPretty v <> " = " <> (showPretty a) <> "\n" <> (showPretty b)
   showPretty (TBind v a b)       = "TBind " <> showPretty v <> " <- " <> (showPretty a) <> "\n" <> (showPretty b)
+  showPretty (LLet v a b)       = "LLet " <> showPretty v <> " <- " <> (showPretty a) <> "\n" <> (showPretty b)
   showPretty (Gauss a b c d)    = "Gauss (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ", " <> (showPretty d) <> ")"
   showPretty (ConvertM a)       = "ConvertM (" <> (showPretty a) <> ")"
   showPretty (MCreate a b x c ) = "MCreate (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> show x <> ", " <> (showPretty c) <> ")"
