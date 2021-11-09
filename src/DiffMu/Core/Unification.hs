@@ -226,18 +226,22 @@ instance Solve MonadDMTC IsEqual (DMTypeOf k, DMTypeOf k) where
       Right a -> dischargeConstraint name
 
 
-solveLessEqualSensitivity :: Sensitivity -> Sensitivity -> Maybe Bool
-solveLessEqualSensitivity (SingleKinded (LinCom (MonCom as))) (SingleKinded (LinCom (MonCom bs))) = case (H.toList as, H.toList bs) of
-  ([(MonCom a,av)],[(MonCom b, bv)]) -> case (H.toList a, H.toList b) of
-    ([],[]) -> Just (av <= bv)
-    _ -> Nothing
-  _ -> Nothing
 
 instance Solve MonadDMTC IsLessEqual (Sensitivity, Sensitivity) where
-  solve_ Dict _ name (IsLessEqual (s1, s2)) = case solveLessEqualSensitivity s1 s2 of
-    Just True -> dischargeConstraint name
-    Just False -> failConstraint name
-    Nothing -> return ()
+  solve_ Dict _ name (IsLessEqual (s1, s2)) = solveLessEqualSensitivity s1 s2
+    where
+      solveLessEqualSensitivity :: IsT MonadDMTC t => Sensitivity -> Sensitivity -> t ()
+      solveLessEqualSensitivity a@(SingleKinded (LinCom (MonCom as))) b@(SingleKinded (LinCom (MonCom bs))) = case (H.toList as, H.toList bs) of
+        ([(MonCom aterm,av)],[(MonCom bterm, bv)]) -> case (H.toList aterm, H.toList bterm) of
+          -- a has no free variables, and is infinity
+          ([],_) | av == Infty -> b ==! constCoeff Infty >> dischargeConstraint name
+
+          -- both a and b do not have any free variables
+          ([],[]) -> case (av <= bv) of
+                       True -> dischargeConstraint name
+                       False -> failConstraint name
+          _ -> return ()
+        _ -> return()
 
 -------------------------------------------------------------------
 -- Monadic monoid structure on dmtypes
