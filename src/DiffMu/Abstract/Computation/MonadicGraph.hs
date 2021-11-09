@@ -62,7 +62,7 @@ oppositeGraph (GraphM graph) = GraphM (opp graph)
         opp f (IsReflexive (sl,sr)) = oppositeEdge <$> f (IsReflexive (sr,sl))
 
 -- findPathM :: forall s m e a. (Show e, Show a, MonadError e m, MonadState s m, MonoidM m a, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> (a,a) -> m (INCRes e (a,a))
-findPathM :: forall s m isT e a. (Show e, Show a, Eq a, MonadConstraint isT m, IsT isT m, Normalize m a, MonadNormalize m, MonadError e m, MonadState s m, MonadLog m, Unify m a, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> (a,a) -> m (INCRes e (PathState a))
+findPathM :: forall s m isT e a. (Show e, Show a, Eq a, MonadConstraint isT m, IsT isT m, Normalize m a, MonadNormalize m, MonadError e m, MonadState s m, MonadImpossible m, MonadLog m, Unify m a, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> (a,a) -> m (INCRes e (PathState a))
 findPathM relevance (GraphM g) (start,goal) | start == goal = return $ Finished ((start,goal),IsShortestPossiblePath)
 findPathM relevance (GraphM g) (start,goal) | otherwise     =
   let -- both (Finished a) (Finished b) | a == b = Finished a
@@ -191,7 +191,7 @@ findPathM relevance (GraphM g) (start,goal) | otherwise     =
 
 type SupState a = ((a,a) :=: a, IsShortestPossiblePath)
 
-findSupremumM :: forall s m isT e a. (Show e, Show a, Eq a, MonadError e m, MonadConstraint isT m, IsT isT m, Unify m (a), Normalize m a, MonadNormalize m, MonadState s m, MonadLog m, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> SupState a -> m (INCRes e ((a,a) :=: a))
+findSupremumM :: forall s m isT e a. (Show e, Show a, Eq a, MonadError e m, MonadConstraint isT m, IsT isT m, Unify m (a), Normalize m a, MonadNormalize m, MonadState s m, MonadImpossible m, MonadLog m, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> SupState a -> m (INCRes e ((a,a) :=: a))
 findSupremumM relevance (GraphM graph) ((a,b) :=: x,isShortestSup) =
   let
     -------------
@@ -388,6 +388,6 @@ findSupremumM relevance (GraphM graph) ((a,b) :=: x,isShortestSup) =
           -- only if all reflexive edges fail, then we can look at the non-reflexive ones
           Fail e -> evalINC (INC stepComputations) ((a,b) :=: x)
 
-findInfimumM :: forall s m isT e a. (Show e, Show a, Eq a, MonadError e m, MonadConstraint isT m, IsT isT m, Unify m (a), Normalize m a, MonadNormalize m, MonadState s m, MonadLog m, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> ((a,a) :=: a) -> m (INCRes e ((a,a) :=: a))
+findInfimumM :: forall s m isT e a. (Show e, Show a, Eq a, MonadError e m, MonadConstraint isT m, IsT isT m, Unify m (a), Normalize m a, MonadNormalize m, MonadState s m, MonadImpossible m, MonadLog m, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> ((a,a) :=: a) -> m (INCRes e ((a,a) :=: a))
 findInfimumM relevance graph z = findSupremumM relevance (oppositeGraph graph) (z,IsShortestPossiblePath)
 

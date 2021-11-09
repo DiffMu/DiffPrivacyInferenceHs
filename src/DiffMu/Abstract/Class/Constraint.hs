@@ -137,7 +137,7 @@ instance TCConstraint IsGaussResult where
 -- Returns if no "changed" constraints remains.
 -- An unchanged constraint is marked "changed", if it is affected by a new substitution.
 -- A changed constraint is marked "unchanged" if it is read by a call to `getUnsolvedConstraintMarkNormal`.
-solveAllConstraints :: forall isT t eC. (MonadLog t, MonadConstraint isT t, MonadNormalize t, IsT isT t) => [SolvingMode] -> t ()
+solveAllConstraints :: forall isT t eC. (MonadImpossible t, MonadLog t, MonadConstraint isT t, MonadNormalize t, IsT isT t) => [SolvingMode] -> t ()
 solveAllConstraints modes = withLogLocation "Constr" $ do
   normalizeState
   openConstr <- getUnsolvedConstraintMarkNormal modes
@@ -148,9 +148,16 @@ solveAllConstraints modes = withLogLocation "Constr" $ do
       log $ "[Solver]: currently solving " <> show name <> " : " <> show constr
       logPrintConstraints
       solve mode name constr
+      allCs <- getAllConstraints
+      let newConstrValue = filter (\(n',val) -> n' == name) allCs
+      case newConstrValue of
+        []        -> log $ "          => " <> green "Discharged"
+        [(_,val)] -> log $ "          => " <> yellow "Wait/Update"
+        _ -> impossible "Found multiple constraints with the same name."
+
       solveAllConstraints modes
 
-solvingAllNewConstraints :: (MonadLog t, MonadConstraint isT t, MonadNormalize t, IsT isT t) => [SolvingMode] -> t a -> t (CloseConstraintSetResult, a)
+solvingAllNewConstraints :: (MonadImpossible t, MonadLog t, MonadConstraint isT t, MonadNormalize t, IsT isT t) => [SolvingMode] -> t a -> t (CloseConstraintSetResult, a)
 solvingAllNewConstraints modes f = withLogLocation "Constr" $ do
   log ""
   log "============ BEGIN solve all new constraints >>>>>>>>>>>>>>>>"

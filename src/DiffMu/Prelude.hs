@@ -17,6 +17,7 @@ module DiffMu.Prelude
   , MonadInternalError (..)
   , TeVar (..)
   , throwOriginalError
+  , blue, green, yellow, red, magenta
   )
   where
 
@@ -110,6 +111,11 @@ class Monad t => MonadInternalError t where
 throwOriginalError :: (MonadError e m) => e -> m a
 throwOriginalError = QUAL.throwError
 
+blue x = "\27[34m" <> x <> "\27[0m"
+green x = "\27[32m" <> x <> "\27[0m"
+yellow x = "\27[33m" <> x <> "\27[0m"
+red x = "\27[31m" <> x <> "\27[0m"
+magenta x = "\27[35m" <> x <> "\27[0m"
 
 
 
