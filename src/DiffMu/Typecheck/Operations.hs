@@ -52,12 +52,20 @@ solveBinary op (τ1, τ2) = f op τ1 τ2
     ret s1 s2 τ = do
       τ' <- τ
       return (Just (s1, s2, τ'))
+      
+    makeNumeric :: DMType -> t (Maybe (Sensitivity, Sensitivity, DMType))
+    makeNumeric t = do
+        v <- newVar
+        unify t (Numeric v)
+        return Nothing
 
     f :: DMTypeOps_Binary -> (DMType) -> (DMType) -> t (Maybe (Sensitivity , Sensitivity, DMType))
     f DMOpAdd (Numeric (Const s1 t1)) (Numeric (Const s2 t2)) = ret zeroId zeroId ((Numeric . (Const (s1 ⋆! s2)) <$> supremum t1 t2))
     f DMOpAdd (Numeric (Const s1 t1)) (Numeric (NonConst t2)) = ret zeroId oneId  ((Numeric . NonConst) <$> supremum t1 t2)
     f DMOpAdd (Numeric (NonConst t1)) (Numeric (Const s2 t2)) = ret oneId  zeroId ((Numeric . NonConst) <$> supremum t1 t2)
     f DMOpAdd (Numeric (NonConst t1)) (Numeric (NonConst t2)) = ret oneId  oneId  ((Numeric . NonConst) <$> supremum t1 t2)
+    f DMOpAdd (Numeric t) (TVar a)                            = makeNumeric (TVar a)
+    f DMOpAdd (TVar a) (Numeric t)                            = makeNumeric (TVar a)
     f DMOpAdd (DMMat n1 cl1 r1 c1 t1) (DMMat n2 cl2 r2 c2 t2) = do
                                                              s <- solveBinary op (t1, t2)
                                                              unify n1 n2
@@ -89,6 +97,8 @@ solveBinary op (τ1, τ2) = f op τ1 τ2
     f DMOpSub (Numeric (Const s1 t1)) (Numeric (NonConst t2)) = ret zeroId oneId ((Numeric . NonConst) <$> supremum t1 t2)
     f DMOpSub (Numeric (NonConst t1)) (Numeric (Const s2 t2)) = ret oneId zeroId ((Numeric . NonConst) <$> supremum t1 t2)
     f DMOpSub (Numeric (NonConst t1)) (Numeric (NonConst t2)) = ret oneId oneId ((Numeric . NonConst) <$> supremum t1 t2)
+    f DMOpSub (Numeric t) (TVar a)                            = makeNumeric (TVar a)
+    f DMOpSub (TVar a) (Numeric t)                            = makeNumeric (TVar a)
     f DMOpSub (DMMat n1 cl1 r1 c1 t1) (DMMat n2 cl2 r2 c2 t2) = do
                                                              s <- solveBinary op (t1, t2)
                                                              unify n1 n2
@@ -110,9 +120,12 @@ solveBinary op (τ1, τ2) = f op τ1 τ2
     f DMOpDiv (Numeric (Const s1 t1)) (Numeric (NonConst t2)) = ret zeroId (constCoeff Infty) (return (Numeric (NonConst DMReal)))
     f DMOpDiv (Numeric (NonConst t1)) (Numeric (Const s2 t2)) = ret (divide oneId s2) zeroId (return (Numeric (NonConst DMReal)))
     f DMOpDiv (Numeric (NonConst t1)) (Numeric (NonConst t2)) = ret (constCoeff Infty) (constCoeff Infty) (return (Numeric (NonConst DMReal)))
+    f DMOpDiv (Numeric t) (TVar a)                            = makeNumeric (TVar a)
 
     f DMOpMod (Numeric (NonConst t1)) (Numeric (Const s2 t2)) = ret s2 zeroId ((Numeric . NonConst) <$> supremum t1 t2)
     f DMOpMod (Numeric (NonConst t1)) (Numeric (NonConst t2)) = ret (constCoeff Infty) (constCoeff Infty) ((Numeric . NonConst) <$> supremum t1 t2)
+    f DMOpMod (Numeric t) (TVar a)                            = makeNumeric (TVar a)
+    f DMOpMod (TVar a) (Numeric t)                            = makeNumeric (TVar a)
 
     -- TODO: Don't we need to return a "Bool" type?
     f DMOpEq (Numeric (Const s1 t1)) (Numeric (Const s2 t2)) = ret zeroId zeroId (pure $ Numeric (NonConst DMInt))
@@ -120,8 +133,8 @@ solveBinary op (τ1, τ2) = f op τ1 τ2
     f DMOpEq (Numeric (NonConst t1)) (Numeric (Const s2 t2)) = ret oneId  zeroId (pure $ Numeric (NonConst DMInt))
     f DMOpEq (Numeric (NonConst t1)) (Numeric (NonConst t2)) = ret oneId  oneId  (pure $ Numeric (NonConst DMInt))
 
-    f op (DMVec n cl c t) t2 = f op (DMMat n cl oneId c t) t2 -- for vectors its the same as fot 1-row matrices
-    f op t2 (DMVec n cl c t) = f op t2 (DMMat n cl oneId c t)
+    f op (DMVecLike _ n cl c t) t2 = f op (DMMat n cl oneId c t) t2 -- for vectors its the same as for 1-row matrices
+    f op t2 (DMVecLike _ n cl c t) = f op t2 (DMMat n cl oneId c t)
 
     f _ _ _                            = return Nothing
 
