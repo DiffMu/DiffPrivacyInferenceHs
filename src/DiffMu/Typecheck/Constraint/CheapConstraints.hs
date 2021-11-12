@@ -342,3 +342,21 @@ instance Solve MonadDMTC IsBlackBoxReturn (DMMain, (DMMain, Sensitivity)) where
           
     solve_ Dict _ name (IsBlackBoxReturn (ret, (argt, args))) = pure ()
     -}
+
+
+instance Solve MonadDMTC IsLess (Sensitivity, Sensitivity) where
+  solve_ Dict _ name (IsLess (s1, s2)) = solveLessSensitivity s1 s2
+    where
+      solveLessSensitivity :: IsT MonadDMTC t => Sensitivity -> Sensitivity -> t ()
+      solveLessSensitivity a@(SingleKinded (LinCom (MonCom as))) b@(SingleKinded (LinCom (MonCom bs))) = case (H.toList as, H.toList bs) of
+        ([(MonCom aterm,av)],[(MonCom bterm, bv)]) -> case (H.toList aterm, H.toList bterm) of
+          -- a has no free variables, and is infinity
+          ([],_) | av == Infty -> b ==! constCoeff Infty >> dischargeConstraint name
+
+          -- both a and b do not have any free variables
+          ([],[]) -> case (av < bv) of
+                       True -> dischargeConstraint name
+                       False -> failConstraint name
+          _ -> return ()
+        _ -> return()
+

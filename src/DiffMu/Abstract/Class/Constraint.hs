@@ -102,6 +102,14 @@ instance TCConstraint IsLessEqual where
   constr = IsLessEqual
   runConstr (IsLessEqual c) = c
 
+---- Less (for sensitivities)
+newtype IsLess a = IsLess a
+  deriving (Show)
+
+instance TCConstraint IsLess where
+  constr = IsLess
+  runConstr (IsLess c) = c
+
 ---- Sups
 newtype IsSupremum a = IsSupremum a deriving Show
 

@@ -227,7 +227,6 @@ instance Solve MonadDMTC IsEqual (DMTypeOf k, DMTypeOf k) where
       Right a -> dischargeConstraint name
 
 
-
 instance Solve MonadDMTC IsLessEqual (Sensitivity, Sensitivity) where
   solve_ Dict _ name (IsLessEqual (s1, s2)) = solveLessEqualSensitivity s1 s2
     where

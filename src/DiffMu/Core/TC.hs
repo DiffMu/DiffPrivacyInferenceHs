@@ -1103,6 +1103,9 @@ instance FixedVars (TVarOf) (IsEqual (Sensitivity,Sensitivity)) where
 instance FixedVars (TVarOf) (IsLessEqual (Sensitivity,Sensitivity)) where
   fixedVars = mempty
 
+instance FixedVars (TVarOf) (IsLess (Sensitivity,Sensitivity)) where
+  fixedVars = mempty
+
 -- Before we can unify dmtypes, we have to proof that we can unify
 -- sensitivities.
 -- We unify them simply by adding an equality constraint. That this
