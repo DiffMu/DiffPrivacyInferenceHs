@@ -22,6 +22,16 @@ instance Functor (Ctx v) where
 instance (SemigroupM m x, HasMonCom m x v) => SemigroupM m (Ctx v x) where
   (⋆) (Ctx c) (Ctx d) = Ctx <$> (c ⋆ d)
 
+instance (SemigroupM m x, HasMonCom m x v) => MonoidM m (Ctx v x) where
+  neutral = (Ctx <$> neutral)
+
+instance (HasMonCom Identity x v) => Semigroup (Ctx v x) where
+  (<>) a b = (a ⋆! b)
+
+instance (HasMonCom Identity x v) => Monoid (Ctx v x) where
+  mempty = neutralId
+
+
 instance (Show v, Show x, DictKey v) => Show (Ctx v x) where
   show (Ctx γ) = showWith ",\n" (\x τ -> show x <> " : " <> show τ) γ ""
 

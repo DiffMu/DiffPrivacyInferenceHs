@@ -144,6 +144,8 @@ filterSomeK vs = [v | Just v <- (f <$> vs)]
         Nothing -> Nothing
         Just Refl -> Just v
 
+filterSomeKPair :: forall v k2 x. (Typeable k2) => [(SomeK v,x)] -> [(v k2, x)]
+filterSomeKPair = undefined
 
 data Subs v a where
   -- Subs :: Term v a => (HashMap (SomeK v) (SomeK a)) -> Subs v a
@@ -238,7 +240,7 @@ class (Monad t, Term (VarFam a) a) => MonadTerm (a :: j -> *) t where
   newVar :: (IsKind k) => t (a k)
   addSub :: (IsKind k) => Sub (VarFam a) a k -> t ()
   getSubs :: t (Subs (VarFam a) a)
-  getFixedVars :: (IsKind k) => Proxy a -> t [VarFam a k]
+  getConstraintsBlockingVariable :: (IsKind k) => Proxy a -> VarFam a k -> t ([Symbol]) -- [(VarFam a k,[Symbol])]
 
 class (Monad t, Term (VarFam a) a, MonadTerm a t) => MonadTermDuplication a t where
   duplicateAllConstraints :: [SomeK (Sub (VarFam a) (ListK a))] -> t ()

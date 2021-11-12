@@ -374,9 +374,12 @@ instance DictKey v => DictLike v x (CtxStack v x) where
   getValue k (CtxStack d _) = getValue k d
   getAllKeys (CtxStack d _) = getAllKeys d
   getAllElems (CtxStack d _) = getAllElems d
+  getAllKeyElemPairs (CtxStack d _) = getAllKeyElemPairs d
+  fromKeyElemPairs list = (CtxStack (fromKeyElemPairs list) [])
   deleteValue k (CtxStack d other) = CtxStack (deleteValue k d) other
   emptyDict = CtxStack emptyDict []
   isEmptyDict (CtxStack top others) = isEmptyDict top
+
 instance Normalize t a => Normalize t (CtxStack v a) where
   normalize (CtxStack top other) = CtxStack <$> normalize top <*> normalize other
 
@@ -499,7 +502,7 @@ data MetaCtx = MetaCtx
     _typeSubs :: Subs TVarOf DMTypeOf,
     _constraints :: ConstraintCtx,
     -- cached state
-    _fixedTVars :: [SingSomeK TVarOf]
+    _fixedTVars :: Ctx (SingSomeK TVarOf) [Symbol]
   }
   deriving (Generic)
 
@@ -674,12 +677,21 @@ instance Monad m => MonadTerm DMTypeOf (TCT m) where
     meta.typeVars %= (removeNameBySubstitution σ)
 
     -- remove fixed var
-    meta.fixedTVars %= removeKindedNameBySubstitution σ
+    meta.fixedTVars %= undefined -- removeKindedNameBySubstitutionInHashMap σ
   newVar = TVar <$> newTVar "τ"
-  getFixedVars _ = do
+  getConstraintsBlockingVariable _ v = do
     vars <- use (meta.fixedTVars)
-    let somes = [SomeK v | SingSomeK v <- vars]
-    return (filterSomeK somes)
+    let constrNames = getValue (SingSomeK v) vars
+    case constrNames of
+      Nothing -> pure []
+      Just a -> pure a
+
+  -- getFixedVars _ = do
+  --   vars <- use (meta.fixedTVars)
+  --   let constrNames = getValue (SingSomeK 
+  --   undefined
+    -- let somes = [(SomeK v,x) | (SingSomeK v,x) <- getAllKeyElemPairs vars]
+    -- return (filterSomeKPair somes)
 
 instance Monad m => MonadTerm SensitivityOf (TCT m) where
   type VarFam SensitivityOf = SVarOf
@@ -692,7 +704,7 @@ instance Monad m => MonadTerm SensitivityOf (TCT m) where
     meta.sensSubs .= σs'
     meta.sensVars %= (removeNameBySubstitution σ)
   newVar = coerce <$> svar <$> newSVar "s"
-  getFixedVars _ = return mempty
+  getConstraintsBlockingVariable _ _ = return mempty
 
 instance Monad m => MonadTermDuplication DMTypeOf (TCT m) where
   duplicateAllConstraints subs = do
@@ -758,8 +770,20 @@ recomputeFixedVars :: MonadDMTC t => t ()
 recomputeFixedVars = do
   (Ctx (MonCom constrs)) <- use (meta.constraints.anncontent.topctx)
   let constrs2 = H.toList constrs
-  let constrs3 = [c | (_ , Watched _ c) <- constrs2]
-  meta.fixedTVars %= (\_ -> constrs3 >>= getFixedVarsOfSolvable)
+  let constrs3 = [(c, name) | (name , Watched _ c) <- constrs2]
+
+  let createSingleCtx (c,name) =
+        let vars = getFixedVarsOfSolvable c
+            varsWithSameName = (\v -> (v,[name])) <$> vars
+            ctxWithSameName = fromKeyElemPairs varsWithSameName
+
+        in ctxWithSameName
+
+  let constrCtxs = fmap createSingleCtx constrs3
+  let constrCtx = mconcat constrCtxs
+
+  -- let constrVarPairs = constrs3 >>= (\(name, c) -> getFixedVarsOfSolvable)
+  meta.fixedTVars %= (\_ -> constrCtx)
   return ()
 
 
@@ -769,13 +793,16 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
   type ConstraintOnSolvable (TCT m) = GoodConstraint
   addConstraint (Solvable c) = do
 
+      -- add the constraint to the constraint list
+      name <- meta.constraints %%= (newAnnName "constr" (Watched (NormalForMode []) (Solvable c)))
+
       -- compute the fixed vars of this constraint
       -- and add them to the cached list
       let newFixed = fixedVars @_ @TVarOf c
-      meta.fixedTVars <>= [SingSomeK v | SomeK v <- newFixed]
+      let varsWithSameName = (\(SomeK v) -> (SingSomeK v,[name])) <$> newFixed
+      let ctxWithSameName = fromKeyElemPairs varsWithSameName
 
-      -- add the constraint to the constraint list
-      name <- meta.constraints %%= (newAnnName "constr" (Watched (NormalForMode []) (Solvable c)))
+      meta.fixedTVars <>= ctxWithSameName
 
       -- log this as event
       tcstate.solvingEvents %= (Event_ConstraintCreated name (show c) :)

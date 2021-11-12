@@ -9,6 +9,7 @@ import DiffMu.Abstract.Class.Term
 -- import DiffMu.Abstract.MonadicPolynomial
 
 import qualified Data.Text as T
+import qualified Data.HashMap.Strict as H
 
 ---------------------------------------------------------------------
 -- A simple (non-kinded) context for names
@@ -33,7 +34,17 @@ newName (hint) (NameCtx names ctr) =
 -- A kinded context for names
 
 data SingSomeK (v :: j -> *) where
-  SingSomeK :: (Show (Demote (KindOf k)), SingKind (KindOf k), SingI k, Typeable k) => v k -> SingSomeK v
+  SingSomeK :: (Show (Demote (KindOf k)), SingKind (KindOf k), SingI k, Typeable v, Typeable k) => v k -> SingSomeK v
+
+instance Eq (SingSomeK SymbolOf) where
+  SingSomeK (a) == SingSomeK (b) = case testEquality (typeOf a) (typeOf b) of
+    Nothing -> False
+    Just Refl -> a == b
+
+instance Hashable (SingSomeK SymbolOf) where
+  hashWithSalt s (SingSomeK x) = s `hashWithSalt` x
+
+instance DictKey (SingSomeK SymbolOf)
 
 instance KShow v => Show (SingSomeK v) where
   show (SingSomeK (s :: v k)) = show s <> " : " <> show (demote @k)
@@ -49,7 +60,7 @@ instance Default (KindedNameCtx v) where
 instance KShow v => Show (KindedNameCtx v) where
   show (KindedNameCtx names _) = "[" <> intercalate ", " (show <$> names) <> "]"
 
-newKindedName :: (Show (Demote (KindOf k)), SingKind (KindOf k), SingI k, FromSymbol v, Typeable k) => Text -> KindedNameCtx v -> (v k, KindedNameCtx v)
+newKindedName :: (Show (Demote (KindOf k)), SingKind (KindOf k), SingI k, FromSymbol v, Typeable k, Typeable v) => Text -> KindedNameCtx v -> (v k, KindedNameCtx v)
 newKindedName (hint) (KindedNameCtx names ctr) =
   let name = (fromSymbol (Symbol (hint <> "_" <> T.pack (show ctr))))
   in (name , KindedNameCtx (SingSomeK (name) : names) (ctr +! 1))
@@ -72,6 +83,9 @@ removeKindedNameBySubstitution ((x :: v k) := _) names =
       g (SingSomeK x) = SingSomeK <$> (f x)
       names' = [n | (Just n) <- g <$> names]
   in names'
+
+removeKindedNameBySubstitutionInHashMap :: ((forall j. Eq (v j)), Typeable k) => Sub v a k -> H.HashMap (SingSomeK v) x -> H.HashMap (SingSomeK v) x
+removeKindedNameBySubstitutionInHashMap = undefined
 
 
 removeNameBySubstitution :: ((forall j. Eq (v j)), Typeable k) => Sub v a k -> KindedNameCtx v -> KindedNameCtx v

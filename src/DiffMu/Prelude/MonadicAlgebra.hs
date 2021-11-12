@@ -159,6 +159,17 @@ instance Monad t =>CheckNeutral t Int where
 instance Monad t => SemiringM t Int where
   one = pure 1
   (⋅) a b = pure $ a P.* b
+
+instance Monad t => SemigroupM t [a] where
+  (⋆) a b = return (a <> b)
+
+instance Monad t => MonoidM t [a] where
+  neutral = return (mempty)
+
+instance (Eq a, Monad t) => CheckNeutral t [a] where
+  checkNeutral a = return (a == [])
+
+
   {-
 (?:) :: Monad m => m a -> m [a] -> m [a]
 (?:) x xs = (:) <$> x <⋅> xs

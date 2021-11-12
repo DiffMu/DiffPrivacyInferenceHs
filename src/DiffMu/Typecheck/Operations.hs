@@ -138,35 +138,39 @@ solveBinary op (τ1, τ2) = f op τ1 τ2
 
     f _ _ _                            = return Nothing
 
-makeNonConstType :: (IsT MonadDMTC t) => DMType -> t DMType
-makeNonConstType (Numeric (TVar a)) = do
-  -- first we check whether the var is a fixed variable
+makeNonConstType :: (IsT MonadDMTC t) => Symbol -> DMType -> t DMType
+makeNonConstType myConstrName (Numeric (TVar a)) = do
+  -- first we check whether the var is blocked by some constraints other than myself
   -- if it is, we do nothing
-  fixedVars <- getFixedVars (Proxy @DMTypeOf)
-  case (a `elem` fixedVars) of
-    True -> return (Numeric (TVar a))
+  blockingConstraints <- getConstraintsBlockingVariable (Proxy @DMTypeOf) a
+  let blockingConstraintsWithoutMe = blockingConstraints \\ [myConstrName]
 
-    -- if a' is not fixed, we can make it non-const
-    False -> do a' <- newVar
-                let t = (NonConst a')
-                addSub (a := t)
-                return (Numeric t)
-makeNonConstType (Numeric (NonConst t)) = pure $ Numeric (NonConst t)
-makeNonConstType (Numeric (Const s t)) = pure $ Numeric (Const s t)
-makeNonConstType (Numeric DMData) = pure $ (Numeric DMData) -- TODO: Check, we do nothing with DMData?
-makeNonConstType (DMVec a b c e)  = (DMVec a b c) <$> (makeNonConstType e)
-makeNonConstType (DMMat a b c d e)  = (DMMat a b c d) <$> (makeNonConstType e)
-makeNonConstType (TVar a)  = pure $ (TVar a) -- TODO: Check, we do nothing with TVar?
-makeNonConstType (Deleted) = internalError "A deleted value tried to escape. We catched it when it was about to become NonConst."
-makeNonConstType a = internalError ("makeNonConstType called on " <> show a)
+  case (blockingConstraintsWithoutMe) of
+    -- if a' is not blocked, we can make it non-const
+    [] -> do a' <- newVar
+             let t = (NonConst a')
+             addSub (a := t)
+             return (Numeric t)
 
-makeNonConstTypeOp :: (IsT MonadDMTC t) => DMTypeOp -> t DMTypeOp
-makeNonConstTypeOp (Unary op (τ :@ s) ρ) = do
-  τ' <- makeNonConstType τ
+    -- otherwise we do nothing
+    _ -> return (Numeric (TVar a))
+
+makeNonConstType name (Numeric (NonConst t)) = pure $ Numeric (NonConst t)
+makeNonConstType name (Numeric (Const s t)) = pure $ Numeric (Const s t)
+makeNonConstType name (Numeric DMData) = pure $ (Numeric DMData) -- TODO: Check, we do nothing with DMData?
+makeNonConstType name (DMVec a b c e)  = (DMVec a b c) <$> (makeNonConstType name e)
+makeNonConstType name (DMMat a b c d e)  = (DMMat a b c d) <$> (makeNonConstType name e)
+makeNonConstType name (TVar a)  = pure $ (TVar a) -- TODO: Check, we do nothing with TVar?
+makeNonConstType name (Deleted) = internalError "A deleted value tried to escape. We catched it when it was about to become NonConst."
+makeNonConstType name a = internalError ("makeNonConstType called on " <> show a)
+
+makeNonConstTypeOp :: (IsT MonadDMTC t) => Symbol -> DMTypeOp -> t DMTypeOp
+makeNonConstTypeOp name (Unary op (τ :@ s) ρ) = do
+  τ' <- makeNonConstType name τ
   pure (Unary op (τ' :@ s) ρ)
-makeNonConstTypeOp (Binary op ((τ₁ :@ s₁) , (τ₂ :@ s₂)) ρ) = do
-  τ1' <- makeNonConstType τ₁
-  τ2' <- makeNonConstType τ₂
+makeNonConstTypeOp name (Binary op ((τ₁ :@ s₁) , (τ₂ :@ s₂)) ρ) = do
+  τ1' <- makeNonConstType name τ₁
+  τ2' <- makeNonConstType name τ₂
   pure (Binary op ((τ1' :@ s₁) , (τ2' :@ s₂)) ρ)
 
 ----------------------------------------
@@ -211,7 +215,7 @@ instance Solve MonadDMTC (IsTypeOpResult) DMTypeOp where
   solve_ Dict SolveExact name constr = solveop name constr
 
   -- If we are "losing generality" / "assuming worst case", then we make all operands in the op into `NonConst`s.
-  solve_ Dict SolveAssumeWorst name (IsTypeOpResult op) = makeNonConstTypeOp op >> return ()
+  solve_ Dict SolveAssumeWorst name (IsTypeOpResult op) = makeNonConstTypeOp name op >> return ()
   solve_ Dict _ name (IsTypeOpResult op)                = return ()
 
 
@@ -222,7 +226,6 @@ opSub x y = Op (IsBinary DMOpSub) [x,y]
 opMul x y = Op (IsBinary DMOpMul) [x,y]
 opCeil x = Op (IsUnary DMOpCeil) [x]
 opDiv x y = Op (IsBinary DMOpDiv) [x,y]
-
 
 
 
