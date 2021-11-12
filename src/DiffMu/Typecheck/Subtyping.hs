@@ -186,9 +186,17 @@ subtypingGraph =
     -- Num Kind
     (_,_, _, Just Refl, _, _, _) ->
       \case { IsReflexive IsStructural
-              -> []
+              -> [
+                    SingleEdge $ return (DMData, DMData)
+                 ]
             ; IsReflexive IsLeftStructural
-              -> []
+              -> [
+                   SingleEdge $
+                   do a₀ <- newVar
+                      a₁ <- newVar
+                      a₀ ⊑! a₁
+                      return (NonConst a₀, NonConst a₁)
+                 ]
             ; IsReflexive IsRightStructural
                -> [SingleEdge $
                    do a₀ <- newVar
@@ -200,24 +208,12 @@ subtypingGraph =
                   , SingleEdge $
                     do a <- newVar
                        return (a , DMAny)
-
-                  -- this one was originally `Structural`
-                  -- but cannot be so because of `DMAny`
-                  , SingleEdge $ return (DMData, DMData)
                  ]
             ; NotReflexive
               -> [ SingleEdge $
                    do a₀ <- newVar
                       s₀ <- newVar
                       return (Const s₀ a₀, NonConst a₀)
-
-                 -- this one was originally `LeftStructural`,
-                 -- but cannot be so because of `DMAny`
-                 , SingleEdge $
-                   do a₀ <- newVar
-                      a₁ <- newVar
-                      a₀ ⊑! a₁
-                      return (NonConst a₀, NonConst a₁)
                  ]
             ; _ -> []
             }
@@ -232,28 +228,27 @@ subtypingGraph =
                        return (a , DMAny)
                  ]
             ; IsReflexive IsLeftStructural
-              -> []
+              -> [
+                   SingleEdge $ return (DMReal, DMReal)
+                 ]
             ; NotReflexive
               -> [ SingleEdge $ return (DMInt, DMReal)
-
-                 -- this one was originally `LeftStructural`,
-                 -- but cannot be so because of `DMAny`
-                 , SingleEdge $ return (DMReal, DMReal)
                  ]
             ; _ -> []
             }
 
     -- kind = clip
     (_, _, _, _, _, Just Refl, _) ->
-      \case { IsReflexive IsRightStructural
+      \case { IsReflexive IsStructural
               -> [ SingleEdge $ return (U, U)
                  , SingleEdge $ do
                      a <- newVar
                      b <- newVar
                      a ⊑! b
                      return (Clip a, Clip b)
-
-                 , SingleEdge $
+                 ]
+            ; IsReflexive IsRightStructural
+              -> [ SingleEdge $
                     do a <- newVar
                        return (a , DMAny)
                  ]
@@ -262,12 +257,13 @@ subtypingGraph =
 
     -- kind = norm
     (_, _, _, _, _, _, Just Refl) ->
-      \case { IsReflexive IsRightStructural
+      \case { IsReflexive IsStructural
               -> [ SingleEdge $ return (L1, L1)
                  , SingleEdge $ return (L2, L2)
                  , SingleEdge $ return (LInf, LInf)
-
-                 , SingleEdge $
+                 ]
+            ; IsReflexive IsRightStructural
+              -> [ SingleEdge $
                     do a <- newVar
                        return (a , DMAny)
                  ]
