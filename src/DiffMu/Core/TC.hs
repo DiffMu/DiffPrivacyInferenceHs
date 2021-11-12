@@ -102,6 +102,7 @@ removeVars σs vs = do
 
 instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs Deleted = pure Deleted
+  substitute σs DMAny = pure DMAny
   substitute σs L1 = pure L1
   substitute σs L2 = pure L2
   substitute σs LInf = pure LInf
@@ -133,6 +134,7 @@ instance Substitute SVarOf SensitivityOf (Annotation a) where
 
 instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
   substitute σs Deleted = pure Deleted
+  substitute σs DMAny = pure DMAny
   substitute σs L1 = pure L1
   substitute σs L2 = pure L2
   substitute σs LInf = pure LInf
@@ -200,6 +202,7 @@ instance Typeable a => FreeVars TVarOf (Annotation a) where
   freeVars (PrivacyAnnotation s) = freeVars s
 
 instance Typeable k => FreeVars TVarOf (DMTypeOf k) where
+  freeVars DMAny = []
   freeVars Deleted = []
   freeVars DMInt = []
   freeVars DMReal = []
@@ -370,6 +373,7 @@ instance DictKey v => DictLike v x (CtxStack v x) where
   setValue k v (CtxStack d other) = CtxStack (setValue k v d) other
   getValue k (CtxStack d _) = getValue k d
   getAllKeys (CtxStack d _) = getAllKeys d
+  getAllElems (CtxStack d _) = getAllElems d
   deleteValue k (CtxStack d other) = CtxStack (deleteValue k d) other
   emptyDict = CtxStack emptyDict []
   isEmptyDict (CtxStack top others) = isEmptyDict top
