@@ -510,11 +510,22 @@ checkSen' (Loop niter cs' (xi, xc) body) scope = do
       τcsnf <- newVar
       unify (NoFun τcsnf) τcs -- functions cannot be captured.
 
--- TODO make body non-const?
+{-
+      -- TODO loops with Const captures/output don't work yet.
+      -- the inferred capture type should be the same as the non-const version of the inferred body type
+      -- so we can loop properly by plugging the loop result into the loop in again
+      -- the inferred type for xc must be non-const, as we cannot assume that it will be the same in each
+      -- iteration.
       addConstraint (Solvable (IsNonConst (τb, τbcs)))
-      -- addConstraint (Solvable (MakeNonConst (τbcs)))
-      addConstraint (Solvable (IsLessEqual (τcs, τbcs)))
-      addConstraint (Solvable (IsLoopResult ((sit, scs, sb), sbcs, τit))) -- compute the right scalars once we know if τ_iter is const or not.
+
+      -- also the given capture that we start iteration with should fit into the expected capture
+      addConstraint (Solvable (IsNonConst (τcs, τbcs)))
+-}
+
+      -- the types of body, input captures and captures as used in the body must all be equal
+      -- (except Const-ness, actually. we'll figure that out at some point)
+      unify τb τbcs
+      unify τcs τbcs
 
       return τbcs
 
@@ -600,7 +611,7 @@ checkSen' (ClipM c m) scope = do
 
 
 --------------------
--- TODO
+-- TODO see #107
 checkSen' (ConvertM m) scope = do
    mb <- checkSens m scope -- check the matrix
    done $ do
@@ -620,7 +631,7 @@ checkSen' (ConvertM m) scope = do
 
       -- move clip to the norm position,
       -- and forget about old `nrm`
-      return (NoFun (DMGrads clp clp n (Numeric (NonConst DMReal))))
+      return (NoFun (DMGrads clp (Clip clp) n (Numeric (NonConst DMReal))))
 
 --------------------
 
