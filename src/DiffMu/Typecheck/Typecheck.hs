@@ -617,9 +617,12 @@ checkSen' (ConvertM m) scope = do
       -- set correct matrix type
       unify τb (NoFun (DMGrads nrm (Clip clp) n (Numeric DMData)))
 
+      -- TODO do we have to scale by 2 i think so...see the matrixnorms pdf in julia docs
+      mscale (oneId ⋆! oneId)
+
       -- move clip to the norm position,
       -- and forget about old `nrm`
-      return (NoFun (DMGrads clp U n (Numeric (NonConst DMReal))))
+      return (NoFun (DMGrads clp clp n (Numeric (NonConst DMReal))))
 
 --------------------
 
@@ -1051,6 +1054,8 @@ checkPri' (Gauss rp εp δp f) scope =
          v_δ :: Sensitivity <- newVar
          v_r :: Sensitivity <- newVar
 
+         -- TODO add constraints for eps in (0,1), del in (0,1)
+
          -- restrict interesting variables in f's context to v_r
          let mf = setBody df (v_ε, v_δ) v_r
 
@@ -1082,6 +1087,7 @@ checkPri' (Loop niter cs' (xi, xc) body) scope =
 
           δn :: Sensitivity <- newVar -- we can choose this freely!
           addConstraint (Solvable (IsLessEqual (δn, oneId :: Sensitivity))) -- otherwise we get a negative ε...
+          -- addConstraint (Solvable (IsLess (zeroId :: Sensitivity, δn))) -- otherwise we get an infinite ε...
 
           -- compute the new privacy for the xs according to the advanced composition theorem
           let two = oneId ⋆! oneId
@@ -1135,6 +1141,12 @@ checkPri' (Loop niter cs' (xi, xc) body) scope =
 
       done $ do
          -- scale and sum contexts
+         -- τit = type of the iterator (i.e. the term describung the number of iterations)
+         -- τcs = type of the capture input tuple
+         -- τb = inferred type of the body
+         -- n = number of iterations as assumed in the loop body
+         -- τbit = type of the iterator variable xi inferred in the body
+         -- τbcs = type of the capture variable xc inferred in the body
          (τit, τcs, (τb, n, τbit, τbcs)) <- msum3Tup (cniter', mcaps', cbody')
 
          unify τit (NoFun (Numeric (Const n DMInt))) -- number of iterations must be constant integer
@@ -1143,14 +1155,24 @@ checkPri' (Loop niter cs' (xi, xc) body) scope =
          τcsnf <- newVar
          unify (NoFun τcsnf) τcs -- functions cannot be captured.
 
-   -- TODO make body non-const?
-         τbnc <- newVar
-         addConstraint (Solvable (IsNonConst (τb, τbnc)))
-         -- addConstraint (Solvable (MakeNonConst (τbcs)))
-         unify τbnc τbcs
-         addConstraint (Solvable (IsLessEqual (τcs, τbcs)))
+{-
+         -- TODO loops with Const captures/output don't work yet.
+         -- the inferred capture type should be the same as the non-const version of the inferred body type
+         -- so we can loop properly by plugging the loop result into the loop in again
+         -- the inferred type for xc must be non-const, as we cannot assume that it will be the same in each
+         -- iteration.
+         addConstraint (Solvable (IsNonConst (τb, τbcs)))
 
-         return τbnc
+         -- also the given capture that we start iteration with should fit into the expected capture
+         addConstraint (Solvable (IsNonConst (τcs, τbcs)))
+-}
+
+         -- the types of body, input captures and captures as used in the body must all be equal
+         -- (except Const-ness, actually. we'll figure that out at some point)
+         unify τb τbcs
+         unify τcs τbcs
+
+         return τbcs
 
 checkPri' (Reorder σ t) scope = do
   mτ <- checkPriv t scope
