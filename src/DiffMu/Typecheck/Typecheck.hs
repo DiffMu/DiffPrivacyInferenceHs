@@ -1063,7 +1063,11 @@ checkPri' (Gauss rp εp δp f) scope =
          v_δ :: Sensitivity <- newVar
          v_r :: Sensitivity <- newVar
 
-         -- TODO add constraints for eps in (0,1), del in (0,1)
+         -- parameters must be in (0,1) for gauss do be DP
+         addConstraint (Solvable (IsLess (v_ε, oneId :: Sensitivity)))
+         addConstraint (Solvable (IsLess (v_δ, oneId :: Sensitivity)))
+         addConstraint (Solvable (IsLess (zeroId :: Sensitivity, v_ε)))
+         addConstraint (Solvable (IsLess (zeroId :: Sensitivity, v_δ)))
 
          -- restrict interesting variables in f's context to v_r
          let mf = setBody df (v_ε, v_δ) v_r
@@ -1096,7 +1100,7 @@ checkPri' (Loop niter cs' (xi, xc) body) scope =
 
           δn :: Sensitivity <- newVar -- we can choose this freely!
           addConstraint (Solvable (IsLessEqual (δn, oneId :: Sensitivity))) -- otherwise we get a negative ε...
-          -- addConstraint (Solvable (IsLess (zeroId :: Sensitivity, δn))) -- otherwise we get an infinite ε...
+          addConstraint (Solvable (IsLess (zeroId :: Sensitivity, δn))) -- otherwise we get an infinite ε...
 
           -- compute the new privacy for the xs according to the advanced composition theorem
           let two = oneId ⋆! oneId
