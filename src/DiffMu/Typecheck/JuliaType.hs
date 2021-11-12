@@ -80,68 +80,46 @@ foreign import ccall "dynamic" call_StringStringBool :: FunPtr (CString -> CStri
 createDMTypeBaseNum :: MonadDMTC t => JuliaType -> t (DMTypeOf BaseNumKind)
 createDMTypeBaseNum (JTInt) = pure DMInt
 createDMTypeBaseNum (JTReal)  = pure DMReal
-createDMTypeBaseNum (t) = do
-    v <- newVar
-    return v
+createDMTypeBaseNum (t) = pure DMAny
 
 createDMTypeNum :: MonadDMTC t => JuliaType -> t (DMTypeOf NumKind)
 createDMTypeNum (JTInt) = pure (NonConst DMInt)
 createDMTypeNum (JTReal)  = pure (NonConst DMReal)
-createDMTypeNum (t) = do
-    v <- newVar
-    return v
+createDMTypeNum (t) = pure DMAny
 
 
-createDMTypeType :: MonadDMTC t => JuliaType -> t DMType
-createDMTypeType (JTInt) = do
+createDMType :: MonadDMTC t => JuliaType -> t DMType
+createDMType (JTInt) = do
   return (Numeric (NonConst DMInt))
-createDMTypeType (JTReal) = do
+createDMType (JTReal) = do
   return (Numeric (NonConst DMReal))
-createDMTypeType (JTTuple ts) = do
-  dts <- mapM createDMTypeType ts
+createDMType (JTTuple ts) = do
+  dts <- mapM createDMType ts
   return (DMTup (dts))
-createDMTypeType (JTVector t) = do
+createDMType (JTVector t) = do
   dt <- createDMTypeNum t
   nrm <- newVar
   clp <- newVar
   n <- newVar
   return (DMVec nrm clp n (Numeric (dt)))
-createDMTypeType (JTMatrix t) = do
+createDMType (JTMatrix t) = do
   dt <- createDMTypeNum t
   nrm <- newVar
   clp <- newVar
   n <- newVar
   m <- newVar
   return (DMMat nrm clp m n (Numeric (dt)))
-createDMTypeType (JTModel) = do
-  dt <- createDMTypeNum JTAny
+createDMType (JTModel) = do
   n <- newVar
-  return (DMParams n (Numeric (dt)))
-createDMTypeType (JTGrads) = do
-  dt <- createDMTypeNum JTAny
+  return (DMParams n (Numeric (DMAny)))
+createDMType (JTGrads) = do
   nrm <- newVar
   clp <- newVar
   n <- newVar
-  return (DMGrads nrm clp n (Numeric (dt)))
-createDMTypeType JTAny = do
-  v <- newTVar "any"
-  return (TVar v)
-createDMTypeType (t)  = throwError (TypeMismatchError $ "expected " <> show t <> " to not be a function.")
+  return (DMGrads nrm clp n (Numeric (DMAny)))
+createDMType JTAny = return DMAny
+createDMType (t)  = throwError (TypeMismatchError $ "expected " <> show t <> " to not be a function.")
 
-
--- Maps julia types to DMTypes (of main kind)
--- (`JTAny` is turned into a new type variable.)
-createDMType :: MonadDMTC t => JuliaType -> t (DMTypeOf MainKind)
- -- NOTE: defaulting to non-const might or might not be what we want to do here.
-createDMType (JTFunction) = do
-  v <- newTVar "any"
-  return (TVar v) -- TODO can we say it's a function?
-createDMType (JTAny) = do
-  v <- newTVar "any"
-  return (TVar v)
-createDMType (t) = do
-  tt <- createDMTypeType t
-  return (NoFun tt)
 
 -- Adds a subtype constraint corresponding to the given julia type.
 -- But does nothing if the julia type cannot be mapped to a dmtype, e.g. if it is `Any`
@@ -150,7 +128,7 @@ addJuliaSubtypeConstraint τ JTAny = pure ()
 addJuliaSubtypeConstraint τ JTFunction = pure ()
 addJuliaSubtypeConstraint τ jt = do
   ι <- createDMType jt
-  τ ≤! ι
+  τ ≤! (NoFun ι)
   pure ()
 
 

@@ -250,6 +250,7 @@ instance Show (Annotation a) where
 -- Types are pretty printed as follows.
 instance Show (DMTypeOf k) where
   show Deleted = "Deleted"
+  show DMAny = "DMAny"
   show DMInt = "Int"
   show DMReal = "Real"
   show DMData = "Data"

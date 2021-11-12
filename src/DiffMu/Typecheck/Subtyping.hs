@@ -116,22 +116,30 @@ subtypingGraph =
                      )
                  ]
             ; IsReflexive NotStructural -> [ SingleEdge $
-                   do nrm <- newVar
-                      clp <- newVar
+                   do clp₀ <- newVar
+                      nrm₀ <- newVar
+                      nrm₁ <- newVar
+                      clp₁ <- newVar
                       n <- newVar
                       m <- newVar
                       a₀ <- newVar
                       a₁ <- newVar
                       a₀ ⊑! a₁
-                      return ((DMMat nrm clp n m a₀), (DMMat nrm clp n m a₁))
+                      nrm₀ ⊑! nrm₁
+                      clp₀ ⊑! clp₁
+                      return ((DMMat nrm₀ clp₀ n m a₀), (DMMat nrm₁ clp₁ n m a₁))
                  , SingleEdge $
-                   do nrm <- newVar
-                      clp <- newVar
+                   do clp₀ <- newVar
+                      nrm₀ <- newVar
+                      nrm₁ <- newVar
+                      clp₁ <- newVar
                       n <- newVar
                       a₀ <- newVar
                       a₁ <- newVar
                       a₀ ⊑! a₁
-                      return ((DMVec nrm clp n a₀), (DMVec nrm clp n a₁))
+                      nrm₀ ⊑! nrm₁
+                      clp₀ ⊑! clp₁
+                      return ((DMVec nrm₀ clp₀ n a₀), (DMVec nrm₁ clp₁ n a₁))
                  , SingleEdge $
                    do m <- newVar
                       a₀ <- newVar
@@ -139,13 +147,17 @@ subtypingGraph =
                       a₀ ⊑! a₁
                       return ((DMParams m a₀), (DMParams m a₁)) -- TODO maybe we need conv rule for params?
                  , SingleEdge $
-                   do nrm <- newVar
-                      clp <- newVar
+                   do nrm₀ <- newVar
+                      clp₀ <- newVar
+                      nrm₁ <- newVar
+                      clp₁ <- newVar
                       m <- newVar
                       a₀ <- newVar
                       a₁ <- newVar
                       a₀ ⊑! a₁
-                      return ((DMGrads nrm clp m a₀), (DMGrads nrm clp m a₁))
+                      nrm₀ ⊑! nrm₁
+                      clp₀ ⊑! clp₁
+                      return ((DMGrads nrm₀ clp₀ m a₀), (DMGrads nrm₁ clp₁ m a₁))
                       {-
                       {-
                  , SingleEdge $ -- this is the conv rule made implicit, for converting DMData to DMReal
