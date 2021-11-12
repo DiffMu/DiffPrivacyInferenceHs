@@ -150,6 +150,12 @@ type DMNumType = DMTypeOf NumKind
 data DMTypeOf (k :: DMKind) where
   Deleted :: DMTypeOf k
 
+  -- a "virtual" type of which everything is a subtype
+  -- we need this in places where we require stuff to
+  -- be subtype of some julia type, and do not need
+  -- additional information about possible refinements
+  DMAny :: DMTypeOf k
+
   -- the base numeric constructors
   DMInt    :: DMTypeOf BaseNumKind
   DMReal   :: DMTypeOf BaseNumKind
@@ -209,6 +215,7 @@ instance Hashable (DMTypeOf k) where
   hashWithSalt s (L2) = s +! 5
   hashWithSalt s (LInf) = s +! 6
   hashWithSalt s (U) = s +! 7
+  hashWithSalt s (DMAny) = s +! 8
   hashWithSalt s (Const n t) = s `hashWithSalt` n `hashWithSalt` t
   hashWithSalt s (NonConst t) = s `hashWithSalt` t
   hashWithSalt s (Numeric t) = s `hashWithSalt` t
