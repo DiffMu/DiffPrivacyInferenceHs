@@ -230,18 +230,24 @@ instance Solve MonadDMTC IsEqual (DMTypeOf k, DMTypeOf k) where
 instance Solve MonadDMTC IsLessEqual (Sensitivity, Sensitivity) where
   solve_ Dict _ name (IsLessEqual (s1, s2)) = solveLessEqualSensitivity s1 s2
     where
+      getVal :: Sensitivity -> Maybe SymVal
+      getVal a@(SingleKinded (LinCom (MonCom as))) = case H.toList as of
+         [(MonCom aterm, av)] -> case H.toList aterm of
+                                      [] -> (Just av)
+                                      _ -> Nothing
+         [] -> (Just zeroId)
+         _ -> Nothing
       solveLessEqualSensitivity :: IsT MonadDMTC t => Sensitivity -> Sensitivity -> t ()
-      solveLessEqualSensitivity a@(SingleKinded (LinCom (MonCom as))) b@(SingleKinded (LinCom (MonCom bs))) = case (H.toList as, H.toList bs) of
-        ([(MonCom aterm,av)],[(MonCom bterm, bv)]) -> case (H.toList aterm, H.toList bterm) of
-          -- a has no free variables, and is infinity
-          ([],_) | av == Infty -> b ==! constCoeff Infty >> dischargeConstraint name
-
-          -- both a and b do not have any free variables
-          ([],[]) -> case (av <= bv) of
-                       True -> dischargeConstraint name
-                       False -> failConstraint name
-          _ -> return ()
-        _ -> return()
+      solveLessEqualSensitivity a b = case getVal a of
+         Just av -> case getVal b of
+                         Just bv -> case av == Infty of
+                                         True -> b ==! constCoeff Infty >> dischargeConstraint name
+                                         False -> case (av <= bv) of
+                                                       True -> dischargeConstraint name
+                                                       False -> failConstraint name
+                         Nothing -> return ()
+         Nothing -> return ()
+         
 
 -------------------------------------------------------------------
 -- Monadic monoid structure on dmtypes
