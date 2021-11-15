@@ -205,9 +205,9 @@ subtypingGraph =
                       s₀ <- newVar
                       return (Const s₀ a₀, Const s₀ a₁)
 
-                  , SingleEdge $
-                    do a <- newVar
-                       return (a , DMAny)
+                  -- , SingleEdge $
+                  --   do a <- newVar
+                  --      return (a , DMAny)
                  ]
             ; NotReflexive
               -> [ SingleEdge $
@@ -223,9 +223,9 @@ subtypingGraph =
       \case { IsReflexive IsRightStructural
               -> [ SingleEdge $ return (DMInt, DMInt)
 
-                 , SingleEdge $
-                    do a <- newVar
-                       return (a , DMAny)
+                 -- , SingleEdge $
+                 --    do a <- newVar
+                 --       return (a , DMAny)
                  ]
             ; IsReflexive IsLeftStructural
               -> [
@@ -247,11 +247,12 @@ subtypingGraph =
                      a ⊑! b
                      return (Clip a, Clip b)
                  ]
-            ; IsReflexive IsRightStructural
-              -> [ SingleEdge $
-                    do a <- newVar
-                       return (a , DMAny)
-                 ]
+            -- ; IsReflexive IsRightStructural
+            --   -> [
+              -- SingleEdge $
+              --       do a <- newVar
+              --          return (a , DMAny)
+              --    ]
             ; _ -> []
             }
 
@@ -262,11 +263,11 @@ subtypingGraph =
                  , SingleEdge $ return (L2, L2)
                  , SingleEdge $ return (LInf, LInf)
                  ]
-            ; IsReflexive IsRightStructural
-              -> [ SingleEdge $
-                    do a <- newVar
-                       return (a , DMAny)
-                 ]
+            -- ; IsReflexive IsRightStructural
+              -- -> [ SingleEdge $
+              --       do a <- newVar
+              --          return (a , DMAny)
+              --    ]
             ; _ -> []
             }
 
@@ -301,6 +302,7 @@ convertSubtypingToSupremum name _                   = pure ()
 -- We return True if we could do something about the constraint
 --    return False if nothing could be done
 solveSubtyping :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => Symbol -> (DMTypeOf k, DMTypeOf k) -> t ()
+solveSubtyping name (_, DMAny) = dischargeConstraint name
 solveSubtyping name path = withLogLocation "Subtyping" $ do
 
   -- Here we define which errors should be caught while doing our hypothetical computation.
