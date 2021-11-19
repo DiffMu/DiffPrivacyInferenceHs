@@ -656,7 +656,7 @@ checkSen' (Transpose m) scope = do
 
 checkSen' (Index m i j) scope = do
 
-      -- check indicex and set their sensitivity to infinity
+      -- check indices and set their sensitivity to infinity
       di <- checkSens i scope
       dj <- checkSens j scope
       let dx = do
@@ -683,9 +683,34 @@ checkSen' (Index m i j) scope = do
 
          return (NoFun (Numeric τ))
 
+checkSen' (VIndex v i) scope = do
+
+      -- check index and set the sensitivity to infinity
+      di <- checkSens i scope
+      let dx = do
+                   _ <- di
+                   mscale inftyS
+                   return ()
+
+      dv <- checkSens v scope -- check the vector
+
+      done $ do
+         (τv, _) <- msumTup (dv, dx)
+
+         -- variables for element type, norm and clip parameters and dimension
+         τ <- newVar
+         nrm <- newVar
+         clp <- newVar
+         n <- newVar
+
+         -- set vector type
+         unify τv (NoFun (DMVec nrm clp n (Numeric τ)))
+
+         -- we don't restrict vector dimension or index size, but leave that to the runtime errors...
+
+         return (NoFun (Numeric τ))
 
 checkSen' (Row m i) scope = do
-
       -- check index and set their sensitivity to infinity
       di <- checkSens i scope
       let dx = do
@@ -714,7 +739,7 @@ checkSen' (Row m i) scope = do
 
 
 checkSen' (SubGrad ps gs) scope = do
-      -- check indicex and set their sensitivity to infinity
+      -- check model and gradient
       dps <- checkSens ps scope
       dgs <- checkSens gs scope
 

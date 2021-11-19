@@ -93,7 +93,11 @@ pJRef name refs = case refs of
                                   t2 <- pSingle i2
                                   referee <- pSingle name
                                   return (Index referee t1 t2)
-                       _ -> parseError ("Only double indexing to matrix elements supported, but you gave " <> show refs)
+                       [i] -> do -- single indices are only allowed for vectors
+                                  t <- pSingle i
+                                  referee <- pSingle name
+                                  return (VIndex referee t)
+                       _ -> parseError ("Only double indexing to matrix elements and single indexing to vector entries supported, but you gave " <> show refs)
 
 pArg arg = case arg of
                      JESymbol s -> return ((UserTeVar s) :- JTAny)

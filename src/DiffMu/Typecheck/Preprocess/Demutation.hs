@@ -703,6 +703,10 @@ elaborateMut scope (Index t1 t2 t3) = do
   (newT2, newT2Type) <- elaborateNonmut scope t2
   (newT3, newT3Type) <- elaborateNonmut scope t3
   return (Index newT1 newT2 newT3 , Pure UserValue)
+elaborateMut scope (VIndex t1 t2) = do
+  (newT1, newT1Type) <- elaborateNonmut scope t1
+  (newT2, newT2Type) <- elaborateNonmut scope t2
+  return (VIndex newT1 newT2 , Pure UserValue)
 elaborateMut scope (Row t1 t2) = do
   (newT1, newT1Type) <- elaborateNonmut scope t1
   (newT2, newT2Type) <- elaborateNonmut scope t2

@@ -645,8 +645,9 @@ data PreDMTerm (t :: * -> *) =
   | Transpose (PreDMTerm t)
   | Size (PreDMTerm t) -- matrix dimensions, returns a tuple of two numbers
   | Length (PreDMTerm t) -- vector dimension, returns a number
-  | Index (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
-  | Row (PreDMTerm t) (PreDMTerm t)
+  | Index (PreDMTerm t) (PreDMTerm t) (PreDMTerm t) -- matrix index
+  | VIndex (PreDMTerm t) (PreDMTerm t) -- vector index
+  | Row (PreDMTerm t) (PreDMTerm t) -- matrix row
   | ClipM Clip (PreDMTerm t)
   -- Loop (DMTerm : "Number of iterations") ([TeVar] : "Captured variables") (TeVar : "name of iteration var", TeVar : "name of capture variable") (DMTerm : "body")
   | Loop (PreDMTerm t) [TeVar] (TeVar, TeVar) (PreDMTerm t)
@@ -668,7 +669,7 @@ pattern LLet a b c = TLetBase LoopLet a b c
 
 {-# COMPLETE Extra, Ret, Sng, Var, Rnd, Arg, Op, Phi, Lam, LamStar, BBLet, BBApply,
  Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, LLet, Gauss, ConvertM, MCreate, Transpose,
- Size, Length, Index, Row, ClipM, Loop, SubGrad, ScaleGrad, Reorder, TProject, LastTerm #-}
+ Size, Length, Index, VIndex, Row, ClipM, Loop, SubGrad, ScaleGrad, Reorder, TProject, LastTerm #-}
 
 
 deriving instance (forall a. Show a => Show (t a)) => Show (PreDMTerm t)
@@ -787,6 +788,7 @@ recDMTermM f h (Transpose a)      = Transpose <$> (f a)
 recDMTermM f h (Size a)           = Size <$> (f a)
 recDMTermM f h (Length a)         = Length <$> (f a)
 recDMTermM f h (Index a b c)      = Index <$> (f a) <*> (f b) <*> (f c)
+recDMTermM f h (VIndex a b)      = VIndex <$> (f a) <*> (f b)
 recDMTermM f h (Row a b)          = Row <$> (f a) <*> (f b)
 recDMTermM f h (ClipM c a)        = ClipM c <$> (f a)
 recDMTermM f h (Loop a b x d )    = Loop <$> (f a) <*> pure b <*> pure x <*> (f d)
@@ -860,6 +862,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (Size a)           = "Size (" <> (showPretty a) <> ")"
   showPretty (Length a)         = "Length (" <> (showPretty a) <> ")"
   showPretty (Index a b c)      = "Index (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> (showPretty c) <> ")"
+  showPretty (VIndex a b)      = "VIndex (" <> (showPretty a) <> ", " <> (showPretty b)  <> ")"
   showPretty (Row a b)          = "Row (" <> (showPretty a) <> ", " <> (showPretty b) <> ")"
   showPretty (ClipM c a)        = "ClipM (" <> show c <> ", " <> (showPretty a) <> ")"
   showPretty (SubGrad a b)      = "SubGrad (" <> (showPretty a) <> ", " <> (showPretty b) <>  ")"
