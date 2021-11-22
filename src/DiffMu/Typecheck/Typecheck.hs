@@ -939,7 +939,7 @@ checkPri' (SBind (x :- dτ) term body) scope = do
    mbody <- done $ do
                    τ <- dbody
                    -- discard x from the context, never mind it's inferred annotation
-                   WithRelev _ (τx :@ _) <- removeVarMaybe @SensitivityK x
+                   WithRelev _ (τx :@ _) <- removeVarMaybe @PrivacyK x
                    return (τ, τx)
 
    -- check term with old scope
