@@ -68,8 +68,8 @@ instance Substitute TVarOf DMTypeOf Sensitivity where
 
 -- instance (Substitute v a x, Substitute v a DMType) => Substitute v a (WithRelev x) where
   -- substitute σs (WithRelev i x) = WithRelev i <$> substitute σs x
-instance (Typeable a, Typeable v, Substitute v a DMType) => Substitute v a (WithRelev x) where
-  substitute σs (WithRelev i x) = undefined
+instance (Typeable a, Typeable v, Substitute v a DMMain, Substitute v a (Annotation x)) => Substitute v a (WithRelev x) where
+  substitute σs (WithRelev i x) = WithRelev i <$> (substitute σs x)
 
 --instance Substitute TVarOf DMTypeOf Privacy where
 --  substitute σs η = pure η
@@ -677,7 +677,7 @@ instance Monad m => MonadTerm DMTypeOf (TCT m) where
     meta.typeVars %= (removeNameBySubstitution σ)
 
     -- remove fixed var
-    meta.fixedTVars %= undefined -- removeKindedNameBySubstitutionInHashMap σ
+    meta.fixedTVars %= deleteValue (SingSomeK (fstSub σ))
   newVar = TVar <$> newTVar "τ"
   getConstraintsBlockingVariable _ v = do
     vars <- use (meta.fixedTVars)

@@ -84,8 +84,6 @@ removeKindedNameBySubstitution ((x :: v k) := _) names =
       names' = [n | (Just n) <- g <$> names]
   in names'
 
-removeKindedNameBySubstitutionInHashMap :: ((forall j. Eq (v j)), Typeable k) => Sub v a k -> H.HashMap (SingSomeK v) x -> H.HashMap (SingSomeK v) x
-removeKindedNameBySubstitutionInHashMap = undefined
 
 
 removeNameBySubstitution :: ((forall j. Eq (v j)), Typeable k) => Sub v a k -> KindedNameCtx v -> KindedNameCtx v

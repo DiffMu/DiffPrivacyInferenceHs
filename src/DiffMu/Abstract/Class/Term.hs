@@ -11,6 +11,8 @@ import Debug.Trace
 data Sub x a k = (:=) (x k) (a k)
 data Sub' x a k j = (:=~) (x k) (a j)
 
+fstSub (x := _) = x
+
 instance (KShow x, KShow a) => Show (Sub x a k) where
   show (x := a) = show x <> " := " <> show a
 
