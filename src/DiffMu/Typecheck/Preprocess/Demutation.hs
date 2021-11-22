@@ -178,7 +178,7 @@ elaborateMut scope (Rnd jt) = pure (Rnd jt , Pure UserValue)
 elaborateMut scope (Var (x :- j)) = do
   let τ = getValueMaybe x scope
   case τ of
-    Nothing -> throwError (VariableNotInScope x)
+    Nothing -> logForce ("checking Var term, scope: " <> show scope) >> throwError (VariableNotInScope x)
     Just τ  -> return (Var (x :- j), τ)
 
 elaborateMut scope (BBLet name args tail) = do
@@ -866,7 +866,7 @@ elaborateMutList f scope mutargs' = do
             -- get the type of this var from the scope
             -- this one needs to be a single arg
             case getValue x scope of
-              Nothing -> throwError (VariableNotInScope x)
+              Nothing -> logForce ("The scope is" <> show scope) >> throwError (VariableNotInScope x)
               Just (Pure (SingleArg y)) | x == y -> do
                 markMutated y
                 return (Var (Just x :- a) , Just (x, NotLocalMutation))
@@ -940,7 +940,7 @@ preprocessLoopBody scope iter (SLetBase ltype (v :- jt) term body) = do
   case v of
     Just v -> case getValue v scope of
                 Just _  -> tell [v] >> return (Extra (MutLet ltype (Extra (Modify (Just v :- jt) term')) (body')))
-                Nothing -> return (SLetBase ltype (Nothing :- jt) term' body')
+                Nothing -> return (SLetBase ltype (Just v :- jt) term' body')
 
     Nothing -> return (SLetBase ltype (v :- jt) term' body')
 
