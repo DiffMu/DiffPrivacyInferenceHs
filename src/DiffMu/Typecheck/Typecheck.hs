@@ -118,7 +118,7 @@ checkSen' (Op op args) scope = do
 -- those get sensitivity 1, all other variables are var terms
 checkSen' (Arg x jτ i) scope = done $ do
                                          τs <- newVar
-                                         logForce $ "checking arg:" <> show (x :- jτ) <> ", dmtype is " <> show τs
+                                         logForce $ "checking arg:" <> show (Just x :- jτ) <> ", dmtype is " <> show τs
                                          -- the inferred type must be a subtype of the user annotation, if given.
                                          addJuliaSubtypeConstraint τs jτ
 
@@ -127,7 +127,7 @@ checkSen' (Arg x jτ i) scope = done $ do
                                          return τs
 
 checkSen' (Var (x :- dτ)) scope =  -- get the term that corresponds to this variable from the scope dict
-   let delτ = getValue x scope
+   let delτ = getValueMaybe x scope
    in case delτ of
      Nothing -> done $ throwError (VariableNotInScope x)
      Just delτ -> do
@@ -145,7 +145,9 @@ checkSen' (Lam xτs body) scope =
   later $ \scope -> do
     -- put a special term to mark x as a function argument. those get special treatment
     -- because we're interested in their sensitivity
-    let addArgs s = foldl (\sc -> (\(x :- τ) -> setValue x (checkSens (Arg x τ IsRelevant) s) sc)) s xτs
+    let f s sc (Just x :- τ) = setValue x (checkSens (Arg x τ IsRelevant) s) sc
+        f s sc (Nothing :- τ) = sc
+    let addArgs s = foldl (f s) s xτs -- (\sc -> (\(x :- τ) -> setValue x (checkSens (Arg x τ IsRelevant) s) sc))
     let scope' = addArgs scope
 
     -- check the body in the modified scope
@@ -172,7 +174,10 @@ checkSen' (LamStar xτs body) scope =
   later $ \scope -> do
     -- put a special term to mark x as a function argument. those get special treatment
     -- because we're interested in their sensitivity
-    let addArgs s = foldl (\sc -> (\(x :- (τ, rel)) -> setValue x (checkSens (Arg x τ rel) s) sc)) s xτs
+    let f s sc (Just x :- (τ , rel)) = setValue x (checkSens (Arg x τ rel) s) sc
+        f s sc (Nothing :- _) = sc
+    let addArgs s = foldl (f s) s xτs
+-- (\sc -> (\(x :- (τ, rel)) -> setValue x (checkSens (Arg x τ rel) s) sc))
     let scope' = addArgs scope
 
     -- check the body in the modified scope
@@ -215,7 +220,7 @@ checkSen' (LamStar xτs body) scope =
 checkSen' (SLet (x :- dτ) term body) scope = do
 
    -- put the computation to check the term into the scope
-   let scope' = setValue x (checkSens term scope) scope
+   let scope' = setValueMaybe x (checkSens term scope) scope
 
    -- check body with that new scope
    result <- checkSens body scope'
@@ -414,7 +419,8 @@ checkSen' (TLet xs term body) original_scope = do
 
   -- add all variables bound in the tuple let as args-checking-commands to the scope
   -- TODO: do we need to make sure that we have unique names here?
-  let addarg scope (x :- τ) = setValue x (checkSens (Arg x τ NotRelevant) original_scope) scope
+  let addarg scope (Just x :- τ) = setValue x (checkSens (Arg x τ NotRelevant) original_scope) scope
+      addarg scope (Nothing :- τ) = scope
   let scope_with_args = foldl addarg original_scope xs
 
   -- check the body in the scope with the new args
@@ -424,7 +430,7 @@ checkSen' (TLet xs term body) original_scope = do
   -- and sensitivities
   let cbody' = do
         τ <- cbody
-        xs_types_sens <- mapM (removeVar @SensitivityK) [x | (x :- _) <- xs]
+        xs_types_sens <- mapM (removeVar @SensitivityK) [x | (Just x :- _) <- xs]
         let xs_types_sens' = [ (ty,sens) | WithRelev _ (ty :@ SensitivityAnnotation sens) <- xs_types_sens ]
         return (τ,xs_types_sens')
 
@@ -473,13 +479,15 @@ checkSen' (Loop niter cs' (xi, xc) body) scope = do
    let scope_vars = getAllKeys scope
 
    -- build the tup of variables
-   let cs = Tup ((\a -> Var (a :- JTAny)) <$> cs')
+   let cs = Tup ((\a -> Var (Just a :- JTAny)) <$> cs')
    -- check it
    ccs <- checkSens cs scope
 
    -- add iteration and capture variables as args-checking-commands to the scope
    -- TODO: do we need to make sure that we have unique names here?
-   let scope' = setValue xi (checkSens (Arg xi JTInt NotRelevant) scope) scope
+   let scope' = case xi of
+                  Just xi -> setValue xi (checkSens (Arg xi JTInt NotRelevant) scope) scope
+                  Nothing -> scope
    let scope'' = setValue xc (checkSens (Arg xc JTAny IsRelevant) scope) scope'
 
    -- check body term in that new scope
@@ -489,7 +497,7 @@ checkSen' (Loop niter cs' (xi, xc) body) scope = do
    -- and sensitivities
    let cbody' = do
          τ <- cbody
-         WithRelev _ (τi :@ si) <- removeVar @SensitivityK xi
+         WithRelev _ (τi :@ si) <- removeVarMaybe @SensitivityK xi
          WithRelev _ (τc :@ sc) <- removeVar @SensitivityK xc
          return (τ, (τi, si), (τc, sc))
 
@@ -902,7 +910,7 @@ checkPri' (Apply f args) scope =
 checkPri' (SLet (x :- dτ) term body) scope = do
 
    -- put the computation to check the term into the scope
-   let scope' = setValue x (checkSens term scope) scope
+   let scope' = setValueMaybe x (checkSens term scope) scope
 
    -- check body with that new scope
    result <- checkPriv body scope'
@@ -922,14 +930,16 @@ checkPri' (SBind (x :- dτ) term body) scope = do
    -- as it does not matter what sensitivity/privacy x has in the body, we put an Arg term in the scope
    -- and later discard its annotation. we use checkSens because there are no Vars in privacy terms so
    -- x will only ever be used in a sensitivity term.
-   let scope' = setValue x (checkSens (Arg x dτ NotRelevant) scope) scope
+   let scope' = case x of
+                  Just x -> setValue x (checkSens (Arg x dτ NotRelevant) scope) scope
+                  Nothing -> scope
 
    -- check body with that new scope
    dbody <- checkPriv body scope'
    mbody <- done $ do
                    τ <- dbody
                    -- discard x from the context, never mind it's inferred annotation
-                   WithRelev _ (τx :@ _) <- removeVar @PrivacyK x
+                   WithRelev _ (τx :@ _) <- removeVarMaybe @SensitivityK x
                    return (τ, τx)
 
    -- check term with old scope
@@ -984,7 +994,8 @@ checkPri' curterm@(TLet xs term body) original_scope = do
   -- put the computations to check the terms into the scope
   -- (in privacy terms we use projections here, making this a "transparent" tlet)
 
-  let addarg scope (x :- _, i) = setValue x (checkSens (TProject i term) original_scope) scope
+  let addarg scope (Just x :- _, i) = setValue x (checkSens (TProject i term) original_scope) scope
+      addarg scope (Nothing :- _, i) = scope
   let scope_with_args = foldl addarg original_scope (xs `zip` [0..])
 
   -- -- check body with that new scope
@@ -1007,8 +1018,8 @@ checkPri' curterm@(TBind xs term body) original_scope = do
   --  tlet (xs...) = a
   --  body
   -- ```
-  checkPri' (SBind (a :- JTAny) term
-                   (TLet xs (Var (a :- JTAny))
+  checkPri' (SBind (Just a :- JTAny) term
+                   (TLet xs (Var (Just a :- JTAny))
                          body))
             original_scope
 
@@ -1144,7 +1155,7 @@ checkPri' (Loop niter cs' (xi, xc) body) scope =
                    return τ
 
       -- build the tup of variables
-      let cs = Tup ((\a -> Var (a :- JTAny)) <$> cs')
+      let cs = Tup ((\a -> Var (Just a :- JTAny)) <$> cs')
 
       -- check it
       mcaps <- checkSens cs  scope
@@ -1157,7 +1168,9 @@ checkPri' (Loop niter cs' (xi, xc) body) scope =
       -- add iteration and capture variables as args-checking-commands to the scope
       -- capture variable is not relevant bc captures get ∞ privacy anyways
       -- TODO: do we need to make sure that we have unique names here?
-      let scope' = setValue xi (checkSens (Arg xi JTInt NotRelevant) scope) scope
+      let scope' = case xi of
+                     Just xi -> setValue xi (checkSens (Arg xi JTInt NotRelevant) scope) scope
+                     Nothing -> scope
       let scope'' = setValue xc (checkSens (Arg xc JTAny NotRelevant) scope) scope'
 
       -- check body term in that new scope
@@ -1167,7 +1180,7 @@ checkPri' (Loop niter cs' (xi, xc) body) scope =
       -- and sensitivities
       let cbody' = do
             τ <- cbody
-            WithRelev _ (τi :@ _) <- removeVar @PrivacyK xi
+            WithRelev _ (τi :@ _) <- removeVarMaybe @PrivacyK xi
             WithRelev _ (τc :@ _) <- removeVar @PrivacyK xc -- unify with caps type?
 
             interesting <- getInteresting

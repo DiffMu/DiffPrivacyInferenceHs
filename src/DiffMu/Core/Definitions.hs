@@ -603,10 +603,10 @@ instance TCConstraint IsTypeOpResult where
 
 type Clip = DMTypeOf ClipKind
 
-data Asgmt a = (:-) TeVar a
+data Asgmt a = (:-) (Maybe TeVar) a
   deriving (Generic, Show, Eq, Ord)
 
-fstA :: Asgmt a -> TeVar
+fstA :: Asgmt a -> Maybe TeVar
 fstA (x :- τ) = x
 
 sndA :: Asgmt a -> a
@@ -650,7 +650,7 @@ data PreDMTerm (t :: * -> *) =
   | Row (PreDMTerm t) (PreDMTerm t) -- matrix row
   | ClipM Clip (PreDMTerm t)
   -- Loop (DMTerm : "Number of iterations") ([TeVar] : "Captured variables") (TeVar : "name of iteration var", TeVar : "name of capture variable") (DMTerm : "body")
-  | Loop (PreDMTerm t) [TeVar] (TeVar, TeVar) (PreDMTerm t)
+  | Loop (PreDMTerm t) [TeVar] (Maybe TeVar, TeVar) (PreDMTerm t)
 -- Special NN builtins
   | SubGrad (PreDMTerm t) (PreDMTerm t)
   | ScaleGrad (PreDMTerm t) (PreDMTerm t) -- scale (a : Scalar) (g : Mutating Gradient)
@@ -698,7 +698,7 @@ type DMTerm = PreDMTerm EmptyExtension
 data MutabilityExtension a =
   MutLet LetKind a a
   -- MutLoop (a : "Number of iterations") (TeVar : "name of iteration var") (a : "body")
-  | MutLoop a (TeVar) a
+  | MutLoop a (Maybe TeVar) a
   | Modify (Asgmt JuliaType) a
   | MutRet
   | DefaultRet a
@@ -819,7 +819,8 @@ instance ShowPretty (TeVar) where
   showPretty (v) = show v
 
 instance ShowPretty a => ShowPretty (Asgmt a) where
-  showPretty (a :- x) = showPretty a <> " :- " <> showPretty x
+  showPretty (Nothing :- x) = "_ :- " <> showPretty x
+  showPretty (Just a :- x) = showPretty a <> " :- " <> showPretty x
 
 instance ShowPretty (DMTypeOp_Some) where
   showPretty (IsBinary op) = show op

@@ -30,7 +30,7 @@ pSingle e = case e of
                  JEBlock stmts -> pList stmts
                  JEInteger n -> pure $ Sng n JTInt
                  JEReal r -> pure $ Sng r JTReal
-                 JESymbol s -> return (Var ((UserTeVar s) :- JTAny))
+                 JESymbol s -> return (Var (Just (UserTeVar s) :- JTAny))
                  JETup elems -> (Tup <$> (mapM pSingle elems))
                  JELam args body -> pJLam args body
                  JELamStar args body -> pJLamStar args body
@@ -100,15 +100,15 @@ pJRef name refs = case refs of
                        _ -> parseError ("Only double indexing to matrix elements and single indexing to vector entries supported, but you gave " <> show refs)
 
 pArg arg = case arg of
-                     JESymbol s -> return ((UserTeVar s) :- JTAny)
-                     JETypeAnnotation (JESymbol s) τ -> return ((UserTeVar s) :- τ)
+                     JESymbol s -> return (Just (UserTeVar s) :- JTAny)
+                     JETypeAnnotation (JESymbol s) τ -> return (Just (UserTeVar s) :- τ)
                      JENotRelevant _ _ -> parseError ("Relevance annotation on a sensitivity function is not permitted.")
                      a -> parseError ("Invalid function argument " <> show a)
 
 pArgRel arg = case arg of
-                       JESymbol s -> return ((UserTeVar s) :- (JTAny, IsRelevant))
-                       JETypeAnnotation (JESymbol s) τ -> return ((UserTeVar s) :- (τ, IsRelevant))
-                       JENotRelevant (JESymbol s) τ -> return ((UserTeVar s) :- (τ, NotRelevant))
+                       JESymbol s -> return (Just (UserTeVar s) :- (JTAny, IsRelevant))
+                       JETypeAnnotation (JESymbol s) τ -> return (Just (UserTeVar s) :- (τ, IsRelevant))
+                       JENotRelevant (JESymbol s) τ -> return (Just (UserTeVar s) :- (τ, NotRelevant))
                        a -> parseError ("Invalid function argument " <> show a)
 
 
@@ -143,7 +143,7 @@ pJSLet assignee assignment tail wrapper =
         JESymbol s -> do
                         dasgmt <- pSingle assignment
                         dtail <- pList tail
-                        return (SLet ((UserTeVar s) :- JTAny) dasgmt (wrapper dtail))
+                        return (SLet (Just (UserTeVar s) :- JTAny) dasgmt (wrapper dtail))
         JETypeAnnotation _ _ -> parseError "Type annotations on variables are not supported."
         JENotRelevant _ _ -> parseError "Type annotations on variables are not supported."
         _ -> parseError ("Invalid assignee " <> (show assignee) <> ", must be a variable.")
@@ -154,7 +154,7 @@ pJBind assignee assignment tail wrapper =
         JESymbol s -> do
                         dasgmt <- pSingle assignment
                         dtail <- pList tail
-                        return (SBind ((UserTeVar s) :- JTAny) dasgmt (wrapper dtail))
+                        return (SBind (Just (UserTeVar s) :- JTAny) dasgmt (wrapper dtail))
         JETypeAnnotation _ _ -> parseError "Type annotations on variables are not supported."
         JENotRelevant _ _ -> parseError "Type annotations on variables are not supported."
         _ -> parseError ("Invalid assignee " <> (show assignee) <> ", must be a variable.")
@@ -174,7 +174,7 @@ pJLoop ivar iter body =
                           JEIter start step end -> do
                                                      dbody <- pSingle body
                                                      nit <- pIter start step end
-                                                     return (Extra (MutLoop nit (UserTeVar $ i) dbody))
+                                                     return (Extra (MutLoop nit (Just (UserTeVar $ i)) dbody))
                           it -> parseError ("Invalid iterator " <> show it <> ", must be a range.")
        i -> parseError ("Invalid iteration variable " <> (show i) <> ".")
 
@@ -191,7 +191,7 @@ pJTLet assignees assignment tail wrapper = do
   -- parse assignment, tail; and build term
   dasgmt <- pSingle assignment
   dtail <- pList tail
-  return (TLet [(UserTeVar s) :- JTAny | s <- assignee_vars] dasgmt (wrapper dtail))
+  return (TLet [Just (UserTeVar s) :- JTAny | s <- assignee_vars] dasgmt (wrapper dtail))
 
 pJFLet name assignment tail wrapper =
   case name of
@@ -310,7 +310,7 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
   -- other symbols
   --
   -- all other symbols turn into calls on TeVars
-  (sym, args) -> (Apply (Var (UserTeVar (Symbol sym) :- JTAny)) <$> mapM pSingle args)
+  (sym, args) -> (Apply (Var (Just (UserTeVar (Symbol sym)) :- JTAny)) <$> mapM pSingle args)
 
 -- all other terms turn into calls
 pJCall term args = Apply <$> pSingle term <*> mapM pSingle args

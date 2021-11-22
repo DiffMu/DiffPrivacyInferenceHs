@@ -74,6 +74,10 @@ class DictKey k => DictLike k v d | d -> k v where
 popValue :: DictLike k v d => k -> d -> (Maybe v , d)
 popValue k d = (getValue k d , deleteValue k d)
 
+getValueMaybe a scope = a >>= (\x -> getValue x scope)
+setValueMaybe (Just k) v scope = setValue k v scope
+setValueMaybe Nothing v scope = scope
+
 class ShowDict k v d | d -> k v where
   showWith :: String -> (k -> v -> String) -> d -> String -> String
 

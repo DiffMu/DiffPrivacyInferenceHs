@@ -64,7 +64,18 @@ checkTopLevel (BBLet v body rest) = do
   return (TopLevelInformation (v : bbvars) (v : glvars), BBLet v body newRest)
 
 -- if we have something else top level
-checkTopLevel (SLet (v :- vt) body rest) = do
+checkTopLevel (SLet (Nothing :- vt) body rest) = checkTopLevel rest
+checkTopLevel (SLet (Just v :- vt) body rest) = do
+  checkNonTopLevelBB body
+  (TopLevelInformation bbvars glvars, newRest) <- checkTopLevel rest
+
+  case v `elem` (bbvars) of
+    True -> throwError (BlackBoxError $ "Found a black box definition for the name " <> show v <> ". This is not allowed since there already is a global variable with that name.")
+    False -> pure ()
+
+  return (TopLevelInformation bbvars (v : glvars), SLet (Just v :- vt) body newRest)
+checkTopLevel (SBind (Nothing :- vt) body rest) = checkTopLevel rest
+checkTopLevel (SBind (Just v :- vt) body rest) = do
   checkNonTopLevelBB body
   (TopLevelInformation bbvars glvars, newRest) <- checkTopLevel rest
 
@@ -72,16 +83,7 @@ checkTopLevel (SLet (v :- vt) body rest) = do
     True -> throwError (BlackBoxError $ "Found a black box definition for the name " <> show v <> ". This is not allowed since there already is a global variable with that name.")
     False -> pure ()
 
-  return (TopLevelInformation bbvars (v : glvars), SLet (v :- vt) body newRest)
-checkTopLevel (SBind (v :- vt) body rest) = do
-  checkNonTopLevelBB body
-  (TopLevelInformation bbvars glvars, newRest) <- checkTopLevel rest
-
-  case v `elem` bbvars of
-    True -> throwError (BlackBoxError $ "Found a black box definition for the name " <> show v <> ". This is not allowed since there already is a global variable with that name.")
-    False -> pure ()
-
-  return (TopLevelInformation bbvars (v : glvars), SBind (v :- vt) body newRest)
+  return (TopLevelInformation bbvars (v : glvars), SBind (Just v :- vt) body newRest)
 checkTopLevel (FLet v body rest) = do
   checkNonTopLevelBB body
   (TopLevelInformation bbvars glvars, newRest)<- checkTopLevel rest
@@ -97,13 +99,15 @@ checkTopLevel (TLet (vs) body rest) = do
 
   let letvars = fstA <$> vs
 
-  let checkname v = case v `elem` bbvars of
+  let checkname v = case v `elem` (Just <$> bbvars) of
         True -> throwError (BlackBoxError $ "Found a black box definition for the name " <> show v <> ". This is not allowed since there already is a global variable with that name.")
         False -> pure ()
 
   mapM checkname letvars
 
-  return (TopLevelInformation bbvars (letvars <> glvars) , TLet (vs) body newRest)
+  let goodLetvars = [a | Just a <- letvars]
+
+  return (TopLevelInformation bbvars (goodLetvars <> glvars) , TLet (vs) body newRest)
 
 -- all other terms mean that the top level scope is done.
 -- we make sure that there are no BBLets there

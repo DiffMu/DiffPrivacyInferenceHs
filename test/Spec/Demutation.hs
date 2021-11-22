@@ -52,11 +52,11 @@ testDemutation = do
   --   it "example 0" $ do
   --     let v s = UserTeVar (Symbol s)
   --     let n i = (Sng i (JuliaType "Integer"))
-  --     let term = FLet (v "f")
+  --     let term = FLet (Just (v "f"))
   --                (
-  --                  Lam [(v "a" :- JTAny) , (v "b" :- JTAny)]
+  --                  Lam [(v "a" :- JTAny) , (Just (v "b") :- JTAny)]
   --                  (
-  --                    Extra (MutLet PureLet (ConvertM (Var (v "b" :- JTAny)))
+  --                    Extra (MutLet PureLet (ConvertM (Var (Just (v "b") :- JTAny)))
   --                    (
   --                      SLet (v "a" :- JTAny) (Op (IsBinary DMOpAdd) [Var (v "a" :- JTAny) , n 1])
   --                      (
@@ -65,24 +65,24 @@ testDemutation = do
   --                    ))
   --                  )
   --                )
-  --                (Var (v "f" :- JTAny))
+  --                (Var (Just (v "f") :- JTAny))
 
   --     (checkMutTerm term) `shouldReturn` True
 
     -- it "example 0.2" $ do
     --   let v s = UserTeVar (Symbol s)
     --   let n i = (Sng i (JuliaType "Integer"))
-    --   let term = FLet (v "f")
+    --   let term = FLet (Just (v "f"))
     --              (
-    --                Lam [(v "a" :- JTAny) , (v "b" :- JTAny)]
+    --                Lam [(v "a" :- JTAny) , (Just (v "b") :- JTAny)]
     --                (
-    --                  Extra (MutLet PureLet (ConvertM (Var (v "b" :- JTAny)))
+    --                  Extra (MutLet PureLet (ConvertM (Var (Just (v "b") :- JTAny)))
     --                  (
     --                    (Op (IsBinary DMOpAdd) [Var (v "a" :- JTAny) , n 1])
     --                  ))
     --                )
     --              )
-    --              (Var (v "f" :- JTAny))
+    --              (Var (Just (v "f") :- JTAny))
 
     --   (checkMutTerm term) `shouldReturn` True
 
@@ -90,9 +90,9 @@ testDemutation = do
     -- it "example 1" $ do
     --   let v s = UserTeVar (Symbol s)
     --   let n i = (Sng i (JuliaType "Integer"))
-    --   let term = FLet (v "f")
+    --   let term = FLet (Just (v "f"))
     --              (
-    --                Lam [(v "a" :- JTAny) , (v "b" :- JTAny)]
+    --                Lam [(v "a" :- JTAny) , (Just (v "b") :- JTAny)]
     --                (
     --                  Extra (MutLoop (n 7) (v "i")
     --                        (
@@ -104,7 +104,7 @@ testDemutation = do
     --                        )
     --                )
     --              )
-    --              (Var (v "f" :- JTAny))
+    --              (Var (Just (v "f") :- JTAny))
 
     --   (checkMutTerm term) `shouldReturn` True
 
@@ -114,17 +114,17 @@ testDemutation = do
       let n i = (Sng i (JTInt))
       let term = FLet (v "f")
                  (
-                   Lam [(v "a" :- JTAny) , (v "b" :- JTAny) , (v "c" :- JTAny)]
+                   Lam [(Just (v "a") :- JTAny) , (Just (v "b") :- JTAny) , (Just (v "c") :- JTAny)]
                    (
-                     Extra (MutLoop (n 7) (v "i")
+                     Extra (MutLoop (n 7) (Just (v "i"))
                      (
-                       Extra (MutLet PureLet (ConvertM (Var (v "b" :- JTAny)))
+                       Extra (MutLet PureLet (ConvertM (Var (Just (v "b") :- JTAny)))
                        (
-                        Extra (MutLet PureLet (ConvertM (Var (v "c" :- JTAny)))
+                        Extra (MutLet PureLet (ConvertM (Var (Just (v "c") :- JTAny)))
                         (
-                         Extra (MutLet PureLet (SLet (v "a" :- JTAny) (Op (IsBinary DMOpAdd) [Var (v "a" :- JTAny) , n 1])
+                         Extra (MutLet PureLet (SLet (Just (v "a") :- JTAny) (Op (IsBinary DMOpAdd) [Var (Just (v "a") :- JTAny) , n 1])
                                         (
-                                          Var (v "b" :- JTAny)
+                                          Var (Just (v "b") :- JTAny)
                                         ))
                          (
                            Extra MutRet
@@ -134,7 +134,7 @@ testDemutation = do
                      ))
                    )
                  )
-                 (Var (v "f" :- JTAny))
+                 (Var (Just (v "f") :- JTAny))
 
       (checkMutTerm term) `shouldReturn` True
 
@@ -143,20 +143,20 @@ testDemutation = do
       let n i = (Sng i (JTInt))
       let term = FLet (v "f")
                  (
-                   Lam [(v "cond" :- JTAny), (v "a" :- JTAny) , (v "b" :- JTAny) , (v "c" :- JTAny)]
+                   Lam [(Just (v "cond") :- JTAny), (Just (v "a") :- JTAny) , (Just (v "b") :- JTAny) , (Just (v "c") :- JTAny)]
                    (
-                     Phi (Var (v "cond" :- JTAny))
+                     Phi (Var (Just (v "cond") :- JTAny))
                      -- branch 1
-                     (Extra (MutLet PureLet (ConvertM (Var (v "b" :- JTAny)))
+                     (Extra (MutLet PureLet (ConvertM (Var (Just (v "b") :- JTAny)))
                      (
-                       ConvertM (Var (v "a" :- JTAny))))
+                       ConvertM (Var (Just (v "a") :- JTAny))))
                      )
 
                      -- branch 2
-                     (ConvertM (Var (v "c" :- JTAny)))
+                     (ConvertM (Var (Just (v "c") :- JTAny)))
                    )
                  )
-                 (Var (v "f" :- JTAny))
+                 (Var (Just (v "f") :- JTAny))
 
       (checkMutTerm term) `shouldReturn` True
 
@@ -165,23 +165,23 @@ testDemutation = do
       let n i = (Sng i (JTInt))
       let term = FLet (v "f")
                  (
-                   Lam [(v "cond" :- JTAny), (v "a" :- JTAny) , (v "b" :- JTAny) , (v "c" :- JTAny)]
+                   Lam [(Just (v "cond") :- JTAny), (Just (v "a") :- JTAny) , (Just (v "b") :- JTAny) , (Just (v "c") :- JTAny)]
                    (
-                     Phi (Var (v "cond" :- JTAny))
+                     Phi (Var (Just (v "cond") :- JTAny))
                      -- branch 1
-                     (Extra (MutLet PureLet (ConvertM (Var (v "b" :- JTAny)))
+                     (Extra (MutLet PureLet (ConvertM (Var (Just (v "b") :- JTAny)))
                      (
-                       ConvertM (Var (v "a" :- JTAny))))
+                       ConvertM (Var (Just (v "a") :- JTAny))))
                      )
 
                      -- branch 2
-                     (SLet (v "a" :- JTAny) (Op (IsBinary DMOpAdd) [Var (v "a" :- JTAny) , n 1])
+                     (SLet (Just (v "a") :- JTAny) (Op (IsBinary DMOpAdd) [Var (Just (v "a") :- JTAny) , n 1])
                      (
-                       Var (v "a" :- JTAny)
+                       Var (Just (v "a") :- JTAny)
                      ))
                    )
                  )
-                 (Var (v "f" :- JTAny))
+                 (Var (Just (v "f") :- JTAny))
 
       (checkMutTerm term) `shouldReturn` True
 

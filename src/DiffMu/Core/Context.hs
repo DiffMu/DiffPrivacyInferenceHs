@@ -212,22 +212,29 @@ getArgList xτs = do
 
   let f :: Asgmt JuliaType -> t (DMTypeOf MainKind :@ Annotation e)
       f (x :- τ) = do
-        val <- getValueM x γ
-        case val of
-          -- If the symbol was in the context γ, then we get its type and sensitivity
-          Just τr -> do
-             (WithRelev _ τx) <- cast τr
-             return τx
-          -- else just return a variable with 0 annotation, as this means it was not used in the body.
+        case x of
+          Just x -> do
+            val <- getValueM x γ
+            case val of
+              -- If the symbol was in the context γ, then we get its type and sensitivity
+              Just τr -> do
+                (WithRelev _ τx) <- cast τr
+                return τx
+              -- else just return a variable with 0 annotation, as this means it was not used in the body.
+              Nothing -> do
+                τv <- newVar
+                return (τv :@ zeroId) -- scale with 0
+          -- 
           Nothing -> do
              τv <- newVar
              return (τv :@ zeroId) -- scale with 0
 
   xτs' <- mapM f xτs
 
+  let xsWithName = [x | (Just x :- _) <- xτs]
   -- We have to remove all symbols x from the context
   let deleteWithRelev :: [TypeCtxSP -> t (TypeCtxSP)]
-      deleteWithRelev = ((\(x :- _) -> deleteValueM x) <$> xτs)
+      deleteWithRelev = ((\(x) -> deleteValueM x) <$> xsWithName)
   γ' <- composeFunM deleteWithRelev γ
 
   types .= γ'
@@ -241,6 +248,9 @@ getAllVars = do
            Left (Ctx (MonCom h')) -> return (H.toList h')
   return h
 
+removeVarMaybe :: forall e t. (DMExtra e, MonadDMTC t) => Maybe TeVar -> t (WithRelev e)
+removeVarMaybe Nothing = pure (WithRelev NotRelevant (DMAny :@ zeroId))
+removeVarMaybe (Just a) = removeVar a
 
 removeVar :: forall e t. (DMExtra e, MonadDMTC t) => TeVar -> t (WithRelev e)
 removeVar x =  do
