@@ -62,6 +62,7 @@ testScope02 pp = do
 testScope03 pp = do
   let ex = " function test()          \n\
            \   function scope(z)      \n\
+           \      g() = 0             \n\
            \      h(x) = g(2)         \n\
            \      y = 100             \n\
            \      g(x) = x*y          \n\
