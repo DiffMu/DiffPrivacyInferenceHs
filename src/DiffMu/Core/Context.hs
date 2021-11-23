@@ -249,7 +249,9 @@ getAllVars = do
   return h
 
 removeVarMaybe :: forall e t. (DMExtra e, MonadDMTC t) => Maybe TeVar -> t (WithRelev e)
-removeVarMaybe Nothing = pure (WithRelev NotRelevant (DMAny :@ zeroId))
+removeVarMaybe Nothing = do
+    v <- newVar
+    return (WithRelev NotRelevant (v :@ zeroId))
 removeVarMaybe (Just a) = removeVar a
 
 removeVar :: forall e t. (DMExtra e, MonadDMTC t) => TeVar -> t (WithRelev e)
