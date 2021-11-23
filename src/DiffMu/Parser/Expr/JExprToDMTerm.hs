@@ -43,6 +43,7 @@ pSingle e = case e of
                  JEBlackBox name args -> pJBlackBox name args [name] (Extra . DefaultRet)
                  JERef name refs -> pJRef name refs
                  JECall name args -> pJCall name args
+                 JEHole -> parseError "Holes (_) are only allowed in assignments."
                  JEUnsupported s -> parseError ("Unsupported expression " <> show s)
                  JEIter _ _ _ -> parseError ("Iterators can only be used in for-loop statements directly.")
                  JEColon -> parseError "Colon (:) can only be used to access matrix rows like in M[1,:]."
@@ -100,12 +101,14 @@ pJRef name refs = case refs of
                        _ -> parseError ("Only double indexing to matrix elements and single indexing to vector entries supported, but you gave " <> show refs)
 
 pArg arg = case arg of
+                     JEHole -> return (Nothing :- JTAny)
                      JESymbol s -> return (Just (UserTeVar s) :- JTAny)
                      JETypeAnnotation (JESymbol s) τ -> return (Just (UserTeVar s) :- τ)
                      JENotRelevant _ _ -> parseError ("Relevance annotation on a sensitivity function is not permitted.")
                      a -> parseError ("Invalid function argument " <> show a)
 
 pArgRel arg = case arg of
+                       JEHole -> return (Nothing :- (JTAny, IsRelevant))
                        JESymbol s -> return (Just (UserTeVar s) :- (JTAny, IsRelevant))
                        JETypeAnnotation (JESymbol s) τ -> return (Just (UserTeVar s) :- (τ, IsRelevant))
                        JENotRelevant (JESymbol s) τ -> return (Just (UserTeVar s) :- (τ, NotRelevant))
@@ -140,17 +143,25 @@ pJBlackBox name args tail wrapper =
 
 pJSLet assignee assignment tail wrapper =
    case assignee of
+        JEHole     -> do
+                        dasgmt <- pSingle assignment
+                        dtail <- pList tail
+                        return (SLet (Nothing :- JTAny) dasgmt (wrapper dtail))
         JESymbol s -> do
                         dasgmt <- pSingle assignment
                         dtail <- pList tail
                         return (SLet (Just (UserTeVar s) :- JTAny) dasgmt (wrapper dtail))
         JETypeAnnotation _ _ -> parseError "Type annotations on variables are not supported."
         JENotRelevant _ _ -> parseError "Type annotations on variables are not supported."
-        _ -> parseError ("Invalid assignee " <> (show assignee) <> ", must be a variable.")
+        _          -> parseError ("Invalid assignee " <> (show assignee) <> ", must be a variable.")
 
 
 pJBind assignee assignment tail wrapper =
    case assignee of
+        JEHole     -> do
+                        dasgmt <- pSingle assignment
+                        dtail <- pList tail
+                        return (SBind (Nothing :- JTAny) dasgmt (wrapper dtail))
         JESymbol s -> do
                         dasgmt <- pSingle assignment
                         dtail <- pList tail
@@ -169,19 +180,22 @@ pJLoop ivar iter body =
        let sub = Op (IsBinary DMOpSub)
        let ceil = Op (IsUnary DMOpCeil)
        return (ceil [div [sub [dend, sub [dstart, (Sng 1 JTInt)]], dstep]]) -- compute number of steps
-  in case ivar of
-       JESymbol i -> case iter of
-                          JEIter start step end -> do
-                                                     dbody <- pSingle body
-                                                     nit <- pIter start step end
-                                                     return (Extra (MutLoop nit (Just (UserTeVar $ i)) dbody))
-                          it -> parseError ("Invalid iterator " <> show it <> ", must be a range.")
-       i -> parseError ("Invalid iteration variable " <> (show i) <> ".")
+  in case iter of
+       JEIter start step end -> do
+                                 dbody <- pSingle body
+                                 nit <- pIter start step end
+                                 i <- case ivar of
+                                              JEHole -> pure Nothing
+                                              JESymbol s -> pure $ Just (UserTeVar $ s)
+                                              i -> parseError ("Invalid iteration variable " <> (show i) <> ".")
+                                 return (Extra (MutLoop nit i dbody))
+       it -> parseError ("Invalid iterator " <> show it <> ", must be a range.")
 
 
 pJTLet assignees assignment tail wrapper = do
   -- make sure that all assignees are simply symbols
-  let ensureSymbol (JESymbol s) = return s
+  let ensureSymbol (JESymbol s) = return (Just (UserTeVar s) :- JTAny)
+      ensureSymbol JEHole = return (Nothing :- JTAny)
       ensureSymbol (JETypeAnnotation _ _) = parseError "Type annotations on variables are not supported."
       ensureSymbol (JENotRelevant _ _) = parseError "Type annotations on variables are not supported."
       ensureSymbol x = parseError ("Invalid assignee " <> (show x) <> ", must be a variable.")
@@ -191,7 +205,7 @@ pJTLet assignees assignment tail wrapper = do
   -- parse assignment, tail; and build term
   dasgmt <- pSingle assignment
   dtail <- pList tail
-  return (TLet [Just (UserTeVar s) :- JTAny | s <- assignee_vars] dasgmt (wrapper dtail))
+  return (TLet assignee_vars dasgmt (wrapper dtail))
 
 pJFLet name assignment tail wrapper =
   case name of

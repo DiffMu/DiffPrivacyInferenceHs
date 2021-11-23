@@ -21,6 +21,7 @@ import Debug.Trace(trace)
 
 data JTree =
      JLineNumber String Int
+   | JHole
    | JSym String
    | JInteger Float
    | JReal Float
@@ -81,6 +82,7 @@ pWithCtor name ctor = name `with` (ctor <$> (pTree `sepBy` sep))
 
 pTree :: Parser JTree
 pTree =     try pTLineNumber
+        <|> try (string ":_" >> return JHole)
         <|> try (JSym <$> pSymbolString)
         <|> try (JReal <$> (wskip float))
         <|> try ((JInteger . fromIntegral) <$> (wskip decimal))
@@ -130,6 +132,7 @@ data JExpr =
      JEInteger Float
    | JEReal Float
    | JESymbol Symbol
+   | JEHole
    | JEColon
    | JELineNumber String Int
    | JEUnsupported String
@@ -250,6 +253,7 @@ pTreeToJExpr tree = case tree of
      JRef as         -> case as of
          (name:refs) -> JERef <$> pTreeToJExpr name <*> mapM pTreeToJExpr refs
          _ -> error ("unsupported reference " <> show tree)
+     JHole           -> pure JEHole
      JColon          -> pure JEColon
      JLoop as        -> case as of
          [(JAssign [ivar, JCall (JColon: iter)]), body] -> JELoop <$> pTreeToJExpr ivar <*> pIter iter <*> pTreeToJExpr body
