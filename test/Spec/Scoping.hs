@@ -85,7 +85,7 @@ testScope03 pp = do
 
 
 testScope04 pp = do
-  let ex = " function test()                   \n\
+  let ex_bad = " function test()                   \n\
            \    function f(a)                  \n\
            \        function h(b)              \n\
            \            i(b) = 2*b + a         \n\
@@ -106,10 +106,32 @@ testScope04 pp = do
            \    end                            \n\
            \    f(13)                          \n\
            \ end"
+           
+  let ex = " function test()                   \n\
+           \    function f(a)                  \n\
+           \        function h(b)              \n\
+           \            i(b) = 2*b + a         \n\
+           \            i(b*5)                 \n\
+           \        end                        \n\
+           \        function g(h,a)            \n\
+           \            x = h(a*7)             \n\
+           \            y = h(a*7)             \n\
+           \            x + y                  \n\
+           \        end                        \n\
+           \        a = g(h,a)                 \n\
+           \        a = g(h,a)                 \n\
+           \        function h(b::Integer)     \n\
+           \            a*11                   \n\
+           \        end                        \n\
+           \        a = g(h,a)                 \n\
+           \        a                          \n\
+           \    end                            \n\
+           \    f(13)                          \n\
+           \ end"
 
-           -- computed by julia
 
       intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
       ty = Fun([([] :->: intc (Fin 138424)) :@ Just []])
-
-  parseEval pp "04 works" ex (pure ty)
+      
+  parseEvalFail pp "04 (bad)" ex_bad (FLetReorderError "")
+  parseEval pp "04 (good)" ex (pure ty)

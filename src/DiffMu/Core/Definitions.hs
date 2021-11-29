@@ -945,6 +945,7 @@ instance Eq DMException where
   NoChoiceFoundError      a        == NoChoiceFoundError      b       = True
   UnificationShouldWaitError a a2  == UnificationShouldWaitError b b2 = True
   ParseError e1 file1 line1        == ParseError e2 file2 line2       = True
+  FLetReorderError        a        == FLetReorderError        b       = True
   _ == _ = False
 
 

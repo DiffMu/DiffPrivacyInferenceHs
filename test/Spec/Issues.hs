@@ -110,7 +110,7 @@ test59 pp = describe "issue 59" $ do
       intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
       ty = Fun([([] :->: intc (Fin 3)) :@ Just []])
 
-  parseEval pp "example variant 1 (bad)" ex_1 (pure ty)
+  parseEvalFail pp "example variant 1 (bad)" ex_1 (FLetReorderError "")
   parseEval pp "example variant 1 (good)" ex_1_good (pure ty)
 
 
@@ -130,10 +130,7 @@ test59 pp = describe "issue 59" $ do
              \    f(2,3)                         \n\
              \ end                               "
 
-      intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
-      ty = Fun([([] :->: intc (Fin 2)) :@ Just []])
-
-  parseEval pp "example variant 2" ex_2 (pure ty)
+  parseEvalFail pp "example variant 2" ex_2 (FLetReorderError "")
 
 
 
@@ -178,10 +175,8 @@ test67 pp = describe "issue 67 (same juliatype choice overwriting)" $ do
          \     f(1)                 \n\
          \ end                      "
 
-      intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
-      ty = Fun([([] :->: intc (Fin 1)) :@ Just []])
+  parseEvalFail pp "example variant 1" ex_1 (FLetReorderError "")
 
-  parseEval pp "example variant 1" ex_1 (pure ty)
 
   let ex_2 =
          " function test()      \n\
@@ -194,10 +189,7 @@ test67 pp = describe "issue 67 (same juliatype choice overwriting)" $ do
          \     h(0)             \n\
          \ end                  "
 
-      intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
-      ty = Fun([([] :->: intc (Fin 1)) :@ Just []])
-
-  parseEval pp "example variant 2" ex_2 (pure ty)
+  parseEvalFail pp "example variant 2" ex_2 (FLetReorderError "")
 
   let ex_3 =
          " function test()      \n\
@@ -213,10 +205,7 @@ test67 pp = describe "issue 67 (same juliatype choice overwriting)" $ do
          \     h(0)             \n\
          \ end                  "
 
-      intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
-      ty = Fun([([] :->: intc (Fin 1)) :@ Just []])
-
-  parseEval pp "example variant 3" ex_3 (pure ty)
+  parseEvalFail pp "example variant 3" ex_3 (FLetReorderError "")
 
 test21 pp = describe "issue 21 (FLet collection)" $ do
   let ex_1 =
