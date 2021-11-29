@@ -511,12 +511,19 @@ checkSen' (Loop niter cs' (xi, xc) body) scope = do
       sb <- newVar
 
       -- scale and sum contexts
+      -- τit = type of the iterator (i.e. the term describung the number of iterations)
+      -- τcs = type of the capture input tuple
+      -- τb = inferred type of the body
+      -- τbit = type of the iterator variable xi inferred in the body
+      -- τbcs = type of the capture variable xc inferred in the body
       (τit, τcs, (τb, (τbit, sbit), (τbcs, sbcs))) <- msum3Tup (cniter <* mscale sit, ccs <* mscale scs, cbody' <* mscale sb)
 
       unify (NoFun (Numeric (NonConst DMInt))) τbit -- number of iterations must match type requested by body
 
       τcsnf <- newVar
       unify (NoFun τcsnf) τcs -- functions cannot be captured.
+
+      addConstraint (Solvable (IsLoopResult ((sit, scs, sb), sbcs, τit))) -- compute the right scalars once we know if τ_iter is const or not.
 
 {-
       -- TODO loops with Const captures/output don't work yet.
