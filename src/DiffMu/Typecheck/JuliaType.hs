@@ -34,8 +34,7 @@ juliatypes (DMVec _ _ _ τ) = (map (\t -> (JTVector t)) (juliatypes τ))
 juliatypes (DMMat _ _ _ _ τ) = (map (\t -> (JTMatrix t)) (juliatypes τ))
 juliatypes (Const _ τ) = juliatypes τ
 juliatypes (NonConst τ) = juliatypes τ
--- TODO: This is not like in DM.jl, and another workaround should be found!
-juliatypes (TVar x) = [JTAny]
+juliatypes (TVar x) = [JTBot] -- juliatypes is only used to check if a dmtype fits into a julia signature, and tvars fit all
 juliatypes (_ :->: _) = [JTFunction]
 juliatypes (_ :->*: _) = [JTFunction]
 juliatypes (DMTup xs) =
@@ -51,12 +50,13 @@ global_callback_issubtype :: IORef (DMEnv)
 global_callback_issubtype = unsafePerformIO (newIORef makeEmptyDMEnv)
 
 instance PartialOrd JuliaType where
-  leq a b =
-    let callback = (askJuliaSubtypeOf $ unsafePerformIO (readIORef global_callback_issubtype))
-    in case (callback) of
-      Nothing -> error "Julia callback (issubtype) is not set."
-      Just fun  -> unsafeLocalState (withCString (show a) (\ca -> withCString (show b) (\cb -> return $ call_StringStringBool fun ca cb)))
-      -- Just f  -> call_StringStringBool f t s
+  leq a b = case a of
+    JTBot -> True -- TVars fit everything
+    _ -> let callback = (askJuliaSubtypeOf $ unsafePerformIO (readIORef global_callback_issubtype))
+         in case (callback) of
+           Nothing -> error "Julia callback (issubtype) is not set."
+           Just fun  -> unsafeLocalState (withCString (show a) (\ca -> withCString (show b) (\cb -> return $ call_StringStringBool fun ca cb)))
+           -- Just f  -> call_StringStringBool f t s
 
 -- `leq` on lists is defined weirdly, so we make our own for signatures.
 newtype JuliaSignature = JuliaSignature [JuliaType]

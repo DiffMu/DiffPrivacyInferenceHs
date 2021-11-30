@@ -413,6 +413,7 @@ type Privacy = PrivacyOf MainSensKind
 
 data JuliaType =
     JTAny
+    | JTBot
     | JTInt
     | JTReal
     | JTFunction
@@ -427,6 +428,7 @@ instance Hashable JuliaType where
 
 instance Show JuliaType where
   show JTAny = "Any"
+  show JTBot = "Bottom"
   show JTInt = "Integer"
   show JTReal = "Real"
   show JTFunction = "Function"
