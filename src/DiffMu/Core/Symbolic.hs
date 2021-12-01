@@ -40,10 +40,10 @@ genSingletons [''SensKind]
 --   deriving (Generic, Show)
 -- addition
 instance Monad t => SemigroupM t (SymVal) where
-  (⋆) Infty Infty        = pure Infty
-  (⋆) Infty (Fin _)      = pure Infty
-  (⋆) (Fin _) Infty      = pure Infty
+  (⋆) Infty _            = pure Infty
+  (⋆) _ Infty            = pure Infty
   (⋆) (Fin a) (Fin b)    = pure $ Fin (a P.+ b)
+
 
 instance Monad t => MonoidM t (SymVal) where
   neutral = pure $ Fin 0
@@ -54,10 +54,11 @@ instance Monad t => CMonoidM t (SymVal)
 --   neg Infty = MinusInfty
 
 -- multiplication
--- TODO: Check correctness: is zero handled differently?
+-- special thing: 0 * Infty = 0 (see paper page 38)
 instance Monad t => SemiringM t (SymVal) where
   one = pure $ Fin 1
-  (⋅) Infty Infty        = pure $ Infty
+  (⋅) (Fin 0) _          = pure $ (Fin 0)
+  (⋅) _ (Fin 0)          = pure $ (Fin 0)
   (⋅) Infty (Fin _)      = pure $ Infty
   (⋅) (Fin _) Infty      = pure $ Infty
   (⋅) (Fin a) (Fin b)    = pure $ Fin (a P.* b)

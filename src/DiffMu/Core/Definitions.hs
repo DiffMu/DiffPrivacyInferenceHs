@@ -410,6 +410,9 @@ type Privacy = PrivacyOf MainSensKind
 
 ---------------------------------------------------------
 -- Julia types
+-- 
+-- An almost one-to-one representation of all supported julia types, with the exception of JTBot which does not
+-- exist in julia and is set to be a julia-subtype of all other JuliaTypes as defined in Typecheck/JuliaTypes.jl
 
 data JuliaType =
     JTAny
@@ -426,9 +429,9 @@ data JuliaType =
 
 instance Hashable JuliaType where
 
+-- this is used for callbacks to actual julia, so the string representation matches julia exactly.
 instance Show JuliaType where
   show JTAny = "Any"
-  show JTBot = "Bottom"
   show JTInt = "Integer"
   show JTReal = "Real"
   show JTFunction = "Function"
@@ -437,33 +440,6 @@ instance Show JuliaType where
   show (JTMatrix t) = "Matrix{" ++ show t ++ "}"
   show (JTModel) = "DMModel"
   show (JTGrads) = "DMGrads"
-
---------------------------------------
--- Tracked CString
--- data JuliaType = JuliaType String CString
---   deriving (Generic, Eq)
-
--- instance Hashable JuliaType where
-
--- instance Show JuliaType where
---   show (JuliaType str _) = show str
-
--- pattern JTAny a = JuliaType "Any" a
--- pattern JTNumInt a = JuliaType "Integer" a
--- pattern JTNumReal a = JuliaType "Real" a
-
--------------------------------------
-
--- instance Hashable JuliaType
-
--- NOTE: The "deriving(Generic,Show)" part is a feature of Haskell which
---       allows us to automatically generate instances for type classes.
---       In this case an instance for Show (conversion to String),
---       and for Generic (used for further automatic derivation of
---       serialization instances or, in our case, instances of Default).
---       But if the data types contain multiple type parameters
---       or existential quantification, such an automatic derivation is
---       unfortunately no longer possible.
 
 
 --------------------------------------------------------------------------

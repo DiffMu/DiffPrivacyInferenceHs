@@ -641,7 +641,7 @@ checkSen' (ConvertM m) scope = do
       -- set correct matrix type
       unify τb (NoFun (DMGrads nrm (Clip clp) n (Numeric DMData)))
 
-      -- TODO do we have to scale by 2 i think so...see the matrixnorms pdf in julia docs
+      -- we have to scale by two unlike in the paper...see the matrixnorms pdf in julia docs
       mscale (oneId ⋆! oneId)
 
       -- move clip to the norm position,
@@ -866,8 +866,8 @@ checkPri' (Rnd t) scope = do
       τ <- (createDMTypeBaseNum t)
       return (NoFun (Numeric (NonConst τ)))
 
--- TODO it is ambiguous if this is an application of a LamStar or an application of a Lam followed by Return.
--- we probably should resolve IsFunctionArgument ( T -> T, S ->* S) by setting S's privacies to infinity.
+-- it is ambiguous if this is an application of a LamStar or an application of a Lam followed by implicit Return.
+-- we handle that by resolving IsFunctionArgument ( T -> T, S ->* S) by setting S's privacies to infinity.
 checkPri' (Apply f args) scope =
   let
     -- check the argument in the given scope,
@@ -924,7 +924,6 @@ checkPri' (SLet (x :- dτ) term body) scope = do
 
    return $ do
      log $ "checking (transparent) privacy SLet: " <> show (x :- dτ) <> " = " <> show term <> " in " <> show body
-     -- TODO
      case dτ of
         JTAny -> return dτ
         dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
@@ -953,7 +952,6 @@ checkPri' (SBind (x :- dτ) term body) scope = do
    dterm <- checkPriv term scope
 
    return $ do
-     -- TODO
      case dτ of
         JTAny -> return dτ
         dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
@@ -982,7 +980,6 @@ checkPri' (SBind (x :- dτ) term body) scope = do
 checkPri' (FLet fname term body) scope = do
 
   -- make a Choice term to put in the scope
-  -- TODO checkPriv or checkSens?
    let scope' = pushChoice fname (checkSens term scope) scope
 
    -- check body with that new scope. Choice terms will result in IsChoice constraints upon ivocation of fname
@@ -1010,7 +1007,6 @@ checkPri' curterm@(TLet xs term body) original_scope = do
 
   return $ do
     log $ "checking (transparent) privacy SLet: " <> show xs <> " = " <> show term <> " in " <> show body
-    -- TODO
     case and [True | (_ :- JTAny) <- xs] of
        True  -> return ()
        False -> throwError (ImpossibleError $ "Type annotations on variables not yet supported\n when checking " <> showPretty curterm)
@@ -1147,7 +1143,7 @@ checkPri' (Loop niter cs' (xi, xc) body) scope =
 
           -- compute the new privacy for the xs according to the advanced composition theorem
           let two = oneId ⋆! oneId
-          let newp = (two ⋅! (ε ⋅! (sqrt (two ⋅! (n ⋅! (minus (ln oneId) (ln δn)))))), δn ⋆! (n ⋅! δ)) -- TODO
+          let newp = (two ⋅! (ε ⋅! (sqrt (two ⋅! (n ⋅! (minus (ln oneId) (ln δn)))))), δn ⋆! (n ⋅! δ))
 
           mapM (\(x, τ) -> setVarP x (WithRelev IsRelevant (τ :@ PrivacyAnnotation newp))) (zip xs τs)
           return ()
