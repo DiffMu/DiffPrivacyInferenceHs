@@ -87,7 +87,7 @@ ceil s = injectVarId (Ceil s)
 sqrt s = injectVarId (Sqrt s)
 maxS s = injectVarId (Max s)
 minus s t = injectVarId (Minus (s, t))
-divide s t = injectVarId (Div (s, t))
+divide s t = s ⋆! injectVarId (Div (s, t))
 
 tryComputeSym :: SymVar k -> SymVar k
 tryComputeSym x = case f x of

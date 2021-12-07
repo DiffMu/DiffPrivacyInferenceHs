@@ -71,6 +71,8 @@ sn_EW x = do
   normalize x'
 
 
+----------------------------------------------
+-- without custom constraint evaluation function
 parseEvalSimple p term expected =
   parseEval p ("Checks '" <> term <> "' correctly") term expected
 
@@ -82,10 +84,34 @@ parseEval_l = parseEval_b True CompareByEqual ExpectSuccess
 parseEvalUnify = parseEval_b False CompareByUnification ExpectSuccess
 parseEvalUnify_l = parseEval_b True CompareByUnification ExpectSuccess
 
+----------------------------------------------
+-- with custom TC/constraint evaluation function
+
+parseEvalFail_customCheck a b c f = parseEval_b False CompareByEqual (ExpectFail f) a b c (pure Deleted)
+
+parseEval_customCheck = parseEval_b_customCheck False CompareByEqual ExpectSuccess
+parseEval_l_customCheck = parseEval_b_customCheck True CompareByEqual ExpectSuccess
+
+parseEvalUnify_customCheck = parseEval_b_customCheck False CompareByUnification ExpectSuccess
+parseEvalUnify_l_customCheck = parseEval_b_customCheck True CompareByUnification ExpectSuccess
+
+
+
 data ComparisonStyle = CompareByEqual | CompareByUnification
 data TestExpectation b = ExpectSuccess | ExpectFail b
 
+
 parseEval_b dolog compstyle failOrSuccess parse desc term (expected :: TC DMMain) =
+  parseEval_b_customCheck dolog compstyle failOrSuccess parse desc term expected customTCCheck 
+  where
+    customTCCheck = do
+      ctrs <- getAllConstraints
+      case ctrs of
+        [] -> pure $ Right ()
+        cs -> pure $ Left (show cs)
+
+
+parseEval_b_customCheck dolog compstyle failOrSuccess parse desc term (expected :: TC DMMain) customTCCheck =
   it desc $ do
     term' <- parse term
 
@@ -117,7 +143,8 @@ parseEval_b dolog compstyle failOrSuccess parse desc term (expected :: TC DMMain
 
     let correct result = do
           -- first, get all constraints (these are exactly the ones which returned from the checking)
-          ctrs <- getAllConstraints
+          -- ctrs <- getAllConstraints
+          customCheckResult <- customTCCheck
 
           -- we check whether our result is as expected
           expectedT <- expected
@@ -127,17 +154,19 @@ parseEval_b dolog compstyle failOrSuccess parse desc term (expected :: TC DMMain
               solveAllConstraints [SolveExact]
 
               -- and additionally if the constraints are empty
-              case ctrs of
-                [] -> pure $ Right ()
-                cs -> pure $ Left (show cs)
+              return customCheckResult 
+              -- case ctrs of
+              --   [] -> pure $ Right ()
+              --   cs -> pure $ Left (show cs)
 
             CompareByEqual -> do
               case expectedT == result of
                 True ->
                   -- and additionally if the constraints are empty
-                  case ctrs of
-                    [] -> pure $ Right ()
-                    cs -> pure $ Left (show cs)
+                  return customCheckResult
+                  -- case ctrs of
+                  --   [] -> pure $ Right ()
+                  --   cs -> pure $ Left (show cs)
                 False -> pure $ Left ("expected type " <> show expectedT <> " but got " <> show result)
 
 
