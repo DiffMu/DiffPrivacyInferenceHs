@@ -282,8 +282,8 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
   (t@"clip", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
 
   -- 1 argument
-  (t@"convert", [a1]) -> ConvertM <$> pSingle a1
-  (t@"convert", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
+  (t@"norm_convert", [a1]) -> ConvertM <$> pSingle a1
+  (t@"norm_convert", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
 
   (t@"transpose", [a1]) -> Transpose <$> pSingle a1
   (t@"transpose", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
@@ -313,6 +313,9 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
   -- all binary operations.
   (t@"/", [a,b]) -> (\a b -> Op (IsBinary DMOpDiv) [a,b]) <$> pSingle a <*> pSingle b
   (t@"/", args)  -> parseError $ "The builtin operation (/) requires exactly 2 arguments, but it has been given " <> show (length args)
+
+  (t@"-", [a,b]) -> (\a b -> Op (IsBinary DMOpSub) [a,b]) <$> pSingle a <*> pSingle b
+  (t@"-", args)  -> parseError $ "The builtin operation (-) requires exactly 2 arguments, but it has been given " <> show (length args)
 
   (t@"%", [a,b]) -> (\a b -> Op (IsBinary DMOpMod) [a,b]) <$> pSingle a <*> pSingle b
   (t@"%", args)  -> parseError $ "The builtin operation (%) requires exactly 2 arguments, but it has been given " <> show (length args)

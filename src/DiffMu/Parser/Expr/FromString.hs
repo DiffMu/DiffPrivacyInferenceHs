@@ -83,6 +83,7 @@ pWithCtor name ctor = name `with` (ctor <$> (pTree `sepBy` sep))
 pTree :: Parser JTree
 pTree =     try pTLineNumber
         <|> try (string ":_" >> return JHole)
+        <|> try (string ":(==)" >> return (JSym "=="))
         <|> try (JSym <$> pSymbolString)
         <|> try (JReal <$> (wskip float))
         <|> try ((JInteger . fromIntegral) <$> (wskip decimal))
