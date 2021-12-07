@@ -65,7 +65,10 @@ instance Monad t => SemiringM t (SymVal) where
 
 -- instance SingI SensKind where
 
-
+-- SymTerm are polynomials for describing sensitivities
+-- apart from regular variables (HonestVar) they can have
+-- non-polynomial expressions inside that we also treat
+-- like variables with special rules.
 data SymVar (k :: SensKind) =
   HonestVar (SymbolOf k)
   | Id (SymTerm MainSensKind)
