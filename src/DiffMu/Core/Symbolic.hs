@@ -59,8 +59,8 @@ instance Monad t => SemiringM t (SymVal) where
   one = pure $ Fin 1
   (⋅) (Fin 0) _          = pure $ (Fin 0)
   (⋅) _ (Fin 0)          = pure $ (Fin 0)
-  (⋅) Infty (Fin _)      = pure $ Infty
-  (⋅) (Fin _) Infty      = pure $ Infty
+  (⋅) Infty      _       = pure $ Infty
+  (⋅)      _  Infty      = pure $ Infty
   (⋅) (Fin a) (Fin b)    = pure $ Fin (a P.* b)
 
 -- instance SingI SensKind where
@@ -78,7 +78,7 @@ data SymVar (k :: SensKind) =
   | Sqrt (SymTerm MainSensKind)
   | Max [SymTerm MainSensKind]
   | Minus (SymTerm MainSensKind, SymTerm MainSensKind)
-  | Div (SymTerm MainSensKind, SymTerm MainSensKind)
+  | Div (SymTerm MainSensKind)
   deriving (Generic, Eq)
 
 ln s = injectVarId (Ln s)
@@ -87,7 +87,7 @@ ceil s = injectVarId (Ceil s)
 sqrt s = injectVarId (Sqrt s)
 maxS s = injectVarId (Max s)
 minus s t = injectVarId (Minus (s, t))
-divide s t = s ⋆! injectVarId (Div (s, t))
+divide s t = s ⋅! injectVarId (Div t)
 
 tryComputeSym :: SymVar k -> SymVar k
 tryComputeSym x = case f x of
@@ -124,10 +124,10 @@ tryComputeSym x = case f x of
     dmLog Infty = Infty
     dmLog (Fin a) = Fin (P.log a)
 
-    dmDiv :: SymVal -> SymVal -> Maybe SymVal
-    dmDiv Infty _ = Nothing
-    dmDiv _ (Infty) = Nothing
-    dmDiv (Fin a) (Fin b) = Just (Fin (a P./ b))
+    dmDiv :: SymVal -> Maybe SymVal
+    dmDiv Infty = Nothing
+    dmDiv (Fin 1) = Just (Fin 1)
+    dmDiv (Fin a) = Just (Fin (1 P./ a))
 
     f :: SymVar k -> Maybe (SymTerm MainSensKind)
     f (HonestVar _)  = Nothing
@@ -149,9 +149,7 @@ tryComputeSym x = case f x of
     --       cannot be solved.
     --
     -- f (Minus (a, b)) = constCoeff <$> (dmMinus <$> extractVal a <*> extractVal b)
-    f (Div (a, b)) = case extractVal b of
-        (Just (Fin 1))  -> pure a
-        _               -> constCoeff <$> (join (dmDiv <$> extractVal a <*> extractVal b))
+    f (Div b) = constCoeff <$> (join (dmDiv <$> extractVal b))
 
 instance Show (SymVar k) where
   show (HonestVar v) = show v
@@ -162,7 +160,7 @@ instance Show (SymVar k) where
   show (Sqrt te) = "sqrt(" <> show te <> ")"
   show (Max te) = "max(" <> show te <> ")"
   show (Minus (t1, t2)) = "(" <> show t1 <> " - " <> show t2 <> ")"
-  show (Div (t1, t2)) = "(" <> show t1 <> " / " <> show t2 <> ")"
+  show (Div t2) = "(1 / " <> show t2 <> ")"
 
 instance Hashable (SymVar k)
 
@@ -232,7 +230,7 @@ instance (Substitute SymVar (CPolyM SymVal Int (SymVar MainSensKind)) (SymVar k2
   substitute σ (Sqrt a)      = tryComputeSym <$> Sqrt <$> substitute σ a
   substitute σ (Max as)      = tryComputeSym <$> Max <$> mapM (substitute σ) as
   substitute σ (Minus (a,b)) = tryComputeSym <$> ((\a b -> Minus (a,b)) <$> substitute σ a <*> substitute σ b)
-  substitute σ (Div (a,b))   = tryComputeSym <$> ((\a b -> Div (a,b)) <$> substitute σ a <*> substitute σ b)
+  substitute σ (Div a)   = tryComputeSym <$> Div <$> substitute σ a
 
 
 
