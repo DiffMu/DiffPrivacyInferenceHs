@@ -238,6 +238,7 @@ instance Solve MonadDMTC IsLessEqual (Sensitivity, Sensitivity) where
          [] -> (Just zeroId)
          _ -> Nothing
       solveLessEqualSensitivity :: IsT MonadDMTC t => Sensitivity -> Sensitivity -> t ()
+      solveLessEqualSensitivity a b | a == b = dischargeConstraint name
       solveLessEqualSensitivity a b = case getVal a of
          Just av -> case getVal b of
                          Just bv -> case av == Infty of
