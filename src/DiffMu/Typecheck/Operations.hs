@@ -10,9 +10,17 @@ import DiffMu.Core.Symbolic
 import DiffMu.Core.Unification
 import DiffMu.Typecheck.Subtyping
 
+import Debug.Trace
+
+----------------------------------------------------------------------------------------
+-- code for handling arithmetic operations, i.e. determining their sensitivity w.r.t.
+-- wheter the involved types are const or non-const numbers or matrices.
+
 
 -- Given a kind of a type op (`DMTypeOp_Some`), and a number of given arguments,
 -- we create an `IsTypeOpResult` constraint, and return the contained types/sensitivities.
+-- the constraint constains sensitivities that are scalars for the operand contexts and will
+-- be determined once enough about the operand types is known.
 makeTypeOp :: (IsT MonadDMTC t) => DMTypeOp_Some -> Int -> t ((DMType) , [(DMType,SVar)])
 makeTypeOp (IsUnary op) 1 =
   do s1 <- newSVar "η"
@@ -58,7 +66,8 @@ solveBinary op (τ1, τ2) = f op τ1 τ2
         v <- newVar
         unify t (Numeric v)
         return Nothing
-
+        
+    -- all possible type signatures for arithmetic operations, and the resulting sensitivities and result types
     f :: DMTypeOps_Binary -> (DMType) -> (DMType) -> t (Maybe (Sensitivity , Sensitivity, DMType))
     f DMOpAdd (Numeric (Const s1 t1)) (Numeric (Const s2 t2)) = ret zeroId zeroId ((Numeric . (Const (s1 ⋆! s2)) <$> supremum t1 t2))
     f DMOpAdd (Numeric (Const s1 t1)) (Numeric (NonConst t2)) = ret zeroId oneId  ((Numeric . NonConst) <$> supremum t1 t2)
@@ -138,22 +147,26 @@ solveBinary op (τ1, τ2) = f op τ1 τ2
 
     f _ _ _                            = return Nothing
 
+
+-- if we fail to resolve a typeop constraint, we make the operands non-const and type again
 makeNonConstType :: (IsT MonadDMTC t) => Symbol -> DMType -> t DMType
 makeNonConstType myConstrName (Numeric (TVar a)) = do
-  -- first we check whether the var is blocked by some constraints other than myself
-  -- if it is, we do nothing
+  -- first we check whether the var is blocked by some constraints
   blockingConstraints <- getConstraintsBlockingVariable (Proxy @DMTypeOf) a
-  let blockingConstraintsWithoutMe = blockingConstraints \\ [myConstrName]
+  -- but we do not get blocked by op constraints, bc we handle that case in solveop for binary
+  opConstraints <- fmap (second runConstr) <$> getConstraintsByType (Proxy @(IsTypeOpResult DMTypeOp))
+  let blockingOpConstraints = filter (\n -> (elem n blockingConstraints)) [name | (name, _) <- opConstraints]
 
-  case (blockingConstraintsWithoutMe) of
+  case (length blockingConstraints) - (length blockingOpConstraints) == 0 of
     -- if a' is not blocked, we can make it non-const
-    [] -> do a' <- newVar
-             let t = (NonConst a')
-             addSub (a := t)
-             return (Numeric t)
+    True -> do
+               a' <- newVar
+               let t = (NonConst a')
+               addSub (a := t)
+               return (Numeric t)
 
     -- otherwise we do nothing
-    _ -> return (Numeric (TVar a))
+    False -> return (Numeric (TVar a))
 
 makeNonConstType name (Numeric (NonConst t)) = pure $ Numeric (NonConst t)
 makeNonConstType name (Numeric (Const s t)) = pure $ Numeric (Const s t)
@@ -182,7 +195,14 @@ solveop name (IsTypeOpResult (Unary op (τa :@ s) τr)) = do
     Nothing -> return ()
     Just (val_s, val_τr) -> do
       addSub (s := val_s)
-      unify τr val_τr
+
+      -- if the return type already is non-const, that's bc we non-constified some types
+      -- earlier to perssimistically resolve constraints we could not have otherwise.
+      -- unification would lead to an error then so we do subtyping in that case
+      -- see issue #124
+      case τr of
+          NoFun (Numeric (NonConst _)) -> addConstraint (Solvable (IsLessEqual (val_τr ,τr))) >> return val_τr
+          _ -> unify τr val_τr
       dischargeConstraint @MonadDMTC name
 
 ----------------------------------------
@@ -200,7 +220,13 @@ solveop name (IsTypeOpResult (Binary op (τa1 :@ s1 , τa2 :@ s2) τr)) = do
       unify (svar s1) val_s1
       unify (svar s2) val_s2
 
-      unify τr val_τr
+      -- if the return type already is non-const, that's bc we non-constified some types
+      -- earlier to perssimistically resolve constraints we could not have otherwise.
+      -- unification would lead to an error then so we do subtyping in that case
+      -- see issue #124
+      case τr of
+          NoFun (Numeric (NonConst _)) -> addConstraint (Solvable (IsLessEqual (val_τr ,τr))) >> return val_τr
+          _ -> unify τr val_τr
       dischargeConstraint @MonadDMTC name
 
 instance FixedVars TVarOf (IsTypeOpResult DMTypeOp) where
