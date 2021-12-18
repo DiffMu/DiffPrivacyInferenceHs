@@ -352,12 +352,8 @@ checkSen' (FLet fname term body) scope = do
    result <- checkSens body scope'
 
    return $ do
-     logForce ("checking body of " <> show fname <> " in:\n" <> show (getAllKeys scope'))
-     logForce ("old scope:\n" <> show (getAllKeys scope))
      result' <- result
-     logForce ("done result:\n")
      removeVar @SensitivityK fname
-     logForce ("end:\n" <> show (getAllKeys scope))
      return result'
 
 
@@ -626,7 +622,8 @@ checkSen' (ClipM c m) scope = do
 
 
 --------------------
--- TODO see #107
+-- NOTE this is different from what is in the paper, as we scale the result context by 2 not by 1
+-- a proof that this is correct is in the matrixnorm pdf, and the authors told me it's correct too
 checkSen' (ConvertM m) scope = do
    mb <- checkSens m scope -- check the matrix
    done $ do
