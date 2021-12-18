@@ -71,7 +71,7 @@ testSLoop pp = describe "Sensitivity loop" $ do
     parseEval pp "static" sloop (pure ty_s)
     parseEval pp "variable" vloop (pure ty_v)
     parseEval pp "variable2" vloop2 (pure ty_v2)
-    parseEvalFail pp "variable (bad)" uloop (FLetReorderError "")
+    parseEvalFail pp "variable (bad)" uloop (UnsatisfiableConstraint "")
 
 testDPGD pp = describe "DPGD" $ do
   let ex = "import Flux \n\
