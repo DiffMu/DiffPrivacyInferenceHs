@@ -185,6 +185,9 @@ solveAllConstraints modes = withLogLocation "Constr" $ do
           log $ "[Solver]: solving (" <> show mode <> ") " <> show name <> " : " <> show constr
           log $ intercalate "\n" (fmap ("             - " <>) xs)
           log $ "          => " <> if b then green "Discharged" else yellow "Wait/Update"
+          traceM $ "[Solver]: solving (" <> show mode <> ") " <> show name <> " : " <> show constr
+          traceM $ intercalate "\n" (fmap ("             - " <>) xs)
+          traceM $ "          => " <> if b then green "Discharged" else yellow "Wait/Update"
 
       solveAllConstraints modes
 

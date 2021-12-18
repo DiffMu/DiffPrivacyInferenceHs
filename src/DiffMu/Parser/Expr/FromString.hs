@@ -96,7 +96,6 @@ pTree =     try pTLineNumber
         <|> try (string ":(:)" >> return JColon)
         <|> try (":ref"      `pWithCtor` JRef)
         <|> try (":if"       `pWithCtor` JIfElse)
-        <|> try (":ifelse"   `pWithCtor` JIfElse)
         <|> try (":for"      `pWithCtor` JLoop)
         <|> try (":block"    `pWithCtor` JBlock)
         <|> try (":tuple"    `pWithCtor` JTup)
