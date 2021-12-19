@@ -359,6 +359,10 @@ findSupremumM relevance (GraphM graph) ((a,b) :=: x,isShortestSup) =
 
 
   in withLogLocation "MndGraph" $ do
+    -- step zero: backup our state, for if the quick path check gives a partial,
+    -- we have to rewind!
+    state0 <- get
+
     -- first, we check if there are even paths a -> x and b -> x
     pathLeft  <- findPathM relevance (GraphM graph) (a,x)
     pathRight <- findPathM relevance (GraphM graph) (b,x)
@@ -382,8 +386,8 @@ findSupremumM relevance (GraphM graph) ((a,b) :=: x,isShortestSup) =
         wantedSup <- normalize ((a,b) :=: x)
         reflResult <- evalINC (INC reflComputations) wantedSup
         case reflResult of
-          Wait -> return Wait
-          Partial a -> return (Partial a)
+          Wait      -> put state0 >> return Wait -- In these two cases we rewind to before the quick path check,
+          Partial a -> put state0 >> return Wait -- because we do not want constraints/substitutions from that to affect our state
           Finished a -> return (Finished a)
           -- only if all reflexive edges fail, then we can look at the non-reflexive ones
           Fail e -> evalINC (INC stepComputations) ((a,b) :=: x)
