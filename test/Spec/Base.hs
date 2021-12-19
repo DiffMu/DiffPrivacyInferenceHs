@@ -63,10 +63,18 @@ sn x = do
   solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
   -- solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveFinal]
   normalize x'
+  solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
+  normalize x'
+  solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
+  normalize x'
 
 sn_EW :: Normalize TC a => TC a -> TC a
 sn_EW x = do
   x' <- x
+  solveAllConstraints [SolveExact,SolveAssumeWorst]
+  normalize x'
+  solveAllConstraints [SolveExact,SolveAssumeWorst]
+  normalize x'
   solveAllConstraints [SolveExact,SolveAssumeWorst]
   normalize x'
 
