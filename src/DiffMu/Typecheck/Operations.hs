@@ -177,13 +177,22 @@ makeNonConstType name (TVar a)  = pure $ (TVar a) -- TODO: Check, we do nothing 
 makeNonConstType name (Deleted) = internalError "A deleted value tried to escape. We catched it when it was about to become NonConst."
 makeNonConstType name a = internalError ("makeNonConstType called on " <> show a)
 
+-- WARNING: Since `makeNonConstType` creates explicit substitutions,
+--          one has to make sure that the same variable
+--          is not substituted twice.
+--          This means we have to normalize the types in here,
+--          and that an implicit condition for `makeNonConstType` is
+--          that it only ever creates a single substitution.
 makeNonConstTypeOp :: (IsT MonadDMTC t) => Symbol -> DMTypeOp -> t DMTypeOp
 makeNonConstTypeOp name (Unary op (τ :@ s) ρ) = do
-  τ' <- makeNonConstType name τ
-  pure (Unary op (τ' :@ s) ρ)
+  τn <- normalize τ
+  τn' <- makeNonConstType name τn
+  pure (Unary op (τn' :@ s) ρ)
 makeNonConstTypeOp name (Binary op ((τ₁ :@ s₁) , (τ₂ :@ s₂)) ρ) = do
-  τ1' <- makeNonConstType name τ₁
-  τ2' <- makeNonConstType name τ₂
+  τ₁n <- normalize τ₁
+  τ1' <- makeNonConstType name τ₁n
+  τ₂n <- normalize τ₂
+  τ2' <- makeNonConstType name τ₂n
   pure (Binary op ((τ1' :@ s₁) , (τ2' :@ s₂)) ρ)
 
 ----------------------------------------
