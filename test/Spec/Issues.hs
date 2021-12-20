@@ -11,6 +11,7 @@ testIssues pp = do
   test60 pp
   test67 pp
   test21 pp
+  test127 pp
 
 test25 pp = describe "issue 25" $ do
   let ex = " function test() \n\
@@ -232,5 +233,17 @@ test21 pp = describe "issue 21 (FLet collection)" $ do
   parseEvalFail pp "example variant 2 (needs to fail)" ex_2 (VariableNotInScope "f")
 
 
+test127 pp = describe "issue 127 (TLet in loop)" $ do
+  let ex_1 = "  function sloop(x::Integer, n::Integer)   \n\
+              \      for i in 1:2:n                       \n\  
+              \          (x,z) = (x+n,1)                  \n\       
+              \      end                                  \n\
+              \      x                                    \n\
+              \  end                                      "
+
+      intnc = NoFun(Numeric (NonConst DMInt))
+      ty = Fun([([intnc :@ (constCoeff oneId) , intnc :@ (inftyS)] :->: intnc) :@ Just [JTInt,JTInt]])
+
+  parseEval pp "example variant 1" ex_1 (pure ty)
 
 

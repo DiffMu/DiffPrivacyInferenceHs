@@ -164,7 +164,7 @@ solveAllConstraints modes = withLogLocation "Constr" $ do
   case openConstr of
     Nothing -> return ()
     Just (name, constr, mode) -> do
-      debug $ "[Solver]: Notice: BEFORE solving (" <> show mode <> ") " <> show name <> " : " <> show constr
+      -- debug $ "[Solver]: Notice: BEFORE solving (" <> show mode <> ") " <> show name <> " : " <> show constr
       -- logPrintConstraints
       solve mode name constr
 
