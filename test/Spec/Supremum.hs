@@ -65,19 +65,7 @@ testSupremum = do
       (tc $ (sn_EW test >>= check)) `shouldReturn` (Right (Right ()))
 
 
-{-
-    it "issue #123" $ do -- loop infinitely
-      let test :: TC _
-          test = do
-            a <- newVar
-            b <- newVar
-            c <- supremum a (Numeric (NonConst b))
-            return (a, (Numeric (NonConst b)))
-      let check :: (DMTypeOf NoFunKind, DMTypeOf NoFunKind) -> TC _
-          check (_, _)         = pure (Right ())
-          check x              = pure (Left x)
-      (tc $ (sn_EW test >>= check)) `shouldReturn` (Right (Right ()))
--}
+
 
 
     it "solves 'max{a,Real} = b' since from Real there is only 1 reflexive path" $ do

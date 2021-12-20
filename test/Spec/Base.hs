@@ -2,6 +2,7 @@
 module Spec.Base
   (module All
   , tc , tcl , tcb , sn , sn_EW , parseEval , parseEval_l , parseEvalUnify , parseEvalUnify_l , parseEvalSimple, parseEvalFail
+  , parseEvalUnify_customCheck
   )
 where
 

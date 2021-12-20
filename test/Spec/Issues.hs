@@ -11,6 +11,7 @@ testIssues pp = do
   test60 pp
   test67 pp
   test21 pp
+  test123 pp
   test125 pp
   test127 pp
 
@@ -233,6 +234,33 @@ test21 pp = describe "issue 21 (FLet collection)" $ do
 
   parseEvalFail pp "example variant 2 (needs to fail)" ex_2 (VariableNotInScope "f")
 
+test123 pp = describe "issue 123 (Rewind side effects of quick-path-check in supremum search)" $ do
+  let ex_1 = "   function ifelse(x,y::Integer)   \n\
+              \             if y == 1             \n\
+              \                 x                 \n\
+              \             elseif y==2           \n\
+              \                 x                 \n\
+              \             else                  \n\
+              \                 y                 \n\
+              \             end                   \n\
+              \          end                     "
+
+      intnc = NoFun(Numeric (NonConst DMInt))
+      ty = Fun([([intnc :@ (constCoeff (Fin 2)) , intnc :@ inftyS] :->: intnc) :@ Just [JTAny, JTInt]])
+
+  parseEvalUnify_customCheck pp "indirect via code succeeds" ex_1 (pure ty) (return (Right ()))
+
+  it "direct construction of constraint succeeds" $ do -- loop infinitely
+    let test :: TC _
+        test = do
+          a <- newVar
+          b <- newVar
+          c <- supremum a (Numeric (NonConst b))
+          return (a, (Numeric (NonConst b)))
+    let check :: (DMTypeOf NoFunKind, DMTypeOf NoFunKind) -> TC _
+        check (_, _)         = pure (Right ())
+        check x              = pure (Left x)
+    (tc $ (sn_EW test >>= check)) `shouldReturn` (Right (Right ()))
 
 test125 pp = describe "issue 125 (Unify in Non-constification)" $ do
   let ex_1 = "   function sloop(x::Integer)   \n\
