@@ -240,10 +240,11 @@ solveop name (IsTypeOpResult (Binary op (τa1 :@ s1 , τa2 :@ s2) τr)) = do
 
       -- if the return type already is non-const, that's bc we non-constified some types
       -- earlier to perssimistically resolve constraints we could not have otherwise.
-      -- unification would lead to an error then so we do subtyping in that case
+      -- unification would lead to an error if we inferred a const return type do we unify
+      -- the number types instead
       -- see issue #124
-      case τr of
-          Numeric (NonConst _) -> addConstraint (Solvable (IsLessEqual (val_τr ,τr))) >> return val_τr
+      case (τr, val_τr) of
+          (Numeric (NonConst tr), Numeric (Const _ tr_val)) -> unify tr tr_val >> return τr
           _ -> unify τr val_τr
       dischargeConstraint @MonadDMTC name
 
