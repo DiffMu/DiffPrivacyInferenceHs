@@ -32,12 +32,19 @@ import Debug.Trace
 run :: IO ()
 run = putStrLn "Hello?"
 
-typecheckFromString_DMTerm :: String -> IO ()
-typecheckFromString_DMTerm term = do
+typecheckFromString_DMTerm_Detailed :: String -> IO ()
+typecheckFromString_DMTerm_Detailed term = do
  let res = parseJTreeFromString term >>= parseJExprFromJTree >>= parseDMTermFromJExpr
  case res of
    Left err -> putStrLn $ "Error while parsing DMTerm from string: " <> show err
-   Right term -> typecheckFromDMTerm term
+   Right term -> typecheckFromDMTerm_Detailed term
+
+typecheckFromString_DMTerm_Simple :: String -> IO ()
+typecheckFromString_DMTerm_Simple term = do
+ let res = parseJTreeFromString term >>= parseJExprFromJTree >>= parseDMTermFromJExpr
+ case res of
+   Left err -> putStrLn $ "Error while parsing DMTerm from string: " <> show err
+   Right term -> typecheckFromDMTerm_Simple term
 
 data DoShowLog = DoShowLog DMLogSeverity [DMLogLocation] | DontShowLog
 
@@ -61,19 +68,11 @@ executeTC l r = do
 
   return x
 
-
--- thisFunctionDoesNotExist :: DMTerm -> TC MutDMTerm
--- thisFunctionDoesNotExist = undefined
-
-typecheckFromDMTerm :: MutDMTerm -> IO ()
-typecheckFromDMTerm term = do
-  putStrLn "Starting DiffMu!"
-
+typecheckFromDMTermWithPrinter :: _ -> DoShowLog -> MutDMTerm -> IO ()
+typecheckFromDMTermWithPrinter printer logoptions term = do
   let r = do
 
         log $ "Checking term   : " <> show term
-        -- typecheck the term t5
-        -- mt <- thisFunctionDoesNotExist term
 
         term' <- liftNewLightTC (preprocessAll term)
 
@@ -93,30 +92,27 @@ typecheckFromDMTerm term = do
         tres''' <- normalize tres''
         return tres'''
 
-        -- a <- newVar
-        -- b <- newVar
-        -- let (ss :: Sensitivity) = injectVarId (Ln (oneId ⋆! oneId ⋆! a))
-        -- a ==! (b ⋆! b)
-        -- solveAllConstraints SolveExact
-        -- traceM $ "My s is   : " <> show ss
-        -- ss' <- normalize ss
-        -- traceM $ "After norm: " <> show ss'
+  x <- executeTC logoptions r
+
+  case x of
+    Left err -> putStrLn $ "Encountered error: " <> show err
+    Right x -> putStrLn $ printer x
 
 
-        -- an example of subtyping
-        {-
-        let iINT = Numeric (NonConst DMInt)
-        let rREAL = Numeric (NonConst DMReal)
-        aa <- TVar <$> newTVar @MainKind "a"
+-- (DoShowLog Warning logging_locations)
 
-        addConstraint (Solvable (IsLessEqual (([iINT :@ oneId] :->: rREAL),aa)))
-        solveAllConstraints SolveExact
-        normalizeContext
-        normalize aa
-        -}
+typecheckFromDMTerm_Simple :: MutDMTerm -> IO ()
+typecheckFromDMTerm_Simple term = do
+  let printer (ty, full) =
+        "\n---------------------------------------------------------------------------\n"
+        <> "Type:\n" <> show ty
+        <> "\n---------------------------------------------------------------------------\n"
+        <> "Constraints:\n" <> show (_constraints (_meta full))
+  typecheckFromDMTermWithPrinter printer (DontShowLog) term
 
+typecheckFromDMTerm_Detailed :: MutDMTerm -> IO ()
+typecheckFromDMTerm_Detailed term = do
 
-  -- these are the locations from which the logs will be shown
   let logging_locations = [
         Location_Check,
         Location_Constraint
@@ -125,33 +121,12 @@ typecheckFromDMTerm term = do
         -- Location_MonadicGraph,
          --Location_All
         ]
+  let printer (ty, full) =
+        "\n---------------------------------------------------------------------------\n"
+        <> "Type:\n" <> show ty
+        <> "\n---------------------------------------------------------------------------\n"
+        <> "Monad state:\n" <> show full
 
-  x <- executeTC (DoShowLog Warning logging_locations) r
-
-  case x of
-    Left err -> putStrLn $ "Encountered error: " <> show err
-    Right x -> putStrLn $ "Result: " <> show x
-
-  {-
-  let x = runExcept (runStateT (runTCT r) (Full def def (Right def)))
-  case x of
-    Left err -> putStrLn $ "Encountered error: " <> show err
-    Right x -> do
-      let logs = view (tcstate.logger) (snd x)
-      -- we do log a message if
-      -- 1. its severity is higher/equal than this one
-      --   OR
-      -- 2. it was logged below one of the given locations
-      let severity = Force
-      let locations = []
-      let realLogs = getLogMessages logs severity locations
-      putStrLn "======================== LOG ========================="
-      putStrLn realLogs
-      putStrLn "======================== End LOG ====================="
-      putStrLn ""
-      putStrLn $ "Result: " <> show x
-  return ()
--}
-
+  typecheckFromDMTermWithPrinter printer (DoShowLog Warning logging_locations) term
 
 
