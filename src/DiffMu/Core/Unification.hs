@@ -18,12 +18,14 @@ import Data.HashMap.Strict as H
 --
 
 
+-------------------------------------------
+-- INC functionality needed for
+-- unification.
+--
+
 class HasUnificationError e a where
   unificationError' :: Show a => a -> a -> e
 
-
--- data INCResT m e a = Finished' (m a) | Wait' | Fail' e
---   deriving (Show, Functor)
 
 data StoppingReason e = Wait' | Fail' e
 
@@ -45,40 +47,16 @@ instance MonadLog m => MonadLog (ExceptT e m) where
   logForce a = ExceptT (logForce a >> pure (Right ()))
   withLogLocation s a = a -- TODO: Make this proper?
 
-    -- ExceptT (withLogLocation s a >> pure (Right ()))
-
--- instance MonadLog m => MonadLog (INCResT e m) where
---   log a = INCResT (log a)
-
--- instance HasUnificationError e a => HasUnificationError (e) [a] where
---   unificationError' a b = unificationError' a b
 
 
--- newtype INCResT m e a = INCResT {runINCResT :: Either (StoppingReason e) (m a)} 
-  -- deriving (Functor, Applicative, Monad)
-
-
-{-
-instance Functor m => Functor (INCResT m e) where
-  fmap f (Finished' a) = Finished' (fmap f a)
-  -- fmap f (Partial' a) = Partial' (fmap f a)
-  fmap f Wait' = Wait'
-  fmap f (Fail' e) = Fail' e
-
-instance Applicative m => Applicative (INCResT m e) where
-  pure a = Finished' (pure a)
-  Finished' f <*> Finished' x = Finished' (f <*> x)
-  Finished' f <*> Wait' = Wait'
-  Wait' <*> Finished' x = Wait'
-  Wait' <*> Wait' = Wait'
-  Fail' e <*> _ = Fail' e
-  _ <*> Fail' e = Fail' e
-  -- Finished' f <*> Partial' x = Partial' (f <*> x)
-  -- Partial' f <*> Partial' x = Partial' (f <*> x)
-
--- instance Monad m => Monad (INCResT m e) where
---   Finished' x >>= f = (x >>=) <*> f
--}
+---------------------------------
+-- The actual unification
+--
+-- | The reason for the implementation using incremental computation is
+--   that unification does not always succeed:
+--   When terms such as `(v :∧: w)` are unified,  usually we cannot do anything,
+--   but have to wait for `v` or `w` to be known in more detail.
+--
 
 normalizeᵢ :: Normalize t a => a -> INCResT e t a
 normalizeᵢ a = liftINC (normalize a)
@@ -116,8 +94,6 @@ instance (HasUnificationError e (Maybe a), MonadLog t, MonadError e t, Show a, U
   unifyᵢ_ (Just a) (Just b) = Just <$> unifyᵢ_ a b
   unifyᵢ_ t s = throwError (unificationError' t s)
 
--- instance Normalize t a => Normalize (INCResT e t) a where
---   normalize a = liftINC (normalize a)
 
 instance MonadDMTC t => Unifyᵢ (INCResT DMException t) (DMTypeOf k) where
   unifyᵢ_ Deleted a                     = liftINC $ internalError "A deleted variable reappeared and tried to escape via unification."
@@ -254,7 +230,7 @@ instance Solve MonadDMTC IsLessEqual (Sensitivity, Sensitivity) where
 -- Monadic monoid structure on dmtypes
 --
 
--- new monoid structure using infimum
+-- monoid structure using infimum
 
 instance (IsT MonadDMTC t) => SemigroupM (t) (DMTypeOf MainKind) where
   (⋆) x y = return (x :∧: y)
@@ -270,21 +246,4 @@ instance (SingI k, Typeable k, IsT MonadDMTC t) => (CheckNeutral (t) (DMTypeOf k
   checkNeutral (_) = return False
 
 -- Old semigroup structure by unification
-{-
--- We define a monadic semigroup structure on `DMTypeOf k`,
--- which is simply unification.
-instance (IsT MonadDMTC t) => SemigroupM (t) (DMTypeOf k) where
-  (⋆) = unify
-
--- This is even a monadic monoid, with the neutral element given by a new type variable.
-instance (SingI k, Typeable k, IsT MonadDMTC t) => MonoidM (t) (DMTypeOf k) where
-  neutral = TVar <$> newTVar ""
-
--- An optimized check for whether a given DMType is a neutral does not create new typevariables,
--- but simply checks if the given DMType is one.
-instance (SingI k, Typeable k, IsT MonadDMTC t) => (CheckNeutral (t) (DMTypeOf k)) where
-  checkNeutral (TVar x) = return True
-  checkNeutral (_) = return False
--}
-
 
