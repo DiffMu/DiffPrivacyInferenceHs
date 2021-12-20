@@ -677,7 +677,8 @@ data MutabilityExtension a =
   MutLet LetKind a a
   -- MutLoop (a : "Number of iterations") (TeVar : "name of iteration var") (a : "body")
   | MutLoop a (Maybe TeVar) a
-  | Modify (Asgmt JuliaType) a
+  | SModify (Asgmt JuliaType) a
+  | TModify [Asgmt JuliaType] a
   | MutRet
   | DefaultRet a
   deriving (Show, Eq, Functor, Foldable, Traversable)
@@ -855,7 +856,8 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
 instance ShowPretty a => ShowPretty (MutabilityExtension a) where
   showPretty (MutLet t a b) = "MutLet{" <> show t <> "} " <> indent (showPretty a) <> indent (showPretty b)
   showPretty (MutLoop a x d) = "MutLoop (" <> (showPretty a) <> ", " <> show x <> ")" <> parenIndent (showPretty d)
-  showPretty (Modify a x) = "Modify! (" <> showPretty a <> ", " <> showPretty x <> ")"
+  showPretty (SModify a x) = "SModify! (" <> showPretty a <> ", " <> showPretty x <> ")"
+  showPretty (TModify a x) = "TModify! (" <> showPretty a <> ", " <> showPretty x <> ")"
   showPretty (MutRet) = "MutRet"
   showPretty (DefaultRet x) = "DefaultRet (" <> showPretty x <> ")"
 

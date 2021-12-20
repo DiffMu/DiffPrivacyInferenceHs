@@ -530,8 +530,8 @@ elaborateMut scope (Extra (MutLoop iters iterVar body)) = do
 
 -- the loop-body-preprocessing creates these modify! terms
 -- they get elaborated into tlet assignments again.
-elaborateMut scope (Extra (Modify (Nothing :- _) t1)) = throwError (DemutationError $ "Found a nameless variable in a modify term.")
-elaborateMut scope (Extra (Modify (Just v :- _) t1)) = do
+elaborateMut scope (Extra (SModify (Nothing :- _) t1)) = throwError (DemutationError $ "Found a nameless variable in a modify term.")
+elaborateMut scope (Extra (SModify (Just v :- _) t1)) = do
   (newT1, newT1Type) <- elaborateNonmut scope t1
   return (Tup [newT1], VirtualMutated [(v , LocalMutation)])
 
@@ -540,6 +540,16 @@ elaborateMut scope (Extra (Modify (Just v :- _) t1)) = do
   --   [Var (v :- jt), newT2] -> pure (Tup [newT2] , VirtualMutated mutVars)
   --   [_, newT2] -> internalError ("After elaboration of an internal_modify term result was not a variable.")
   --   _ -> internalError ("Wrong number of terms after elaborateMutList")
+
+-- We also have tuple modify
+elaborateMut scope (Extra (TModify xs t1)) = do
+  let elabSingle (Just v :- _) = return (v, LocalMutation)
+      elabSingle (Nothing :- _) = throwError (DemutationError $ "Found a nameless variable in a tuple modify term.")
+
+  allElab <- mapM elabSingle xs
+
+  (newT1, newT1Type) <- elaborateNonmut scope t1
+  return (newT1 , VirtualMutated allElab)
 
 
 elaborateMut scope (Extra (MutRet)) = do
@@ -939,10 +949,35 @@ preprocessLoopBody scope iter (SLetBase ltype (v :- jt) term body) = do
 
   case v of
     Just v -> case getValue v scope of
-                Just _  -> tell [v] >> return (Extra (MutLet ltype (Extra (Modify (Just v :- jt) term')) (body')))
+                Just _  -> tell [v] >> return (Extra (MutLet ltype (Extra (SModify (Just v :- jt) term')) (body')))
                 Nothing -> return (SLetBase ltype (Just v :- jt) term' body')
 
     Nothing -> return (SLetBase ltype (v :- jt) term' body')
+
+
+preprocessLoopBody scope iter (TLet (vs) term body) = do
+  -- it is not allowed to change the iteration variable
+  case (iter) of
+    (Just iter) | (Just iter) `elem` (fstA <$> vs)
+                          -> throwOriginalError (DemutationError $ "Inside for-loops the iteration variable (in this case '" <> show iter <> "') is not allowed to be mutated.")
+    _ -> pure ()
+
+  -- if an slet expression binds a variable which is already in scope,
+  -- then this means we are actually mutating this variable.
+  -- thus we update the term to be a mutlet and use the builtin modify!
+  -- function for setting the variable
+  -- if the variable has not been in scope, it is a local variable,
+  -- and we do not change the term
+
+  (term') <- preprocessLoopBody scope iter term
+  (body') <- preprocessLoopBody scope iter body
+
+  -- we collect those values of vs for which there is something in the scope
+  let vs_in_scope = [v | (Just v :- _) <- vs, (Just _) <- [getValue v scope]]
+
+  case vs_in_scope of
+    [] -> return (TLet vs term' body')
+    tv : tvs -> tell vs_in_scope >> return (Extra (MutLet PureLet (Extra (TModify (vs) term')) (body')))
 
 preprocessLoopBody scope iter (FLet f _ _) = throwOriginalError (DemutationError $ "Function definition is not allowed in for loops. (Encountered definition of " <> show f <> ".)")
 preprocessLoopBody scope iter (Ret t) = throwOriginalError (DemutationError $ "Return is not allowed in for loops. (Encountered " <> show (Ret t) <> ".)")
