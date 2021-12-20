@@ -11,6 +11,7 @@ testIssues pp = do
   test60 pp
   test67 pp
   test21 pp
+  test125 pp
   test127 pp
 
 test25 pp = describe "issue 25" $ do
@@ -233,10 +234,24 @@ test21 pp = describe "issue 21 (FLet collection)" $ do
   parseEvalFail pp "example variant 2 (needs to fail)" ex_2 (VariableNotInScope "f")
 
 
+test125 pp = describe "issue 125 (Unify in Non-constification)" $ do
+  let ex_1 = "   function sloop(x::Integer)   \n\
+              \             for i in 1:10      \n\
+              \                 x = x+x        \n\
+              \             end                \n\
+              \             x                  \n\
+              \         end                    "
+
+      intnc = NoFun(Numeric (NonConst DMInt))
+      ty = Fun([([intnc :@ (constCoeff (Fin 1024))] :->: intnc) :@ Just [JTInt]])
+
+  parseEval pp "example variant 1" ex_1 (pure ty)
+
+
 test127 pp = describe "issue 127 (TLet in loop)" $ do
   let ex_1 = "  function sloop(x::Integer, n::Integer)   \n\
-              \      for i in 1:2:n                       \n\  
-              \          (x,z) = (x+n,1)                  \n\       
+              \      for i in 1:2:n                       \n\
+              \          (x,z) = (x+n,1)                  \n\
               \      end                                  \n\
               \      x                                    \n\
               \  end                                      "
