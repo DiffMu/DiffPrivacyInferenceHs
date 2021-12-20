@@ -143,22 +143,18 @@ checkSen' (Lam xτs body) scope =
   -- the body is checked in the toplevel scope, not the current variable scope.
   -- this reflects the julia behaviour
   later $ \scope -> do
-    -- put a special term to mark x as a function argument. those get special treatment
-    -- because we're interested in their sensitivity
+
+    -- put a special term to mark x as a function argument. those get special tratment
+    -- because we're interested in their privacy. put the relevance given in the function signature, too.
     let f s sc (Just x :- τ) = setValue x (checkSens (Arg x τ IsRelevant) s) sc
         f s sc (Nothing :- τ) = sc
-    let addArgs s = foldl (f s) s xτs -- (\sc -> (\(x :- τ) -> setValue x (checkSens (Arg x τ IsRelevant) s) sc))
+    let addArgs s = foldl (f s) s xτs
     let scope' = addArgs scope
 
-    -- check the body in the modified scope
-    let mresult = checkSens body scope'
+    -- check the function body
+    τr <- checkPriv body scope'
 
-    -- add the arguments to all delayed scopes in the result, in case this returns another delayed thing.
-    -- we want to use the current scope upon application of that delayed thing, but the argument names
-    -- must be the actual function arguments.
-    let modresult = modifyScope addArgs mresult
-
-    τr <- modresult
+    -- extract julia signature
     let sign = (sndA <$> xτs)
     done $ do
       restype <- τr
