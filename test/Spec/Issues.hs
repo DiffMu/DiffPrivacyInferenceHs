@@ -250,16 +250,15 @@ test123 pp = describe "issue 123 (Rewind side effects of quick-path-check in sup
 
   parseEvalUnify_customCheck pp "indirect via code succeeds" ex_1 (pure ty) (return (Right ()))
 
-  it "direct construction of constraint succeeds" $ do -- loop infinitely
+  it "direct construction of constraint succeeds" $ do
     let test :: TC _
         test = do
           a <- newVar
           b <- newVar
           c <- supremum a (Numeric (NonConst b))
           return (a, (Numeric (NonConst b)))
-    let check :: (DMTypeOf NoFunKind, DMTypeOf NoFunKind) -> TC _
-        check (_, _)         = pure (Right ())
-        check x              = pure (Left x)
+    let check :: (DMTypeOf NoFunKind, DMTypeOf NoFunKind) -> TC (Either () ())
+        check _ = return (Right ())
     (tc $ (sn_EW test >>= check)) `shouldReturn` (Right (Right ()))
 
 test125 pp = describe "issue 125 (Unify in Non-constification)" $ do

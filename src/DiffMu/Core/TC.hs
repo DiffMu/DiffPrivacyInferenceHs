@@ -17,6 +17,19 @@ import qualified Data.HashMap.Strict as H
 
 import Debug.Trace
 
+--------------------------------------------------------------------------------
+-- TC.hs
+--
+-- | Defines the TC monad, ie.:
+-- | - all class instances for Types, Sensitivity, Privacy terms.
+-- | - all substitution, normalization, constraints, logging functionality for TC
+-- 
+--------------------------------------------------------------------------------
+
+
+
+
+
 -- Helper function for using a monadic function to update the state of a "by a lens accessible"
 -- value in a state monad. Such an operator does not seem to be defined in the "lenses" library.
 -- This might be because using it is not always well behaved, the following note applies.
@@ -66,13 +79,8 @@ instance Substitute SVarOf SensitivityOf JuliaType where
 instance Substitute TVarOf DMTypeOf Sensitivity where
   substitute σs η = pure η
 
--- instance (Substitute v a x, Substitute v a DMType) => Substitute v a (WithRelev x) where
-  -- substitute σs (WithRelev i x) = WithRelev i <$> substitute σs x
 instance (Typeable a, Typeable v, Substitute v a DMMain, Substitute v a (Annotation x)) => Substitute v a (WithRelev x) where
   substitute σs (WithRelev i x) = WithRelev i <$> (substitute σs x)
-
---instance Substitute TVarOf DMTypeOf Privacy where
---  substitute σs η = pure η
 
 instance Substitute v a x => Substitute v a (H.HashMap k x) where
   substitute σs h = mapM (substitute σs) h
@@ -592,27 +600,15 @@ instance Monad m => MonadLog (TCT m) where
   withLogLocation loc action = dmWithLogLocation (fromString_DMLogLocation loc) action
 
 
--- instance Show Meta1Ctx where
---   show (Meta1Ctx s t c) =  "- sens vars: " <> show s <> "\n"
---                         <> "- type vars: " <> show t <> "\n"
---                         <> "- cnst vars: " <> show c <> "\n"
-
--- instance Show e => Show (Meta0Ctx e) where
---   show (Meta0Ctx sσ tσ cs γ) = "- sens subs:   " <> show sσ <> "\n"
---                             <> "- type subs:   " <> show tσ <> "\n"
---                             <> "- constraints: " <> show cs <> "\n"
---                             <> "- types:       " <> show γ <> "\n"
 
 instance Show (MetaCtx) where
   show (MetaCtx s t sσ tσ cs fixedT) =
        "- sens vars: " <> show s <> "\n"
     <> "- type vars: " <> show t <> "\n"
-    -- <> "- cnst vars: " <> show c <> "\n"
     <> "- sens subs:   " <> show sσ <> "\n"
     <> "- type subs:   " <> show tσ <> "\n"
     <> "- fixed TVars: " <> show fixedT <> "\n"
     <> "- constraints:\n" <> show cs <> "\n"
-    -- <> "- types:       " <> show γ <> "\n"
 
 instance Show Watcher where
   show (Watcher changed) = show changed
@@ -637,14 +633,6 @@ instance Default (Full) where
 
 instance Semigroup NormalizationLevel where
   NormalForMode a <> NormalForMode b = NormalForMode (a `intersect` b)
-  -- NotNormal <> a = NotNormal
-  -- a <> NotNormal = NotNormal
-  -- NormalForMode a <> NormalForMode b = NormalForMode (min a b)
-
--- instance Ord (NormalizationLevel) where
---   NotNormal <= _ = True
---   NormalForMode a <= NotNormal = False
---   NormalForMode a <= NormalForMode b = a <= b
 
 instance (SemigroupM t a) => SemigroupM t (Watched a) where
   (⋆) (Watched x a) (Watched y b) = Watched (x <> y) <$> a ⋆ b
@@ -688,12 +676,6 @@ instance Monad m => MonadTerm DMTypeOf (TCT m) where
       Nothing -> pure []
       Just a -> pure a
 
-  -- getFixedVars _ = do
-  --   vars <- use (meta.fixedTVars)
-  --   let constrNames = getValue (SingSomeK 
-  --   undefined
-    -- let somes = [(SomeK v,x) | (SingSomeK v,x) <- getAllKeyElemPairs vars]
-    -- return (filterSomeKPair somes)
 
 instance Monad m => MonadTerm SensitivityOf (TCT m) where
   type VarFam SensitivityOf = SVarOf
@@ -883,11 +865,11 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
         cs'' = second f <$> cs'
     return [(name,c) | (name, Just c) <- cs'' ]
 
-  logPrintConstraints = pure () -- do
-    -- ctrs <- use (meta.constraints.anncontent)
-    -- log $ "## Constraints ##"
-    -- log $ show ctrs
-    -- log $ ""
+  logPrintConstraints = do
+    ctrs <- use (meta.constraints.anncontent)
+    log $ "## Constraints ##"
+    log $ show ctrs
+    log $ ""
 
   getAllConstraints = do
     (Ctx (MonCom cs)) <- use (meta.constraints.anncontent.topctx)
@@ -913,62 +895,15 @@ filterWithSomeVars wanted ctrs =
   
 
 
-    -- case null top of
-    --   True  -> 
-    --   False -> return Failure_WasNotEmpty
-
-  -- clearConstraints = undefined
-  --   -- (AnnNameCtx ns ctx) <- use (meta.constraints)
-  --   -- meta.constraints .= AnnNameCtx ns emptyDict
-  --   -- return ctx
-  -- restoreConstraints ctx1 = undefined --do
-    -- (AnnNameCtx ns _) <- use (meta.constraints)
-    -- meta.constraints .= AnnNameCtx ns ctx1
-
-    -- (AnnNameCtx n cs) <- use (meta.constraints)
-
-
-
-
-
-
-  {-
-instance Monad m => MonadConstraint' Symbol TC (TCT m) where
-  -- type ConstrVar TC = Symbol
-  addConstraint' c = meta.constraints %%= newAnnName "constr" (DMSolvable c)
-  -- modify0 (\f -> f {constraints = MonCom [(c,"hello")]}) -- --modify0 (\s -> s {constraints = _}) -- 
-  getUnsolvedConstraint' = undefined -- getUnsolved <$> view (meta0.constraints) <$> get
-  -- addConstraint'2 c = return ()
--}
--- instance MonadConstraint'' Symbol TCT where
---   addConstraint'' c = meta0.constraints %%= newAnnName "" (Solvable'' c)
-
--- instance Monad t => MonadConstraintTag DM Symbol (TCT t e) where
---   addConstraintTag c = meta0.constraints %%= newAnnName "" (SolvableTag c)
-
--- instance Monad t => MonadConstraintDiff Symbol (TC e) (TCT t e) where
---   addConstraintDiff c = _ -- meta0.constraints %%= newAnnName "" (SolvableTag c)
 
 
 
 
 instance Monad m => MonadWatch (TCT m) where
-  -- startWatch = tcstate.watcher %= (\(Watcher _ _) -> Watcher IsWatching NotChanged)
-  -- stopWatch = tcstate.watcher %= (\(Watcher _ s) -> Watcher NotWatching s)
   resetChanged = tcstate.watcher %= (\(Watcher _) -> Watcher NotChanged)
   notifyChanged = tcstate.watcher %= (\(Watcher _) -> Watcher IsChanged)
   getChanged = do (Watcher c) <- use (tcstate.watcher)
                   return c
-
-
-
-
-
--- instance MonadWatch m => MonadWatch (TCT m) where
---   notifyChanged = TCT (lift (lift notifyChanged))
-
-
--- supremum :: forall isT t a k. (Normalize (t) (a k), IsT isT t, MonadTerm a (t), MonadConstraint isT (t), Solve isT IsSupremum (a k, a k, a k)) => (a k) -> (a k) -> t (a k)
 
 
 
@@ -1068,34 +1003,16 @@ instance (Monad t, Normalize t a) => Normalize t (Maybe a) where
   normalize (Just a) = Just <$> normalize a
 
 
--- instance (Solve MonadDMTC IsInfimum (DMType,DMType,DMType), IsT MonadDMTC t, Monad t) => Normalize (t) DMTypeOp where
 instance (MonadDMTC t) => Normalize (t) DMTypeOp where
   normalize (Unary op τ res) = Unary op <$> normalize τ <*> normalize res
   normalize (Binary op τ res) = Binary op <$> normalize τ <*> normalize res
 
-  -- normalize (Ternary op τ res) = Ternary op <$> normalize τ <*> normalize res
-
--- instance MonadDMTC t :=> Normalize (t) DMTypeOp where
---   ins = Sub Dict
 
 instance (MonadDMTC t => Normalize (t) a) => MonadDMTC t :=> Normalize (t) a where
--- instance (IsT isT t, isT e t => Normalize (t) a) => isT e t :=> Normalize (t) a where
   ins = Sub Dict
 
 
 instance Monad m => IsT MonadDMTC (TCT m) where
--- instance (forall e. MonadDMTC t) => IsT MonadDMTC (t) where
-
-  -- normalize (Binary op σ τ) = Binary op <$> normalize σ <*> normalize τ
-  -- normalize (Ternary op ρ σ τ) = Ternary op <$> normalize ρ <*> normalize σ <*> normalize τ
-
-
--- instance (forall e t. (MonadDMTC t => Normalize (t) a)) => HasNormalize MonadDMTC a where
-
-
-
-  -- solve_ (Constr (Binary op σ τ)) = undefined
-  -- solve_ (Constr (Ternary op ρ σ τ)) = undefined
 
 
 
@@ -1111,17 +1028,6 @@ newPVar = do
    p1 ::Sensitivity <- newVar
    p2 :: Sensitivity <- newVar
    return (p1, p2)
-
-  -- where f names = let (τ , names') = newName hint names
-  --                 in (TVar τ, names')
-
-
-  -- state (over meta0 f)
-  -- where f (Meta1Ctx s t c) =
-  --         let (τ , s') = newName hint s
-  --         in (TVar τ , Meta1Ctx s t c)
-
--- instance (MonadDMTC t, GoodConstraintContent a) => ConstraintOnSolvable t a where
 
 ------------------------------------------------------------------------
 -- unification of sensitivities
@@ -1154,12 +1060,6 @@ instance (MonadDMTC t, Show a, Unify t a) => Unify t (Maybe a) where
   unify_ (Just a) (Just b) = Just <$> unify_ a b
   unify_ t s = throwError (UnificationError t s)
 
--- instance Unify MonadDMTC Privacy where
---   unify_ (a1,b1) (a2,b2) = (,) <$> (unify_ a1 a2) <*> (unify_ b1 b2)
-
-
-
-
 
 
 
@@ -1176,23 +1076,14 @@ truncateExtra η η_old =
   (case η_old == zeroId of
       True -> zeroId
       _    -> η)
--- truncateExtra :: Annotation f -> Annotation e -> Annotation f
--- truncateExtra η (SensitivityAnnotation η_old) = 
---   (case η_old == zeroId of
---       True -> zeroId
---       _    -> η)
--- truncateExtra η η_old =
+
 
 scaleExtra :: forall (a :: AnnotationKind). Sensitivity -> Annotation a -> Annotation a
 scaleExtra η (SensitivityAnnotation s) = SensitivityAnnotation (η ⋅! s)
 scaleExtra η (PrivacyAnnotation (ε, δ)) = PrivacyAnnotation (η ⋅! ε , η ⋅! δ)
 
--- scaleSens :: forall (a :: AnnotationKind). Sensitivity -> Sensitivi -> Annotation a
--- scaleSens = undefined
 
 normalizeAnn :: forall t k. (MonadDMTC t) => DMTypeOf k -> t (DMTypeOf k)
--- normalizeAnn :: Monad m => DMTypeOf k -> (TCT m) (DMTypeOf k)
--- normalizeAnn :: forall t k. (IsT MonadDMTC t) => DMTypeOf k -> t (DMTypeOf k)
 normalizeAnn (TVar a) = pure $ TVar a
 normalizeAnn (Fun as) = do
   let normalizeInside (f :@ annot) = (:@ annot) <$> normalizeAnn f
@@ -1239,18 +1130,6 @@ normalizeAnn (xs :->*: y) = do
   let normalizeInside (x :@ annot) = (:@ annot) <$> normalizeAnn x
   (:->*:) <$> mapM normalizeInside xs <*> normalizeAnn y
 normalizeAnn x = pure x
-
-
--- normalizeInsideAnn :: MonadDMTC t => DMTypeOf (AnnotatedKind a) -> t (DMTypeOf (AnnotatedKind a))
--- normalizeInsideAnn (TVar a) = undefined
-
--- normalizeRewritingDMType :: MonadDMTC t -> 
--- normalizeRewritingDMType :: (IsT MonadDMTC t, (Solve MonadDMTC IsInfimum (DMType, DMType, DMType))) => DMTypeOf k -> t (DMTypeOf k)
--- normalizeRewritingDMType (TVar a) = pure $ TVar a
--- normalizeRewritingDMType (TVar a) = pure $ TVar a
--- normalizeRewritingDMType (TVar a) = pure $ TVar a
--- normalizeRewritingDMType (TVar a) = pure $ TVar a
--- normalizeRewritingDMType (TVar a) = pure $ TVar a
 
 
 

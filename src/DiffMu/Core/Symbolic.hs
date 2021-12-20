@@ -169,19 +169,8 @@ instance Show SensKind where
   show MainSensKind = "S"
 
 
--- newtype MultInt = MultInt Int
---   deriving (Hashable, Eq)
--- instance Show MultInt where
---   show (MultInt a) = show a
-
--- instance Monad m => SemigroupM m MultInt where
---   (⋆) (MultInt a) (MultInt b) = pure $ MultInt $ (P.*) a b
-
--- instance Monad m => MonoidM m MultInt where
---   neutral = pure (MultInt 1)
 type SymTerm :: SensKind -> *
 type SymTerm = CPolyM SymVal Int (SymVar MainSensKind)
--- SingleKinded (LinCom SymVal (MonCom Int (SymVar MainSensKind)))
 
 instance CheckContains (SymVar MainSensKind) (SymbolOf MainSensKind) where
   checkContains (Id _) = Nothing
@@ -199,14 +188,10 @@ instance CheckContains (SymVar MainSensKind) (SymbolOf MainSensKind) where
 instance Monad m => CheckNeutral m (SymTerm k) where
   checkNeutral a = pure False
 
--- SingleKinded (LinCom SymVal (MonCom Int (SymVar MainSensKind)))
 
 svar :: SymbolOf MainSensKind -> (SymTerm MainSensKind)
 svar a = injectVarId (HonestVar a)
 
-  -- LinCom (MonCom [(Fin 1, MonCom [(1,HonestVar a)])])
-
--- type SymTerm t = Combination t SymVal Rational Symbol
 
 instance (SemigroupM m a, SemigroupM m b) => SemigroupM m (a,b) where
   (⋆) (a1,a2) (b1,b2) = (,) <$> (a1 ⋆ b1) <*> (a2 ⋆ b2)

@@ -46,26 +46,9 @@ instance Monoid Changed where
   mempty = NotChanged
 
 class Monad t => MonadWatch t where
-  -- startWatch :: t ()
-  -- stopWatch :: t ()
   resetChanged :: t ()
   notifyChanged :: t ()
   getChanged :: t Changed
-
--- instance MonadWatch Watch where
---   notifyChanged = tell IsChanged
-
--- instance MonadWatch Identity where
---   startWatch = pure ()
---   notifyChanged = pure ()
-
--- class Subs x a s where
---   getTerm :: s -> x -> Maybe a
-
--- type SubMap x a = HashMap x a
-
--- instance (Eq x, Hashable x) => Subs x a (HashMap x a) where
---   getTerm s x = H.lookup x s
 
 
 class (Typeable v, Typeable a, forall k. Eq (v k)) => Substitute (v :: j -> *) (a :: j -> *) x where
@@ -102,13 +85,6 @@ instance (FreeVars v a) => FreeVars v (Maybe a) where
 
 
 
--- class (Hashable (Var a), Show (Var a), Show a, Substitute (Var a) a a) => Term a where
---   type Var a :: *
---   -- substituteAll :: Monad t => (Var a -> t a) -> a -> t a
---   var :: Var a -> a
-
--- class (KHashable v, KShow v, KShow a, KEq v, forall k. Substitute v a (a k)) => Term v a where
--- class (KHashable v, KShow v, KShow a, KEq v, forall k. SingI k => Substitute v a (a k)) => Term v a where
 
 
 class (KHashable v, KShow v, KShow a, KEq v, forall k. (Substitute v a (a k))) => Term v a where
@@ -117,16 +93,13 @@ class (KHashable v, KShow v, KShow a, KEq v, forall k. (Substitute v a (a k))) =
 
 data SomeK (v :: j -> *) where
   SomeK :: (Typeable v, Typeable k, SingI k) => v k -> SomeK v
--- deriving instance Generic (SomeK v)
 
 
 instance (KHashable v) => Hashable (SomeK v) where
   hashWithSalt salt (SomeK x) = hashWithSalt salt x
 
 instance (KShow v) => Show (SomeK (v :: j -> *)) where
-  show (SomeK (x :: v k)) = show x --  <> show (someTypeRep x)
-    -- let pP = someTypeRep x
-    -- in _
+  show (SomeK (x :: v k)) = show x
 
 
 
@@ -150,7 +123,6 @@ filterSomeKPair :: forall v k2 x. (Typeable k2) => [(SomeK v,x)] -> [(v k2, x)]
 filterSomeKPair = undefined
 
 data Subs v a where
-  -- Subs :: Term v a => (HashMap (SomeK v) (SomeK a)) -> Subs v a
   Subs :: Term v a => (HashMap (SomeK v) (SomeK a)) -> Subs v a
 
 
@@ -167,10 +139,7 @@ instance Show (Subs v a) where
   show (Subs s) = intercalate ", " ((\(SomeK x, SomeK a) -> show (x :=~ a)) <$> toList s)
 
 
--- class Substitute (Var a) a x => VSubstitute a x where
--- instance Substitute (Var a) a x => VSubstitute a x where
 removeFromSubstitution :: (Monad t, Term v a) => [SomeK v] -> (forall k. IsKind k => v k -> t (a k)) -> (forall k. IsKind k => v k -> t (a k))
--- removeFromSubstitution vars σ x = case or [compareVar (SomeK x) v | v <- vars] of
 removeFromSubstitution vars σ x = case (SomeK x) `elem` vars of
   True -> pure (var x)
   False -> σ x
@@ -185,7 +154,6 @@ trySubstitute (Subs m) (x :: v k) = case H.lookup (SomeK x) m of
 
   Nothing -> pure (var x)
 
--- trySubstitute :: (MonadImpossible t, MonadWatch t, Term v a, Typeable k) => Subs v a -> v k -> t (a k)
 
 substituteSingle :: (Typeable k, Term v a) => Sub v a k -> a j -> a j
 substituteSingle ((x :: v k) := (a :: a k)) b = runIdentity (substitute f b)
@@ -210,12 +178,6 @@ substituteSingle' :: (Typeable k, Term v a) => Sub v a k -> SomeK a -> SomeK a
 substituteSingle' ((x :: v k) := (a :: a k)) (SomeK (a0 :: a j)) = SomeK (substituteSingle (x := a) a0)
 
 
---       Nothing -> impossible $ "Encountered a wrongly kinded substitution: " <> show (typeRep @j) <> " ≠ " <> show (typeRep @j0)
---       Just Refl -> notifyChanged >> pure a
--- substituteSingle' (x := a) b = runIdentity (substitute f b)
---   where f v | v == x    = pure a
---         f v | otherwise = pure (var v)
-  -- undefined -- runIdentity . substitute (trySubstitute (Subs (H.singleton x a)))
 
 
 instance (MonadImpossible t, Term v a) => SemigroupM t (Subs v a) where
@@ -242,14 +204,10 @@ class (Monad t, Term (VarFam a) a) => MonadTerm (a :: j -> *) t where
   newVar :: (IsKind k) => t (a k)
   addSub :: (IsKind k) => Sub (VarFam a) a k -> t ()
   getSubs :: t (Subs (VarFam a) a)
-  getConstraintsBlockingVariable :: (IsKind k) => Proxy a -> VarFam a k -> t ([Symbol]) -- [(VarFam a k,[Symbol])]
+  getConstraintsBlockingVariable :: (IsKind k) => Proxy a -> VarFam a k -> t ([Symbol])
 
 class (Monad t, Term (VarFam a) a, MonadTerm a t) => MonadTermDuplication a t where
   duplicateAllConstraints :: [SomeK (Sub (VarFam a) (ListK a))] -> t ()
-
-
-  -- addMultiSub :: (Typeable k) => Sub (VarFam a) [a] k
-
 
 
 
