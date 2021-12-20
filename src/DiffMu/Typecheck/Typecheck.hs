@@ -152,7 +152,7 @@ checkSen' (Lam xτs body) scope =
     let scope' = addArgs scope
 
     -- check the function body
-    τr <- checkPriv body scope'
+    τr <- checkSens body scope'
 
     -- extract julia signature
     let sign = (sndA <$> xτs)
@@ -177,14 +177,7 @@ checkSen' (LamStar xτs body) scope =
     let scope' = addArgs scope
 
     -- check the body in the modified scope
-    let mresult = checkPriv body scope'
-
-    -- add the arguments to all delayed scopes in the result, in case this returns another delayed thing.
-    -- we want to use the current scope upon application of that delayed thing, but the argument names
-    -- must be the actual function arguments.
-    let modresult = modifyScope addArgs mresult
-
-    τr <- modresult
+    τr <- checkPriv body scope'
     let sign = (fst <$> sndA <$> xτs)
     done $ do
       restype <- τr
