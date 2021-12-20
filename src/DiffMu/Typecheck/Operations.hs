@@ -216,6 +216,15 @@ solveop name (IsTypeOpResult (Unary op (τa :@ s) τr)) = do
 
 ----------------------------------------
 -- Solving binary constraints (exactly)
+-- if we know the result type is a number all operands need to be numbers as well.
+solveop name (IsTypeOpResult (Binary op ((TVar τa1) :@ _, _) (Numeric τr))) = do
+    t1 <- newVar
+    unify (TVar τa1) (Numeric t1)
+    return ()
+solveop name (IsTypeOpResult (Binary op (_, (TVar τa2) :@ _) (Numeric τr))) = do
+    t2 <- newVar
+    unify (TVar τa2) (Numeric t2)
+    return ()
 solveop name (IsTypeOpResult (Binary op (τa1 :@ s1 , τa2 :@ s2) τr)) = do
   solveres <- solveBinary op (τa1, τa2)
   case solveres of
@@ -234,7 +243,7 @@ solveop name (IsTypeOpResult (Binary op (τa1 :@ s1 , τa2 :@ s2) τr)) = do
       -- unification would lead to an error then so we do subtyping in that case
       -- see issue #124
       case τr of
-          NoFun (Numeric (NonConst _)) -> addConstraint (Solvable (IsLessEqual (val_τr ,τr))) >> return val_τr
+          Numeric (NonConst _) -> addConstraint (Solvable (IsLessEqual (val_τr ,τr))) >> return val_τr
           _ -> unify τr val_τr
       dischargeConstraint @MonadDMTC name
 

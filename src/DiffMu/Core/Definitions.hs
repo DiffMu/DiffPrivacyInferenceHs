@@ -196,7 +196,7 @@ data DMTypeOf (k :: DMKind) where
   DMParams :: Sensitivity -> DMType -> DMType -- number of parameters and element type
 
   -- annotations
-  NoFun :: DMTypeOf NoFunKind -> DMTypeOf MainKind
+  NoFun :: DMType -> DMTypeOf MainKind
   Fun :: [DMTypeOf FunKind :@ Maybe [JuliaType]] -> DMTypeOf MainKind
   (:∧:) :: DMTypeOf MainKind -> DMTypeOf MainKind -> DMTypeOf MainKind -- infimum
 

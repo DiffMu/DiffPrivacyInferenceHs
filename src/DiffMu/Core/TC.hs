@@ -568,6 +568,7 @@ logWithSeverity sev text = do
   -- here we split the messages at line breaks (using `lines`)
   -- in order to get consistent looking output (every line has a header)
   let messages = DMLogMessage sev loc <$> (reverse $ lines text)
+  -- traceM text -- force logging even if the computation des not terminate
   tell (DMLogMessages messages)
   -- tcstate.logger.loggerMessages %= (messages <>)
 
@@ -578,6 +579,7 @@ dmlog text = do
   -- here we split the messages at line breaks (using `lines`)
   -- in order to get consistent looking output (every line has a header)
   let messages = DMLogMessage sev loc <$> (reverse $ lines text)
+  -- traceM text -- force logging even if the computation des not terminate
   tell (DMLogMessages messages)
   -- tcstate.logger.loggerMessages %= ( <>)
 
