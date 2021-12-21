@@ -174,7 +174,6 @@ makeNonConstType name (Numeric DMData) = pure $ (Numeric DMData) -- TODO: Check,
 makeNonConstType name (DMVec a b c e)  = (DMVec a b c) <$> (makeNonConstType name e)
 makeNonConstType name (DMMat a b c d e)  = (DMMat a b c d) <$> (makeNonConstType name e)
 makeNonConstType name (TVar a)  = pure $ (TVar a) -- TODO: Check, we do nothing with TVar?
-makeNonConstType name (Deleted) = internalError "A deleted value tried to escape. We catched it when it was about to become NonConst."
 makeNonConstType name a = internalError ("makeNonConstType called on " <> show a)
 
 -- WARNING: Since `makeNonConstType` creates explicit substitutions,

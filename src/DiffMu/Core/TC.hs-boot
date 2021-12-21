@@ -22,7 +22,6 @@ class LiftTC (t :: * -> *)
 
 class (MonadImpossible (t), MonadWatch (t), MonadLog t,
        MonadTerm DMTypeOf (t),
-       MonadTermDuplication DMTypeOf (t),
        MonadTerm SymTerm (t),
        MonadState (Full) (t),
        MonadWriter DMLogMessages (t),

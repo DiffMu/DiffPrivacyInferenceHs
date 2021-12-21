@@ -96,8 +96,6 @@ instance (HasUnificationError e (Maybe a), MonadLog t, MonadError e t, Show a, U
 
 
 instance MonadDMTC t => Unifyᵢ (INCResT DMException t) (DMTypeOf k) where
-  unifyᵢ_ Deleted a                     = liftINC $ internalError "A deleted variable reappeared and tried to escape via unification."
-  unifyᵢ_ a Deleted                     = liftINC $ internalError "A deleted variable reappeared and tried to escape via unification."
   unifyᵢ_ DMAny DMAny                   = pure DMAny
   unifyᵢ_ DMReal DMReal                 = pure DMReal
   unifyᵢ_ DMInt DMInt                   = pure DMInt

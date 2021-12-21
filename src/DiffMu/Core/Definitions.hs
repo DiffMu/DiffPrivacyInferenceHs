@@ -128,7 +128,7 @@ pattern DMVec n c d t = DMVecLike Vector n c d t
 pattern DMGrads n c d t = DMVecLike Gradient n c d t
 
 -- so we don't get incomplete pattern warnings for them
-{-# COMPLETE Deleted, DMInt, DMReal, Const, NonConst, DMData, Numeric, TVar, (:->:), (:->*:), DMTup, L1, L2, LInf, U, Clip,
+{-# COMPLETE DMInt, DMReal, Const, NonConst, DMData, Numeric, TVar, (:->:), (:->*:), DMTup, L1, L2, LInf, U, Clip,
  DMVec, DMGrads, DMMat, DMParams, NoFun, Fun, (:∧:), BlackBox #-}
 
 --------------------
@@ -148,8 +148,6 @@ type DMNumType = DMTypeOf NumKind
 -- NOTE: We can write `(k :: DMKind)` here, because we use the `DataKinds` ghc-extension, which allows us to use
 -- the terms in `DMKind` in a place where normally haskell types would be expected.
 data DMTypeOf (k :: DMKind) where
-  Deleted :: DMTypeOf k
-
   -- a "virtual" type of which everything is a subtype
   -- we need this in places where we require stuff to
   -- be subtype of some julia type, and do not need
@@ -207,7 +205,6 @@ data DMTypeOf (k :: DMKind) where
 
 
 instance Hashable (DMTypeOf k) where
-  hashWithSalt s (Deleted) = s
   hashWithSalt s (DMInt) = s +! 1
   hashWithSalt s (DMReal) = s +! 2
   hashWithSalt s (DMData) = s +! 3
@@ -249,7 +246,6 @@ instance Show (Annotation a) where
 
 -- Types are pretty printed as follows.
 instance Show (DMTypeOf k) where
-  show Deleted = "Deleted"
   show DMAny = "DMAny"
   show DMInt = "Int"
   show DMReal = "Real"
@@ -284,7 +280,6 @@ instance Show (DMTypeOf k) where
 instance Eq (DMTypeOf k) where
   -- special
   TVar a == TVar b = a == b
-  Deleted == Deleted = True
 
   -- ClipKind
   U == U = True
@@ -695,35 +690,6 @@ data SumExtension e f a = SELeft (e a) | SERight (f a)
 
 liftExtension :: (t (PreDMTerm t) -> PreDMTerm s) -> PreDMTerm t -> PreDMTerm s
 liftExtension f x = runIdentity $ recDMTermM (Identity . liftExtension f) (Identity . f) (x)
--- liftExtension f (Extra e)          = (f e)
--- -- liftExtension f (t) = runIdentity $ recDMTermM (\a -> Identity (liftExtension f a)) (_) t
--- liftExtension f (Ret (r))          = Ret (liftExtension f r)
--- liftExtension f (Sng g jt)         = Sng g jt
--- liftExtension f (Var (v :- jt))    = Var (v :- jt)
--- liftExtension f (Rnd jt)           = Rnd jt
--- liftExtension f (Arg v jt r)       = Arg v jt r
--- liftExtension f (Op op ts)         = Op op (fmap (liftExtension f) ts)
--- liftExtension f (Phi a b c)        = Phi (liftExtension f a) (liftExtension f b) (liftExtension f c)
--- liftExtension f (Lam     jts a)    = Lam jts (liftExtension f a)
--- liftExtension f (LamStar jts a)    = LamStar jts (liftExtension f a)
--- liftExtension f (BlackBox jts)     = BlackBox jts
--- liftExtension f (Apply a bs)       = Apply (liftExtension f a) (fmap (liftExtension f) bs)
--- liftExtension f (FLet v a b)       = FLet v (liftExtension f a) (liftExtension f b)
--- liftExtension f (Choice chs)       = Choice (fmap (liftExtension f) chs)
--- liftExtension f (SLet jt a b)      = SLet jt (liftExtension f a) (liftExtension f b)
--- liftExtension f (Tup as)           = Tup (fmap (liftExtension f) as)
--- liftExtension f (TLet jt a b)      = TLet jt (liftExtension f a) (liftExtension f b)
--- liftExtension f (Gauss a b c d)    = Gauss (liftExtension f a) (liftExtension f b) (liftExtension f c) (liftExtension f d)
--- liftExtension f (ConvertM a)       = ConvertM (liftExtension f a)
--- liftExtension f (MCreate a b x c ) = MCreate (liftExtension f a) (liftExtension f b) x (liftExtension f c)
--- liftExtension f (Transpose a)      = Transpose (liftExtension f a)
--- liftExtension f (Size a)      = Size (liftExtension f a)
--- liftExtension f (Index a b c)      = Index (liftExtension f a) (liftExtension f b) (liftExtension f c)
--- liftExtension f (ClipM c a)        = ClipM c (liftExtension f a)
--- liftExtension f (Loop a b x d )    = Loop (liftExtension f a) (b) x (liftExtension f d)
--- liftExtension f (SubGrad a b)      = SubGrad (liftExtension f a) (liftExtension f b)
--- liftExtension f (ScaleGrad a b)    = ScaleGrad (liftExtension f a) (liftExtension f b)
--- liftExtension f (Reorder x a)      = Reorder x (liftExtension f a)
 
 -- recursing into a dmterm
 recDMTermSameExtension :: forall t. (Traversable t) => (PreDMTerm t -> (PreDMTerm t)) -> PreDMTerm t -> (PreDMTerm t)

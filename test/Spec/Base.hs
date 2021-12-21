@@ -85,7 +85,7 @@ sn_EW x = do
 parseEvalSimple p term expected =
   parseEval p ("Checks '" <> term <> "' correctly") term expected
 
-parseEvalFail a b c f = parseEval_b False CompareByEqual (ExpectFail f) a b c (pure Deleted)
+parseEvalFail a b c f = parseEval_b False CompareByEqual (ExpectFail f) a b c (pure (NoFun (Numeric (NonConst DMInt))))
 
 parseEval = parseEval_b False CompareByEqual ExpectSuccess
 parseEval_l = parseEval_b True CompareByEqual ExpectSuccess
@@ -96,7 +96,7 @@ parseEvalUnify_l = parseEval_b True CompareByUnification ExpectSuccess
 ----------------------------------------------
 -- with custom TC/constraint evaluation function
 
-parseEvalFail_customCheck a b c f = parseEval_b False CompareByEqual (ExpectFail f) a b c (pure Deleted)
+parseEvalFail_customCheck a b c f = parseEval_b False CompareByEqual (ExpectFail f) a b c (pure (NoFun (Numeric (NonConst DMInt))))
 
 parseEval_customCheck = parseEval_b_customCheck False CompareByEqual ExpectSuccess
 parseEval_l_customCheck = parseEval_b_customCheck True CompareByEqual ExpectSuccess

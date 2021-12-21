@@ -109,7 +109,6 @@ removeVars σs vs = do
   return [v | (Just v) <- newvs]
 
 instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
-  substitute σs Deleted = pure Deleted
   substitute σs DMAny = pure DMAny
   substitute σs L1 = pure L1
   substitute σs L2 = pure L2
@@ -141,7 +140,6 @@ instance Substitute SVarOf SensitivityOf (Annotation a) where
   substitute σs (PrivacyAnnotation s) = PrivacyAnnotation <$> (substitute σs s)
 
 instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
-  substitute σs Deleted = pure Deleted
   substitute σs DMAny = pure DMAny
   substitute σs L1 = pure L1
   substitute σs L2 = pure L2
@@ -211,7 +209,6 @@ instance Typeable a => FreeVars TVarOf (Annotation a) where
 
 instance Typeable k => FreeVars TVarOf (DMTypeOf k) where
   freeVars DMAny = []
-  freeVars Deleted = []
   freeVars DMInt = []
   freeVars DMReal = []
   freeVars DMData = []
@@ -317,7 +314,6 @@ instance (FreeVars TVarOf x, Substitute TVarOf DMTypeOf x) => GoodConstraintCont
 
 class (MonadImpossible (t), MonadWatch (t), MonadLog t,
        MonadTerm DMTypeOf (t),
-       MonadTermDuplication DMTypeOf (t),
        MonadTerm SensitivityOf (t),
        MonadState (Full) (t),
        MonadWriter DMLogMessages (t),
@@ -690,56 +686,7 @@ instance Monad m => MonadTerm SensitivityOf (TCT m) where
   newVar = coerce <$> svar <$> newSVar "s"
   getConstraintsBlockingVariable _ _ = return mempty
 
-instance Monad m => MonadTermDuplication DMTypeOf (TCT m) where
-  duplicateAllConstraints subs = do
 
-    ------------------------------------
-    -- duplicating all constraints which contain the given vars
-    --
-    -- NOTE: We only duplicate in the top ConstraintCtx in the CtxStack.
-    --       We might want to check that the vars actually do
-    --       not appear in the lower ConstraintCtx's.
-    --       (Or duplicate them there too?)
-    --
-    -- 1. get all the constraint (names) from the ctx stack
-    (AnnNameCtx _ ctrs) <- use (meta.constraints)
-    let ctr_names = getAllKeys ctrs
-
-    -- 2. Build a function which takes a constraint name,
-    --    and duplicates the corresponding constraint if necessary
-    let f :: Symbol -> TCT m ()
-        f name = do
-          case getValue name ctrs of
-            Nothing -> return ()
-            Just (Watched _ (Solvable (ctr :: c a))) -> do
-              duplicated <- duplicateTerm subs (runConstr ctr)
-              case duplicated of
-                -- if the constraint was not actually duplicated,
-                -- this means that the variables did not occur inside
-                -- and we do not have to change this constraint
-                Nothing -> return ()
-
-                -- if we do get duplicated constraints, we discharge the
-                -- actual constraint, and add a new constraint for every copy
-                Just duplicated -> do dischargeConstraint name
-                                      mapM_ (\newctr -> addConstraint (Solvable (constr @c newctr))) duplicated
-
-    --
-    -- 3. Apply the function to all constraint names
-    mapM f ctr_names
-
-
-    ------------------------------------
-    -- set all variables to `Deleted`:
-    --
-    -- 1. build subs which set them to deleted, and put the actions of doing so into a list
-    let σ = [addSub (x := Deleted) | SomeK (x := _) <- subs]
-
-    -- 2. execute all these (monadic) actions
-    sequence σ
-
-    -- And we are done.
-    return ()
 
 getFixedVarsOfSolvable :: Solvable GoodConstraint GoodConstraintContent MonadDMTC -> [SingSomeK TVarOf]
 getFixedVarsOfSolvable (Solvable c) =
