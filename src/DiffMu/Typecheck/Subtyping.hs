@@ -552,7 +552,9 @@ checkContractionAllowed _ _ _ = return ContractionDisallowed
 -- NOTE: IsLessEqual is interpreted as a subtyping relation.
 instance (SingI k, Typeable k) => Solve MonadDMTC IsLessEqual (DMTypeOf k, DMTypeOf k) where
   solve_ Dict SolveSpecial name (IsLessEqual (a,b)) = return ()
-  solve_ Dict SolveExact name (IsLessEqual (a,b))  = solveSubtyping name (a,b)
+  solve_ Dict SolveExact name (IsLessEqual (a,b))  | a `elem` getBottoms = dischargeConstraint name
+  solve_ Dict SolveExact name (IsLessEqual (a,b))  | b `elem` getTops    = dischargeConstraint name
+  solve_ Dict SolveExact name (IsLessEqual (a,b))  | otherwise           = solveSubtyping name (a,b)
   solve_ Dict SolveGlobal name (IsLessEqual path) = collapseSubtypingCycles path
   solve_ Dict SolveAssumeWorst name (IsLessEqual (a,b)) = return ()
   solve_ Dict SolveFinal name (IsLessEqual (a,b)) = do
