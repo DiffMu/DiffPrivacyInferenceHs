@@ -18,6 +18,7 @@ import DiffMu.Typecheck.Preprocess.Common
 import DiffMu.Typecheck.Preprocess.TopLevel
 import DiffMu.Typecheck.Preprocess.Demutation
 import DiffMu.Typecheck.Preprocess.FLetReorder
+import DiffMu.Typecheck.Preprocess.LexicalScoping
 
 import qualified Data.HashMap.Strict as H
 
@@ -46,6 +47,9 @@ preprocessAll term = do
   logForce $ "-----------------------------------"
   logForce $ "FLet processed term:\n" <> showPretty term'''
 
+  -- lexical scoping processing
+  term'''' <- liftLightTC (LSFull def) (\_ -> ()) (processLS term''')
+
   -- done
-  return term'''
+  return term''''
 

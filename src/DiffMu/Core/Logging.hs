@@ -12,6 +12,7 @@ import qualified Control.Monad.Except as QUAL
 
 data DMLogLocation =
   Location_PreProcess
+  | Location_PrePro_LexicalScoping
   | Location_PrePro_Demutation
   | Location_PrePro_Global
   | Location_PrePro_FLetReorder
@@ -45,6 +46,9 @@ instance ISing_DMLogLocation Location_PrePro_Global where
 
 instance ISing_DMLogLocation Location_PrePro_FLetReorder where
   singDMLogLocation _ = Location_PrePro_FLetReorder
+
+instance ISing_DMLogLocation Location_PrePro_LexicalScoping where
+  singDMLogLocation _ = Location_PrePro_LexicalScoping
 
 -- END singleton
 -------
@@ -93,6 +97,7 @@ instance Show DMLogLocation where
   show Location_PrePro_Demutation = "PrePro_Demutation"
   show Location_PrePro_Global = "PrePro_Global"
   show Location_PrePro_FLetReorder = "PrePro_FLetReorder"
+  show Location_PrePro_LexicalScoping = "PrePro_LexicalScoping"
   show Location_Unification = "Unification"
   show Location_Subst = "Subst"
   show Location_INC = "INC"
