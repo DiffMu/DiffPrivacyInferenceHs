@@ -106,7 +106,7 @@ testScope04 pp = do
            \    end                            \n\
            \    f(13)                          \n\
            \ end"
-           
+
   let ex = " function test()                   \n\
            \    function f(a)                  \n\
            \        function h(b)              \n\
@@ -132,6 +132,34 @@ testScope04 pp = do
 
       intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
       ty = Fun([([] :->: intc (Fin 138424)) :@ Just []])
-      
+
   parseEvalFail pp "04 (bad)" ex_bad (FLetReorderError "")
   parseEval pp "04 (good)" ex (pure ty)
+
+
+testScope05 pp = do
+  let ex1 = "function test()        \n\
+           \     y = 1              \n\
+           \     function foo4(y)   \n\
+           \        g = a -> a + y  \n\
+           \     end                \n\
+           \     foo4(123)(1)       \n\
+           \  end"
+      ex2 = "function test2()       \n\
+           \     y = 1              \n\
+           \     g = a -> a + y     \n\
+           \     function foo4(y)   \n\
+           \        g               \n\
+           \     end                \n\
+           \     foo4(123)(1)       \n\
+           \  end"
+
+      intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
+      ty1 = Fun([([] :->: intc (Fin 124)) :@ Just []])
+      ty2 = Fun([([] :->: intc (Fin 2)) :@ Just []])
+
+  parseEval pp "05 (inside)" ex1 (pure ty1)
+  parseEval pp "05 (outside)" ex2 (pure ty2)
+
+
+  
