@@ -3,6 +3,7 @@ module Spec.Base
   (module All
   , tc , tcl , tcb , sn , sn_EW , parseEval , parseEval_l , parseEvalUnify , parseEvalUnify_l , parseEvalSimple, parseEvalFail
   , parseEvalUnify_customCheck
+  , parseEvalString , parseEvalString_l , parseEvalString_customCheck
   )
 where
 
@@ -85,33 +86,43 @@ sn_EW x = do
 parseEvalSimple p term expected =
   parseEval p ("Checks '" <> term <> "' correctly") term expected
 
-parseEvalFail a b c f = parseEval_b False CompareByEqual (ExpectFail f) a b c (pure (NoFun (Numeric (NonConst DMInt))))
+parseEvalFail a b c f = parseEval_b False a b c (TestByFail f)
 
-parseEval = parseEval_b False CompareByEqual ExpectSuccess
-parseEval_l = parseEval_b True CompareByEqual ExpectSuccess
+parseEval parse desc term expected = parseEval_b False parse desc term (TestByEquality expected)
+parseEval_l parse desc term expected = parseEval_b True parse desc term (TestByEquality expected)
 
-parseEvalUnify = parseEval_b False CompareByUnification ExpectSuccess
-parseEvalUnify_l = parseEval_b True CompareByUnification ExpectSuccess
+
+parseEvalUnify parse desc term expected   = parseEval_b False parse desc term (TestByUnification expected)
+parseEvalUnify_l parse desc term expected = parseEval_b True  parse desc term (TestByUnification expected)
+
+parseEvalString parse desc term expected   = parseEval_b False parse desc term (TestByString expected)
+parseEvalString_l parse desc term expected = parseEval_b True  parse desc term (TestByString expected)
 
 ----------------------------------------------
 -- with custom TC/constraint evaluation function
 
-parseEvalFail_customCheck a b c f = parseEval_b False CompareByEqual (ExpectFail f) a b c (pure (NoFun (Numeric (NonConst DMInt))))
+parseEvalFail_customCheck a b c f = parseEval_b False a b c (TestByFail f)
 
-parseEval_customCheck = parseEval_b_customCheck False CompareByEqual ExpectSuccess
-parseEval_l_customCheck = parseEval_b_customCheck True CompareByEqual ExpectSuccess
+parseEval_customCheck parse desc term expected = parseEval_b_customCheck False parse desc term (TestByEquality expected)
+parseEval_l_customCheck parse desc term expected = parseEval_b_customCheck True parse desc term (TestByEquality expected)
 
-parseEvalUnify_customCheck = parseEval_b_customCheck False CompareByUnification ExpectSuccess
-parseEvalUnify_l_customCheck = parseEval_b_customCheck True CompareByUnification ExpectSuccess
+parseEvalUnify_customCheck parse desc term expected   = parseEval_b_customCheck False parse desc term (TestByUnification expected)
+parseEvalUnify_l_customCheck parse desc term expected = parseEval_b_customCheck True  parse desc term (TestByUnification expected)
+
+parseEvalString_customCheck parse desc term expected   = parseEval_b_customCheck False parse desc term (TestByString expected)
+parseEvalString_l_customCheck parse desc term expected = parseEval_b_customCheck True  parse desc term (TestByString expected)
+
 
 
 
 data ComparisonStyle = CompareByEqual | CompareByUnification
 data TestExpectation b = ExpectSuccess | ExpectFail b
 
+data TestBy = TestByEquality (TC DMMain) | TestByUnification (TC DMMain) | TestByString (String, String) | TestByFail DMException
 
-parseEval_b dolog compstyle failOrSuccess parse desc term (expected :: TC DMMain) =
-  parseEval_b_customCheck dolog compstyle failOrSuccess parse desc term expected customTCCheck 
+
+parseEval_b dolog parse desc term (testBy :: TestBy) =
+  parseEval_b_customCheck dolog parse desc term testBy customTCCheck
   where
     customTCCheck = do
       ctrs <- getAllConstraints
@@ -120,12 +131,12 @@ parseEval_b dolog compstyle failOrSuccess parse desc term (expected :: TC DMMain
         cs -> pure $ Left (show cs)
 
 
-parseEval_b_customCheck dolog compstyle failOrSuccess parse desc term (expected :: TC DMMain) customTCCheck =
+parseEval_b_customCheck dolog parse desc term (testBy :: TestBy) customTCCheck =
   it desc $ do
     term' <- parse term
 
     let res = parseJTreeFromString term' >>= parseJExprFromJTree >>= parseDMTermFromJExpr
-     
+
     let term'' :: TC DMMain
         term'' = case res of
                    Left err -> error $ "Error while parsing DMTerm from string: " <> show err
@@ -150,36 +161,74 @@ parseEval_b_customCheck dolog compstyle failOrSuccess parse desc term (expected 
                             tres''
            -- pure $ (tres'')
 
-    let correct result = do
-          -- first, get all constraints (these are exactly the ones which returned from the checking)
-          -- ctrs <- getAllConstraints
+    let correctEquality (expected) result = do
+          expectedT <- expected
+          customCheckResult <- customTCCheck
+          case expectedT == result of
+            True ->
+              -- and additionally if the constraints are empty
+              return customCheckResult
+            False -> pure $ Left ("expected type " <> show expectedT <> " but got " <> show result)
+
+        correctUnification (expected) result = do
+          expectedT <- expected
           customCheckResult <- customTCCheck
 
           -- we check whether our result is as expected
-          expectedT <- expected
-          case compstyle of
-            CompareByUnification -> do
-              unify result expectedT
-              solveAllConstraints [SolveExact]
+          unify result expectedT
+          solveAllConstraints [SolveExact]
 
-              -- and additionally if the constraints are empty
-              return customCheckResult 
-              -- case ctrs of
-              --   [] -> pure $ Right ()
-              --   cs -> pure $ Left (show cs)
+          -- and additionally if the constraints are empty
+          return customCheckResult
 
-            CompareByEqual -> do
-              case expectedT == result of
-                True ->
-                  -- and additionally if the constraints are empty
-                  return customCheckResult
-                  -- case ctrs of
-                  --   [] -> pure $ Right ()
-                  --   cs -> pure $ Left (show cs)
-                False -> pure $ Left ("expected type " <> show expectedT <> " but got " <> show result)
+        correctString (expectedType, expectedConstrs) result = do
+          let actualType = show result
+
+          full <- get
+          let actualConstrs = show (_constraints (_meta full))
+
+          case (actualType == expectedType, actualConstrs == expectedConstrs) of
+            (True,True) -> return $ Right ()
+            (_,_) -> return $ Left (actualType, actualConstrs)
+
+    case testBy of
+      TestByEquality expected -> (tcb dolog $ (sn term'' >>= correctEquality expected)) `shouldReturn` (Right (Right ()))
+      TestByUnification expected -> (tcb dolog $ (sn term'' >>= correctUnification expected)) `shouldReturn` (Right (Right ()))
+      TestByString expected -> (tcb dolog $ (sn term'' >>= correctString (expected))) `shouldReturn` (Right (Right ()))
+      TestByFail f  -> (tcb dolog $ (sn term'')) `shouldReturn` (Left f)
 
 
-    case failOrSuccess of
-      ExpectSuccess -> (tcb dolog $ (sn term'' >>= correct)) `shouldReturn` (Right (Right ()))
-      ExpectFail f  -> (tcb dolog $ (sn term'' >>= correct)) `shouldReturn` (Left f)
+    -- let correct testBy result = do
+    --       -- first, get all constraints (these are exactly the ones which returned from the checking)
+    --       -- ctrs <- getAllConstraints
+    --       customCheckResult <- customTCCheck
+
+    --       -- we check whether our result is as expected
+    --       expectedT <- expected
+    --       case compstyle of
+    --         CompareByUnification -> do
+    --           unify result expectedT
+    --           solveAllConstraints [SolveExact]
+
+    --           -- and additionally if the constraints are empty
+    --           return customCheckResult 
+    --           -- case ctrs of
+    --           --   [] -> pure $ Right ()
+    --           --   cs -> pure $ Left (show cs)
+
+    --         CompareByEqual -> do
+    --           case expectedT == result of
+    --             True ->
+    --               -- and additionally if the constraints are empty
+    --               return customCheckResult
+    --               -- case ctrs of
+    --               --   [] -> pure $ Right ()
+    --               --   cs -> pure $ Left (show cs)
+    --             False -> pure $ Left ("expected type " <> show expectedT <> " but got " <> show result)
+
+
+    -- (tcb dolog $ (sn term'' >>= correct testBy)) `shouldReturn` (Right (Right ()))
+    -- case failOrSuccess of
+      -- ExpectSuccess -> (tcb dolog $ (sn term'' >>= correct testBy)) `shouldReturn` (Right (Right ()))
+      -- ExpectFail f  -> (tcb dolog $ (sn term'' >>= correct testBy)) `shouldReturn` (Left f)
 

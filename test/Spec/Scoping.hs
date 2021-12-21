@@ -162,4 +162,3 @@ testScope05 pp = do
   parseEval pp "05 (outside)" ex2 (pure ty2)
 
 
-  
