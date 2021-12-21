@@ -4,10 +4,19 @@ module Spec.TypecheckingExamples where
 import Spec.Base
 
 
-testCheckSens parse = do
+testTypecheckingExamples pp = do
+  testSens pp
+  testOps pp
+  testPriv pp
+  testBlackBox pp
+  testSLoop pp
+  testDPGD pp
+  
+
+testSens pp = do
   describe "checkSens" $ do
-    parseEvalSimple parse "3 + 7 * 9" (pure $ NoFun (Numeric (Const (constCoeff (Fin 66)) DMInt)))
-    parseEvalSimple parse "2.2 * 3"   (pure $ NoFun (Numeric (Const (constCoeff (Fin 6.6000004)) DMReal)))
+    parseEvalSimple pp"3 + 7 * 9" (pure $ NoFun (Numeric (Const (constCoeff (Fin 66)) DMInt)))
+    parseEvalSimple pp"2.2 * 3"   (pure $ NoFun (Numeric (Const (constCoeff (Fin 6.6000004)) DMReal)))
 
     let test = "function test(a)\n"
             <> "  a\n"
@@ -15,7 +24,7 @@ testCheckSens parse = do
     let ty   = do
           τ <- newTVar ""
           return $ Fun([([TVar τ :@ oneId] :->: TVar τ) :@ Just [JTAny]])
-    parseEvalUnify parse "Checks the identity function" test ty
+    parseEvalUnify pp"Checks the identity function" test ty
 
 
 testOps pp = describe "Ops" $ do
@@ -28,16 +37,50 @@ testOps pp = describe "Ops" $ do
                  \     w + x \n\
                  \  end \n\
                  \ end"
-        ex_mat = "function foo(x::Matrix{Real}, y::Matrix{Real}, z::Matrix{Real}) \n\
-                 \ 2*x + y - z \n\
+        ex_mat = "function foo(x::Matrix{Integer}, y::Matrix{Integer}, z::Matrix{Integer}) \n\
+                 \ 2.0*x + y - z \n\
                  \ end"
-              
-
         int = NoFun(Numeric (NonConst DMInt))
         real = NoFun(Numeric (NonConst DMReal))
         ty_num = Fun([([int :@ (constCoeff (Fin 1)), int :@ (constCoeff (Fin 11)), int :@ (constCoeff (Fin 5.5)), int :@ inftyS] :->: real) :@ Just [JTInt, JTInt, JTInt, JTInt]])
-    --parseEval pp "numeric ops sensitivity" ex_num (pure ty_num) -- TODO infinite loop
-    parseEval pp "matrix ops sensitivity" ex_mat (pure ty_num)
+        ty_mat :: TC DMMain = do
+            n <- newVar
+            m <- newVar
+            let mat1 = NoFun (DMMat L1 U n m (Numeric (NonConst DMInt)))
+            let mat2 = NoFun (DMMat L1 U n m (Numeric (NonConst DMReal)))
+            return (Fun [([mat1 :@ constCoeff (Fin 2), mat1 :@ constCoeff (Fin 1), mat1 :@ constCoeff (Fin 1)] :->: mat2) :@ Just [JTMatrix JTInt, JTMatrix JTInt, JTMatrix JTInt]])
+    parseEval pp "numeric ops sensitivity" ex_num (pure ty_num)
+    parseEvalUnify pp "matrix ops sensitivity" ex_mat (ty_mat)
+
+testPriv pp = describe "privacies" $ do
+    let ret = "function f(x :: Integer) :: Priv() \n\
+               \ x + x                 \n\
+               \ end"
+        inv = "function g(x :: Integer) :: Priv() \n\
+               \ y :: Robust() = gaussian_mechanism(0.1, 0.1, 0.1, 0.1*x) \n\
+               \ 200*y \n\
+               \ end"
+        int = NoFun(Numeric (NonConst DMInt))
+        real = NoFun(Numeric (NonConst DMReal))
+        ty_r = Fun([([int :@ (inftyS, inftyS)] :->*: int) :@ Just [JTInt]])
+        ty_i = Fun([([int :@ (constCoeff (Fin 0.1), constCoeff (Fin 0.1))] :->*: real) :@ Just [JTInt]])
+    parseEval pp "return" ret (pure ty_r)
+    parseEval pp "robust" inv (pure ty_i)
+
+
+testBlackBox pp = describe "black box" $ do
+    let bb = "function bb(x) :: BlackBox() \n\
+             \   100 \n\
+             \ end   \n\
+             \ function j(x::Integer, y) \n\
+             \    y = bb(y)     \n\
+             \    x / y  \n\
+             \ end"
+        int = NoFun(Numeric (NonConst DMInt))
+        real = NoFun(Numeric (NonConst DMReal))
+        ty = Fun([([int :@ inftyS, real :@ inftyS] :->: real) :@ Just [JTInt, JTAny]])
+    parseEvalUnify pp "numeric" bb (pure ty)
+
 
 testSLoop pp = describe "Sensitivity loop" $ do
     let sloop = "function sloop(x::Integer) \n\
@@ -73,6 +116,7 @@ testSLoop pp = describe "Sensitivity loop" $ do
     parseEval pp "variable2" vloop2 (pure ty_v2)
     parseEvalFail pp "variable (bad)" uloop (UnsatisfiableConstraint "")
 
+
 testDPGD pp = describe "DPGD" $ do
   let ex = "import Flux \n\
           \ function unbounded_gradient(model::DMModel, d::Vector, l) :: BlackBox() \n\
@@ -107,12 +151,17 @@ testDPGD pp = describe "DPGD" $ do
           \    model \n\
           \ end"
 
-      intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
-      ty = Fun([([] :->: intc (Fin 2)) :@ Just []])
+      ty = "Fun([([NoFun(Matrix<n: τ_30, c: τ_31>[s_34 × s_24](Num(Data))) @ (4.0⋅sqrt(2.0⋅ceil(s_34)⋅(0.0 - ln(s_50)))⋅s_26⋅sqrt(2.0⋅ceil(s_56)⋅(0.0 - ln(s_52))),ceil(s_56)⋅ceil(s_34)⋅s_27 + s_52 + ceil(s_56)⋅s_50),NoFun(Matrix<n: τ_85, c: τ_86>[s_40 × s_41](Num(Data))) @ (4.0⋅sqrt(2.0⋅ceil(s_34)⋅(0.0 - ln(s_50)))⋅s_26⋅sqrt(2.0⋅ceil(s_56)⋅(0.0 - ln(s_52))),ceil(s_56)⋅ceil(s_34)⋅s_27 + s_52 + ceil(s_56)⋅s_50),NoFun(Num(τ_106[s_26])) @ (0,0),NoFun(Num(τ_108[s_27])) @ (0,0),NoFun(Num(τ_131[s_56])) @ (0,0),NoFun(Num(τ_161[s_60])) @ (∞,∞)] ->* NoFun(Params[s_59](Num(Real[--])))) @ Just [Any,Any,Any,Any,Any,Real]])"
 
--- Fun([([NoFun(Matrix<n: \964_101, c: \964_102>[s_47 \215 s_48](\964_100)) @ (4.0\8901sqrt(2.0\8901ceil(s_12)\8901(0.0 - ln(s_50)))\8901s_26\8901sqrt(2.0\8901ceil(s_56)\8901(0.0 - ln(s_52))),s_52 + ceil(s_56)\8901ceil(s_12)\8901s_27 + ceil(s_56)\8901s_50),NoFun(Matrix<n: \964_85, c: \964_86>[s_40 \215 s_41](Num(Data))) @ (4.0\8901sqrt(2.0\8901ceil(s_12)\8901(0.0 - ln(s_50)))\8901s_26\8901sqrt(2.0\8901ceil(s_56)\8901(0.0 - ln(s_52))),s_52 + ceil(s_56)\8901ceil(s_12)\8901s_27 + ceil(s_56)\8901s_50),NoFun(Num(\964_106[s_26])) @ (0,0),NoFun(Num(\964_108[s_27])) @ (0,0),NoFun(Num(\964_133[s_56])) @ (0,0),NoFun(\964a_46) @ (\8734,\8734)] ->* NoFun(Params[s_58](Num(\964_155[--])))) :@ Just [JTAny,JTAny,JTAny,JTAny,JTAny,JTAny]]
- 
-  parseEval pp "a DP version of basic gradient descent" ex (pure ty)
+      cs = "constr_40 : [final,worst,global,exact,special] IsLessEqual (s_50,1),\n\
+           \constr_20 : [final,worst,global,exact,special] IsLess (s_27,1),\n\
+           \constr_41 : [final,worst,global,exact,special] IsLess (0,s_50),\n\
+           \constr_21 : [final,worst,global,exact,special] IsLess (0,s_26),\n\
+           \constr_43 : [final,worst,global,exact,special] IsLessEqual (s_52,1),\n\
+           \constr_19 : [final,worst,global,exact,special] IsLess (s_26,1),\n\
+           \constr_44 : [final,worst,global,exact,special] IsLess (0,s_52),\n\
+           \constr_22 : [final,worst,global,exact,special] IsLess (0,s_27)"
+  parseEvalString pp "a DP version of basic gradient descent" ex (ty, cs)
 
 
 

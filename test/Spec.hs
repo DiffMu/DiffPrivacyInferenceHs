@@ -39,10 +39,7 @@ runAllTests parse = defaultspec $ do
   testSupremum
   testCheck_Rules
   testScoping parse
-  testCheckSens parse
-  testOps parse
-  testSLoop parse
-  testDPGD parse
+  testTypecheckingExamples parse
   testIssues parse
   -- testParsing parse
   -- testDemutation
