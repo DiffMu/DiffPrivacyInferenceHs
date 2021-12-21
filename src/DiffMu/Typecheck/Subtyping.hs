@@ -467,15 +467,26 @@ completeDiamondUpstream graph (a0,a1) =
   in goodPaths'
 
 
-
-checkContractionAllowed :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => [(DMTypeOf k)] -> (DMTypeOf k, DMTypeOf k) -> t ContractionAllowed
-checkContractionAllowed contrTypes (TVar a, TVar b) = do
+--
+-- This function checks if it is allowed to contract the
+-- diamond given by tvars in `contrTypes`, where `a` and `b`
+-- are the input and output edges, respectively.
+--
+-- There are certain conditions which need to hold for variables in
+-- `contrTypes`, such that contraction is allowed
+--
+-- The variable `center` is the one which is the center of the contraction,
+-- for this one, no conditions apply. It needs to be `elem` contrTypes,
+-- and may even only work if `a == center` or `b == center`.
+checkContractionAllowed :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => [(DMTypeOf k)] -> (DMTypeOf k, DMTypeOf k) -> DMTypeOf k -> t ContractionAllowed
+checkContractionAllowed contrTypes (TVar a, TVar b) (center) = do
   let acceptOnlyVar (TVar a) = Just a
       acceptOnlyVar _        = Nothing
 
       -- We check that all types which we want to contract are type variables
       -- if this returns `Just [xs]` then all types were actually vars
-      contrVars' = mapM acceptOnlyVar contrTypes
+      -- We do exclude the center from this check.
+      contrVars' = mapM acceptOnlyVar (contrTypes \\ [center])
 
   -- The actual case distinction
   case contrVars' of
@@ -514,8 +525,11 @@ checkContractionAllowed contrTypes (TVar a, TVar b) = do
           -- i.e., an edge is good if one of the following cases appears:
           let isGood (x,y) =
                 or
-                  [ -- the edge is fully part of the diamond to be contracted
-                    and [x `elem` (contrTypes), y `elem` (contrTypes)]
+                  [ -- the edge attaches to the center
+                    or [x == center , y == center]
+
+                    -- the edge is fully part of the diamond to be contracted
+                  , and [x `elem` (contrTypes), y `elem` (contrTypes)]
 
                     -- the edge attaches to the input of the diamond, and in it's own input
                     -- does not reference any contraction-variables
@@ -531,7 +545,7 @@ checkContractionAllowed contrTypes (TVar a, TVar b) = do
             False -> return ContractionDisallowed
             True -> return ContractionAllowed
 
-checkContractionAllowed _ _ = return ContractionDisallowed
+checkContractionAllowed _ _ _ = return ContractionDisallowed
 
 
 -- We can solve `IsLessEqual` constraints for DMTypes.
@@ -544,10 +558,12 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsLessEqual (DMTypeOf k, DMTyp
   solve_ Dict SolveFinal name (IsLessEqual (a,b)) = do
     -- if we are in solve final, we try to contract the edge
         debug $ "Computing LessEqual: " <> show (a,b)
-        allowed <- checkContractionAllowed [a,b] (a,b)
-        case allowed of
-          ContractionAllowed -> unify a b >> return ()
-          ContractionDisallowed -> return ()
+        alloweda <- checkContractionAllowed [a,b] (a,b) a
+        allowedb <- checkContractionAllowed [a,b] (a,b) a
+        case (alloweda , allowedb) of
+          (ContractionAllowed, _) -> unify a b >> return ()
+          (_, ContractionAllowed) -> unify a b >> return ()
+          _ -> return ()
 
 
 
@@ -663,10 +679,12 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsSupremum ((DMTypeOf k, DMTyp
     let f (x,contrVars) = do
 
               debug $ "Trying to contract from " <> show (x,y) <> " with contrVars: " <> show contrVars
-              allowed <- checkContractionAllowed (y:contrVars) (x,y)
-              case allowed of
-                ContractionAllowed -> unifyAll (y:contrVars) >> return True
-                ContractionDisallowed -> return False
+              allowedy <- checkContractionAllowed (y:contrVars) (x,y) y
+              allowedx <- checkContractionAllowed (y:contrVars) (x,y) x
+              case (allowedy, allowedx) of
+                (ContractionAllowed, _) -> unifyAll (y:contrVars) >> return True
+                (_, ContractionAllowed) -> unifyAll (y:contrVars) >> return True
+                _ -> return False
 
     let g f [] = return ()
         g f (x:xs) = do
@@ -696,10 +714,12 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsInfimum ((DMTypeOf k, DMType
     let f (y,contrVars) = do
 
               debug $ "Trying to contract from " <> show (x,y) <> " with contrVars: " <> show contrVars
-              allowed <- checkContractionAllowed (x:contrVars) (x,y)
-              case allowed of
-                ContractionAllowed -> unifyAll (x:contrVars) >> return True
-                ContractionDisallowed -> return False
+              allowedx <- checkContractionAllowed (x:contrVars) (x,y) x
+              allowedy <- checkContractionAllowed (x:contrVars) (x,y) y
+              case (allowedx , allowedy) of
+                (ContractionAllowed, _) -> unifyAll (x:contrVars) >> return True
+                (_, ContractionAllowed) -> unifyAll (x:contrVars) >> return True
+                _ -> return False
 
     let g f [] = return ()
         g f (x:xs) = do
