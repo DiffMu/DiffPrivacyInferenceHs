@@ -48,8 +48,8 @@ preprocessAll term = do
   logForce $ "FLet processed term:\n" <> showPretty term'''
 
   -- lexical scoping processing
-  term'''' <- liftLightTC (LSFull def) (\_ -> ()) (processLS term''')
+  -- term'''' <- liftLightTC (LSFull def) (\_ -> ()) (processLS term''')
 
   -- done
-  return term''''
+  return term'''
 

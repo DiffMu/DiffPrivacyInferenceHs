@@ -103,7 +103,8 @@ pTree =     try pTLineNumber
 
 parseJTreeFromString :: String -> Either DMException JTree
 parseJTreeFromString input =
-  let res = runParser pTree "jl-hs-communication" (trace ("Parsing input:\n------------\n" <> input <> "\n---------------") input)
+  -- let res = runParser pTree "jl-hs-communication" (trace ("Parsing input:\n------------\n" <> input <> "\n---------------") input)
+  let res = runParser pTree "jl-hs-communication" input
   in case res of
     Left e  -> Left (InternalError $ "Communication Error: Could not parse JExpr from string\n\n----------------------\n" <> input <> "\n---------------------------\n" <> errorBundlePretty e)
     Right a -> Right a

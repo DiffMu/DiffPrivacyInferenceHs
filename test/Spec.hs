@@ -12,6 +12,7 @@ import Spec.Unification
 import Spec.Issues
 -- import Spec.Parsing
 import Spec.Demutation
+import Spec.SingleRun
 
 -- import Test.QuickCheck hiding (Fun)
 
@@ -23,7 +24,8 @@ defaultspec spec = do
   -- >>= withArgs [] . runSpec spec
   -- >>= evaluateSummary
 
-
+runSingleTest :: (String -> IO String) -> IO ()
+runSingleTest parse = defaultspec $ testSingleRun parse
 
 
 runAllTests :: (String -> IO String) -> IO ()

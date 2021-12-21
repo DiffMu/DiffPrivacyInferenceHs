@@ -85,6 +85,19 @@ runHaskellTests sub parse = do
 foreign import ccall "dynamic" call_StringString :: FunPtr (CString -> IO CString) -> CString -> IO CString
 foreign export ccall runHaskellTests :: FunPtr SubtypingCallbackFun -> FunPtr TermParserCallbackFun -> IO ()
 
+
+runSingleHaskellTest :: FunPtr SubtypingCallbackFun -> FunPtr TermParserCallbackFun -> IO ()
+runSingleHaskellTest sub parse = do
+  putStrLn "We are testing now!"
+  writeIORef global_callback_issubtype (makeDMEnv (sub))
+  runSingleTest (callTermParserCallback parse) `catchAny` \e -> do
+    putStrLn "======================================="
+    putStrLn $ "Call to haskell resulted in exception (" <> displayException e <> ")."
+
+foreign export ccall runSingleHaskellTest :: FunPtr SubtypingCallbackFun -> FunPtr TermParserCallbackFun -> IO ()
+
+
+
 runExprParser :: CString -> IO ()
 runExprParser str = do
   putStrLn "Running the Expr parser now!"
