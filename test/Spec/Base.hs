@@ -67,8 +67,6 @@ sn x = do
   x2 <- normalize x1
   solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
   x3 <- normalize x2
-
-  solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
   return x3
 
 sn_EW :: Normalize TC a => TC a -> TC a
