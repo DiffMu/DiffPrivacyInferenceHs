@@ -51,7 +51,6 @@ type MutCtx = Ctx TeVar IsMutated
 
 data MFull = MFull
   {
-    -- _strongImmutTypes :: ImmutCtx
     _mutTypes :: MutCtx
   , _termVarsOfMut :: NameCtx
   , _topLevelInfo :: TopLevelInformation
@@ -178,7 +177,7 @@ elaborateMut scope (Rnd jt) = pure (Rnd jt , Pure UserValue)
 elaborateMut scope (Var (x :- j)) = do
   let τ = getValueMaybe x scope
   case τ of
-    Nothing -> logForce ("checking Var term, scope: " <> show scope) >> throwError (VariableNotInScope x)
+    Nothing -> logForce ("checking Var term, scope: " <> show scope) >> throwError (DemutationDefinitionOrderError x)
     Just τ  -> return (Var (x :- j), τ)
 
 elaborateMut scope (BBLet name args tail) = do
@@ -799,7 +798,7 @@ elaborateLambda scope args body = do
       -- (i.e., no captures were used)
       -- mutTypes <- use mutTypes
       -- case isEmptyDict mutTypes of
-      --   False -> throwError (VariableNotInScope $ "The variables " <> show mutTypes <> " are not in scope.")
+      --   False -> throwError (DemutationDefinitionOrderError $ "The variables " <> show mutTypes <> " are not in scope.")
       --   True ->
           -- check that the body is a mutation result
           -- and reorder the resulting tuple
@@ -876,7 +875,7 @@ elaborateMutList f scope mutargs' = do
             -- get the type of this var from the scope
             -- this one needs to be a single arg
             case getValue x scope of
-              Nothing -> logForce ("The scope is" <> show scope) >> throwError (VariableNotInScope x)
+              Nothing -> logForce ("The scope is" <> show scope) >> throwError (DemutationDefinitionOrderError x)
               Just (Pure (SingleArg y)) | x == y -> do
                 markMutated y
                 return (Var (Just x :- a) , Just (x, NotLocalMutation))
@@ -1122,7 +1121,7 @@ elaborateImmut (MutLam vars body) = do
   mutTypes <- use mutTypes
   case isEmptyDict mutTypes of
     True -> pure ()
-    False -> throwError (VariableNotInScope $ "The variables " <> show mutTypes <> " are not in scope.")
+    False -> throwError (DemutationDefinitionOrderError $ "The variables " <> show mutTypes <> " are not in scope.")
 
   -- construct the type of this lambda term
   let typ = [m | (_ , m) <- vars_mut]

@@ -889,6 +889,7 @@ data DMException where
   TypeMismatchError       :: String -> DMException
   NoChoiceFoundError      :: String -> DMException
   DemutationError         :: String -> DMException
+  DemutationDefinitionOrderError :: Show a => a -> DMException
   BlackBoxError           :: String -> DMException
   FLetReorderError        :: String -> DMException
   UnificationShouldWaitError :: DMTypeOf k -> DMTypeOf k -> DMException
@@ -911,6 +912,16 @@ instance Show DMException where
   show (BlackBoxError e) = "While preprocessing black boxes, the following error was encountered:\n " <> e
   show (FLetReorderError e) = "While processing function signatures, the following error was encountered:\n " <> e
   show (ParseError e file line) = "Unsupported julia expression in file " <> file <> ", line " <> show line <> ":\n " <> e
+  show (DemutationDefinitionOrderError a) = "The variable '" <> show a <> "' has not been defined before being used.\n"
+                                            <> "Note that currently every variable has to be assigned some value prior to its usage.\n"
+                                            <> "Here, 'prior to usage' means literally earlier in the code.\n"
+                                            <> "The actual value of that assignment is irrelevant, e.g., the first line of the following code is only there to fix the error which is currently shown:\n"
+                                            <> ">  a = 0" <> "\n"
+                                            <> ">  function f()" <> "\n"
+                                            <> ">    a" <> "\n"
+                                            <> ">  end" <> "\n"
+                                            <> ">  a = 3" <> "\n"
+                                            <> ">  f()" <> "\n"
 
 instance Eq DMException where
   UnsupportedTermError    a        == UnsupportedTermError    b       = True
