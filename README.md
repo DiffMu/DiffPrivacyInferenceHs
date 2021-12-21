@@ -75,4 +75,13 @@ The subfolders are organized as follows:
 - docs        (place for documentation)
 ```
 
+In particular, in `src/DiffMu/Core`, we find:
+ - Definitions of all relevant data types, and the main typechecking monad in `Definitions.hs` and `TC.hs`,
+   unification is found in `Unification.hs`
+ - The symbolic number data type, used for sensitivity and privacy values in `Symbolic.hs`.
+ - The logging system in `Logging.hs`.
+ 
+In `src/DiffMu/Typecheck`, we have:
+ - The main typechecking function in `Typecheck.hs`.
+
 
