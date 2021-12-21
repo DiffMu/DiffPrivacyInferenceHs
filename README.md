@@ -78,10 +78,15 @@ The subfolders are organized as follows:
 In particular, in `src/DiffMu/Core`, we find:
  - Definitions of all relevant data types, and the main typechecking monad in `Definitions.hs` and `TC.hs`,
    unification is found in `Unification.hs`
- - The symbolic number data type, used for sensitivity and privacy values in `Symbolic.hs`.
- - The logging system in `Logging.hs`.
+ - The symbolic number data type, used for sensitivity and privacy values in `Symbolic.hs`
+ - The logging system in `Logging.hs`
  
 In `src/DiffMu/Typecheck`, we have:
- - The main typechecking function in `Typecheck.hs`.
+ - The preprocessing steps in `Preprocess`:
+    1. Collection information about top-level functions (`TopLevel.hs`)
+    2. Translating mutating code to non-mutating code (`Demutation.hs`)
+    3. Rearranging function definitions (`FLetReorder.hs`)
+    4. Renaming function argument names to simulate lexical scoping (`LexicalScoping.hs`)
+ - The main typechecking function in `Typecheck.hs`
 
 
