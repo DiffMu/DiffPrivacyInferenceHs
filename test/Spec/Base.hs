@@ -61,14 +61,15 @@ tcb False = tc
 
 sn :: Normalize TC a => TC a -> TC a
 sn x = do
-  x' <- x
+  x1 <- x
   solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
   -- solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveFinal]
-  normalize x'
+  x2 <- normalize x1
   solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
-  normalize x'
+  x3 <- normalize x2
+
   solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
-  normalize x'
+  return x3
 
 sn_EW :: Normalize TC a => TC a -> TC a
 sn_EW x = do
