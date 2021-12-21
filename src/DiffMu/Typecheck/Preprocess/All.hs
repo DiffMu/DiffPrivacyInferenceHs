@@ -34,8 +34,8 @@ preprocessAll term = do
   -- top level processing
 
   (tlinfo, term') <- liftLightTC def def (checkTopLevel term)
-  logForce $ "-----------------------------------"
-  logForce $ "Toplevel information:\n" <> show tlinfo
+  info $ "-----------------------------------"
+  info $ "Toplevel information:\n" <> show tlinfo
 
   -- -- mutation processing
   term'' <- liftLightTC (MFull def def tlinfo) (\_ -> ()) (demutate term')
@@ -44,11 +44,14 @@ preprocessAll term = do
   -- flet processing
   term''' <- liftLightTC def def (collectAllFLets term'')
 
-  logForce $ "-----------------------------------"
-  logForce $ "FLet processed term:\n" <> showPretty term'''
+  info $ "-----------------------------------"
+  info $ "FLet processed term:\n" <> showPretty term'''
 
   -- lexical scoping processing
   term'''' <- liftLightTC (LSFull def) (\_ -> ()) (processLS term''')
+
+  info $ "-----------------------------------"
+  info $ "Lexical scoping processed term:\n" <> showPretty term''''
 
   -- done
   return term''''
