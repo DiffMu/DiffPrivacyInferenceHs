@@ -9,6 +9,8 @@ testScoping pp = do
     testScope02 pp
     testScope03 pp
     testScope04 pp
+    testScope05 pp
+    testScope06 pp
 
 
 testScope01 pp = do
@@ -160,5 +162,32 @@ testScope05 pp = do
 
   parseEval pp "05 (inside)" ex1 (pure ty1)
   parseEval pp "05 (outside)" ex2 (pure ty2)
+
+testScope06 pp = do
+  let ex1 = "  function test()            \n\
+            \    a = 3                    \n\
+            \    b = 5                    \n\
+            \    function f(a,b)          \n\
+            \      a = 7                  \n\
+            \      function g(ff)         \n\
+            \        (a,b) -> ff(a,b)     \n\
+            \      end                    \n\
+            \      function h(a,b)        \n\
+            \        b = 3                \n\
+            \        a + b                \n\
+            \      end                    \n\
+            \      g(h)(a,b)              \n\
+            \    end                      \n\
+            \    y = b + 12               \n\
+            \    b = 9                    \n\
+            \    x = a                    \n\
+            \    a = 23                   \n\
+            \    f(x,y)                   \n\
+            \  end                        "
+
+      intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
+      ty1 = Fun([([] :->: intc (Fin 10)) :@ Just []])
+
+  parseEval pp "06 works" ex1 (pure ty1)
 
 

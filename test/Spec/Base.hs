@@ -159,7 +159,6 @@ parseEval_b_customCheck dolog parse desc term (testBy :: TestBy) customTCCheck =
                                   --      )
                             let (tres'',_) = runState (extractDelayed def tres) def
                             tres''
-           -- pure $ (tres'')
 
     let correctEquality (expected) result = do
           expectedT <- expected
