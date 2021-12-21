@@ -937,6 +937,7 @@ instance Eq DMException where
   UnificationShouldWaitError a a2  == UnificationShouldWaitError b b2 = True
   ParseError e1 file1 line1        == ParseError e2 file2 line2       = True
   FLetReorderError        a        == FLetReorderError        b       = True
+  DemutationDefinitionOrderError a == DemutationDefinitionOrderError b = True
   _ == _ = False
 
 

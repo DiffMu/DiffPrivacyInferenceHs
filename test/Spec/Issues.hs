@@ -232,7 +232,7 @@ test21 pp = describe "issue 21 (FLet collection)" $ do
          \      x               \n\
          \  end                 "
 
-  parseEvalFail pp "example variant 2 (needs to fail)" ex_2 (VariableNotInScope "f")
+  parseEvalFail pp "example variant 2 (needs to fail)" ex_2 (DemutationDefinitionOrderError "f")
 
 test123 pp = describe "issue 123 (Rewind side effects of quick-path-check in supremum search)" $ do
   let ex_1 = "   function ifelse(x,y::Integer)   \n\
