@@ -29,7 +29,6 @@ import Debug.Trace
 
 data LSFull = LSFull
   {
-    -- _strongImmutTypes :: ImmutCtx
     _termVarsOfLS :: NameCtx
   }
 
@@ -40,9 +39,11 @@ $(makeLenses ''LSFull)
 
 
 -- new variables
-newTeVarOfLS :: (MonadState LSFull m) => Text -> m (TeVar)
-newTeVarOfLS hint = termVarsOfLS %%= (first GenTeVar . (newName hint))
-
+newTeVarOfLS :: (MonadState LSFull m) => TeVar -> m (TeVar)
+newTeVarOfLS hintVar = termVarsOfLS %%= (first GenTeVar . (newName (hint hintVar)))
+  where
+    hint (GenTeVar (Symbol x))   = x <> "_genls"
+    hint (UserTeVar (Symbol x))  = x <> "_uls"
 
 processLS :: DMTerm -> LSTC (DMTerm)
 processLS = undefined
