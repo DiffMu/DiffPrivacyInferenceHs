@@ -184,11 +184,13 @@ parseEval_b_customCheck dolog parse desc term (testBy :: TestBy) customTCCheck =
           let actualType = show result
 
           full <- get
-          let actualConstrs = show (_constraints (_meta full))
+          let allActualConstrs = (_anncontent (_constraints (_meta full)))
+          let shownActualTopConstrs = show (_topctx allActualConstrs)
+          let actualOtherConstrs = _otherctxs allActualConstrs
 
-          case (actualType == expectedType, actualConstrs == expectedConstrs) of
-            (True,True) -> return $ Right ()
-            (_,_) -> return $ Left (actualType, actualConstrs)
+          case (actualType == expectedType, shownActualTopConstrs == expectedConstrs, actualOtherConstrs) of
+            (True,True,[]) -> return $ Right ()
+            (_,_,otherCtrs) -> return $ Left (actualType, shownActualTopConstrs, show otherCtrs)
 
     case testBy of
       TestByEquality expected -> (tcb dolog $ (sn term'' >>= correctEquality expected)) `shouldReturn` (Right (Right ()))

@@ -57,7 +57,7 @@ In particular, in order to run/build from source, you need:
 
 
 
-### Folder structure
+### Project structure
 The subfolders are organized as follows:
 ```
 - app  (main entry point into application)
@@ -70,7 +70,6 @@ The subfolders are organized as follows:
      |- Typecheck  (Implementation of the actual typechecking and subtyping rules)
 - ffisrc      (haskell code which is the entrypoint when calling this project from julia)
 - csrc        (c code fragment for initializing the haskell runtime)
-- capp        (currently unused)
 - test        (place for tests which do NOT need to call julia-callbacks, i.e., currently none)
 - test-native (current place for all tests which are called when executing test_hs() in julia)
 - docs        (place for documentation)
