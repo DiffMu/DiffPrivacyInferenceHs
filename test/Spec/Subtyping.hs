@@ -170,6 +170,16 @@ testSubtyping_Cycles = do
             s ⊑! t
             a ⊑! t
 
+            -- we block y and z and a and b to not activate diamond contraction
+            (yb :: DMMain) <- newVar
+            (zb :: DMMain) <- newVar
+            (ab :: DMMain) <- newVar
+            (bb :: DMMain) <- newVar
+            addConstraint (Solvable (IsJuliaEqual (y, yb)))
+            addConstraint (Solvable (IsJuliaEqual (z, zb)))
+            addConstraint (Solvable (IsJuliaEqual (a, ab)))
+            addConstraint (Solvable (IsJuliaEqual (b, bb)))
+
             -- we are interested in how `a` and `b` turn out
             return (a,b)
       let checkres (a,b) = a == b
@@ -189,6 +199,16 @@ testSubtyping_Cycles = do
             x ⊑! z
             z ⊑! y
 
+            -- we block y and z and a and b to not activate diamond contraction
+            (yb :: DMMain) <- newVar
+            (zb :: DMMain) <- newVar
+            (ab :: DMMain) <- newVar
+            (bb :: DMMain) <- newVar
+            addConstraint (Solvable (IsJuliaEqual (y, yb)))
+            addConstraint (Solvable (IsJuliaEqual (z, zb)))
+            addConstraint (Solvable (IsJuliaEqual (a, ab)))
+            addConstraint (Solvable (IsJuliaEqual (b, bb)))
+
             -- we are interested in how `a` and `b` turn out
             return (a,b)
       let checkres (a,b) = a == b
@@ -206,6 +226,16 @@ testSubtyping_Cycles = do
             (y :: DMMain) <- infimum a x
             z <- newVar
             x ⊑! z
+
+            -- we block y and z and a and b to not activate diamond contraction
+            (yb :: DMMain) <- newVar
+            (zb :: DMMain) <- newVar
+            (ab :: DMMain) <- newVar
+            (bb :: DMMain) <- newVar
+            addConstraint (Solvable (IsJuliaEqual (y, yb)))
+            addConstraint (Solvable (IsJuliaEqual (z, zb)))
+            addConstraint (Solvable (IsJuliaEqual (a, ab)))
+            addConstraint (Solvable (IsJuliaEqual (b, bb)))
 
             -- we are interested in how `a` and `b` turn out
             return (a,b)
@@ -243,39 +273,57 @@ testSubtyping_ContractEdge = do
       let checkres (a,b) = a == b
       (tc $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right True)
 
-    it "does NOT contract edge if left variable is bounded from above" $ do
+    it "does NOT contract edge if left variable is bounded from above, and right is fixed" $ do
       let test1 = do
             -- main
             (a :: DMMain) <- newVar
             b <- newVar
             a ⊑! b
-            -- blocking constraint
+
+            -------
+            -- blocking constraints
+            -- a bounded from above
             x <- newVar
             a ⊑! x
+
+            -- b is fixed
+            (y :: DMMain) <- newVar
+            addConstraint (Solvable (IsJuliaEqual (y, b)))
+
             return (a,b)
       (tc $ (sn test1 >>= (\(a,b) -> return (a == b)))) `shouldReturn` (Right False)
 
-    it "does NOT contract edge if right variable is bounded from below" $ do
+    it "does NOT contract edge if right variable is bounded from below, and left is fixed" $ do
       let test1 = do
             -- main
             (a :: DMMain) <- newVar
             b <- newVar
             a ⊑! b
-            -- blocking constraint
+            -- blocking constraints
+            -- b bounded from below
             y <- newVar
             y ⊑! b
+
+            -- a is fixed
+            (x :: DMMain) <- newVar
+            addConstraint (Solvable (IsJuliaEqual (x, a)))
+
             return (a,b)
       (tc $ (sn test1 >>= (\(a,b) -> return (a == b)))) `shouldReturn` (Right False)
 
-    it "does NOT contract edge if variable additionally appears in a non subtyping constraint " $ do
+    it "does NOT contract edge if variables additionally appears in a non subtyping constraint " $ do
       let test1 = do
             -- main
             (a :: DMMain) <- newVar
             b <- newVar
             a ⊑! b
             -- blocking constraint
-            (y :: DMMain) <- newVar
-            addConstraint (Solvable (IsJuliaEqual (y, a)))
+            (ba :: DMMain) <- newVar
+            addConstraint (Solvable (IsJuliaEqual (ba, a)))
+
+            (bb :: DMMain) <- newVar
+            addConstraint (Solvable (IsJuliaEqual (bb, b)))
+
             return (a,b)
       (tc $ (sn test1 >>= (\(a,b) -> return (a == b)))) `shouldReturn` (Right False)
 
@@ -300,10 +348,9 @@ testSubtyping_ContractEdge = do
 
             -- we are interested in how `a`, `b`, `x`, `y` turn out
             return (x,a,b,y)
-      let checkres (x,a,b,y) = and [ a == b
-                                   , x /= a
-                                   , y /= b ]
-      (tc $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right True)
+      let checkres (x,a,b,y) = ( a == b
+                               , x /= y)
+      (tc $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right (True , True))
 
   describe "subtyping (contracting diamonds - subtyping and sup/inf constraints)" $ do
     it "does contract diamond given by sup/inf" $ do
@@ -393,14 +440,14 @@ testSubtyping_ContractEdge = do
             d ≤! b
 
             -- the additional constraint
-            addConstraint (Solvable (IsJuliaEqual (c, int)))
+            addConstraint (Solvable (IsJuliaEqual (a, int)))
+            addConstraint (Solvable (IsJuliaEqual (b, int)))
 
             return (d,a,b,c)
-      let checkres (d,a,b,c) | let f = [a,b,c,d]
+      let checkres (d,a,b,c) = let f = [a,b,c,d]
                                    ix = [0,1,2,3]
-                               in and [(f !! i /= f !! j) | i <- ix, j <- ix, i /= j] = Right ()
-          checkres x = Left x
-      (tc $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right (Right ()))
+                               in [(f !! i /= f !! j) | i <- ix, j <- ix, i /= j]
+      (tc $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right (take 12 $ repeat True))
 
 
 
