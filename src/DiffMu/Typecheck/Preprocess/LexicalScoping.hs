@@ -26,31 +26,37 @@ import Data.Foldable
 
 import Debug.Trace
 
+-----------------------------------------------------------------------------------
+-- preprocessing step to make function argument names unique
 
 data LSFull = LSFull
   {
     _termVarsOfLS :: NameCtx
   }
 
-
+-- the monad keeping the state we require to generate unique names
 type LSTC = LightTC Location_PrePro_Demutation LSFull
 
 $(makeLenses ''LSFull)
 
+-- generate unique new variables if it's not a Nothing...
 newTeVarMaybe :: (MonadState LSFull m) => (Maybe TeVar) -> m (Maybe TeVar)
 newTeVarMaybe (Just t) = Just <$> (newTeVarOfLS t)
 newTeVarMaybe Nothing = return Nothing
 
--- new variables
+-- generate unique new variables
 newTeVarOfLS :: (MonadState LSFull m) => TeVar -> m (TeVar)
 newTeVarOfLS hintVar = termVarsOfLS %%= (first GenTeVar . (newName (hint hintVar)))
   where
     hint (GenTeVar (Symbol x))   = x <> "_genls"
     hint (UserTeVar (Symbol x))  = x <> "_uls"
 
+-- transform the dmterm to one where function argument names are unique
+-- by generating new names for them and substituting all occurances in the body
 processLS :: DMTerm -> LSTC (DMTerm)
 processLS t = substituteNames H.empty t
 
+-- in a dmterm, apply all variable name substitutions contained in the hashmap recursively.
 substituteNames :: H.HashMap TeVar TeVar -> DMTerm -> LSTC DMTerm
 substituteNames names term = let
     subIf c = case H.lookup c names of
@@ -92,52 +98,3 @@ substituteNames names term = let
    MCreate t1 t2 (x1, x2) t3 -> MCreate <$> subSame t1 <*> subSame t2 <*> return (subIf x1, subIf x2) <*> subSame t3
    Loop t1 cs (x1, x2) body -> Loop <$> subSame t1 <*> return (map subIf cs) <*> return (fmap subIf x1, subIf x2) <*> subSame body
    _ -> recDMTermMSameExtension (substituteNames names) term
-{-
-  [Asgmt JuliaType] (PreDMTerm t)
-  | LamStar [(Asgmt (JuliaType, Relevance))] (PreDMTerm t)
-  | Arg TeVar JuliaType Relevance
-  | Var (Asgmt JuliaType)
-  | BBLet TeVar [JuliaType] (PreDMTerm t) -- name, arguments, tail
-  | BBApply (PreDMTerm t) [(PreDMTerm t)] [TeVar] -- term containing the application, list of captured variables.
-  | FLet TeVar (PreDMTerm t) (PreDMTerm t)
-  | SLetBase LetKind (Asgmt JuliaType) (PreDMTerm t) (PreDMTerm t)
-  | TLetBase LetKind [(Asgmt JuliaType)] (PreDMTerm t) (PreDMTerm t)
-  | MCreate (PreDMTerm t) (PreDMTerm t) (TeVar, TeVar) (PreDMTerm t)
-  | Loop (PreDMTerm t) [TeVar] (Maybe TeVar, TeVar) (PreDMTerm t)
-
-
-  | Ret ((PreDMTerm t))
-  | Sng Float JuliaType
-  | Rnd JuliaType
-  | Op DMTypeOp_Some [(PreDMTerm t)]
-  | Phi (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
-  | Apply (PreDMTerm t) [(PreDMTerm t)]
-  | Choice (HashMap [JuliaType] (PreDMTerm t))
-  | Tup [(PreDMTerm t)]
-  | Gauss (PreDMTerm t) (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
--- matrix related things
-  | ConvertM (PreDMTerm t)
-  | Transpose (PreDMTerm t)
-  | Size (PreDMTerm t) -- matrix dimensions, returns a tuple of two numbers
-  | Length (PreDMTerm t) -- vector dimension, returns a number
-  | Index (PreDMTerm t) (PreDMTerm t) (PreDMTerm t) -- matrix index
-  | VIndex (PreDMTerm t) (PreDMTerm t) -- vector index
-  | Row (PreDMTerm t) (PreDMTerm t) -- matrix row
-  | ClipM Clip (PreDMTerm t)
-  -- Loop (DMTerm : "Number of iterations") ([TeVar] : "Captured variables") (TeVar : "name of iteration var", TeVar : "name of capture variable") (DMTerm : "body")
--- Special NN builtins
-  | SubGrad (PreDMTerm t) (PreDMTerm t)
-  | ScaleGrad (PreDMTerm t) (PreDMTerm t) -- scale (a : Scalar) (g : Mutating Gradient)
--- Special Tuple terms
-  | Reorder [Int] (PreDMTerm t)
-  | TProject Int (PreDMTerm t)
--- Special Scope terms
-  | LastTerm (PreDMTerm t)
-  deriving (Generic)
-
-pattern SLet a b c = SLetBase PureLet a b c
-pattern SBind a b c = SLetBase BindLet a b c
-pattern TLet a b c = TLetBase PureLet a b c
-pattern TBind a b c = TLetBase BindLet a b c
-pattern LLet a b c = TLetBase LoopLet a b c
--}
