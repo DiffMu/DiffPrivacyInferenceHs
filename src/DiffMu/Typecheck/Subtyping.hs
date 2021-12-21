@@ -114,8 +114,7 @@ subtypingGraph =
                      let (args₀, args₁) = unzip args
                      return (DMTup args₀, DMTup args₁)
                      )
-                 ]
-            ; IsReflexive NotStructural -> [ SingleEdge $
+                 , SingleEdge $
                    do clp₀ <- newVar
                       nrm₀ <- newVar
                       nrm₁ <- newVar
@@ -128,7 +127,9 @@ subtypingGraph =
                       nrm₀ ⊑! nrm₁
                       clp₀ ⊑! clp₁
                       return ((DMMat nrm₀ clp₀ n m a₀), (DMMat nrm₁ clp₁ n m a₁))
-                 , SingleEdge $
+                 ]
+            ; IsReflexive NotStructural -> [
+                   SingleEdge $
                    do clp₀ <- newVar
                       nrm₀ <- newVar
                       nrm₁ <- newVar
