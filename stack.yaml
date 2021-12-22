@@ -18,8 +18,8 @@
 # resolver: ./custom-snapshot.yaml
 # resolver: https://example.com/snapshots/2018-01-01.yaml
 
-resolver: nightly-2021-01-11
-compiler: ghc-8.10.3
+resolver: lts-18.19
+compiler: ghc-8.10.7
 compiler-check: match-exact
 
 # resolver:
@@ -40,9 +40,16 @@ packages:
 # drop-packages:
 #   - sized
 
+allow-newer: true
+
 extra-deps:
   - parsec3-numbers-0.1.0
   - pomaps-0.2.0.1
+
+flags:
+  mintty:
+    Win32-2-13-1: false
+
 
 # extra-deps:
 # - git: https://github.com/MxmUrw/computational-algebra

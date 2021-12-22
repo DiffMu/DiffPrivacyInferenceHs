@@ -101,7 +101,7 @@ verbatim: |
 
     if os(Windows)
       options: standalone
-      mod-def-file: DiffMuWrapper.def
+      mod-def-file: ffisrc/DiffMuWrapper.def
 
     other-modules:       Wrapper
     build-depends:
