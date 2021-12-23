@@ -112,7 +112,7 @@ typecheckFromDMTerm_Simple :: MutDMTerm -> IO ()
 typecheckFromDMTerm_Simple term = do
   let printer (ty, full) =
         "\n---------------------------------------------------------------------------\n"
-        <> "Type:\n" <> show ty
+        <> "Type:\n" <> showPretty ty
         <> "\n---------------------------------------------------------------------------\n"
         <> "Constraints:\n" <> show (_constraints (_meta full))
   typecheckFromDMTermWithPrinter printer (DontShowLog) term
@@ -130,7 +130,7 @@ typecheckFromDMTerm_Detailed term = do
         ]
   let printer (ty, full) =
         "\n---------------------------------------------------------------------------\n"
-        <> "Type:\n" <> show ty
+        <> "Type:\n" <> showPretty ty
         <> "\n---------------------------------------------------------------------------\n"
         <> "Monad state:\n" <> show full
 

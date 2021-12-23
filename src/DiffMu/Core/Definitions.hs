@@ -271,6 +271,54 @@ instance Show (DMTypeOf k) where
   show (x :∧: y) = "(" <> show x <> "∧" <> show y <> ")"
   show (BlackBox n) = "BlackBox [" <> show n <> "]"
 
+showArgPretty :: (ShowPretty a, ShowPretty b) => (a :@ b) -> String
+showArgPretty (a :@ b) = "-  " <> showPretty a <> "\n"
+                      <> "    @ " <> showPretty b <> "\n"
+
+showFunPretty :: (ShowPretty a, ShowPretty b) => String -> [(a :@ b)] -> a -> String
+showFunPretty marker args ret = intercalate "\n" (fmap showArgPretty args)
+                         <> "--------------------------\n"
+                         <> " " <> marker <> " " <> (showPretty ret)
+
+showPrettyEnumVertical :: (ShowPretty a) => [a] -> String
+showPrettyEnumVertical as = "{\n" <> intercalate "\n,\n" (fmap (parenIndent . showPretty) as) <> "\n}"
+
+instance ShowPretty (Sensitivity) where
+  showPretty s = show s
+
+instance ShowPretty (SymbolOf k) where
+  showPretty = show
+
+instance (ShowPretty a, ShowPretty b) => ShowPretty (a :@ b) where
+  showPretty (a :@ b) = showPretty a <> " @ " <> showPretty b
+
+
+instance ShowPretty (DMTypeOf k) where
+  showPretty DMAny = "DMAny"
+  showPretty DMInt = "Int"
+  showPretty DMReal = "Real"
+  showPretty DMData = "Data"
+  showPretty (Const s t) = showPretty t <> "[" <> showPretty s <> "]"
+  showPretty (NonConst t) = showPretty t
+  showPretty (Numeric t) = showPretty t
+  showPretty (TVar t) = showPretty t
+  showPretty (a :->: b) = showFunPretty "->" a b
+  showPretty (a :->*: b) = showFunPretty "->*" a b
+  showPretty (DMTup ts) = showPretty ts
+  showPretty L1 = "L1"
+  showPretty L2 = "L2"
+  showPretty LInf = "L∞"
+  showPretty U = "U"
+  showPretty (Clip n) = showPretty n
+  showPretty (DMVec nrm clp n τ) = "Vector<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty n <> "](" <> showPretty τ <> ")"
+  showPretty (DMMat nrm clp n m τ) = "Matrix<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty n <> " × " <> showPretty m <> "](" <> showPretty τ <> ")"
+  showPretty (DMParams m τ) = "Params[" <> showPretty m <> "](" <> showPretty τ <> ")"
+  showPretty (DMGrads nrm clp m τ) = "Grads<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty m <> "](" <> showPretty τ <> ")"
+  showPretty (NoFun x) = showPretty x
+  showPretty (Fun xs) = showPrettyEnumVertical (fmap fstAnn xs)
+  showPretty (x :∧: y) = "(" <> showPretty x <> "∧" <> showPretty y <> ")"
+  showPretty (BlackBox n) = "BlackBox [" <> showPretty n <> "]"
+
 
 -- instance Eq (DMTypeOf NormKind) where
 --   _ == _ = False
