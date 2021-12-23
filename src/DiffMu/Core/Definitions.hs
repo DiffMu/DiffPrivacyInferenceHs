@@ -281,7 +281,7 @@ showFunPretty marker args ret = intercalate "\n" (fmap showArgPretty args)
                          <> " " <> marker <> " " <> (showPretty ret)
 
 showPrettyEnumVertical :: (ShowPretty a) => [a] -> String
-showPrettyEnumVertical as = "{\n" <> intercalate "\n,\n" (fmap (parenIndent . showPretty) as) <> "\n}"
+showPrettyEnumVertical as = "{\n" <> intercalate "\n,\n" (fmap (justIndent . showPretty) as) <> "\n}"
 
 instance ShowPretty (Sensitivity) where
   showPretty s = show s
@@ -804,6 +804,9 @@ instance ShowPretty a => ShowPretty [a] where
 
 parenIndent :: String -> String
 parenIndent s = "\n(\n" <> unlines (fmap ("  " <>) (lines s)) <> ")"
+
+justIndent :: String -> String
+justIndent s = unlines (fmap ("  " <>) (lines s))
 
 indent :: String -> String
 indent s = unlines (fmap ("  " <>) (lines s))
