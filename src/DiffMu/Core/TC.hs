@@ -543,13 +543,13 @@ $(makeLenses ''TCState)
 
 
 
-forceLogStart :: MonadDMTC t => t ()
-forceLogStart = do
+logForceStart :: MonadDMTC t => t ()
+logForceStart = do
   old <- (tcstate.logger.loggerCurrentSeverity) %%= (\old -> (old,Force))
   (tcstate.logger.loggerBackupSeverity) %= (\_ -> old)
 
-forceLogEnd :: MonadDMTC t => t ()
-forceLogEnd = do
+logForceEnd :: MonadDMTC t => t ()
+logForceEnd = do
   old <- use (tcstate.logger.loggerBackupSeverity)
   (tcstate.logger.loggerCurrentSeverity) %= (\_ -> old)
 

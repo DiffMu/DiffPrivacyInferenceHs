@@ -116,7 +116,6 @@ testSLoop pp = describe "Sensitivity loop" $ do
     parseEval pp "variable2" vloop2 (pure ty_v2)
     parseEvalFail pp "variable (bad)" uloop (UnsatisfiableConstraint "")
 
-
 testDPGD pp = describe "DPGD" $ do
   let ex = "import Flux \n\
           \ function unbounded_gradient(model::DMModel, d::Vector, l) :: BlackBox() \n\
@@ -151,18 +150,17 @@ testDPGD pp = describe "DPGD" $ do
           \    model \n\
           \ end"
 
-      ty = "Fun([([NoFun(Matrix<n: τ_30, c: τ_31>[s_34 × s_24](Num(Data))) @ (4.0⋅sqrt(2.0⋅ceil(s_34)⋅(0.0 - ln(s_50)))⋅s_26⋅sqrt(2.0⋅ceil(s_56)⋅(0.0 - ln(s_52))),ceil(s_56)⋅ceil(s_34)⋅s_27 + s_52 + ceil(s_56)⋅s_50),NoFun(Matrix<n: τ_85, c: τ_86>[s_40 × s_41](Num(Data))) @ (4.0⋅sqrt(2.0⋅ceil(s_34)⋅(0.0 - ln(s_50)))⋅s_26⋅sqrt(2.0⋅ceil(s_56)⋅(0.0 - ln(s_52))),ceil(s_56)⋅ceil(s_34)⋅s_27 + s_52 + ceil(s_56)⋅s_50),NoFun(Num(τ_106[s_26])) @ (0,0),NoFun(Num(τ_108[s_27])) @ (0,0),NoFun(Num(τ_131[s_56])) @ (0,0),NoFun(Num(τ_161[s_60])) @ (∞,∞)] ->* NoFun(Params[s_59](Num(Real[--])))) @ Just [Any,Any,Any,Any,Any,Real]])"
+      ty = "Fun([([NoFun(Matrix<n: τ_30, c: τ_31>[s_23 × s_35](Num(Data))) @ (4.0⋅s_26⋅sqrt(2.0⋅ceil(s_23)⋅(0.0 - ln(s_50)))⋅sqrt(2.0⋅ceil(s_55)⋅(0.0 - ln(s_52))),ceil(s_23)⋅ceil(s_55)⋅s_27 + s_50⋅ceil(s_55) + s_52),NoFun(Matrix<n: τ_85, c: τ_86>[s_40 × s_41](Num(Data))) @ (4.0⋅s_26⋅sqrt(2.0⋅ceil(s_23)⋅(0.0 - ln(s_50)))⋅sqrt(2.0⋅ceil(s_55)⋅(0.0 - ln(s_52))),ceil(s_23)⋅ceil(s_55)⋅s_27 + s_50⋅ceil(s_55) + s_52),NoFun(Num(τ_106[s_26])) @ (0,0),NoFun(Num(τ_108[s_27])) @ (0,0),NoFun(Num(τ_125[s_55])) @ (0,0),NoFun(Num(τ_141[s_57])) @ (∞,∞)] ->* NoFun(Params[s_53](Num(Real[--])))) @ Just [Any,Any,Any,Any,Any,Any]])"
 
-      cs = "constr_40 : [final,worst,global,exact,special] IsLessEqual (s_50,1),\n\
-           \constr_20 : [final,worst,global,exact,special] IsLess (s_27,1),\n\
-           \constr_41 : [final,worst,global,exact,special] IsLess (0,s_50),\n\
-           \constr_21 : [final,worst,global,exact,special] IsLess (0,s_26),\n\
-           \constr_43 : [final,worst,global,exact,special] IsLessEqual (s_52,1),\n\
-           \constr_19 : [final,worst,global,exact,special] IsLess (s_26,1),\n\
-           \constr_44 : [final,worst,global,exact,special] IsLess (0,s_52),\n\
-           \constr_22 : [final,worst,global,exact,special] IsLess (0,s_27)"
-  parseEvalString pp "a DP version of basic gradient descent" ex (ty, cs)
-
+      cs = "constr_21 : [final,worst,global,exact,special] IsLess (0,s_27),\
+           \\nconstr_43 : [final,worst,global,exact,special] IsLess (0,s_52),\
+           \\nconstr_18 : [final,worst,global,exact,special] IsLess (s_26,1),\
+           \\nconstr_40 : [final,worst,global,exact,special] IsLess (0,s_50),\
+           \\nconstr_20 : [final,worst,global,exact,special] IsLess (0,s_26),\
+           \\nconstr_39 : [final,worst,global,exact,special] IsLessEqual (s_50,1),\
+           \\nconstr_42 : [final,worst,global,exact,special] IsLessEqual (s_52,1),\
+           \\nconstr_19 : [final,worst,global,exact,special] IsLess (s_27,1)"
+  parseEvalString_customCheck pp "a DP version of basic gradient descent" ex (ty, cs) (pure $ Right ())
 
 
 

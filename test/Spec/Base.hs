@@ -3,7 +3,7 @@ module Spec.Base
   (module All
   , tc , tcl , tcb , sn , sn_EW , parseEval , parseEval_l , parseEvalUnify , parseEvalUnify_l , parseEvalSimple, parseEvalFail
   , parseEvalUnify_customCheck
-  , parseEvalString , parseEvalString_l , parseEvalString_customCheck
+  , parseEvalString , parseEvalString_l , parseEvalString_customCheck, parseEvalString_l_customCheck
   )
 where
 
@@ -50,9 +50,11 @@ tc r = do
 tcl :: TC a -> IO (Either DMException a)
 tcl r = do
 
-  x <- executeTC (DoShowLog Force [Location_Constraint , Location_INC, Location_MonadicGraph, Location_Unification]) r
+  x <- executeTC (DoShowLog Force []) r
+  -- x <- executeTC (DoShowLog Force [Location_Constraint , Location_INC, Location_MonadicGraph, Location_Unification]) r
   -- x <- executeTC (DoShowLog Force [Location_Constraint, Location_Subtyping]) r
   return (fst <$> x)
+
 
 
 tcb :: Bool -> TC a -> IO (Either DMException a)
@@ -61,13 +63,31 @@ tcb False = tc
 
 sn :: Normalize TC a => TC a -> TC a
 sn x = do
-  x1 <- x
+  -- x1 <- x
+  -- solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
+  -- -- solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveFinal]
+  -- x2 <- normalize x1
+  -- solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
+  -- x3 <- normalize x2
+  -- return x3
+  tres' <- x
+
+  logForce $ "================================================"
+  logForce $ "before solving constraints (1)"
+  logPrintConstraints
   solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
-  -- solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveFinal]
-  x2 <- normalize x1
+  tres'' <- normalize tres'
+  logForce $ "================================================"
+  logForce $ "before solving constraints (2)"
+  logPrintConstraints
   solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
-  x3 <- normalize x2
-  return x3
+  tres''' <- normalize tres''
+  logForce $ "================================================"
+  logForce $ "before solving constraints (3)"
+  logPrintConstraints
+  return tres'''
+
+
 
 sn_EW :: Normalize TC a => TC a -> TC a
 sn_EW x = do
@@ -179,7 +199,19 @@ parseEval_b_customCheck dolog parse desc term (testBy :: TestBy) customTCCheck =
           -- and additionally if the constraints are empty
           return customCheckResult
 
-        correctString (expectedType, expectedConstrs) result = do
+        -- correctString (expectedType, expectedConstrs) result = do
+        --   let actualType = show result
+
+        --   full <- get
+        --   let allActualConstrs = (_anncontent (_constraints (_meta full)))
+        --   let shownActualTopConstrs = show (_topctx allActualConstrs)
+        --   let actualOtherConstrs = _otherctxs allActualConstrs
+
+        --   case (actualType == expectedType, shownActualTopConstrs == expectedConstrs, actualOtherConstrs) of
+        --     (True,True,[]) -> return $ Right ()
+        --     (_,_,otherCtrs) -> return $ Left (actualType, shownActualTopConstrs, show otherCtrs)
+
+        correctString result = do
           let actualType = show result
 
           full <- get
@@ -187,14 +219,12 @@ parseEval_b_customCheck dolog parse desc term (testBy :: TestBy) customTCCheck =
           let shownActualTopConstrs = show (_topctx allActualConstrs)
           let actualOtherConstrs = _otherctxs allActualConstrs
 
-          case (actualType == expectedType, shownActualTopConstrs == expectedConstrs, actualOtherConstrs) of
-            (True,True,[]) -> return $ Right ()
-            (_,_,otherCtrs) -> return $ Left (actualType, shownActualTopConstrs, show otherCtrs)
+          return (actualType,shownActualTopConstrs)
 
     case testBy of
       TestByEquality expected -> (tcb dolog $ (sn term'' >>= correctEquality expected)) `shouldReturn` (Right (Right ()))
       TestByUnification expected -> (tcb dolog $ (sn term'' >>= correctUnification expected)) `shouldReturn` (Right (Right ()))
-      TestByString expected -> (tcb dolog $ (sn term'' >>= correctString (expected))) `shouldReturn` (Right (Right ()))
+      TestByString expected -> (tcb dolog $ (sn term'' >>= correctString)) `shouldReturn` (Right (expected))
       TestByFail f  -> (tcb dolog $ (sn term'')) `shouldReturn` (Left f)
 
 

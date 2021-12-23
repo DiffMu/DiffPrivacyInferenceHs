@@ -83,13 +83,20 @@ typecheckFromDMTermWithPrinter printer logoptions term = do
                    Nothing -> internalError "The result of typechecking was a non-applied later value.\nFrom this, no type information can be extracted."
                    Just a -> a
 
-        log $ "Type before constraint resolving: " <> show tres'
-        log $ "solving constraints:"
-        logPrintConstraints
+        -- log $ "Type before constraint resolving: " <> show tres'
+        -- logForce $ "================================================"
+        -- logForce $ "before solving constraints (1)"
+        -- logPrintConstraints
         solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
         tres'' <- normalize tres'
+        -- logForce $ "================================================"
+        -- logForce $ "before solving constraints (2)"
+        -- logPrintConstraints
         solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
         tres''' <- normalize tres''
+        -- logForce $ "================================================"
+        -- logForce $ "before solving constraints (3)"
+        -- logPrintConstraints
         return tres'''
 
   x <- executeTC logoptions r
@@ -114,8 +121,8 @@ typecheckFromDMTerm_Detailed :: MutDMTerm -> IO ()
 typecheckFromDMTerm_Detailed term = do
 
   let logging_locations = [
-        Location_Check,
-        Location_Constraint
+        -- Location_Check,
+        -- Location_Constraint
         -- Location_Subst
         -- Location_INC,
         -- Location_MonadicGraph,
@@ -127,6 +134,6 @@ typecheckFromDMTerm_Detailed term = do
         <> "\n---------------------------------------------------------------------------\n"
         <> "Monad state:\n" <> show full
 
-  typecheckFromDMTermWithPrinter printer (DoShowLog Warning logging_locations) term
+  typecheckFromDMTermWithPrinter printer (DoShowLog Force logging_locations) term
 
 
