@@ -312,12 +312,12 @@ instance ShowPretty (DMTypeOf k) where
   showPretty (Clip n) = showPretty n
   showPretty (DMVec nrm clp n τ) = "Vector<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty n <> "](" <> showPretty τ <> ")"
   showPretty (DMMat nrm clp n m τ) = "Matrix<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty n <> " × " <> showPretty m <> "](" <> showPretty τ <> ")"
-  showPretty (DMParams m τ) = "Params[" <> showPretty m <> "](" <> showPretty τ <> ")"
-  showPretty (DMGrads nrm clp m τ) = "Grads<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty m <> "](" <> showPretty τ <> ")"
+  showPretty (DMParams m τ) = "DMModel[" <> showPretty m <> "](" <> showPretty τ <> ")"
+  showPretty (DMGrads nrm clp m τ) = "DMGrads<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty m <> "](" <> showPretty τ <> ")"
   showPretty (NoFun x) = showPretty x
   showPretty (Fun xs) = showPrettyEnumVertical (fmap fstAnn xs)
   showPretty (x :∧: y) = "(" <> showPretty x <> "∧" <> showPretty y <> ")"
-  showPretty (BlackBox n) = "BlackBox [" <> showPretty n <> "]"
+  showPretty (BlackBox n) = "BlackBox[" <> showPretty n <> "]"
 
 
 -- instance Eq (DMTypeOf NormKind) where
