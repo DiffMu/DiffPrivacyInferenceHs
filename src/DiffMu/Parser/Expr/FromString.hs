@@ -45,7 +45,7 @@ type Parser = Parsec Void String
 
 pTLineNumber :: Parser JTree
 pTLineNumber = let pLocation = do
-                                filename <- string "none"
+                                filename <- some (noneOf @[] " :")
                                 char ':'
                                 n <- decimal
                                 return (filename, n)
