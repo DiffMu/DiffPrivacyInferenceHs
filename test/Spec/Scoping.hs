@@ -14,23 +14,23 @@ testScoping pp = do
 
 
 testScope01 pp = do
-  let ex = " function test()               \n\
-           \   function f(a)               \n\
-           \      backup = a               \n\
-           \      b = a * 2                \n\
-           \      a = b                    \n\
-           \      a = 3 * a                \n\
-           \      b = a * b                \n\
-           \      result = backup + a + b  \n\
-           \      result                   \n\
-           \   end                         \n\
-           \   f(1)                        \n\
+  let ex = " function test()                \n\
+           \   function f(a)                \n\
+           \      backup = a                \n\
+           \      b = a * 2                 \n\
+           \      a1 = b                    \n\
+           \      a2 = 3 * a1               \n\
+           \      b1 = a2 * b               \n\
+           \      result = backup + a2 + b1 \n\
+           \      result                    \n\
+           \   end                          \n\
+           \   f(1)                         \n\
            \ end"
            -- backup = 1
            -- b = 1 * 2 = 2
-           -- a = 2
-           -- a = 3 * 2 = 6
-           -- b = 6 * 2 = 12
+           -- a1 = 2
+           -- a2 = 3 * 2 = 6
+           -- b1 = 6 * 2 = 12
            -- result = 1 + 6 + 12 = 19
 
       intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
@@ -44,7 +44,7 @@ testScope02 pp = do
            \   function scope(z)      \n\
            \     y = 100              \n\
            \     g(x) = x+y           \n\
-           \     y = g(z)             \n\
+           \     y1 = g(z)            \n\
            \     g(z)                 \n\
            \   end                    \n\
            \   scope(3)               \n\
@@ -56,7 +56,7 @@ testScope02 pp = do
            -- g{103}(3) = 3 + 103 = 106
 
       intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
-      ty = Fun([([] :->: intc (Fin 106)) :@ Just []])
+      ty = Fun([([] :->: intc (Fin 103)) :@ Just []])
 
   parseEval pp "02 works" ex (pure ty)
 
@@ -68,7 +68,7 @@ testScope03 pp = do
            \      h(x) = g(2)         \n\
            \      y = 100             \n\
            \      g(x) = x*y          \n\
-           \      y = h(1)            \n\
+           \      y2 = h(1)           \n\
            \      g(z)                \n\
            \   end                    \n\
            \   scope(3)               \n\
@@ -81,13 +81,13 @@ testScope03 pp = do
            -- g{200}(3) = 3*200 = 600
 
       intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
-      ty = Fun([([] :->: intc (Fin 600)) :@ Just []])
+      ty = Fun([([] :->: intc (Fin 300)) :@ Just []])
 
   parseEval pp "03 works" ex (pure ty)
 
 
 testScope04 pp = do
-  let ex_bad = " function test()                   \n\
+  let ex_bad = "function test()                \n\
            \    function f(a)                  \n\
            \        function h(b)              \n\
            \            i(b) = 2*b + a         \n\
@@ -120,20 +120,20 @@ testScope04 pp = do
            \            y = h(a*7)             \n\
            \            x + y                  \n\
            \        end                        \n\
-           \        a = g(h,a)                 \n\
-           \        a = g(h,a)                 \n\
+           \        a1 = g(h,a)                \n\
+           \        a2 = g(h,a1)               \n\
            \        function h(b::Integer)     \n\
            \            a*11                   \n\
            \        end                        \n\
-           \        a = g(h,a)                 \n\
-           \        a                          \n\
+           \        a3 = g(h,a2)               \n\
+           \        a3                         \n\
            \    end                            \n\
            \    f(13)                          \n\
            \ end"
 
 
       intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
-      ty = Fun([([] :->: intc (Fin 138424)) :@ Just []])
+      ty = Fun([([] :->: intc (Fin 286)) :@ Just []])
 
   parseEvalFail pp "04 (bad)" ex_bad (FLetReorderError "")
   parseEval pp "04 (good)" ex (pure ty)
@@ -168,20 +168,20 @@ testScope06 pp = do
             \    a = 3                    \n\
             \    b = 5                    \n\
             \    function f(a,b)          \n\
-            \      a = 7                  \n\
+            \      a1 = 7                 \n\
             \      function g(ff)         \n\
             \        (a,b) -> ff(a,b)     \n\
             \      end                    \n\
             \      function h(a,b)        \n\
-            \        b = 3                \n\
-            \        a + b                \n\
+            \        b1 = 3               \n\
+            \        a + b1               \n\
             \      end                    \n\
-            \      g(h)(a,b)              \n\
+            \      g(h)(a1,b)             \n\
             \    end                      \n\
             \    y = b + 12               \n\
-            \    b = 9                    \n\
+            \    b2 = 9                   \n\
             \    x = a                    \n\
-            \    a = 23                   \n\
+            \    a2 = 12                  \n\
             \    f(x,y)                   \n\
             \  end                        "
 
