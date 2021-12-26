@@ -209,7 +209,7 @@ solveop name (IsTypeOpResult (Unary op (τa :@ s) τr)) = do
       -- unification would lead to an error then so we do subtyping in that case
       -- see issue #124
       case τr of
-          NoFun (Numeric (NonConst _)) -> addConstraint (Solvable (IsLessEqual (val_τr ,τr))) >> return val_τr
+          (Numeric (NonConst _)) -> addConstraint (Solvable (IsLessEqual (val_τr ,τr))) >> return val_τr
           _ -> unify τr val_τr
       dischargeConstraint @MonadDMTC name
 
