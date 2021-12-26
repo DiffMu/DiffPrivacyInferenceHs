@@ -11,8 +11,8 @@ import Spec.Base
 
 testBrokenScoping pp = do
   describe "Scopes do not allow reassignment with different types (#138)" $ do
-    -- testScope01 pp -- JULIA EXCEPTION
-    -- testScope02 pp -- JULIA EXCEPTION
+    testScope01 pp
+    testScope02 pp
     testScope03 pp
     testScope04 pp
     testScope05 pp
@@ -45,7 +45,7 @@ testScope01 pp = do
       ty = Fun([([] :->: intc (Fin 19)) :@ Just []])
 
   -- parseEval pp "01 works" ex (pure ty)
-  parseEvalFail pp "01 fails" ex (UnificationError "" "")
+  parseEvalFail pp "01 fails" ex (ParseError "" "" 0)
 
 
 
@@ -69,7 +69,7 @@ testScope02 pp = do
       ty = Fun([([] :->: intc (Fin 106)) :@ Just []])
 
   -- parseEval pp "02 works" ex (pure ty)
-  parseEvalFail pp "02 fails" ex (UnsatisfiableConstraint "")
+  parseEvalFail pp "02 fails" ex (ParseError "" "" 0)
 
 
 testScope03 pp = do
@@ -95,7 +95,7 @@ testScope03 pp = do
       ty = Fun([([] :->: intc (Fin 600)) :@ Just []])
 
   -- parseEval pp "03 works" ex (pure ty)
-  parseEvalFail pp "03 fails" ex (UnsatisfiableConstraint "")
+  parseEvalFail pp "03 fails" ex (ParseError "" "" 0)
 
 
 testScope04 pp = do
@@ -149,7 +149,7 @@ testScope04 pp = do
 
   parseEvalFail pp "04 (bad) fails" ex_bad (FLetReorderError "")
   -- parseEval pp "04 (good)" ex (pure ty)
-  parseEvalFail pp "04 (good) fails" ex (UnificationError "" "")
+  parseEvalFail pp "04 (good) fails" ex (ParseError "" "" 0)
 
 
 testScope05 pp = do
@@ -224,7 +224,7 @@ testScope07 pp = do
       ty = Fun([([] :->: intc (Fin 5)) :@ Just []])
 
   -- parseEval pp "07 works" ex (pure ty)
-  parseEvalFail pp "07 fails" ex (UnsatisfiableConstraint "")
+  parseEvalFail pp "07 fails" ex (ParseError "" "" 0)
 
 testScope08 pp = do
   let ex1 = " function test9()           \n\
@@ -290,8 +290,8 @@ testScope08 pp = do
 
   -- parseEval pp "08 (version 1) works" ex (pure ty1)
   -- parseEval pp "08 (version 2) works" ex (pure ty2)
-  parseEvalFail pp "08 (version 1) fails" ex1 (UnsatisfiableConstraint "")
-  parseEvalFail pp "08 (version 2) fails" ex2 (UnsatisfiableConstraint "")
+  parseEvalFail pp "08 (version 1) fails" ex1 (ParseError "" "" 0)
+  parseEvalFail pp "08 (version 2) fails" ex2 (ParseError "" "" 0)
 
 
 

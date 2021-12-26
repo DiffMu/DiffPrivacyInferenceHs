@@ -130,7 +130,7 @@ typecheckFromDMTerm_Detailed term = do
         ]
   let printer (ty, full) =
         "\n---------------------------------------------------------------------------\n"
-        <> "Type:\n" <> showPretty ty
+        <> "Type:\n" <> show ty
         <> "\n---------------------------------------------------------------------------\n"
         <> "Monad state:\n" <> show full
 
