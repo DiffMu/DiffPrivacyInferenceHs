@@ -205,7 +205,11 @@ setIfTypesMatch name ma scope =
           a <- ma
           b <- mb
           return $ do
-            (a',b') <- msumTup (a, b)
+            let bWithoutCtx = do
+                  b' <- b
+                  types %= resetToDefault
+                  return b'
+            (a',b') <- msumTup (a, bWithoutCtx)
             unify a' b'
   in setValue name newval scope
 

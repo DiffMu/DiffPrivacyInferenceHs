@@ -122,7 +122,7 @@ typecheckFromDMTerm_Detailed term = do
 
   let logging_locations = [
         -- Location_Check,
-        -- Location_Constraint
+        Location_Constraint
         -- Location_Subst
         -- Location_INC,
         -- Location_MonadicGraph,
@@ -134,6 +134,6 @@ typecheckFromDMTerm_Detailed term = do
         <> "\n---------------------------------------------------------------------------\n"
         <> "Monad state:\n" <> show full
 
-  typecheckFromDMTermWithPrinter printer (DoShowLog Force logging_locations) term
+  typecheckFromDMTermWithPrinter printer (DoShowLog Debug logging_locations) term
 
 
