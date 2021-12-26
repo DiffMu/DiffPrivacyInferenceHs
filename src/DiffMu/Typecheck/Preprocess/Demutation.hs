@@ -112,12 +112,12 @@ immutTypeEq _ _ = False
 -- but do not allow to change that value afterwards.
 safeSetValue :: Maybe TeVar -> ImmutType -> Scope -> MTC Scope
 safeSetValue (Nothing) newType scope = pure scope
-safeSetValue (Just var) newType scope =
-  case getValue var scope of
-    Nothing -> pure $ setValue var newType scope
-    (Just oldType) -> if immutTypeEq oldType newType
-                      then pure scope
-                      else throwError (DemutationError $ "Found a redefinition of the variable '" <> show var <> "', where the old type (" <> show oldType <> ") and the new type (" <> show newType <> ") differ. This is not allowed.")
+safeSetValue (Just var) newType scope = throwError (ParseError ("Reassignment of variable " <> show var <> " is not allowed.") "" 0)
+  -- case getValue var scope of
+  --   Nothing -> pure $ setValue var newType scope
+  --   (Just oldType) -> if immutTypeEq oldType newType
+  --                     then pure scope
+  --                     else throwError (DemutationError $ "Found a redefinition of the variable '" <> show var <> "', where the old type (" <> show oldType <> ") and the new type (" <> show newType <> ") differ. This is not allowed.")
 
 
 
