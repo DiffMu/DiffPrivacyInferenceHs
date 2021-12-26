@@ -194,3 +194,22 @@ pushChoice name ma scope =
             return (a' :∧: b')
   in setValue name newval scope
 
+
+
+setIfTypesMatch :: TeVar -> DMDelayed -> DMScope -> DMScope
+setIfTypesMatch name ma scope =
+  let oldval = getValue name scope
+      newval = case oldval of
+        Nothing -> ma
+        Just mb -> do
+          a <- ma
+          b <- mb
+          return $ do
+            (a',b') <- msumTup (a, b)
+            unify a' b'
+  in setValue name newval scope
+
+
+setIfTypesMatchMaybe :: Maybe TeVar -> DMDelayed -> DMScope -> DMScope
+setIfTypesMatchMaybe Nothing _ scope = scope
+setIfTypesMatchMaybe (Just a) val scope = setIfTypesMatch a val scope

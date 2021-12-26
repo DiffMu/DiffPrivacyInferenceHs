@@ -26,6 +26,7 @@ import System.IO.Unsafe
 
 
 
+
 ------------------------------------------------------------------------
 -- The typechecking function
 checkPriv :: DMTerm -> DMScope -> DMDelayed
@@ -129,10 +130,11 @@ checkSen' (Arg x jτ i) scope = done $ do
 checkSen' (Var (x :- dτ)) scope =  -- get the term that corresponds to this variable from the scope dict
    let delτ = getValueMaybe x scope
    in case delτ of
-     Nothing -> done $ throwError (VariableNotInScope x)
+     Nothing -> done $ logForce ("[Var-Sens] Scope is:\n" <> show (getAllKeys scope)) >> throwError (VariableNotInScope x)
      Just delτ -> do
         mτ <- delτ -- get the computation that will give us the type of x
         done $ do
+            logForce ("[Var-Sens] Scope is:\n" <> show (getAllKeys scope))
             τ <- mτ -- extract the type of x
             -- if the user has given an annotation
             -- inferred type must be a subtype of the user annotation
@@ -146,7 +148,7 @@ checkSen' (Lam xτs body) scope =
 
     -- put a special term to mark x as a function argument. those get special tratment
     -- because we're interested in their privacy. put the relevance given in the function signature, too.
-    let f s sc (Just x :- τ) = setValue x (checkSens (Arg x τ IsRelevant) s) sc
+    let f s sc (Just x :- τ) = setIfTypesMatch x (checkSens (Arg x τ IsRelevant) s) sc
         f s sc (Nothing :- τ) = sc
     let addArgs s = foldl (f s) s xτs
     let scope' = addArgs scope
@@ -177,7 +179,7 @@ checkSen' (LamStar xτs body) scope =
   later $ \scope -> do
     -- put a special term to mark x as a function argument. those get special treatment
     -- because we're interested in their sensitivity
-    let f s sc (Just x :- (τ , rel)) = setValue x (checkSens (Arg x τ rel) s) sc
+    let f s sc (Just x :- (τ , rel)) = setIfTypesMatch x (checkSens (Arg x τ rel) s) sc
         f s sc (Nothing :- _) = sc
     let addArgs s = foldl (f s) s xτs
     let scope' = addArgs scope
@@ -223,7 +225,8 @@ checkSen' (LamStar xτs body) scope =
 checkSen' (SLet (x :- dτ) term body) scope = do
 
    -- put the computation to check the term into the scope
-   let scope' = setValueMaybe x (checkSens term scope) scope
+   --  let scope' = setValueMaybe x (checkSens term scope) scope
+   let scope' = setIfTypesMatchMaybe x (checkSens term scope) scope
 
    -- check body with that new scope
    result <- checkSens body scope'
@@ -243,7 +246,7 @@ checkSen' (SLet (x :- dτ) term body) scope = do
 checkSen' (BBLet name jτs tail) scope = do
 
    -- the type of this is just a BlackBox, put it in the scope
-   let scope' = setValue name (done $ return (BlackBox jτs)) scope
+   let scope' = setIfTypesMatch name (done $ return (BlackBox jτs)) scope
 
    -- check tail with that new scope
    result <- checkSens tail scope'
@@ -339,10 +342,11 @@ checkSen' (Apply f args) scope =
     -- restricting function to modify variables which are
     -- also modified on an outer level
     args <- applyAllDelayedLayers scope (sequence margs)
+    -- args <- sequence margs
 
     -- we merge the different TC's into a single result TC
     return $ do
-       logForce ("Scope is:\n" <> show (getAllKeys scope))
+       logForce ("[Apply-Sens]Scope is:\n" <> show (getAllKeys scope))
        (sbranch_check res args)
 
 
@@ -418,7 +422,7 @@ checkSen' (TLet xs term body) original_scope = do
 
   -- add all variables bound in the tuple let as args-checking-commands to the scope
   -- TODO: do we need to make sure that we have unique names here?
-  let addarg scope (Just x :- τ) = setValue x (checkSens (Arg x τ NotRelevant) original_scope) scope
+  let addarg scope (Just x :- τ) = setIfTypesMatch x (checkSens (Arg x τ NotRelevant) original_scope) scope
       addarg scope (Nothing :- τ) = scope
   let scope_with_args = foldl addarg original_scope xs
 
@@ -485,7 +489,7 @@ checkSen' (Loop niter cs' (xi, xc) body) scope = do
    -- add iteration and capture variables as args-checking-commands to the scope
    -- TODO: do we need to make sure that we have unique names here?
    let scope' = case xi of
-                  Just xi -> setValue xi (checkSens (Arg xi JTInt NotRelevant) scope) scope
+                  Just xi -> setIfTypesMatch xi (checkSens (Arg xi JTInt NotRelevant) scope) scope
                   Nothing -> scope
    let scope'' = setValue xc (checkSens (Arg xc JTAny IsRelevant) scope) scope'
 
@@ -897,7 +901,7 @@ checkPri' (Apply f args) scope =
        -- i.e. "typecheck" means here "extracting" the result of the later computation
        res <- (applyDelayedLayer scope (checkSens f scope))
        done $ do
-                logForce ("Scope is:\n" <> show (getAllKeys scope))
+                logForce ("[Apply-Priv]Scope is:\n" <> show (getAllKeys scope))
                 r <- res
                 mtruncateP inftyP -- truncate f's context to ∞
                 return r
@@ -917,7 +921,8 @@ checkPri' (Apply f args) scope =
 checkPri' (SLet (x :- dτ) term body) scope = do
 
    -- put the computation to check the term into the scope
-   let scope' = setValueMaybe x (checkSens term scope) scope
+   --  let scope' = setValueMaybe x (checkSens term scope) scope
+   let scope' = setIfTypesMatchMaybe x (checkSens term scope) scope
 
    -- check body with that new scope
    result <- checkPriv body scope'
@@ -937,7 +942,7 @@ checkPri' (SBind (x :- dτ) term body) scope = do
    -- and later discard its annotation. we use checkSens because there are no Vars in privacy terms so
    -- x will only ever be used in a sensitivity term.
    let scope' = case x of
-                  Just x -> setValue x (checkSens (Arg x dτ NotRelevant) scope) scope
+                  Just x -> setIfTypesMatch x (checkSens (Arg x dτ NotRelevant) scope) scope
                   Nothing -> scope
 
    -- check body with that new scope
@@ -998,7 +1003,7 @@ checkPri' curterm@(TLet xs term body) original_scope = do
   -- put the computations to check the terms into the scope
   -- (in privacy terms we use projections here, making this a "transparent" tlet)
 
-  let addarg scope (Just x :- _, i) = setValue x (checkSens (TProject i term) original_scope) scope
+  let addarg scope (Just x :- _, i) = setIfTypesMatch x (checkSens (TProject i term) original_scope) scope
       addarg scope (Nothing :- _, i) = scope
   let scope_with_args = foldl addarg original_scope (xs `zip` [0..])
 
@@ -1172,7 +1177,7 @@ checkPri' (Loop niter cs' (xi, xc) body) scope =
       -- capture variable is not relevant bc captures get ∞ privacy anyways
       -- TODO: do we need to make sure that we have unique names here?
       let scope' = case xi of
-                     Just xi -> setValue xi (checkSens (Arg xi JTInt NotRelevant) scope) scope
+                     Just xi -> setIfTypesMatch xi (checkSens (Arg xi JTInt NotRelevant) scope) scope
                      Nothing -> scope
       let scope'' = setValue xc (checkSens (Arg xc JTAny NotRelevant) scope) scope'
 
