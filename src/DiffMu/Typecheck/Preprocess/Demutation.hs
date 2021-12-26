@@ -121,6 +121,16 @@ safeSetValue (Just var) newType scope =
       --                 else throwError (DemutationError $ "Found a redefinition of the variable '" <> show var <> "', where the old type (" <> show oldType <> ") and the new type (" <> show newType <> ") differ. This is not allowed.")
 
 
+safeSetValueAllowFLet :: Maybe TeVar -> ImmutType -> Scope -> MTC Scope
+safeSetValueAllowFLet (Nothing) newType scope = pure scope
+safeSetValueAllowFLet (Just var) newType scope =
+  case getValue var scope of
+    Nothing -> pure $ setValue var newType scope
+    (Just oldType) -> if immutTypeEq oldType newType
+                      then pure scope
+                      else throwError (DemutationError $ "Found a redefinition of the variable '" <> show var <> "', where the old type (" <> show oldType <> ") and the new type (" <> show newType <> ") differ. This is not allowed.")
+
+
 
 ---
 -- elaborating loops
@@ -297,8 +307,8 @@ elaborateMut scope (FLet fname term body) = do
   -- set the new scope with fname if not already existing
   -- (but only allow pure uservalue-functions, or single-definition mutating functions)
   scope' <- case ftype of
-        Nothing -> safeSetValue (Just fname) newTermType scope
-        Just (Pure UserValue) -> safeSetValue (Just fname) newTermType scope
+        Nothing -> safeSetValueAllowFLet (Just fname) newTermType scope
+        Just (Pure UserValue) -> safeSetValueAllowFLet (Just fname) newTermType scope
         Just (Mutating _) -> throwError (DemutationError $ "We do not allow mutating functions to have multiple definitions")
         Just (Pure DefaultValue) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
         Just (Pure (SingleArg _)) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
