@@ -72,9 +72,9 @@ catchAny = Control.Exception.catch
 
 callTermParserCallback :: FunPtr TermParserCallbackFun -> String -> IO String
 callTermParserCallback parse input = do
-  withCString input (\input -> do
-                        res <- call_StringString parse input
-                        peekCString res)
+  withCString input (\input -> (do
+                        res <- (call_StringString parse input)
+                        peekCString res) `catchAny` (\_ -> return "exception in julia"))
 
 runHaskellTests :: FunPtr SubtypingCallbackFun -> FunPtr TermParserCallbackFun -> IO ()
 runHaskellTests sub parse = do

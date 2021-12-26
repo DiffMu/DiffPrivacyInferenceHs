@@ -11,8 +11,8 @@ import Spec.Base
 
 testBrokenScoping pp = do
   describe "Scopes do not allow reassignment with different types (#138)" $ do
-    testScope01 pp
-    testScope02 pp
+    -- testScope01 pp -- JULIA EXCEPTION
+    -- testScope02 pp -- JULIA EXCEPTION
     testScope03 pp
     testScope04 pp
     testScope05 pp

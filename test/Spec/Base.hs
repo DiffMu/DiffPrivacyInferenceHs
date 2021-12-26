@@ -107,7 +107,7 @@ parseEvalSimple p term expected =
   parseEval p ("Checks '" <> term <> "' correctly") term expected
 
 parseEvalFail a b c f = parseEval_b False a b c (TestByFail f)
-parseEvalThrows a b c f = parseEval_b False a b c (TestByThrows)
+parseEvalThrows a b c = parseEval_b False a b c (TestByThrows)
 
 parseEval parse desc term expected = parseEval_b False parse desc term (TestByEquality expected)
 parseEval_l parse desc term expected = parseEval_b True parse desc term (TestByEquality expected)
