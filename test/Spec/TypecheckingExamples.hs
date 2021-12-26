@@ -89,6 +89,14 @@ testSLoop pp = describe "Sensitivity loop" $ do
                  \   end \n\
                  \   x \n\
                  \end"
+        mloop = "function sloop(x::Integer) \n\
+                 \   for i in 1:10 \n\
+                 \      y = 100   \n\
+                 \      x = x + x \n\
+                 \      y = x     \n\
+                 \   end \n\
+                 \   x \n\
+                 \end"
         vloop = "function sloop(x::Integer, n::Integer) \n\
                  \   for i in 1:2*n \n\
                  \      x = x + 5 \n\
@@ -112,6 +120,7 @@ testSLoop pp = describe "Sensitivity loop" $ do
         ty_v = Fun([([int :@ (constCoeff (Fin 1)), int :@ (constCoeff (Fin 2))] :->: int) :@ Just [JTInt, JTInt]])
         ty_v2 = Fun([([int :@ (constCoeff (Fin 1)), int :@ (inftyS)] :->: int) :@ Just [JTInt, JTInt]])
     parseEval pp "static" sloop (pure ty_s)
+    parseEvalFail pp "overwriting" mloop (ParseError "" "" 0)
     parseEval pp "variable" vloop (pure ty_v)
     parseEval pp "variable2" vloop2 (pure ty_v2)
     parseEvalFail pp "variable (bad)" uloop (UnsatisfiableConstraint "")
@@ -131,35 +140,28 @@ testDPGD pp = describe "DPGD" $ do
           \          Flux.softmax)) \n\
           \ end \n\
           \ loss(X, y, model) :: BlackBox() = Flux.crossentropy(model.model(X), y) \n\
-          \ function train_dp(data, labels, eps::NoData(), del::NoData(), n::NoData(), eta::NoData()) :: Priv() \n\
+          \ function train_dp(data, labels, eps::NoData(), del::NoData(), eta::NoData()) :: Priv() \n\
           \    model = init_model() \n\
           \    (dim, _) = size(data) \n\
-          \    aloss = 0 \n\
-          \    for _ in 1:n \n\
-          \        for i in 1:dim \n\
+          \    for i in 1:dim \n\
           \           d = data[i,:] \n\
           \           l = labels[i,:] \n\
           \           gs = unbounded_gradient(model, d, l) \n\
-          \  \n\
           \           gsc = norm_convert(clip(L2,gs)) \n\
           \           gsg :: Robust() = gaussian_mechanism(2/dim, eps, del, scale_gradient(1/dim,gsc)) \n\
           \           model :: Robust() = subtract_gradient(model, scale_gradient(eta * dim, gsg)) \n\
-          \     #      aloss += loss(d,l,model)/(n*dim) \n\
-          \        end \n\
           \    end \n\
           \    model \n\
           \ end"
 
-      ty = "Fun([([NoFun(Matrix<n: τ_30, c: τ_31>[s_23 × s_35](Num(Data))) @ (4.0⋅s_26⋅sqrt(2.0⋅ceil(s_23)⋅(0.0 - ln(s_50)))⋅sqrt(2.0⋅ceil(s_55)⋅(0.0 - ln(s_52))),ceil(s_23)⋅ceil(s_55)⋅s_27 + s_50⋅ceil(s_55) + s_52),NoFun(Matrix<n: τ_85, c: τ_86>[s_40 × s_41](Num(Data))) @ (4.0⋅s_26⋅sqrt(2.0⋅ceil(s_23)⋅(0.0 - ln(s_50)))⋅sqrt(2.0⋅ceil(s_55)⋅(0.0 - ln(s_52))),ceil(s_23)⋅ceil(s_55)⋅s_27 + s_50⋅ceil(s_55) + s_52),NoFun(Num(τ_106[s_26])) @ (0,0),NoFun(Num(τ_108[s_27])) @ (0,0),NoFun(Num(τ_125[s_55])) @ (0,0),NoFun(Num(τ_141[s_57])) @ (∞,∞)] ->* NoFun(Params[s_53](Num(Real[--])))) @ Just [Any,Any,Any,Any,Any,Any]])"
+      ty = "Fun([([NoFun(Matrix<n: τ_16, c: τ_17>[s_16 × s_28](Num(Data))) @ (2.0⋅sqrt(2.0⋅(0.0 - ln(s_43))⋅ceil(s_16))⋅s_19,s_20⋅ceil(s_16) + s_43),NoFun(Matrix<n: τ_81, c: τ_82>[s_33 × s_34](Num(Data))) @ (2.0⋅sqrt(2.0⋅(0.0 - ln(s_43))⋅ceil(s_16))⋅s_19,s_20⋅ceil(s_16) + s_43),NoFun(Num(τ_101[s_19])) @ (0,0),NoFun(Num(τ_103[s_20])) @ (0,0),NoFun(Num(τ_129[s_47])) @ (∞,∞)] ->* NoFun(Params[s_44](Num(Real[--])))) @ Just [Any,Any,Any,Any,Any]])"
 
-      cs = "constr_21 : [final,worst,global,exact,special] IsLess (0,s_27),\
-           \\nconstr_43 : [final,worst,global,exact,special] IsLess (0,s_52),\
-           \\nconstr_18 : [final,worst,global,exact,special] IsLess (s_26,1),\
-           \\nconstr_40 : [final,worst,global,exact,special] IsLess (0,s_50),\
-           \\nconstr_20 : [final,worst,global,exact,special] IsLess (0,s_26),\
-           \\nconstr_39 : [final,worst,global,exact,special] IsLessEqual (s_50,1),\
-           \\nconstr_42 : [final,worst,global,exact,special] IsLessEqual (s_52,1),\
-           \\nconstr_19 : [final,worst,global,exact,special] IsLess (s_27,1)"
+      cs = "constr_16 : [final,worst,global,exact,special] IsLess (s_20,1),\
+          \\nconstr_38 : [final,worst,global,exact,special] IsLess (0,s_43),\
+          \\nconstr_15 : [final,worst,global,exact,special] IsLess (s_19,1),\
+          \\nconstr_17 : [final,worst,global,exact,special] IsLess (0,s_19),\
+          \\nconstr_18 : [final,worst,global,exact,special] IsLess (0,s_20),\
+          \\nconstr_37 : [final,worst,global,exact,special] IsLessEqual (s_43,1)"
   parseEvalString_customCheck pp "a DP version of basic gradient descent" ex (ty, cs) (pure $ Right ())
 
 
