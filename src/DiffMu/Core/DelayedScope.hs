@@ -31,17 +31,36 @@ import Debug.Trace
 -- to be mutually recursive.
 -- `Done` just holds the result of a finished computation, `Later` holds a computation
 -- mapping an input of type x to another possibly delayed computation.
-data DelayedT_ x m a = Done a | Later (x -> (DelayedT x m a))
-newtype DelayedT x m a = DelayedT (m (DelayedT_ x m a))
+-- data DelayedT_ x m a = Done a | Later (x -> (DelayedT x m a))
+-- newtype DelayedT x m a = DelayedT (m (DelayedT_ x m a))
+newtype DelayedT x m a = DelayedT (m a)
+  deriving (Functor, Applicative, Monad)
+
+deriving instance MonadState s m => MonadState s (DelayedT x m)
 
 -- apply a modification described by mod to all delayed layers.
-modifyScope :: Monad m => (x -> x) -> DelayedT x m a -> DelayedT x m a
-modifyScope mod (DelayedT ma) = DelayedT $ do
-    a <- ma
-    case a of
-      Done a -> return $ Done a
-      Later g -> return $ Later $ \x -> modifyScope mod (g (mod x))
+-- modifyScope :: Monad m => (x -> x) -> DelayedT x m a -> DelayedT x m a
+-- modifyScope mod (DelayedT ma) = DelayedT $ do
+--     a <- ma
+--     case a of
+--       Done a -> return $ Done a
+--       Later g -> return $ Later $ \x -> modifyScope mod (g (mod x))
 
+
+done :: Monad m => a -> DelayedT x m a
+done = return
+
+
+extractDelayed :: Monad m => x -> DelayedT x m a -> m a
+extractDelayed x (DelayedT ma) = ma
+
+tryGetDone :: Monad m => DelayedT x m a -> m (Maybe a)
+tryGetDone (DelayedT ma) = Just <$> ma
+
+-- later :: Monad m => (x -> DelayedT x m a) -> DelayedT x m a
+-- later f = DelayedT (pure (Later f))
+
+{-
 
 -- we expose the original constructors as shortcuts
 done :: Monad m => a -> DelayedT x m a
@@ -118,7 +137,9 @@ tryGetDone (DelayedT ma) = do
     Later g -> return Nothing
 
 -- throwing an error finishes a computation
-throwDelayedError e = DelayedT (pure $ Done $ (throwError e))
+-}
+throwDelayedError e = DelayedT (return $ (throwError e))
+
 
 
 ------------------------------------------------------------------------
@@ -161,6 +182,7 @@ newTeVar hint = termVars %%= (first GenTeVar . (newName hint))
 
 -- the type of our typechecking is `TC DMMain`, inside of a `DelayedT` & `State` monad
 type DMDelayed = DelayedT DMScope (State DelayedState) (TC DMMain)
+-- type DMDelayed = (State DelayedState) (TC DMMain)
 
 newtype DMScope = DMScope (H.HashMap TeVar (DMDelayed))
   deriving Generic

@@ -144,7 +144,7 @@ checkSen' (Var (x :- dτ)) scope =  -- get the term that corresponds to this var
 checkSen' (Lam xτs body) scope =
   -- the body is checked in the toplevel scope, not the current variable scope.
   -- this reflects the julia behaviour
-  later $ \scope -> do
+  do
 
     -- put a special term to mark x as a function argument. those get special tratment
     -- because we're interested in their privacy. put the relevance given in the function signature, too.
@@ -159,13 +159,14 @@ checkSen' (Lam xτs body) scope =
     -- add the arguments to all delayed scopes in the result, in case this returns another delayed thing.
     -- we want to use the current scope upon application of that delayed thing, but the argument names
     -- must be the actual function arguments.
-    let modresult = modifyScope addArgs mresult
+    -- let modresult = modifyScope addArgs mresult
 
-    τr <- modresult
+    τr <- mresult
 
     -- extract julia signature
     let sign = (sndA <$> xτs)
     done $ do
+      logForce $ "Checking Lam, outer scope: " <> show (getAllKeys scope) <> " | inner: " <> show (getAllKeys scope')
       restype <- τr
       xrτs <- getArgList @_ @SensitivityK xτs
       let xrτs' = [x :@ s | (x :@ SensitivityAnnotation s) <- xrτs]
@@ -176,7 +177,7 @@ checkSen' (Lam xτs body) scope =
 checkSen' (LamStar xτs body) scope =
   -- the body is checked in the toplevel scope, not the current variable scope.
   -- this reflects the julia behaviour
-  later $ \scope -> do
+  do
     -- put a special term to mark x as a function argument. those get special treatment
     -- because we're interested in their sensitivity
     let f s sc (Just x :- (τ , rel)) = setIfTypesMatch x (checkSens (Arg x τ rel) s) sc
@@ -190,9 +191,9 @@ checkSen' (LamStar xτs body) scope =
     -- add the arguments to all delayed scopes in the result, in case this returns another delayed thing.
     -- we want to use the current scope upon application of that delayed thing, but the argument names
     -- must be the actual function arguments.
-    let modresult = modifyScope addArgs mresult
+    -- let modresult = modifyScope addArgs mresult
 
-    τr <- modresult
+    τr <- mresult
 
     let sign = (fst <$> sndA <$> xτs)
     done $ do
@@ -293,7 +294,8 @@ checkSen' (BBApply app args cs) scope =
     -- also modified on an outer level
     -- this should not have any impact on the sensitivity of things here tho
     -- because everything happens inside the box and gets scaled by infty
-    args <- applyAllDelayedLayers scope (sequence margs)
+    -- args <- applyAllDelayedLayers scope (sequence margs)
+    args <- (sequence margs)
 
     -- we merge the different TC's into a single result TC
     return $ do
@@ -334,15 +336,15 @@ checkSen' (Apply f args) scope =
     --traceM $ "checking sens apply " <> show (f, args)
     -- we typecheck the function, but `apply` our current layer on the Later computation
     -- i.e. "typecheck" means here "extracting" the result of the later computation
-    res <- (applyDelayedLayer scope mf)
+    res <- mf -- (applyDelayedLayer scope mf)
 
     -- we apply the current scope to *ALL* (!) layers.
     -- i.e., all arguments are evaluated fully in the current scope
     -- this only makes sense because of the parsing rule
     -- restricting function to modify variables which are
     -- also modified on an outer level
-    args <- applyAllDelayedLayers scope (sequence margs)
-    -- args <- sequence margs
+    -- args <- applyAllDelayedLayers scope (sequence margs)
+    args <- sequence margs
 
     -- we merge the different TC's into a single result TC
     return $ do
@@ -843,7 +845,8 @@ checkSen' (TProject i t) scope = do
 
 checkSen' (LastTerm t) scope = do
   -- typecheck the term t, and apply the current scope to it
-  applyAllDelayedLayers scope (checkSens t scope)
+  -- applyAllDelayedLayers scope (checkSens t scope)
+  (checkSens t scope)
 
 checkSen' term@(SBind x a b) scope = do
   throwDelayedError (TypeMismatchError $ "Found the term\n" <> showPretty term <> "\nwhich is a privacy term because of the bind in a place where a sensitivity term was expected.")
@@ -899,7 +902,7 @@ checkPri' (Apply f args) scope =
     f_check :: DelayedT DMScope (State DelayedState) (TC DMMain) = do
        -- we typecheck the function, but `apply` our current layer on the Later computation
        -- i.e. "typecheck" means here "extracting" the result of the later computation
-       res <- (applyDelayedLayer scope (checkSens f scope))
+       res <- (checkSens f scope)
        done $ do
                 logForce ("[Apply-Priv]Scope is:\n" <> show (getAllKeys scope))
                 r <- res
@@ -912,7 +915,7 @@ checkPri' (Apply f args) scope =
     ff <- f_check
 
     -- we extract the result of the args computations
-    args <- applyAllDelayedLayers scope (sequence margs)
+    args <- (sequence margs)
 
     -- we merge the different TC's into a single result TC
     return (sbranch_check ff args)
