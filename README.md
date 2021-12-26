@@ -7,7 +7,7 @@ This is the backend for [DiffPrivacyInference.jl](https://github.com/DiffMu/Diff
 This project uses both Julia and Haskell, as such, you need to have both languages installed.
 In particular, in order to run/build from source, you need:
  - [Julia](https://julialang.org/), a relatively recent version, e.g. `>= 1.6.1`
- - [Haskell Tool Stack](https://docs.haskellstack.org/en/stable/README/)
+ - [Haskell Tool Stack](https://docs.haskellstack.org/en/stable/README/) version `>= 1.6.0`
  - GNU Make
 
 ### Building from source
