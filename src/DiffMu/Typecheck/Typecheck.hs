@@ -1003,8 +1003,7 @@ checkPri' curterm@(TLet xs term body) original_scope = do
   -- put the computations to check the terms into the scope
   -- (in privacy terms we use projections here, making this a "transparent" tlet)
 
-  -- let addarg scope (Just x :- _, i) = setIfTypesMatch x (checkSens (TProject i term) original_scope) scope
-  let addarg scope (Just x :- _, i) = setValue x (checkSens (TProject i term) original_scope) scope
+  let addarg scope (Just x :- _, i) = setIfTypesMatch x (checkSens (TProject i term) original_scope) scope
       addarg scope (Nothing :- _, i) = scope
   let scope_with_args = foldl addarg original_scope (xs `zip` [0..])
 
