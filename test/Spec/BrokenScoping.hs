@@ -147,7 +147,7 @@ testScope04 pp = do
       intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
       ty = Fun([([] :->: intc (Fin 138424)) :@ Just []])
 
-  parseEvalFail pp "04 (bad) fails" ex_bad (FLetReorderError "")
+  parseEvalFail pp "04 (bad) fails" ex_bad (ParseError "" "" 0)
   -- parseEval pp "04 (good)" ex (pure ty)
   parseEvalFail pp "04 (good) fails" ex (ParseError "" "" 0)
 
@@ -201,7 +201,8 @@ testScope06 pp = do
       intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
       ty1 = Fun([([] :->: intc (Fin 10)) :@ Just []])
 
-  parseEval pp "06 works" ex1 (pure ty1)
+  -- parseEval pp "06 works" ex1 (pure ty1)
+  parseEvalFail pp "06 works" ex1 (ParseError "" "" 0)
 
 
 ---------------------------------------------------------------------
