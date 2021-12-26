@@ -6,6 +6,7 @@ import Spec.Subtyping
 import Spec.Supremum
 import Spec.Rules
 import Spec.Scoping
+import Spec.BrokenScoping
 import Spec.TypecheckingExamples
 import Spec.Unsafe
 import Spec.Unification
@@ -39,6 +40,7 @@ runAllTests parse = defaultspec $ do
   testSupremum
   testCheck_Rules
   testScoping parse
+  testBrokenScoping parse
   testTypecheckingExamples parse
   testIssues parse
   -- testParsing parse
