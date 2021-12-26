@@ -45,7 +45,7 @@ testScope01 pp = do
       ty = Fun([([] :->: intc (Fin 19)) :@ Just []])
 
   -- parseEval pp "01 works" ex (pure ty)
-  parseEvalFail pp "01 fails" ex (UnsatisfiableConstraint "")
+  parseEvalFail pp "01 fails" ex (UnificationError "" "")
 
 
 
@@ -149,7 +149,7 @@ testScope04 pp = do
 
   parseEvalFail pp "04 (bad) fails" ex_bad (FLetReorderError "")
   -- parseEval pp "04 (good)" ex (pure ty)
-  parseEvalFail pp "04 (good) fails" ex (UnsatisfiableConstraint "")
+  parseEvalFail pp "04 (good) fails" ex (UnificationError "" "")
 
 
 testScope05 pp = do
@@ -201,8 +201,7 @@ testScope06 pp = do
       intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
       ty1 = Fun([([] :->: intc (Fin 10)) :@ Just []])
 
-  -- parseEval pp "06 works" ex1 (pure ty1)
-  parseEvalFail pp "06 fails" ex1 (UnsatisfiableConstraint "")
+  parseEval pp "06 works" ex1 (pure ty1)
 
 
 ---------------------------------------------------------------------
