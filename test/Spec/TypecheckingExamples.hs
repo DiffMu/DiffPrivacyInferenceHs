@@ -73,8 +73,8 @@ testBlackBox pp = describe "black box" $ do
              \   100 \n\
              \ end   \n\
              \ function j(x::Integer, y) \n\
-             \    y = bb(y)     \n\
-             \    x / y  \n\
+             \    z = bb(y)     \n\
+             \    x / z  \n\
              \ end"
         int = NoFun(Numeric (NonConst DMInt))
         real = NoFun(Numeric (NonConst DMReal))
