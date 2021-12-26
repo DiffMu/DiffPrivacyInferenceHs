@@ -50,8 +50,8 @@ test58 pp = describe "issue 58" $ do
                 \        function h(b)             \n\
                 \            a                     \n\
                 \        end                       \n\
-                \        a = g(h,a)                \n\
-                \        a                         \n\
+                \        c = g(h,a)                \n\
+                \        c                         \n\
                 \    end                           \n\
                 \    f()                           \n\
                 \ end"
@@ -178,7 +178,7 @@ test67 pp = describe "issue 67 (same juliatype choice overwriting)" $ do
          \     f(1)                 \n\
          \ end                      "
 
-  parseEvalFail pp "example variant 1" ex_1 (FLetReorderError "")
+  parseEvalFail pp "example variant 1" ex_1 (ParseError "" "" 0)
 
 
   let ex_2 =
