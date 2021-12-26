@@ -2,6 +2,7 @@
 module Spec.Base
   (module All
   , tc , tcl , tcb , sn , sn_EW , parseEval , parseEval_l , parseEvalUnify , parseEvalUnify_l , parseEvalSimple, parseEvalFail
+  , parseEvalThrows
   , parseEvalUnify_customCheck
   , parseEvalString , parseEvalString_l , parseEvalString_customCheck, parseEvalString_l_customCheck
   )
@@ -106,6 +107,7 @@ parseEvalSimple p term expected =
   parseEval p ("Checks '" <> term <> "' correctly") term expected
 
 parseEvalFail a b c f = parseEval_b False a b c (TestByFail f)
+parseEvalThrows a b c f = parseEval_b False a b c (TestByThrows)
 
 parseEval parse desc term expected = parseEval_b False parse desc term (TestByEquality expected)
 parseEval_l parse desc term expected = parseEval_b True parse desc term (TestByEquality expected)
@@ -138,6 +140,7 @@ data ComparisonStyle = CompareByEqual | CompareByUnification
 data TestExpectation b = ExpectSuccess | ExpectFail b
 
 data TestBy = TestByEquality (TC DMMain) | TestByUnification (TC DMMain) | TestByString (String, String) | TestByFail DMException
+              | TestByThrows
 
 
 parseEval_b dolog parse desc term (testBy :: TestBy) =
@@ -226,6 +229,7 @@ parseEval_b_customCheck dolog parse desc term (testBy :: TestBy) customTCCheck =
       TestByUnification expected -> (tcb dolog $ (sn term'' >>= correctUnification expected)) `shouldReturn` (Right (Right ()))
       TestByString expected -> (tcb dolog $ (sn term'' >>= correctString)) `shouldReturn` (Right (expected))
       TestByFail f  -> (tcb dolog $ (sn term'')) `shouldReturn` (Left f)
+      TestByThrows -> (tcb dolog $ (sn term'')) `shouldThrow` anyException
 
 
     -- let correct testBy result = do
