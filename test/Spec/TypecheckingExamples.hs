@@ -30,11 +30,11 @@ testSens pp = do
 testOps pp = describe "Ops" $ do
     let ex_num = "function foo(w::Integer, x::Integer, y::Integer, z::Integer) \n\
                  \ if z == 1 \n\
-                 \    z = x + x + y - 3 \n\
-                 \    5.0 * z  \n\
+                 \    z1 = x + x + y - 3 \n\
+                 \    5.0 * z1  \n\
                  \  else \n\
-                 \     w = w + y/2 \n\
-                 \     w + x \n\
+                 \     w1 = w + y/2 \n\
+                 \     w1 + x \n\
                  \  end \n\
                  \ end"
         ex_mat = "function foo(x::Matrix{Integer}, y::Matrix{Integer}, z::Matrix{Integer}) \n\
