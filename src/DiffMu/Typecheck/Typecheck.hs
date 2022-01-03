@@ -834,9 +834,9 @@ checkPri' scope (SBind (x :- dτ) term body) = do
                  Nothing -> scope
 
   -- check body with that new scope
-  dbody <- checkPriv scope' body 
+  let dbody = checkPriv scope' body 
   let mbody = do
-             let τ = dbody
+             τ <- dbody
              -- discard x from the context, never mind it's inferred annotation
              WithRelev _ (τx :@ _) <- removeVarMaybe @PrivacyK x
              return (τ, τx)
