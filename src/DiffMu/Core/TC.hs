@@ -502,6 +502,7 @@ data MetaCtx = MetaCtx
   {
     _sensVars :: KindedNameCtx SVarOf,
     _typeVars :: KindedNameCtx TVarOf,
+    _termVars :: NameCtx,
     _sensSubs :: Subs SVarOf SensitivityOf,
     _typeSubs :: Subs TVarOf DMTypeOf,
     _constraints :: ConstraintCtx,
@@ -598,9 +599,10 @@ instance Monad m => MonadLog (TCT m) where
 
 
 instance Show (MetaCtx) where
-  show (MetaCtx s t sσ tσ cs fixedT) =
+  show (MetaCtx s t n sσ tσ cs fixedT) =
        "- sens vars: " <> show s <> "\n"
     <> "- type vars: " <> show t <> "\n"
+    <> "- name vars: " <> show n <> "\n"
     <> "- sens subs:   " <> show sσ <> "\n"
     <> "- type subs:   " <> show tσ <> "\n"
     <> "- fixed TVars: " <> show fixedT <> "\n"
@@ -975,6 +977,9 @@ newPVar = do
    p1 ::Sensitivity <- newVar
    p2 :: Sensitivity <- newVar
    return (p1, p2)
+
+newTeVar :: (MonadDMTC m) => Text -> m (TeVar)
+newTeVar hint = meta.termVars %%= (first GenTeVar . (newName hint))
 
 ------------------------------------------------------------------------
 -- unification of sensitivities
