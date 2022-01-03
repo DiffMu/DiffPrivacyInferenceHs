@@ -93,16 +93,14 @@ checkSen' scope (Op op args) = do
   -- Sensitivities are scalars for the argument's context
   (res, arg_sens) <- makeTypeOp op (length args)
 
-  -- check all the args
-  argst <- mapM (\t -> checkSens scope t) args
-  
-  -- make the appropriate unification and scaling, then sum the contexts.
-  let handleOpArg (τ_arg, (τ, s)) = do
+  -- typecheck, make the appropriate unification and scaling, then sum the contexts.
+  let handleOpArg (t_arg, (τ, s)) = do
+                                  τ_arg <- checkSens scope t_arg
                                   unify (NoFun τ) τ_arg
                                   mscale (svar s)
                                   return τ_arg
                                   
-  msumS (map handleOpArg (zip argst arg_sens))
+  msumS (map handleOpArg (zip args arg_sens))
   
   -- return the `res` type given by `makeTypeOp`
   return (NoFun res)
@@ -212,7 +210,7 @@ checkSen' scope (SLet (x :- dτ) term body) = do
    -- check body with that new scope
    result <- checkSens scope' body
 
-   log $ "checking sensitivity SLet: " <> show (x :- dτ) <> " = " <> show term <> " in " <> show body
+   logForce $ "checking sensitivity SLet: " <> show (x :- dτ) <> " = " <> show term <> " in " <> show body
    -- TODO
    case dτ of
       JTAny -> return dτ
@@ -297,6 +295,7 @@ checkSen' scope (FLet fname term body) = do
 
   -- check body with that new scope. Choice terms will result in IsChoice constraints upon ivocation of fname
 
+  logForce ("[FLet-Sens] for '" <> show fname <> "', scope is: " <> show (getAllKeys scope))
   result' <- checkSens scope' body
   removeVar @SensitivityK fname
   return result'

@@ -124,7 +124,7 @@ typecheckFromDMTerm_Detailed :: MutDMTerm -> IO ()
 typecheckFromDMTerm_Detailed term = do
 
   let logging_locations = [
-        -- Location_Check,
+        Location_Check,
         Location_Constraint
         -- Location_Subst
         -- Location_INC,
