@@ -880,12 +880,6 @@ checkPri' scope (Apply f args) =
       mtruncateP p
       return (τ :@ p)
 
-    sbranch_check mf margs = do
-        (τ_sum :: DMMain, argτs) <- msumTup (mf , msumP margs) -- sum args and f's context
-        τ_ret <- newVar -- a type var for the function return type
-        addConstraint (Solvable (IsFunctionArgument (τ_sum, Fun [(argτs :->*: τ_ret) :@ Nothing])))
-        return τ_ret
-
     margs = (\arg -> (checkArg scope arg)) <$> args
 
     f_check :: (TC DMMain) = do
@@ -897,15 +891,11 @@ checkPri' scope (Apply f args) =
        return res
 
   in do
-    --traceM $ "checking priv apply " <> show (f, args)
-    -- extract result of f typechecking
-    mf <- f_check
+    (τ_sum :: DMMain, argτs) <- msumTup (f_check , msumP margs) -- sum args and f's context
+    τ_ret <- newVar -- a type var for the function return type
+    addConstraint (Solvable (IsFunctionArgument (τ_sum, Fun [(argτs :->*: τ_ret) :@ Nothing])))
+    return τ_ret
 
-    -- we extract the result of the args computations
-    fargs <- (sequence margs)
-
-    -- we merge the different TC's into a single result TC
-    sbranch_check f_check (margs)
 
 
 checkPri' scope (SLet (x :- dτ) term body) = do
