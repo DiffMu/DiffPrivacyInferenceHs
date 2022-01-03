@@ -33,10 +33,10 @@ import Debug.Trace
 -- mapping an input of type x to another possibly delayed computation.
 -- data DelayedT_ x m a = Done a | Later (x -> (DelayedT x m a))
 -- newtype DelayedT x m a = DelayedT (m (DelayedT_ x m a))
-newtype DelayedT x m a = DelayedT (m a)
-  deriving (Functor, Applicative, Monad)
+-- newtype DelayedT x m a = DelayedT (m a)
+--   deriving (Functor, Applicative, Monad)
 
-deriving instance MonadState s m => MonadState s (DelayedT x m)
+-- deriving instance MonadState s m => MonadState s (DelayedT x m)
 
 -- apply a modification described by mod to all delayed layers.
 -- modifyScope :: Monad m => (x -> x) -> DelayedT x m a -> DelayedT x m a
@@ -47,15 +47,15 @@ deriving instance MonadState s m => MonadState s (DelayedT x m)
 --       Later g -> return $ Later $ \x -> modifyScope mod (g (mod x))
 
 
-done :: Monad m => a -> DelayedT x m a
-done = return
+-- done :: Monad m => a -> DelayedT x m a
+-- done = return
 
 
-extractDelayed :: Monad m => x -> DelayedT x m a -> m a
-extractDelayed x (DelayedT ma) = ma
+-- extractDelayed :: Monad m => x -> DelayedT x m a -> m a
+-- extractDelayed x (DelayedT ma) = ma
 
-tryGetDone :: Monad m => DelayedT x m a -> m (Maybe a)
-tryGetDone (DelayedT ma) = Just <$> ma
+-- tryGetDone :: Monad m => DelayedT x m a -> m (Maybe a)
+-- tryGetDone (DelayedT ma) = Just <$> ma
 
 -- later :: Monad m => (x -> DelayedT x m a) -> DelayedT x m a
 -- later f = DelayedT (pure (Later f))
@@ -138,7 +138,7 @@ tryGetDone (DelayedT ma) = do
 
 -- throwing an error finishes a computation
 -}
-throwDelayedError e = DelayedT (return $ (throwError e))
+-- throwDelayedError e = DelayedT (return $ (throwError e))
 
 
 
@@ -150,21 +150,20 @@ throwDelayedError e = DelayedT (return $ (throwError e))
 -- For this we use a state monad with the following state type, and
 -- wrapped around it is the DelayedT transformer.
 
-data DelayedState = DelayedState
-  {
-    _termVars :: NameCtx
-  }
+-- data DelayedState = DelayedState
+--   {
+--     _termVars :: NameCtx
+--   }
 
-$(makeLenses ''DelayedState)
+-- $(makeLenses ''DelayedState)
 
-instance Default DelayedState where
-  def = DelayedState def
+-- instance Default DelayedState where
+--   def = DelayedState def
 
 
 -- in order to create a unique term variable, call this function.
-newTeVar :: (MonadState DelayedState m) => Text -> m (TeVar)
-newTeVar hint = termVars %%= (first GenTeVar . (newName hint))
-
+-- newTeVar :: (MonadState DelayedState m) => Text -> m (TeVar)
+-- newTeVar hint = termVars %%= (first GenTeVar . (newName hint))
 
 
 ------------------------------------------------------------------------
@@ -207,17 +206,14 @@ instance Default (DMScope) where
 -- normal variables because if another method of the same function was defined
 -- earlier, their types have to be collected in one type using the `:∧:` operator
 pushChoice :: TeVar -> (TC DMMain) -> DMScope -> DMScope
-pushChoice name ma scope = undefined
-  -- let oldval = getValue name scope
-  --     newval = case oldval of
-  --       Nothing -> ma
-  --       Just mb -> do
-  --         a <- ma
-  --         b <- mb
-  --         return $ do
-  --           (a',b') <- msumTup (a, b)
-  --           return (a' :∧: b')
-  -- in setValue name newval scope
+pushChoice name ma scope =
+  let oldval = getValue name scope
+      newval = case oldval of
+        Nothing -> ma
+        Just mb -> do
+          (a',b') <- msumTup (ma, mb)
+          return (a' :∧: b')
+  in setValue name newval scope
 
 
 
