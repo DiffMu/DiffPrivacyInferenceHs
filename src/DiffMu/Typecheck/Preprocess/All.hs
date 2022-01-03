@@ -4,16 +4,7 @@ module DiffMu.Typecheck.Preprocess.All where
 import DiffMu.Prelude
 import DiffMu.Abstract
 import DiffMu.Core
-import DiffMu.Core.Symbolic
-import DiffMu.Core.TC
 import DiffMu.Core.Logging
-import DiffMu.Abstract.Data.Permutation
-import DiffMu.Typecheck.Operations
-import DiffMu.Core.DelayedScope
-import DiffMu.Typecheck.JuliaType
-import DiffMu.Typecheck.Constraint.IsFunctionArgument
-import DiffMu.Typecheck.Constraint.IsJuliaEqual
-import DiffMu.Typecheck.Constraint.CheapConstraints
 import DiffMu.Typecheck.Preprocess.Common
 import DiffMu.Typecheck.Preprocess.TopLevel
 import DiffMu.Typecheck.Preprocess.Demutation
