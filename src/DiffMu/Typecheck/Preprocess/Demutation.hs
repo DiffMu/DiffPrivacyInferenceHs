@@ -6,6 +6,7 @@ module DiffMu.Typecheck.Preprocess.Demutation where
 import DiffMu.Prelude
 import DiffMu.Abstract
 import DiffMu.Core
+import DiffMu.Core.TC
 import DiffMu.Core.Logging
 import DiffMu.Abstract.Data.Permutation
 import DiffMu.Typecheck.Preprocess.Common
@@ -79,13 +80,21 @@ instance Monad m => CheckNeutral m IsMutated where
 -- helpers
 markMutated :: TeVar -> MTC ()
 markMutated var = do
-  let singl = setValue var Mutated emptyDict
-  mutTypes %= (⋆! singl)
+  -- let singl = setValue var Mutated emptyDict
+  -- mutTypes %= (⋆! singl)
+  mutTypes %=~ (markMutatedInScope var)
+    where 
+      markMutatedInScope :: TeVar -> MutCtx -> MTC MutCtx 
+      markMutatedInScope var _ = throwError (ParseError ("Reassignment of variable " <> show var <> " is not allowed.") "" 0)
 
 markRead :: TeVar -> MTC ()
 markRead var = do
   let singl = setValue var NotMutated emptyDict
   mutTypes %= (⋆! singl)
+
+markReadMaybe :: Maybe TeVar -> MTC ()
+markReadMaybe (Just x) = markRead x
+markReadMaybe Nothing = pure ()
 
 wrapReorder :: (Eq a, Show a) => [a] -> [a] -> PreDMTerm t -> PreDMTerm t
 wrapReorder have want term | have == want = term
@@ -107,10 +116,11 @@ safeSetValue (Nothing) newType scope = pure scope
 safeSetValue (Just var) newType scope =
   case getValue var scope of
     Nothing -> pure $ setValue var newType scope
-    (Just oldType) -> throwError (ParseError ("Reassignment of variable " <> show var <> " is not allowed.") "" 0)
-      -- if immutTypeEq oldType newType
-      --                 then pure scope
-      --                 else throwError (DemutationError $ "Found a redefinition of the variable '" <> show var <> "', where the old type (" <> show oldType <> ") and the new type (" <> show newType <> ") differ. This is not allowed.")
+    (Just oldType) -> do
+      markMutated var -- We say that we are changing this variable. This can throw an error.
+      if immutTypeEq oldType newType
+                      then pure scope
+                      else throwError (DemutationError $ "Found a redefinition of the variable '" <> show var <> "', where the old type (" <> show oldType <> ") and the new type (" <> show newType <> ") differ. This is not allowed.")
 
 
 safeSetValueAllowFLet :: Maybe TeVar -> ImmutType -> Scope -> MTC Scope
@@ -181,7 +191,9 @@ elaborateMut scope (Var (x :- j)) = do
   let τ = getValueMaybe x scope
   case τ of
     Nothing -> logForce ("checking Var term, scope: " <> show scope) >> throwError (DemutationDefinitionOrderError x)
-    Just τ  -> return (Var (x :- j), τ)
+    Just τ  -> do
+      markReadMaybe x
+      return (Var (x :- j), τ)
 
 elaborateMut scope (BBLet name args tail) = do
 
