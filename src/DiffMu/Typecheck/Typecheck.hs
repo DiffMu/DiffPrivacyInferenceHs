@@ -29,62 +29,57 @@ import System.IO.Unsafe
 
 ------------------------------------------------------------------------
 -- The typechecking function
-checkPriv :: DMTerm -> DMScope -> DMDelayed
+checkPriv :: DMTerm -> DMScope -> TC DMMain
 checkPriv t scope = do
-  -- Define the computation to do before checking
-  let beforeCheck = do
-       γ <- use types
-       case γ of -- TODO prettify.
-           Left (Ctx (MonCom c)) | H.null c -> return ()
-           Right (Ctx (MonCom c)) | H.null c -> return ()
-           ctx   -> impossible $ "Input context for checking must be empty. But I got:\n" <> show ctx
-       types .= Right def -- cast to privacy context.
 
-  -- Define the computation to do after checking
-  let afterCheck = \res -> do
-       γ <- use types
-       case γ of
-           Right γ -> return res
-           Left γ -> error $ "checkPriv returned a sensitivity context!\n" <> "It is:\n" <> show γ <> "\nThe input term was:\n" <> show t
+  -- The computation to do before checking
+  γ <- use types
+  case γ of -- TODO prettify.
+      Left (Ctx (MonCom c)) | H.null c -> return ()
+      Right (Ctx (MonCom c)) | H.null c -> return ()
+      ctx   -> impossible $ "Input context for checking must be empty. But I got:\n" <> show ctx
+  types .= Right def -- cast to privacy context.
 
-  -- get the delayed value of the sensititivty checking
-  res <- checkPri' t scope
+  -- The checking itself
+  res <- withLogLocation "Check" $ checkPri' t scope
 
-  -- combine with the pre/post compututations
-  return (beforeCheck >> withLogLocation "Check" res >>= afterCheck)
+  -- The computation to do after checking
+  γ <- use types
+  case γ of
+      Right γ -> return res
+      Left γ -> error $ "checkPriv returned a sensitivity context!\n" <> "It is:\n" <> show γ <> "\nThe input term was:\n" <> show t
 
 
 
-checkSens :: DMTerm -> DMScope -> DMDelayed
+
+checkSens :: DMTerm -> DMScope -> TC DMMain
 checkSens t scope = do
-  -- Define the computation to do before checking
-  let beforeCheck = do
-       γ <- use types
-       case γ of -- TODO prettify.
-           Left (Ctx (MonCom c)) | H.null c -> return ()
-           Right (Ctx (MonCom c)) | H.null c -> return ()
-           ctx   -> impossible $ "Input context for checking must be empty. But I got:\n" <> show ctx <> "\nThe term is:\n" <> show t
-       types .= Left def -- cast to sensitivity context.
+  -- The computation to do before checking
+  γ <- use types
+  case γ of -- TODO prettify.
+      Left (Ctx (MonCom c)) | H.null c -> return ()
+      Right (Ctx (MonCom c)) | H.null c -> return ()
+      ctx   -> impossible $ "Input context for checking must be empty. But I got:\n" <> show ctx <> "\nThe term is:\n" <> show t
+  types .= Left def -- cast to sensitivity context.
 
-  -- Define the computation to do after checking
-  let afterCheck = \res -> do
-       γ <- use types
-       case γ of
-           Left γ -> return res
-           Right γ -> error $ "checkSens returned a privacy context!\n" <> "It is:\n" <> show γ <> "\nThe input term was:\n" <> show t
 
   -- get the delayed value of the sensititivty checking
-  res <- checkSen' t scope
+  res <- withLogLocation "Check" $ checkSen' t scope
 
-  -- combine with the pre/post compututations
-  return (beforeCheck >> withLogLocation "Check" res >>= afterCheck)
+  -- The computation to do after checking
+  γ <- use types
+  case γ of
+      Left γ -> return res
+      Right γ -> error $ "checkSens returned a privacy context!\n" <> "It is:\n" <> show γ <> "\nThe input term was:\n" <> show t
 
 
 --------------------
 -- Sensitivity terms
 
 
-checkSen' :: DMTerm -> DMScope -> DMDelayed
+checkSen' :: DMTerm -> DMScope -> TC DMMain
+checkSen' = undefined
+{-
 
 -- TODO: Here we assume that η really has type τ, and do not check it. Should maybe do that.
 checkSen' (Sng η τ) scope = done $ do
@@ -858,8 +853,10 @@ checkSen' t scope = (throwDelayedError (UnsupportedTermError t))
 --------------------------------------------------------------------------------
 -- Privacy terms
 
-checkPri' :: DMTerm -> DMScope -> DMDelayed
-
+-}
+checkPri' :: DMTerm -> DMScope -> TC DMMain
+checkPri' = undefined
+{-
 checkPri' (Ret t) scope = do
    mτ <- checkSens t scope
    done $ do
@@ -1245,3 +1242,5 @@ checkPri' (Reorder σ t) scope = do
     return ρ
 
 checkPri' t scope = checkPriv (Ret t) scope -- secretly return if the term has the wrong color.
+
+-}

@@ -181,14 +181,17 @@ newTeVar hint = termVars %%= (first GenTeVar . (newName hint))
 
 
 -- the type of our typechecking is `TC DMMain`, inside of a `DelayedT` & `State` monad
-type DMDelayed = DelayedT DMScope (State DelayedState) (TC DMMain)
--- type DMDelayed = (State DelayedState) (TC DMMain)
+-- type TC DMMain = DelayedT DMScope (State DelayedState) (TC DMMain)
+-- type TC DMMain = (State DelayedState) (TC DMMain)
 
-newtype DMScope = DMScope (H.HashMap TeVar (DMDelayed))
+-- newtype DMScope = DMScope (H.HashMap TeVar (TC DMMain))
+--   deriving Generic
+
+newtype DMScope = DMScope (H.HashMap TeVar (TC DMMain))
   deriving Generic
 
 -- our scopes are `DictLike`
-instance DictLike TeVar (DMDelayed) (DMScope) where
+instance DictLike TeVar (TC DMMain) (DMScope) where
   setValue v m (DMScope h) = DMScope (H.insert v m h)
   deleteValue v (DMScope h) = DMScope (H.delete v h)
   getValue k (DMScope h) = h H.!? k
@@ -203,39 +206,39 @@ instance Default (DMScope) where
 -- pushing choices (multiple dispatch function variables) is different from pushing
 -- normal variables because if another method of the same function was defined
 -- earlier, their types have to be collected in one type using the `:∧:` operator
-pushChoice :: TeVar -> (DMDelayed) -> DMScope -> DMScope
-pushChoice name ma scope =
-  let oldval = getValue name scope
-      newval = case oldval of
-        Nothing -> ma
-        Just mb -> do
-          a <- ma
-          b <- mb
-          return $ do
-            (a',b') <- msumTup (a, b)
-            return (a' :∧: b')
-  in setValue name newval scope
+pushChoice :: TeVar -> (TC DMMain) -> DMScope -> DMScope
+pushChoice name ma scope = undefined
+  -- let oldval = getValue name scope
+  --     newval = case oldval of
+  --       Nothing -> ma
+  --       Just mb -> do
+  --         a <- ma
+  --         b <- mb
+  --         return $ do
+  --           (a',b') <- msumTup (a, b)
+  --           return (a' :∧: b')
+  -- in setValue name newval scope
 
 
 
-setIfTypesMatch :: TeVar -> DMDelayed -> DMScope -> DMScope
-setIfTypesMatch name ma scope =
-  let oldval = getValue name scope
-      newval = case oldval of
-        Nothing -> ma
-        Just mb -> do
-          a <- ma
-          b <- mb
-          return $ do
-            let bWithoutCtx = do
-                  b' <- b
-                  types %= resetToDefault
-                  return b'
-            (a',b') <- msumTup (a, bWithoutCtx)
-            unify a' b'
-  in setValue name newval scope
+setIfTypesMatch :: TeVar -> TC DMMain -> DMScope -> DMScope
+setIfTypesMatch name ma scope = undefined
+  -- let oldval = getValue name scope
+  --     newval = case oldval of
+  --       Nothing -> ma
+  --       Just mb -> do
+  --         a <- ma
+  --         b <- mb
+  --         return $ do
+  --           let bWithoutCtx = do
+  --                 b' <- b
+  --                 types %= resetToDefault
+  --                 return b'
+  --           (a',b') <- msumTup (a, bWithoutCtx)
+  --           unify a' b'
+  -- in setValue name newval scope
 
 
-setIfTypesMatchMaybe :: Maybe TeVar -> DMDelayed -> DMScope -> DMScope
+setIfTypesMatchMaybe :: Maybe TeVar -> TC DMMain -> DMScope -> DMScope
 setIfTypesMatchMaybe Nothing _ scope = scope
 setIfTypesMatchMaybe (Just a) val scope = setIfTypesMatch a val scope

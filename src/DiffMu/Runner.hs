@@ -77,11 +77,14 @@ typecheckFromDMTermWithPrinter printer logoptions term = do
         term' <- liftNewLightTC (preprocessAll term)
 
 
-        let tres = checkSens (term') def
-        let (tres'',_) = runState (tryGetDone tres) def
-        tres' <- case tres'' of
-                   Nothing -> internalError "The result of typechecking was a non-applied later value.\nFrom this, no type information can be extracted."
-                   Just a -> a
+        -- let tres = checkSens (term') def
+        tres' <- checkSens (term') def
+        -- let tres'' = tres
+        -- let (tres'',_) = runState (runTCT tres) def
+        -- tres' <- case tres'' of
+        --            Nothing -> internalError "The result of typechecking was a non-applied later value.\nFrom this, no type information can be extracted."
+        --            Just a -> a
+
 
         -- log $ "Type before constraint resolving: " <> show tres'
         -- logForce $ "================================================"

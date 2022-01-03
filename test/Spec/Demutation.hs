@@ -21,8 +21,9 @@ checkMutTerm term = do
 
 
         let tres = checkSens (term') def
-        let (tres'',_) = runState (extractDelayed def tres) def
-        tres' <- tres''
+        -- let (tres'',_) = runState (extractDelayed def tres) def
+        -- tres' <- tres''
+        tres' <- tres
         log $ "Type before constraint resolving: " <> show tres'
         log $ "solving constraints:"
         logPrintConstraints

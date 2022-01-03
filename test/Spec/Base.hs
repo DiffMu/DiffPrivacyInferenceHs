@@ -166,7 +166,8 @@ parseEval_b_customCheck dolog parse desc term (testBy :: TestBy) customTCCheck =
                      do
                             (res) <- liftNewLightTC (preprocessAll res'' )
                             -- res <- preprocessDMTerm res'
-                            let tres = checkSens res def
+                            -- let tres = checkSens res def
+                            checkSens res def
                                   -- (do
                                   --          case dolog of
                                   --            True -> traceM $ "preprocessed term:\n" <> show res
@@ -179,8 +180,8 @@ parseEval_b_customCheck dolog parse desc term (testBy :: TestBy) customTCCheck =
                                   --            -- expectedT <- expected
                                   --            -- unify inferredT expectedT
                                   --      )
-                            let (tres'',_) = runState (extractDelayed def tres) def
-                            tres''
+                            -- let (tres'',_) = runState (extractDelayed def tres) def
+                            -- tres''
 
     let correctEquality (expected) result = do
           expectedT <- expected
