@@ -138,7 +138,7 @@ checkSen' scope (Lam xτs body) =
 
     -- put a special term to mark x as a function argument. those get special treatment
     -- because we're interested in their privacy. put the relevance given in the function signature, too.
-    let f s sc (Just x :- τ) = setScopeValue x (checkSens s (Arg x τ IsRelevant)) sc
+    let f s sc (Just x :- τ) = setValue x (checkSens s (Arg x τ IsRelevant)) sc
         f s sc (Nothing :- τ) = sc
     let addArgs s = foldl (f s) s xτs
     let scope' = addArgs scope
@@ -165,7 +165,7 @@ checkSen' scope (LamStar xτs body) =
   do
     -- put a special term to mark x as a function argument. those get special treatment
     -- because we're interested in their sensitivity
-    let f s sc (Just x :- (τ , rel)) = setScopeValue x (checkSens s (Arg x τ rel)) sc
+    let f s sc (Just x :- (τ , rel)) = setValue x (checkSens s (Arg x τ rel)) sc
         f s sc (Nothing :- _) = sc
     let addArgs s = foldl (f s) s xτs
     let scope' = addArgs scope
@@ -205,7 +205,7 @@ checkSen' scope (SLet (x :- dτ) term body) = do
 
    -- put the computation to check the term into the scope
    --  let scope' = setValueMaybe x (checkSens term scope) scope
-   let scope' = setScopeValueMaybe x (checkSens scope term) scope
+   let scope' = setValueMaybe x (checkSens scope term) scope
 
    -- check body with that new scope
    result <- checkSens scope' body
@@ -222,7 +222,7 @@ checkSen' scope (SLet (x :- dτ) term body) = do
 checkSen' scope (BBLet name jτs tail) = do
 
    -- the type of this is just a BlackBox, put it in the scope
-   let scope' = setScopeValue name (return (BlackBox jτs)) scope
+   let scope' = setValue name (return (BlackBox jτs)) scope
 
    -- check tail with that new scope
    result <- checkSens scope' tail
@@ -353,7 +353,7 @@ checkSen' original_scope (TLet xs term body) = do
 
   -- add all variables bound in the tuple let as args-checking-commands to the scope
   -- TODO: do we need to make sure that we have unique names here?
-  let addarg scope (Just x :- τ) = setScopeValue x (checkSens original_scope (Arg x τ NotRelevant)) scope
+  let addarg scope (Just x :- τ) = setValue x (checkSens original_scope (Arg x τ NotRelevant)) scope
       addarg scope (Nothing :- τ) = scope
   let scope_with_args = foldl addarg original_scope xs
 
@@ -419,7 +419,7 @@ checkSen' scope (Loop niter cs' (xi, xc) body) = do
   -- add iteration and capture variables as args-checking-commands to the scope
   -- TODO: do we need to make sure that we have unique names here?
   let scope' = case xi of
-                 Just xi -> setScopeValue xi (checkSens scope (Arg xi JTInt NotRelevant)) scope
+                 Just xi -> setValue xi (checkSens scope (Arg xi JTInt NotRelevant)) scope
                  Nothing -> scope
   let scope'' = setValue xc (checkSens scope (Arg xc JTAny IsRelevant)) scope'
 
@@ -812,7 +812,7 @@ checkPri' scope (SLet (x :- dτ) term body) = do
 
   -- put the computation to check the term into the scope
   --  let scope' = setValueMaybe x (checkSens term scope) scope
-  let scope' = setScopeValueMaybe x (checkSens scope term) scope
+  let scope' = setValueMaybe x (checkSens scope term) scope
 
   -- check body with that new scope
   result <- checkPriv scope' body
@@ -830,7 +830,7 @@ checkPri' scope (SBind (x :- dτ) term body) = do
   -- and later discard its annotation. we use checkSens because there are no Vars in privacy terms so
   -- x will only ever be used in a sensitivity term.
   let scope' = case x of
-                 Just x -> setScopeValue x (checkSens scope (Arg x dτ NotRelevant)) scope
+                 Just x -> setValue x (checkSens scope (Arg x dτ NotRelevant)) scope
                  Nothing -> scope
 
   -- check body with that new scope
@@ -887,7 +887,7 @@ checkPri' original_scope curterm@(TLet xs term body) = do
   -- put the computations to check the terms into the scope
   -- (in privacy terms we use projections here, making this a "transparent" tlet)
 
-  let addarg scope (Just x :- _, i) = setScopeValue x (checkSens original_scope (TProject i term)) scope
+  let addarg scope (Just x :- _, i) = setValue x (checkSens original_scope (TProject i term)) scope
       addarg scope (Nothing :- _, i) = scope
   let scope_with_args = foldl addarg original_scope (xs `zip` [0..])
 
@@ -1057,7 +1057,7 @@ checkPri' scope (Loop niter cs' (xi, xc) body) =
       -- capture variable is not relevant bc captures get ∞ privacy anyways
       -- TODO: do we need to make sure that we have unique names here?
       let scope' = case xi of
-                     Just xi -> setScopeValue xi (checkSens scope (Arg xi JTInt NotRelevant)) scope
+                     Just xi -> setValue xi (checkSens scope (Arg xi JTInt NotRelevant)) scope
                      Nothing -> scope
       let scope'' = setValue xc (checkSens scope (Arg xc JTAny NotRelevant)) scope'
 
