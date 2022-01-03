@@ -8,7 +8,7 @@ import DiffMu.Core.Logging
 import DiffMu.Core.Symbolic
 import DiffMu.Core.TC
 import DiffMu.Typecheck.Operations
-import DiffMu.Core.DelayedScope
+import DiffMu.Core.Scope
 import DiffMu.Abstract.Data.Permutation
 import DiffMu.Typecheck.JuliaType
 import DiffMu.Typecheck.Constraint.IsFunctionArgument

@@ -2,7 +2,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module DiffMu.Core.DelayedScope where
+module DiffMu.Core.Scope where
 
 import DiffMu.Prelude
 import DiffMu.Abstract

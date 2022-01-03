@@ -16,7 +16,7 @@ import DiffMu.Core.Logging as All
 import DiffMu.Core.Definitions as All
 import DiffMu.Core.Symbolic as All
 import DiffMu.Core.Context as All
-import DiffMu.Core.DelayedScope as All
+import DiffMu.Core.Scope as All
 import DiffMu.Typecheck.Operations as All
 import DiffMu.Typecheck.Subtyping as All
 import DiffMu.Typecheck.Typecheck as All
