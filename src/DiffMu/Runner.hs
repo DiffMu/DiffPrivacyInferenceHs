@@ -125,7 +125,8 @@ typecheckFromDMTerm_Detailed term = do
 
   let logging_locations = [
         Location_Check,
-        Location_Constraint
+        Location_Constraint,
+        Location_PrePro_Demutation
         -- Location_Subst
         -- Location_INC,
         -- Location_MonadicGraph,

@@ -29,8 +29,14 @@ data IsMutated = Mutated | NotMutated
 data IsLocalMutation = LocalMutation | NotLocalMutation
   deriving (Show, Eq)
 
-data VarAccessType = ReadSingle ScopeVar | ReadMulti | WriteSingle ScopeVar
-  deriving (Show,Eq)
+data VarAccessType = ReadSingle ScopeVar | ReadMulti | WriteSingleBase IsFLetDefined ScopeVar
+  deriving (Show,Eq,Ord)
+
+data IsFLetDefined = FLetDefined | NotFLetDefined
+  deriving (Show,Eq,Ord)
+
+pattern WriteSingle v = WriteSingleBase NotFLetDefined v
+pattern WriteSingleFunction v = WriteSingleBase FLetDefined v
 
 onlyLocallyMutatedVariables :: [(TeVar,IsLocalMutation)] -> Bool
 onlyLocallyMutatedVariables xs = [v | (v, NotLocalMutation) <- xs] == []
@@ -85,26 +91,79 @@ instance Monad m => CheckNeutral m IsMutated where
   checkNeutral (NotMutated) = pure True
   checkNeutral (Mutated) = pure False
 
+-- data VarAccessType = ReadSingle ScopeVar | ReadMulti | WriteSingle ScopeVar | WriteSingleFunction ScopeVar
+
+computeVarAccessType :: TeVar -> VarAccessType -> VarAccessType -> MTC VarAccessType
+computeVarAccessType var a b = do
+  let cur = sort [a,b]
+  case cur of
+    [ReadSingle a, ReadSingle b] | a == b   -> pure (ReadSingle a)
+    [ReadSingle a, ReadSingle b] | a /= b   -> pure (ReadMulti)
+    [ReadSingle a, ReadMulti]               -> pure (ReadMulti)
+    [ReadSingle a, WriteSingle b] | a == b  -> pure (WriteSingle a)
+    [ReadSingle a, WriteSingle b] | a /= b  -> throwError $ DemutationError $ "The variable '" <> show var <> "' "
+                                                                           <> "' is being mutated and read in two different scopes.\n"
+                                                                           <> "This is not allowed."
+    -- [ReadSingle a, WriteSingleFunction b] | a == b -> pure (WriteSingleFunction a)
+    -- [ReadSingle a, WriteSingleFunction b] | a /= b -> throwError $ DemutationError $ "The variable '" <> show var <> "' "
+    --                                                                                <> "' is being mutated and read in two different scopes.\n"
+    --                                                                                <> "This is not allowed."
+    [ReadSingle a, WriteSingleFunction b]   -> pure (WriteSingleFunction b)
+    [ReadMulti,ReadMulti]                   -> pure (ReadMulti)
+    [ReadMulti,WriteSingle _]               -> throwError $ DemutationError $ "The variable '" <> show var <> "' "
+                                                                            <> "' is being mutated and read in two different scopes.\n"
+                                                                            <> "This is not allowed."
+    [ReadMulti,WriteSingleFunction a]       -> pure (WriteSingleFunction a) -- because of flet reordering it is allowed to mutate functions
+    [WriteSingle a, WriteSingle b] | a == b -> pure (WriteSingle a)
+    [WriteSingle a, WriteSingle b] | a /= b -> throwError $ DemutationError $ "The variable '" <> show var <> "' "
+                                                                            <> "' is being mutated in two different scopes.\n"
+                                                                            <> "This is not allowed."
+    [WriteSingle _, WriteSingleFunction _]  -> throwError $ DemutationError $ "The variable '" <> show var <> "' is defined as function and as value."
+                                                                            <> "This is not allowed."
+    [WriteSingleFunction a, WriteSingleFunction b] | a == b -> pure (WriteSingleFunction a)
+    [WriteSingleFunction a, WriteSingleFunction b] | a /= b -> throwError $ DemutationError $ "The variable '" <> show var <> "' "
+                                                                            <> "' is being mutated in two different scopes.\n"
+                                                                            <> "This is not allowed."
+    _ -> impossible "In demutation, while computing var access type. This branch should be inaccessible."
 
 -- helpers
-markMutated :: TeVar -> MTC ()
-markMutated var = do
-  -- let singl = setValue var Mutated emptyDict
-  -- mutTypes %= (⋆! singl)
-  mutTypes %=~ (markMutatedInScope var)
+markMutatedBase :: IsFLetDefined -> ScopeVar -> TeVar -> MTC ()
+markMutatedBase fletdef scname var = mutTypes %=~ (markMutatedInScope scname var)
     where 
-      markMutatedInScope :: TeVar -> VarAccessCtx -> MTC VarAccessCtx 
-      markMutatedInScope var _ = throwError (ParseError ("Reassignment of variable " <> show var <> " is not allowed.") "" 0)
+      markMutatedInScope :: ScopeVar -> TeVar -> VarAccessCtx -> MTC VarAccessCtx 
+      markMutatedInScope scname var ctx =
+        case getValue var ctx of
+          Nothing                      -> impossible $ "When demutating (MarkMutated), the variable "
+                                                       <> show var <> " was not in the VA-Ctx."
+          Just oldvatype -> do
+            newvatype <- computeVarAccessType var oldvatype (WriteSingleBase fletdef scname)
+            return (setValue var newvatype ctx)
 
-markRead :: TeVar -> MTC ()
-markRead var = undefined
-  -- do
-  -- let singl = setValue var (ReadSingle undefined) emptyDict
-  -- mutTypes %= (⋆! singl)
+markMutatedFLet :: ScopeVar -> TeVar -> MTC ()
+markMutatedFLet scname var = do
+  log $ "Marking flet mutated for " <> show var
+  markMutatedBase FLetDefined scname var
 
-markReadMaybe :: Maybe TeVar -> MTC ()
-markReadMaybe (Just x) = markRead x
-markReadMaybe Nothing = pure ()
+markMutated :: ScopeVar -> TeVar -> MTC ()
+markMutated scname var = do
+  log $ "Marking simple mutated for " <> show var
+  markMutatedBase NotFLetDefined scname var
+
+
+markRead :: ScopeVar -> TeVar -> MTC ()
+markRead scname var = mutTypes %=~ (markReadInScope scname var)
+    where 
+      markReadInScope :: ScopeVar -> TeVar -> VarAccessCtx -> MTC VarAccessCtx 
+      markReadInScope scname var ctx =
+        case getValue var ctx of
+          Nothing                      -> pure (setValue var (ReadSingle scname) ctx)
+          Just oldvatype -> do
+            newvatype <- computeVarAccessType var oldvatype (ReadSingle scname)
+            return (setValue var newvatype ctx)
+
+markReadMaybe :: ScopeVar -> Maybe TeVar -> MTC ()
+markReadMaybe scname (Just x) = markRead scname x
+markReadMaybe scname Nothing = pure ()
 
 wrapReorder :: (Eq a, Show a) => [a] -> [a] -> PreDMTerm t -> PreDMTerm t
 wrapReorder have want term | have == want = term
@@ -121,18 +180,23 @@ immutTypeEq _ _ = False
 
 -- set the type of the variable in scope,
 -- but do not allow to change that value afterwards.
-safeSetValue :: Maybe TeVar -> ImmutType -> Scope -> MTC Scope
-safeSetValue (Nothing) newType scope = pure scope
-safeSetValue (Just var) newType scope =
+safeSetValueBase :: IsFLetDefined -> ScopeVar -> Maybe TeVar -> ImmutType -> Scope -> MTC Scope
+safeSetValueBase fletdef scname (Nothing) newType scope = pure scope
+safeSetValueBase fletdef scname (Just var) newType scope =
   case getValue var scope of
-    Nothing -> pure $ setValue var newType scope
+    Nothing -> do
+      markRead scname var
+      return (setValue var newType scope)
     (Just oldType) -> do
-      markMutated var -- We say that we are changing this variable. This can throw an error.
+      markMutatedBase fletdef scname var -- We say that we are changing this variable. This can throw an error.
       if immutTypeEq oldType newType
                       then pure scope
                       else throwError (DemutationError $ "Found a redefinition of the variable '" <> show var <> "', where the old type (" <> show oldType <> ") and the new type (" <> show newType <> ") differ. This is not allowed.")
 
+safeSetValue = safeSetValueBase NotFLetDefined
+safeSetValueAllowFLet = safeSetValueBase FLetDefined
 
+{-
 safeSetValueAllowFLet :: Maybe TeVar -> ImmutType -> Scope -> MTC Scope
 safeSetValueAllowFLet (Nothing) newType scope = pure scope
 safeSetValueAllowFLet (Just var) newType scope =
@@ -141,7 +205,7 @@ safeSetValueAllowFLet (Just var) newType scope =
     (Just oldType) -> if immutTypeEq oldType newType
                       then pure scope
                       else throwError (DemutationError $ "Found a redefinition of the variable '" <> show var <> "', where the old type (" <> show oldType <> ") and the new type (" <> show newType <> ") differ. This is not allowed.")
-
+-}
 
 
 ---
@@ -155,7 +219,9 @@ demutate :: MutDMTerm -> MTC (DMTerm)
 demutate term = do
   logForce $ "Term before mutation elaboration:\n" <> showPretty term
 
-  (res , _) <- elaborateMut def term
+  topscname <- newScopeVar "toplevel"
+
+  (res , _) <- elaborateMut topscname def term
   logForce $ "-----------------------------------"
   logForce $ "Mutation elaborated term is:\n" <> showPretty res
 
@@ -166,9 +232,9 @@ demutate term = do
   return optimized
 
 
-elaborateNonmut :: Scope -> MutDMTerm -> MTC (DMTerm , ImmutType)
-elaborateNonmut scope term = do
-  (resTerm , resType) <- elaborateMut scope term
+elaborateNonmut :: ScopeVar -> Scope -> MutDMTerm -> MTC (DMTerm , ImmutType)
+elaborateNonmut scname scope term = do
+  (resTerm , resType) <- elaborateMut scname scope term
 
   -- get the context and make sure that all variables are not mutated
   -- Ctx (MonCom ctx) <- use mutTypes
@@ -189,35 +255,35 @@ elaborateNonmut scope term = do
 
   return (resTerm , resType)
 
-elaborateMut :: Scope -> MutDMTerm -> MTC (DMTerm , ImmutType)
+elaborateMut :: ScopeVar -> Scope -> MutDMTerm -> MTC (DMTerm , ImmutType)
 
-elaborateMut scope (Op op args) = do
-  args' <- mapM (elaborateNonmut scope) args
+elaborateMut scname scope (Op op args) = do
+  args' <- mapM (elaborateNonmut scname scope) args
   pure (Op op (fst <$> args') , Pure UserValue)
-elaborateMut scope (Sng η τ) = pure (Sng η τ , Pure UserValue)
-elaborateMut scope (Rnd jt) = pure (Rnd jt , Pure UserValue)
+elaborateMut scname scope (Sng η τ) = pure (Sng η τ , Pure UserValue)
+elaborateMut scname scope (Rnd jt) = pure (Rnd jt , Pure UserValue)
 
-elaborateMut scope (Var (x :- j)) = do
+elaborateMut scname scope (Var (x :- j)) = do
   let τ = getValueMaybe x scope
   case τ of
     Nothing -> logForce ("checking Var term, scope: " <> show scope) >> throwError (DemutationDefinitionOrderError x)
     Just τ  -> do
-      markReadMaybe x
+      markReadMaybe scname x
       return (Var (x :- j), τ)
 
-elaborateMut scope (BBLet name args tail) = do
+elaborateMut scname scope (BBLet name args tail) = do
 
   -- write the black box into the scope with its type
-  scope'  <- safeSetValue (Just name) PureBlackBox scope
+  scope'  <- safeSetValue scname (Just name) PureBlackBox scope
 
   -- typecheck the body in this new scope
-  (newBody , newBodyType) <- elaborateMut scope' tail
+  (newBody , newBodyType) <- elaborateMut scname scope' tail
 
   return (BBLet name args newBody , consumeDefaultValue newBodyType)
 
-elaborateMut scope (SLetBase ltype (x :- τ) term body) = do
+elaborateMut scname scope (SLetBase ltype (x :- τ) term body) = do
 
-  (newTerm , newTermType) <- elaborateMut scope term
+  (newTerm , newTermType) <- elaborateMut scname scope term
 
   case newTermType of
     Pure _ -> pure ()
@@ -225,14 +291,14 @@ elaborateMut scope (SLetBase ltype (x :- τ) term body) = do
     VirtualMutated _ -> throwError (DemutationError $ "Found an assignment " <> show x <> " = " <> showPretty term <> " where RHS is a mutating call. This is not allowed.")
     PureBlackBox     -> throwError (DemutationError $ "Found an assignment " <> show x <> " = " <> showPretty term <> " where RHS is a black box. This is not allowed.")
 
-  scope'  <- safeSetValue x newTermType scope
-  (newBody , newBodyType) <- elaborateMut scope' body
+  scope'  <- safeSetValue scname x newTermType scope
+  (newBody , newBodyType) <- elaborateMut scname scope' body
 
   return (SLetBase ltype (x :- τ) newTerm newBody , consumeDefaultValue newBodyType)
 
-elaborateMut scope (TLetBase ltype vars term body) = do
+elaborateMut scname scope (TLetBase ltype vars term body) = do
 
-  (newTerm , newTermType) <- elaborateMut scope term
+  (newTerm , newTermType) <- elaborateMut scname scope term
 
   case newTermType of
     Pure _ -> pure ()
@@ -241,23 +307,25 @@ elaborateMut scope (TLetBase ltype vars term body) = do
     PureBlackBox     -> throwError (DemutationError $ "Found an assignment " <> show vars <> " = " <> showPretty term <> " where RHS is a black box. This is not allowed.")
 
   -- add all values as pure to the scope
-  scope' <- foldrM (\(v :- _) s -> safeSetValue v (Pure UserValue) s) scope (vars)
-  (newBody , newBodyType) <- elaborateMut scope' body
+  scope' <- foldrM (\(v :- _) s -> safeSetValue scname v (Pure UserValue) s) scope (vars)
+  (newBody , newBodyType) <- elaborateMut scname scope' body
 
   return (TLetBase ltype vars newTerm newBody , consumeDefaultValue newBodyType)
 
-elaborateMut scope (LamStar args body) = do
-  (newBody, newBodyType) <- elaborateLambda scope [(v :- x) | (v :- (x , _)) <- args] body
+elaborateMut scname scope (LamStar args body) = do
+  bodyscname <- newScopeVar "lamstar"
+  (newBody, newBodyType) <- elaborateLambda bodyscname scope [(v :- x) | (v :- (x , _)) <- args] body
   return (LamStar args newBody, newBodyType)
 
-elaborateMut scope (Lam args body) = do
-  (newBody, newBodyType) <- elaborateLambda scope args body
+elaborateMut scname scope (Lam args body) = do
+  bodyscname <- newScopeVar "lam"
+  (newBody, newBodyType) <- elaborateLambda bodyscname scope args body
   return (Lam args newBody, newBodyType)
 
-elaborateMut scope (Apply f args) = do
+elaborateMut scname scope (Apply f args) = do
 
   -- typecheck the function f
-  (newF , τ) <- elaborateNonmut scope f
+  (newF , τ) <- elaborateNonmut scname scope f
 
   --------
   -- 2 cases
@@ -271,7 +339,7 @@ elaborateMut scope (Apply f args) = do
           False -> throwError (DemutationError $ "Trying to call the function '" <> showPretty f <> "' with a wrong number of arguments.")
 
         let mutargs = zip muts args
-        (newArgs , muts) <- elaborateMutList (showPretty f) scope mutargs
+        (newArgs , muts) <- elaborateMutList (showPretty f) scname scope mutargs
 
         -- the new term
         return (Apply newF newArgs , retType muts)
@@ -285,7 +353,7 @@ elaborateMut scope (Apply f args) = do
 
         -- since the box is pure, we say so to `elaborateMutList`
         let mutargs = [(NotMutated,a) | a <- args]
-        (newArgs , muts) <- elaborateMutList (showPretty f) scope mutargs
+        (newArgs , muts) <- elaborateMutList (showPretty f) scname scope mutargs
 
         return (BBApply newF newArgs glvars , Pure UserValue)
   --
@@ -310,10 +378,10 @@ elaborateMut scope (Apply f args) = do
 
 
 
-elaborateMut scope (FLet fname term body) = do
+elaborateMut scname scope (FLet fname term body) = do
 
   -- check the term
-  (newTerm, newTermType) <- elaborateNonmut scope term
+  (newTerm, newTermType) <- elaborateNonmut scname scope term
 
   -- get the current type for fname from the scope
   let ftype = getValue fname scope
@@ -321,8 +389,8 @@ elaborateMut scope (FLet fname term body) = do
   -- set the new scope with fname if not already existing
   -- (but only allow pure uservalue-functions, or single-definition mutating functions)
   scope' <- case ftype of
-        Nothing -> safeSetValueAllowFLet (Just fname) newTermType scope
-        Just (Pure UserValue) -> safeSetValueAllowFLet (Just fname) newTermType scope
+        Nothing -> safeSetValueAllowFLet scname (Just fname) newTermType scope
+        Just (Pure UserValue) -> safeSetValueAllowFLet scname (Just fname) newTermType scope
         Just (Mutating _) -> throwError (DemutationError $ "We do not allow mutating functions to have multiple definitions")
         Just (Pure DefaultValue) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
         Just (Pure (SingleArg _)) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
@@ -331,14 +399,14 @@ elaborateMut scope (FLet fname term body) = do
 
   -- check the body with this new scope
 
-  (newBody, newBodyType) <- elaborateMut scope' body
+  (newBody, newBodyType) <- elaborateMut scname scope' body
 
   return (FLet fname newTerm newBody, consumeDefaultValue newBodyType)
 
-elaborateMut scope (Extra (MutLet ltype term1 term2)) = do
+elaborateMut scname scope (Extra (MutLet ltype term1 term2)) = do
 
   -- elaborate the first term and get its mutated variables
-  (newTerm1, newTerm1Type) <- elaborateMut scope term1
+  (newTerm1, newTerm1Type) <- elaborateMut scname scope term1
 
   -- find out which variables have been locally modified,
   -- add these to the scope
@@ -349,7 +417,7 @@ elaborateMut scope (Extra (MutLet ltype term1 term2)) = do
 
 
   -- elaborate the second term and get its mutated variables
-  (newTerm2, newTerm2Type) <- elaborateMut scope' term2
+  (newTerm2, newTerm2Type) <- elaborateMut scname scope' term2
 
   case (newTerm1Type , newTerm2Type) of
 
@@ -472,9 +540,9 @@ elaborateMut scope (Extra (MutLet ltype term1 term2)) = do
                                                 <> "\nThis is not supported."
                                                 <> "\nIn the term:\n" <> showPretty (Extra (MutLet ltype term1 term2)))
 
-elaborateMut scope (Extra (MutLoop iters iterVar body)) = do
+elaborateMut scname scope (Extra (MutLoop iters iterVar body)) = do
   -- first, elaborate the iters
-  (newIters , newItersType) <- elaborateNonmut scope iters
+  (newIters , newItersType) <- elaborateNonmut scname scope iters
 
   -- now, preprocess the body,
   -- i.e., find out which variables are getting mutated
@@ -487,11 +555,11 @@ elaborateMut scope (Extra (MutLoop iters iterVar body)) = do
   -- we add these variables to the scope as args, since they are allowed
   -- to occur in mutated positions
   -- let scope0 = foldr (\v s -> setValue v (Pure) s) scope modifyVars
-  scope' <- safeSetValue iterVar (Pure UserValue) scope
+  scope' <- safeSetValue scname iterVar (Pure UserValue) scope
 
   -- we can now elaborate the body, and thus get the actual list
   -- of modified variables
-  (newBody, newBodyType) <- elaborateMut scope' preprocessedBody
+  (newBody, newBodyType) <- elaborateMut scname scope' preprocessedBody
 
   -- we accept a full virtual mutated, or a globally pure value
   case newBodyType of
@@ -554,9 +622,9 @@ elaborateMut scope (Extra (MutLoop iters iterVar body)) = do
 
 -- the loop-body-preprocessing creates these modify! terms
 -- they get elaborated into tlet assignments again.
-elaborateMut scope (Extra (SModify (Nothing :- _) t1)) = throwError (DemutationError $ "Found a nameless variable in a modify term.")
-elaborateMut scope (Extra (SModify (Just v :- _) t1)) = do
-  (newT1, newT1Type) <- elaborateNonmut scope t1
+elaborateMut scname scope (Extra (SModify (Nothing :- _) t1)) = throwError (DemutationError $ "Found a nameless variable in a modify term.")
+elaborateMut scname scope (Extra (SModify (Just v :- _) t1)) = do
+  (newT1, newT1Type) <- elaborateNonmut scname scope t1
   return (Tup [newT1], VirtualMutated [(v , LocalMutation)])
 
   -- (argTerms, mutVars) <- elaborateMutList "internal_modify" scope [(Mutated , (Var v)) , (NotMutated , t1)]
@@ -566,25 +634,25 @@ elaborateMut scope (Extra (SModify (Just v :- _) t1)) = do
   --   _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 -- We also have tuple modify
-elaborateMut scope (Extra (TModify xs t1)) = do
+elaborateMut scname scope (Extra (TModify xs t1)) = do
   let elabSingle (Just v :- _) = return (v, LocalMutation)
       elabSingle (Nothing :- _) = throwError (DemutationError $ "Found a nameless variable in a tuple modify term.")
 
   allElab <- mapM elabSingle xs
 
-  (newT1, newT1Type) <- elaborateNonmut scope t1
+  (newT1, newT1Type) <- elaborateNonmut scname scope t1
   return (newT1 , VirtualMutated allElab)
 
 
-elaborateMut scope (Extra (MutRet)) = do
+elaborateMut scname scope (Extra (MutRet)) = do
   return (Tup [] , VirtualMutated [])
 
-elaborateMut scope (LastTerm t) = do
-  (newTerm, newType) <- elaborateMut scope t
+elaborateMut scname scope (LastTerm t) = do
+  (newTerm, newType) <- elaborateMut scname scope t
   return (LastTerm (newTerm), newType)
 
-elaborateMut scope (Extra (DefaultRet x)) = do
-  (newX,newXType) <- elaborateNonmut scope x
+elaborateMut scname scope (Extra (DefaultRet x)) = do
+  (newX,newXType) <- elaborateNonmut scname scope x
   case newXType of
     -- if the term is pure, then we annotate
     -- it to say that it is default
@@ -594,11 +662,11 @@ elaborateMut scope (Extra (DefaultRet x)) = do
     -- to say that it is default: we keep the actual type
     t -> return (newX , t)
 
-elaborateMut scope term@(Phi cond t1 t2) = do
+elaborateMut scname scope term@(Phi cond t1 t2) = do
   -- elaborate all subterms
-  (newCond , newCondType) <- elaborateNonmut scope cond
-  (newT1 , newT1Type) <- elaborateMut scope t1
-  (newT2 , newT2Type) <- elaborateMut scope t2
+  (newCond , newCondType) <- elaborateNonmut scname scope cond
+  (newT1 , newT1Type) <- elaborateMut scname scope t1
+  (newT2 , newT2Type) <- elaborateMut scname scope t2
 
   ----
   -- mutated if case
@@ -663,8 +731,8 @@ elaborateMut scope term@(Phi cond t1 t2) = do
 ----
 -- the mutating builtin cases
 
-elaborateMut scope (SubGrad t1 t2) = do
-  (argTerms, mutVars) <- elaborateMutList "subgrad" scope [(Mutated , t1), (NotMutated , t2)]
+elaborateMut scname scope (SubGrad t1 t2) = do
+  (argTerms, mutVars) <- elaborateMutList "subgrad" scname scope [(Mutated , t1), (NotMutated , t2)]
   case argTerms of
     -- NOTE: Because of #95, we say that this function is pure
     --
@@ -674,8 +742,8 @@ elaborateMut scope (SubGrad t1 t2) = do
     -- END NOTE
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
-elaborateMut scope (ScaleGrad scalar grads) = do
-  (argTerms, mutVars) <- elaborateMutList "scalegrad" scope [(NotMutated , scalar), (Mutated , grads)]
+elaborateMut scname scope (ScaleGrad scalar grads) = do
+  (argTerms, mutVars) <- elaborateMutList "scalegrad" scname scope [(NotMutated , scalar), (Mutated , grads)]
   case argTerms of
     -- NOTE: Because of #95, we say that this function is pure
     --
@@ -685,8 +753,8 @@ elaborateMut scope (ScaleGrad scalar grads) = do
     -- END NOTE
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
-elaborateMut scope (ClipM c t) = do
-  (argTerms, mutVars) <- elaborateMutList "clip" scope [(Mutated , t)]
+elaborateMut scname scope (ClipM c t) = do
+  (argTerms, mutVars) <- elaborateMutList "clip" scname scope [(Mutated , t)]
   case argTerms of
     -- NOTE: Because of #95, we say that this function is pure
     --
@@ -696,8 +764,8 @@ elaborateMut scope (ClipM c t) = do
     -- END NOTE
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
-elaborateMut scope (Gauss t1 t2 t3 t4) = do
-  (argTerms, mutVars) <- elaborateMutList "gauss" scope [(NotMutated , t1), (NotMutated , t2), (NotMutated , t3), (Mutated , t4)]
+elaborateMut scname scope (Gauss t1 t2 t3 t4) = do
+  (argTerms, mutVars) <- elaborateMutList "gauss" scname scope [(NotMutated , t1), (NotMutated , t2), (NotMutated , t3), (Mutated , t4)]
   case argTerms of
     -- NOTE: Because of #95, we say that this function is pure
     --
@@ -707,8 +775,8 @@ elaborateMut scope (Gauss t1 t2 t3 t4) = do
     -- END NOTE
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
-elaborateMut scope (ConvertM t1) = do
-  (argTerms, mutVars) <- elaborateMutList "convert" scope [(Mutated , t1)]
+elaborateMut scname scope (ConvertM t1) = do
+  (argTerms, mutVars) <- elaborateMutList "convert" scname scope [(Mutated , t1)]
   case argTerms of
     -- NOTE: Because of #95, we say that this function is pure
     --
@@ -718,49 +786,49 @@ elaborateMut scope (ConvertM t1) = do
     -- END NOTE
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
-elaborateMut scope (Transpose t1) = do
-  (newT1, newT1Type) <- elaborateNonmut scope t1
+elaborateMut scname scope (Transpose t1) = do
+  (newT1, newT1Type) <- elaborateNonmut scname scope t1
   return (Transpose newT1 , Pure UserValue)
 
 -- the non mutating builtin cases
-elaborateMut scope (Ret t1) = do
-  (newT1, newT1Type) <- elaborateNonmut scope t1
+elaborateMut scname scope (Ret t1) = do
+  (newT1, newT1Type) <- elaborateNonmut scname scope t1
   return (Ret newT1 , Pure UserValue)
-elaborateMut scope (Tup t1s) = do
-  newT1s <- fmap fst <$> mapM (elaborateNonmut scope) t1s
+elaborateMut scname scope (Tup t1s) = do
+  newT1s <- fmap fst <$> mapM (elaborateNonmut scname scope) t1s
   return (Tup newT1s , Pure UserValue)
-elaborateMut scope (MCreate t1 t2 t3 t4) = do
-  (newT1, newT1Type) <- elaborateNonmut scope t1
-  (newT2, newT2Type) <- elaborateNonmut scope t2
-  (newT4, newT4Type) <- elaborateNonmut scope t4
+elaborateMut scname scope (MCreate t1 t2 t3 t4) = do
+  (newT1, newT1Type) <- elaborateNonmut scname scope t1
+  (newT2, newT2Type) <- elaborateNonmut scname scope t2
+  (newT4, newT4Type) <- elaborateNonmut scname scope t4
   return (MCreate newT1 newT2 t3 newT4 , Pure UserValue)
-elaborateMut scope (Index t1 t2 t3) = do
-  (newT1, newT1Type) <- elaborateNonmut scope t1
-  (newT2, newT2Type) <- elaborateNonmut scope t2
-  (newT3, newT3Type) <- elaborateNonmut scope t3
+elaborateMut scname scope (Index t1 t2 t3) = do
+  (newT1, newT1Type) <- elaborateNonmut scname scope t1
+  (newT2, newT2Type) <- elaborateNonmut scname scope t2
+  (newT3, newT3Type) <- elaborateNonmut scname scope t3
   return (Index newT1 newT2 newT3 , Pure UserValue)
-elaborateMut scope (VIndex t1 t2) = do
-  (newT1, newT1Type) <- elaborateNonmut scope t1
-  (newT2, newT2Type) <- elaborateNonmut scope t2
+elaborateMut scname scope (VIndex t1 t2) = do
+  (newT1, newT1Type) <- elaborateNonmut scname scope t1
+  (newT2, newT2Type) <- elaborateNonmut scname scope t2
   return (VIndex newT1 newT2 , Pure UserValue)
-elaborateMut scope (Row t1 t2) = do
-  (newT1, newT1Type) <- elaborateNonmut scope t1
-  (newT2, newT2Type) <- elaborateNonmut scope t2
+elaborateMut scname scope (Row t1 t2) = do
+  (newT1, newT1Type) <- elaborateNonmut scname scope t1
+  (newT2, newT2Type) <- elaborateNonmut scname scope t2
   return (Row newT1 newT2, Pure UserValue)
-elaborateMut scope (Size t1) = do
-  (newT1, newT1Type) <- elaborateMut scope t1
+elaborateMut scname scope (Size t1) = do
+  (newT1, newT1Type) <- elaborateMut scname scope t1
   return (Size newT1, Pure UserValue)
-elaborateMut scope (Length t1) = do
-  (newT1, newT1Type) <- elaborateMut scope t1
+elaborateMut scname scope (Length t1) = do
+  (newT1, newT1Type) <- elaborateMut scname scope t1
   return (Length newT1, Pure UserValue)
 
 -- the unsupported terms
-elaborateMut scope term@(Choice t1)        = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
-elaborateMut scope term@(Loop t1 t2 t3 t4) = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
-elaborateMut scope term@(Reorder t1 t2)    = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
-elaborateMut scope term@(TProject t1 t2)    = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
-elaborateMut scope term@(Arg x a b)        = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
-elaborateMut scope term@(BBApply x a b)    = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
+elaborateMut scname scope term@(Choice t1)        = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
+elaborateMut scname scope term@(Loop t1 t2 t3 t4) = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
+elaborateMut scname scope term@(Reorder t1 t2)    = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
+elaborateMut scname scope term@(TProject t1 t2)    = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
+elaborateMut scname scope term@(Arg x a b)        = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
+elaborateMut scname scope term@(BBApply x a b)    = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
 
 
 
@@ -773,8 +841,8 @@ elaborateMut scope term@(BBApply x a b)    = throwError (UnsupportedError ("When
 -- elaborating a lambda term
 --
 
-elaborateLambda :: Scope ->  [Asgmt JuliaType] -> MutDMTerm -> MTC (DMTerm , ImmutType)
-elaborateLambda scope args body = do
+elaborateLambda :: ScopeVar -> Scope -> [Asgmt JuliaType] -> MutDMTerm -> MTC (DMTerm , ImmutType)
+elaborateLambda scname scope args body = do
   -- add args as vars to the scope
   --
   -- NOTE: we do not use `safeSetValue` here, because function
@@ -788,7 +856,7 @@ elaborateLambda scope args body = do
                      args
 
   -- check the body
-  (newBody,τ) <- elaborateMut scope' body
+  (newBody,τ) <- elaborateMut scname scope' body
 
   -- get the context and check if some variables are now mutated
   ctx <- use mutTypes
@@ -880,8 +948,8 @@ elaborateLambda scope args body = do
 -- elaborating a list of terms which are used in individually either mutating, or not mutating places
 --
 
-elaborateMutList :: String -> Scope -> [(IsMutated , MutDMTerm)] -> MTC ([DMTerm] , [(TeVar, IsLocalMutation)])
-elaborateMutList f scope mutargs' = do
+elaborateMutList :: String -> ScopeVar -> Scope -> [(IsMutated , MutDMTerm)] -> MTC ([DMTerm] , [(TeVar, IsLocalMutation)])
+elaborateMutList f scname scope mutargs' = do
   ---------
   -- NOTE: Because of #95, currently mutation is DISABLED,
   --       we simulate this by saying that all arguments are to be treated as non mutating
@@ -903,11 +971,11 @@ elaborateMutList f scope mutargs' = do
             case getValue x scope of
               Nothing -> logForce ("The scope is" <> show scope) >> throwError (DemutationDefinitionOrderError x)
               Just (Pure (SingleArg y)) | x == y -> do
-                markMutated y
+                markMutated scname y
                 return (Var (Just x :- a) , Just (x, NotLocalMutation))
               Just (Pure (SingleArg y)) -> throwError (DemutationError $ "When calling the mutating function " <> f <> " found the variable " <> show x <> " as argument in a mutable-argument-position. It is bound to the function argument " <> show y <> ", but it is not allowed to use renamed function arguments in such a position.")
               Just (Pure _) -> do
-                markMutated x
+                markMutated scname x
                 return (Var (Just x :- a) , Just (x, LocalMutation))
               Just res -> throwError (DemutationError $ "When calling the mutating function " <> f <> " found the variable " <> show x <> " as argument in a mutable-argument-position. It has the type " <> show res <> ", which is not allowed here.")
 
@@ -919,7 +987,7 @@ elaborateMutList f scope mutargs' = do
       checkArg (NotMutated , arg) = do
         -- if the argument is given in an immutable position,
         -- we allow to use the full immut checking
-        (arg' , τ) <- elaborateMut scope arg
+        (arg' , τ) <- elaborateMut scname scope arg
 
         -- we require the argument to be of pure type
         case τ of
