@@ -78,7 +78,7 @@ typecheckFromDMTermWithPrinter printer logoptions term = do
 
 
         -- let tres = checkSens (term') def
-        tres' <- checkSens (term') def
+        tres' <- checkSens def (term')
         -- let tres'' = tres
         -- let (tres'',_) = runState (runTCT tres) def
         -- tres' <- case tres'' of

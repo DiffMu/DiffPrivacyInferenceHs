@@ -20,7 +20,7 @@ checkMutTerm term = do
         term' <- liftNewLightTC (preprocessAll term)
 
 
-        let tres = checkSens (term') def
+        let tres = checkSens def (term')
         -- let (tres'',_) = runState (extractDelayed def tres) def
         -- tres' <- tres''
         tres' <- tres

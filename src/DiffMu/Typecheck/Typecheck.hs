@@ -29,8 +29,8 @@ import System.IO.Unsafe
 
 ------------------------------------------------------------------------
 -- The typechecking function
-checkPriv :: DMTerm -> DMScope -> TC DMMain
-checkPriv t scope = do
+checkPriv :: DMScope -> DMTerm -> TC DMMain
+checkPriv scope t = do
 
   -- The computation to do before checking
   γ <- use types
@@ -52,8 +52,8 @@ checkPriv t scope = do
 
 
 
-checkSens :: DMTerm -> DMScope -> TC DMMain
-checkSens t scope = do
+checkSens :: DMScope -> DMTerm -> TC DMMain
+checkSens scope t = do
   -- The computation to do before checking
   γ <- use types
   case γ of -- TODO prettify.
@@ -857,7 +857,7 @@ checkSen' t scope = (throwDelayedError (UnsupportedTermError t))
 -}
 checkPri' :: DMScope -> DMTerm -> TC DMMain
 checkPri' scope (Ret t) = do
-   τ <- checkSens t scope
+   τ <- checkSens scope t
    mtruncateP inftyP
    log $ "checking privacy " <> show (Ret t) <> ", type is " <> show τ
    return τ

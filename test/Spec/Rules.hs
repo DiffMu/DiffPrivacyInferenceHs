@@ -8,7 +8,7 @@ testCheck_Rules = do
   describe "rules-privacy-slet" $ do
     it "forwards inner type correctly" $ do
       let term = SLet (Just (UserTeVar (Symbol "x")) :- JTAny) (Sng 1.0 (JTReal)) (Var (Just ((UserTeVar (Symbol "x"))) :- JTAny))
-      let f = checkPriv term def
+      let f = checkPriv def term
       -- do
       --       let tres = checkPriv term def
       --       -- let (tres'',_) = runState (extractDelayed def tres) def

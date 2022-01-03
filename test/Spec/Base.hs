@@ -167,7 +167,7 @@ parseEval_b_customCheck dolog parse desc term (testBy :: TestBy) customTCCheck =
                             (res) <- liftNewLightTC (preprocessAll res'' )
                             -- res <- preprocessDMTerm res'
                             -- let tres = checkSens res def
-                            checkSens res def
+                            checkSens def res
                                   -- (do
                                   --          case dolog of
                                   --            True -> traceM $ "preprocessed term:\n" <> show res
