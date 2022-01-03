@@ -84,179 +84,163 @@ checkSen' scope (Sng η τ) = do
   res <- Numeric <$> (Const (constCoeff (Fin η)) <$> (createDMTypeBaseNum τ))
   return (NoFun res)
 
-checkSen' scope _ = undefined
 
-{-
 -- typechecking an op
-checkSen' (Op op args) scope = do
-  argsdel :: [TC DMMain] <- mapM (\t -> checkSens t scope) args -- check all the args in the delayed monad
-  done $ do
-     let handleOpArg (marg, (τ, s)) = do
-                                     τ_arg <- marg
-                                     unify (NoFun τ) τ_arg
-                                     mscale (svar s)
-                                     return τ_arg
+checkSen' scope (Op op args) = do
+  -- create a new typeop constraint for op
+  -- res is resulting type of the operation when used on types in arg_sens
+  -- arg_sens :: [(SMType, Sensitivity)]
+  -- types are to be unified with the actual types of the args
+  -- Sensitivities are scalars for the argument's context
+  (res, arg_sens) <- makeTypeOp op (length args)
 
-     -- create a new typeop constraint for op
-     -- res is resulting type of the operation when used on types in arg_sens
-     -- arg_sens :: [(SMType, Sensitivity)]
-     -- types are to be unified with the actual types of the args
-     -- Sensitivities are scalars for the argument's context
-     (res, arg_sens) <- makeTypeOp op (length args)
-
-     -- make the appropriate unification and scaling, then sum the contexts.
-     msumS (map handleOpArg (zip argsdel arg_sens))
-
-     -- return the `res` type given by `makeTypeOp`
-     return (NoFun res)
+  -- check all the args
+  argst <- mapM (\t -> checkSens scope t) args
+  
+  -- make the appropriate unification and scaling, then sum the contexts.
+  let handleOpArg (τ_arg, (τ, s)) = do
+                                  unify (NoFun τ) τ_arg
+                                  mscale (svar s)
+                                  return τ_arg
+                                  
+  msumS (map handleOpArg (zip argst arg_sens))
+  
+  -- return the `res` type given by `makeTypeOp`
+  return (NoFun res)
 
 
 -- a special term for function argument variables.
 -- those get sensitivity 1, all other variables are var terms
-checkSen' (Arg x jτ i) scope = done $ do
-                                         τs <- newVar
-                                         logForce $ "checking arg:" <> show (Just x :- jτ) <> ", dmtype is " <> show τs
-                                         -- the inferred type must be a subtype of the user annotation, if given.
-                                         addJuliaSubtypeConstraint τs jτ
+checkSen' scope (Arg x jτ i) = do
+  τs <- newVar
+  logForce $ "checking arg:" <> show (Just x :- jτ) <> ", dmtype is " <> show τs
+  -- the inferred type must be a subtype of the user annotation, if given.
+  addJuliaSubtypeConstraint τs jτ
 
-                                         -- put the variable in the Γ context with sensitivity 1
-                                         setVarS x (WithRelev i (τs :@ SensitivityAnnotation oneId))
-                                         return τs
+  -- put the variable in the Γ context with sensitivity 1
+  setVarS x (WithRelev i (τs :@ SensitivityAnnotation oneId))
+  return τs
 
-checkSen' (Var (x :- dτ)) scope =  -- get the term that corresponds to this variable from the scope dict
-   let delτ = getValueMaybe x scope
-   in case delτ of
-     Nothing -> done $ logForce ("[Var-Sens] Scope is:\n" <> show (getAllKeys scope)) >> throwError (VariableNotInScope x)
-     Just delτ -> do
-        mτ <- delτ -- get the computation that will give us the type of x
-        done $ do
-            logForce ("[Var-Sens] Scope is:\n" <> show (getAllKeys scope))
-            τ <- mτ -- extract the type of x
-            -- if the user has given an annotation
-            -- inferred type must be a subtype of the user annotation
-            addJuliaSubtypeConstraint τ dτ
-            return τ
 
-checkSen' (Lam xτs body) scope =
+checkSen' scope (Var (x :- dτ)) =  -- get the term that corresponds to this variable from the scope dict
+   let mτ = getValueMaybe x scope
+   in case mτ of
+     Nothing -> logForce ("[Var-Sens] Scope is:\n" <> show (getAllKeys scope)) >> throwError (VariableNotInScope x)
+     Just jτ -> do
+                     logForce ("[Var-Sens] Scope is:\n" <> show (getAllKeys scope))
+                     τ <- jτ -- extract the type of x
+                     -- if the user has given an annotation
+                     -- inferred type must be a subtype of the user annotation
+                     addJuliaSubtypeConstraint τ dτ
+                     return τ
+
+checkSen' scope (Lam xτs body) =
   -- the body is checked in the toplevel scope, not the current variable scope.
   -- this reflects the julia behaviour
   do
 
-    -- put a special term to mark x as a function argument. those get special tratment
+    -- put a special term to mark x as a function argument. those get special treatment
     -- because we're interested in their privacy. put the relevance given in the function signature, too.
-    let f s sc (Just x :- τ) = setIfTypesMatch x (checkSens (Arg x τ IsRelevant) s) sc
+    let f s sc (Just x :- τ) = setScopeValue x (checkSens s (Arg x τ IsRelevant)) sc
         f s sc (Nothing :- τ) = sc
     let addArgs s = foldl (f s) s xτs
     let scope' = addArgs scope
 
     -- check the body in the modified scope
-    let mresult = checkSens body scope'
-
-    -- add the arguments to all delayed scopes in the result, in case this returns another delayed thing.
-    -- we want to use the current scope upon application of that delayed thing, but the argument names
-    -- must be the actual function arguments.
-    -- let modresult = modifyScope addArgs mresult
-
-    τr <- mresult
+    restype <- checkSens scope' body
 
     -- extract julia signature
     let sign = (sndA <$> xτs)
-    done $ do
-      logForce $ "Checking Lam, outer scope: " <> show (getAllKeys scope) <> " | inner: " <> show (getAllKeys scope')
-      restype <- τr
-      xrτs <- getArgList @_ @SensitivityK xτs
-      let xrτs' = [x :@ s | (x :@ SensitivityAnnotation s) <- xrτs]
-      let τ = (xrτs' :->: restype)
-      return (Fun [τ :@ (Just sign)])
+        
+    -- get inferred types and sensitivities for the arguments
+    xrτs <- getArgList @_ @SensitivityK xτs
+    let xrτs' = [x :@ s | (x :@ SensitivityAnnotation s) <- xrτs]
+    logForce $ "Checking Lam, outer scope: " <> show (getAllKeys scope) <> " | inner: " <> show (getAllKeys scope')
+
+    -- make an arrow type.
+    let τ = (xrτs' :->: restype)
+    return (Fun [τ :@ (Just sign)])
 
 
-checkSen' (LamStar xτs body) scope =
+checkSen' scope (LamStar xτs body) =
   -- the body is checked in the toplevel scope, not the current variable scope.
   -- this reflects the julia behaviour
   do
     -- put a special term to mark x as a function argument. those get special treatment
     -- because we're interested in their sensitivity
-    let f s sc (Just x :- (τ , rel)) = setIfTypesMatch x (checkSens (Arg x τ rel) s) sc
+    let f s sc (Just x :- (τ , rel)) = setScopeValue x (checkSens s (Arg x τ rel)) sc
         f s sc (Nothing :- _) = sc
     let addArgs s = foldl (f s) s xτs
     let scope' = addArgs scope
 
     -- check the body in the modified scope
-    let mresult = checkPriv body scope'
+    restype <- checkPriv scope' body
 
-    -- add the arguments to all delayed scopes in the result, in case this returns another delayed thing.
-    -- we want to use the current scope upon application of that delayed thing, but the argument names
-    -- must be the actual function arguments.
-    -- let modresult = modifyScope addArgs mresult
-
-    τr <- mresult
-
+    -- extract julia signature
     let sign = (fst <$> sndA <$> xτs)
-    done $ do
-      restype <- τr
-      -- get inferred types and privacies for the arguments
-      xrτs <- getArgList @_ @PrivacyK [(x :- τ) | (x :- (τ, _)) <- xτs]
+        
+    -- get inferred types and privacies for the arguments
+    xrτs <- getArgList @_ @PrivacyK [(x :- τ) | (x :- (τ, _)) <- xτs]
 
-      -- variables that are annotated irrelevant can be made const in case they are
-      -- numeric or tuples. that way we can express the result sensitivity/privacy
-      -- in terms of the nonrelevant input variables
-      let addC :: (DMMain :@ b, (a, Relevance)) -> TCT Identity ()
-          addC ((τ :@ _), (_, i)) = do
-                 _ <- case i of
-                       IsRelevant -> pure ()
-                       NotRelevant -> do
-                                        addConstraint (Solvable (MakeConst τ))
-                                        return ()
-                 return ()
+    -- variables that are annotated irrelevant can be made const in case they are
+    -- numeric or tuples. that way we can express the result sensitivity/privacy
+    -- in terms of the nonrelevant input variables
+    let addC :: (DMMain :@ b, (a, Relevance)) -> TCT Identity ()
+        addC ((τ :@ _), (_, i)) = do
+               _ <- case i of
+                     IsRelevant -> pure ()
+                     NotRelevant -> do
+                                      addConstraint (Solvable (MakeConst τ))
+                                      return ()
+               return ()
+    mapM addC (zip xrτs (sndA <$> xτs))
 
-      mapM addC (zip xrτs (sndA <$> xτs))
+    -- truncate function context to infinity sensitivity
+    mtruncateS inftyS
+    
+    -- build the type signature and proper ->* type
+    let xrτs' = [x :@ p | (x :@ PrivacyAnnotation p) <- xrτs]
+    let τ = (xrτs' :->*: restype)
+    return (Fun [τ :@ (Just sign)])
 
-      -- truncate function context to infinity sensitivity
-      mtruncateS inftyS
-      -- build the type signature and proper ->* type
-      let xrτs' = [x :@ p | (x :@ PrivacyAnnotation p) <- xrτs]
-      let τ = (xrτs' :->*: restype)
-      return (Fun [τ :@ (Just sign)])
 
-
-checkSen' (SLet (x :- dτ) term body) scope = do
+checkSen' scope (SLet (x :- dτ) term body) = do
 
    -- put the computation to check the term into the scope
    --  let scope' = setValueMaybe x (checkSens term scope) scope
-   let scope' = setIfTypesMatchMaybe x (checkSens term scope) scope
+   let scope' = setScopeValueMaybe x (checkSens scope term) scope
 
    -- check body with that new scope
-   result <- checkSens body scope'
+   result <- checkSens scope' body
 
-   return $ do
-     log $ "checking sensitivity SLet: " <> show (x :- dτ) <> " = " <> show term <> " in " <> show body
-     -- TODO
-     case dτ of
-        JTAny -> return dτ
-        dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
+   log $ "checking sensitivity SLet: " <> show (x :- dτ) <> " = " <> show term <> " in " <> show body
+   -- TODO
+   case dτ of
+      JTAny -> return dτ
+      dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
 
-     result' <- result
-     return result'
+   return result
 
 
-
-checkSen' (BBLet name jτs tail) scope = do
+checkSen' scope (BBLet name jτs tail) = do
 
    -- the type of this is just a BlackBox, put it in the scope
-   let scope' = setIfTypesMatch name (done $ return (BlackBox jτs)) scope
+   let scope' = setScopeValue name (return (BlackBox jτs)) scope
 
    -- check tail with that new scope
-   result <- checkSens tail scope'
-   done $ do
-     result' <- result
-     removeVar @SensitivityK name
-     return result'
+   result <- checkSens scope' tail
+   removeVar @SensitivityK name
+   return result
 
 
-checkSen' (BBApply app args cs) scope =
+
+checkSen' scope _ = undefined
+{-
+
+checkSen' scope (BBApply app args cs) =
   let
     checkArg arg = do
-      τ <- checkSens arg scope
+      τ <- checkSens scope arg
       let scaleContext :: TC (DMMain, Sensitivity)
           scaleContext =
             do τ' <- τ
@@ -276,7 +260,7 @@ checkSen' (BBApply app args cs) scope =
                                return ()
 
     margs = checkArg <$> args
-    mf = checkSens app scope
+    mf = checkSens scope app
 
   in do
     -- we typecheck the function, no need to `apply` our current layer on the Later computation
@@ -301,8 +285,6 @@ checkSen' (BBApply app args cs) scope =
         addConstraint (Solvable (IsBlackBox (τ_box, fst <$> argτs))) -- constraint makes sure the signature matches the args
         mapM (\s -> addConstraint (Solvable (IsBlackBoxReturn (τ_ret, s)))) argτs -- constraint sets the sensitivity to the right thing
         return τ_ret
-
-
 
 checkSen' (Apply f args) scope =
   let
@@ -420,7 +402,7 @@ checkSen' (TLet xs term body) original_scope = do
 
   -- add all variables bound in the tuple let as args-checking-commands to the scope
   -- TODO: do we need to make sure that we have unique names here?
-  let addarg scope (Just x :- τ) = setIfTypesMatch x (checkSens (Arg x τ NotRelevant) original_scope) scope
+  let addarg scope (Just x :- τ) = setScopeValue x (checkSens (Arg x τ NotRelevant) original_scope) scope
       addarg scope (Nothing :- τ) = scope
   let scope_with_args = foldl addarg original_scope xs
 
@@ -487,7 +469,7 @@ checkSen' (Loop niter cs' (xi, xc) body) scope = do
    -- add iteration and capture variables as args-checking-commands to the scope
    -- TODO: do we need to make sure that we have unique names here?
    let scope' = case xi of
-                  Just xi -> setIfTypesMatch xi (checkSens (Arg xi JTInt NotRelevant) scope) scope
+                  Just xi -> setScopeValue xi (checkSens (Arg xi JTInt NotRelevant) scope) scope
                   Nothing -> scope
    let scope'' = setValue xc (checkSens (Arg xc JTAny IsRelevant) scope) scope'
 
@@ -921,7 +903,7 @@ checkPri' (SLet (x :- dτ) term body) scope = do
 
    -- put the computation to check the term into the scope
    --  let scope' = setValueMaybe x (checkSens term scope) scope
-   let scope' = setIfTypesMatchMaybe x (checkSens term scope) scope
+   let scope' = setScopeValue x (checkSens term scope) scope
 
    -- check body with that new scope
    result <- checkPriv body scope'
@@ -941,7 +923,7 @@ checkPri' (SBind (x :- dτ) term body) scope = do
    -- and later discard its annotation. we use checkSens because there are no Vars in privacy terms so
    -- x will only ever be used in a sensitivity term.
    let scope' = case x of
-                  Just x -> setIfTypesMatch x (checkSens (Arg x dτ NotRelevant) scope) scope
+                  Just x -> setScopeValue x (checkSens (Arg x dτ NotRelevant) scope) scope
                   Nothing -> scope
 
    -- check body with that new scope
@@ -1002,7 +984,7 @@ checkPri' curterm@(TLet xs term body) original_scope = do
   -- put the computations to check the terms into the scope
   -- (in privacy terms we use projections here, making this a "transparent" tlet)
 
-  let addarg scope (Just x :- _, i) = setIfTypesMatch x (checkSens (TProject i term) original_scope) scope
+  let addarg scope (Just x :- _, i) = setScopeValue x (checkSens (TProject i term) original_scope) scope
       addarg scope (Nothing :- _, i) = scope
   let scope_with_args = foldl addarg original_scope (xs `zip` [0..])
 
@@ -1176,7 +1158,7 @@ checkPri' (Loop niter cs' (xi, xc) body) scope =
       -- capture variable is not relevant bc captures get ∞ privacy anyways
       -- TODO: do we need to make sure that we have unique names here?
       let scope' = case xi of
-                     Just xi -> setIfTypesMatch xi (checkSens (Arg xi JTInt NotRelevant) scope) scope
+                     Just xi -> setScopeValue xi (checkSens (Arg xi JTInt NotRelevant) scope) scope
                      Nothing -> scope
       let scope'' = setValue xc (checkSens (Arg xc JTAny NotRelevant) scope) scope'
 

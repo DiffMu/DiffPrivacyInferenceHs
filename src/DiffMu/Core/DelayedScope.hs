@@ -238,7 +238,12 @@ setIfTypesMatch name ma scope = undefined
   --           unify a' b'
   -- in setValue name newval scope
 
+setScopeValueMaybe :: Maybe TeVar -> TC DMMain -> DMScope -> DMScope
+setScopeValueMaybe Nothing _ scope = scope
+setScopeValueMaybe (Just a) val scope = setScopeValue a val scope
 
-setIfTypesMatchMaybe :: Maybe TeVar -> TC DMMain -> DMScope -> DMScope
-setIfTypesMatchMaybe Nothing _ scope = scope
-setIfTypesMatchMaybe (Just a) val scope = setIfTypesMatch a val scope
+setScopeValue :: TeVar -> TC DMMain -> DMScope -> DMScope
+setScopeValue a val scope =
+    case getValue a scope of
+          Nothing -> setValue a val scope
+          Just mb -> setValue a (impossible $ ("Trying to reassign varible " <> show a <> " which should have been caught in demutation.")) scope
