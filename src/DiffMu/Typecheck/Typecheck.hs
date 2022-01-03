@@ -266,21 +266,16 @@ checkSen' scope (BBApply app args cs) =
     return τ_ret
 
 
-{-
-checkSen' (Apply f args) scope =
+checkSen' scope (Apply f args) =
   let
     -- check the argument in the given scope,
     -- and scale scope by new variable, return both
-    checkArg :: DMTerm -> DMScope -> DelayedT DMScope (State DelayedState) (TC (DMMain :@ Sensitivity))
-    checkArg arg scope = do
-      τ <- checkSens arg scope
-      let scaleContext :: TC (DMMain :@ Sensitivity)
-          scaleContext =
-            do τ' <- τ
-               s <- newVar
-               mscale s
-               return (τ' :@ s)
-      return (scaleContext)
+    checkArg :: DMScope -> DMTerm -> (TC (DMMain :@ Sensitivity))
+    checkArg scope arg = do
+      τ' <- checkSens scope arg
+      s <- newVar
+      mscale s
+      return (τ' :@ s)
 
     sbranch_check mf margs = do
         (τ_sum :: DMMain, argτs) <- msumTup (mf , msumS margs) -- sum args and f's context
@@ -288,107 +283,83 @@ checkSen' (Apply f args) scope =
         addConstraint (Solvable (IsFunctionArgument (τ_sum, Fun [(argτs :->: τ_ret) :@ Nothing])))
         return τ_ret
 
-    margs = (\arg -> (checkArg arg scope)) <$> args
-    mf = checkSens f scope
+    margs = checkArg scope <$> args
+    mf = checkSens scope f
 
   in do
-    --traceM $ "checking sens apply " <> show (f, args)
-    -- we typecheck the function, but `apply` our current layer on the Later computation
-    -- i.e. "typecheck" means here "extracting" the result of the later computation
-    res <- mf -- (applyDelayedLayer scope mf)
+    logForce ("[Apply-Sens]Scope is:\n" <> show (getAllKeys scope))
+    sbranch_check mf margs
 
-    -- we apply the current scope to *ALL* (!) layers.
-    -- i.e., all arguments are evaluated fully in the current scope
-    -- this only makes sense because of the parsing rule
-    -- restricting function to modify variables which are
-    -- also modified on an outer level
-    -- args <- applyAllDelayedLayers scope (sequence margs)
-    args <- sequence margs
-
-    -- we merge the different TC's into a single result TC
-    return $ do
-       logForce ("[Apply-Sens]Scope is:\n" <> show (getAllKeys scope))
-       (sbranch_check res args)
-
-
-checkSen' (FLet fname term body) scope = do
+checkSen' scope (FLet fname term body) = do
 
   -- make a Choice term to put in the scope
-   let scope' = pushChoice fname (checkSens term scope) scope
+  let scope' = pushChoice fname (checkSens scope term) scope
 
-   -- check body with that new scope. Choice terms will result in IsChoice constraints upon ivocation of fname
-   result <- checkSens body scope'
+  -- check body with that new scope. Choice terms will result in IsChoice constraints upon ivocation of fname
 
-   return $ do
-     result' <- result
-     removeVar @SensitivityK fname
-     return result'
-
-
-checkSen' (Choice d) scope = do
-   delCs <- mapM (\t -> checkSens t scope) (snd <$> H.toList d)
-   done $ do
-      choices <- msumS delCs
-      let combined = foldl (:∧:) (Fun []) choices
-      return combined
-
-
-checkSen' (Phi cond ifbr elsebr) scope = do
-   ifd <- checkSens ifbr scope
-   elsed <- checkSens elsebr scope
-   condd <- checkSens cond scope
-
-   mcond <- done $ do
-        τ_cond <- condd
-        mscale inftyS
-        return τ_cond
-
-   done $ do
-      τ_sum <- msumS [ifd, elsed, mcond]
-      (τif, τelse) <- case τ_sum of
-                           (τ1 : τ2 : _) -> return (τ1, τ2)
-                           _ -> throwError (ImpossibleError "Sum cannot return empty.")
-
-      -- the branches need to return types that are indistinguishable by julia dispatch,
-      -- otherwise we cannot resolve dispatch because we don't know which branch is going
-      -- to be chosen at runtime.
-      addConstraint (Solvable (IsJuliaEqual (τif, τelse)))
-
-      -- once we know they are julia-equal, we can safely make the Phi return their supremum.
-      τ <- newVar
-      addConstraint (Solvable (IsSupremum ((τif, τelse) :=: τ)))
-      return τ
+  result' <- checkSens scope' body
+  removeVar @SensitivityK fname
+  return result'
 
 
 
-checkSen' (Tup ts) scope = do
-  τsd <- mapM (\t -> (checkSens t scope)) ts
-  done $ do
-
-     -- check tuple entries and sum contexts
-     τsum <- msumS τsd
-
-     -- ensure nothing that is put in a tuple is a function
-     let makeNoFun ty = do v <- newVar
-                           unify (NoFun v) ty
-                           return v
-     τnf <- mapM makeNoFun τsum
-
-     log $ "checking sens Tup: " <> show (Tup ts) <> ", type is " <> show (NoFun (DMTup τnf)) <> " when terms were " <> show τsum
-     -- return the tuple.
-     return (NoFun (DMTup τnf))
+checkSen' scope (Choice d) = do
+  let delCs = checkSens scope <$> (snd <$> H.toList d)
+  choices <- msumS delCs
+  let combined = foldl (:∧:) (Fun []) choices
+  return combined
 
 
-checkSen' (TLet xs term body) original_scope = do
+
+checkSen' scope (Phi cond ifbr elsebr) = do
+  let ifd   = checkSens scope ifbr
+  let elsed = checkSens scope elsebr
+  let condd = checkSens scope cond <* mscale inftyS
+
+  τ_sum <- msumS [ifd, elsed, condd]
+  (τif, τelse) <- case τ_sum of
+                       (τ1 : τ2 : _) -> return (τ1, τ2)
+                       _ -> throwError (ImpossibleError "Sum cannot return empty.")
+
+  -- the branches need to return types that are indistinguishable by julia dispatch,
+  -- otherwise we cannot resolve dispatch because we don't know which branch is going
+  -- to be chosen at runtime.
+  addConstraint (Solvable (IsJuliaEqual (τif, τelse)))
+
+  -- once we know they are julia-equal, we can safely make the Phi return their supremum.
+  τ <- newVar
+  addConstraint (Solvable (IsSupremum ((τif, τelse) :=: τ)))
+  return τ
+
+
+
+checkSen' scope (Tup ts) = do
+
+  -- check tuple entries and sum contexts
+  τsum <- msumS (checkSens scope <$> ts)
+
+  -- ensure nothing that is put in a tuple is a function
+  let makeNoFun ty = do v <- newVar
+                        unify (NoFun v) ty
+                        return v
+  τnf <- mapM makeNoFun τsum
+
+  log $ "checking sens Tup: " <> show (Tup ts) <> ", type is " <> show (NoFun (DMTup τnf)) <> " when terms were " <> show τsum
+  -- return the tuple.
+  return (NoFun (DMTup τnf))
+
+
+
+checkSen' original_scope (TLet xs term body) = do
 
   -- add all variables bound in the tuple let as args-checking-commands to the scope
   -- TODO: do we need to make sure that we have unique names here?
-  let addarg scope (Just x :- τ) = setScopeValue x (checkSens (Arg x τ NotRelevant) original_scope) scope
+  let addarg scope (Just x :- τ) = setScopeValue x (checkSens original_scope (Arg x τ NotRelevant)) scope
       addarg scope (Nothing :- τ) = scope
   let scope_with_args = foldl addarg original_scope xs
 
   -- check the body in the scope with the new args
-  cbody <- checkSens body scope_with_args
+  let cbody = checkSens scope_with_args body
 
   -- append the computation of removing the args from the context again, remembering their types
   -- and sensitivities
@@ -399,95 +370,93 @@ checkSen' (TLet xs term body) original_scope = do
         return (τ,xs_types_sens')
 
   -- the computation for checking the term
-  cterm <- checkSens term original_scope
+  let cterm = checkSens original_scope term
 
   -- merging the computations and matching inferred types and sensitivities
-  done $ do
-    -- create a new var for scaling the term context
-    s <- newVar
+  -- create a new var for scaling the term context
+  s <- newVar
 
-    -- extract both TC computations
-    -- (the computation for the term is scaled with s)
-    ((τbody,xs_types_sens), τterm) <- msumTup (cbody', (cterm <* mscale s))
+  -- extract both TC computations
+  -- (the computation for the term is scaled with s)
+  ((τbody,xs_types_sens), τterm) <- msumTup (cbody', (cterm <* mscale s))
 
-    -- split the sens/type pairs of the arguments
-    let (xs_types , xs_sens) = unzip xs_types_sens
+  -- split the sens/type pairs of the arguments
+  let (xs_types , xs_sens) = unzip xs_types_sens
 
-    -- helper function for making sure that type is a nofun, returning the nofun component
-    let makeNoFun ty = do v <- newVar
-                          unify (NoFun v) ty
-                          return v
+  -- helper function for making sure that type is a nofun, returning the nofun component
+  let makeNoFun ty = do v <- newVar
+                        unify (NoFun v) ty
+                        return v
 
-    -- here we use `makeNoFun`
-    -- we make all tuple component types into nofuns
-    xs_types' <- mapM makeNoFun xs_types
+  -- here we use `makeNoFun`
+  -- we make all tuple component types into nofuns
+  xs_types' <- mapM makeNoFun xs_types
 
-    -- and require that the type of the term is actually this tuple type
-    unify τterm (NoFun (DMTup xs_types'))
+  -- and require that the type of the term is actually this tuple type
+  unify τterm (NoFun (DMTup xs_types'))
 
-    -- finally we need make sure that our scaling factor `s` is the maximum of the tuple sensitivities
-    s ==! maxS xs_sens
+  -- finally we need make sure that our scaling factor `s` is the maximum of the tuple sensitivities
+  s ==! maxS xs_sens
 
-    log $ "checking sensitivities TLet: " <> show (xs) <> " = " <> show term <> " in " <> show body <> "\n ==> types are " <> show τbody <> " for term " <> show τterm
-    -- and we return the type of the body
-    return τbody
+  log $ "checking sensitivities TLet: " <> show (xs) <> " = " <> show term <> " in " <> show body <> "\n ==> types are " <> show τbody <> " for term " <> show τterm
+  -- and we return the type of the body
+  return τbody
 
 -- a loop checked in sensitivity mode returns its captures into a TLet
 -- the term exists so in privacy mode we can use TBind
-checkSen' (LLet cs loop tail) scope = do
-  checkSens (TLet cs loop tail) scope
+checkSen' scope (LLet cs loop tail) = do
+  checkSens scope (TLet cs loop tail)
 
-checkSen' (Loop niter cs' (xi, xc) body) scope = do
-   cniter <- checkSens niter scope
+checkSen' scope (Loop niter cs' (xi, xc) body) = do
+  let cniter = checkSens scope niter
 
-   let scope_vars = getAllKeys scope
+  let scope_vars = getAllKeys scope
 
-   -- build the tup of variables
-   let cs = Tup ((\a -> Var (Just a :- JTAny)) <$> cs')
-   -- check it
-   ccs <- checkSens cs scope
+  -- build the tup of variables
+  let cs = Tup ((\a -> Var (Just a :- JTAny)) <$> cs')
+  -- check it
+  let ccs = checkSens scope cs
 
-   -- add iteration and capture variables as args-checking-commands to the scope
-   -- TODO: do we need to make sure that we have unique names here?
-   let scope' = case xi of
-                  Just xi -> setScopeValue xi (checkSens (Arg xi JTInt NotRelevant) scope) scope
-                  Nothing -> scope
-   let scope'' = setValue xc (checkSens (Arg xc JTAny IsRelevant) scope) scope'
+  -- add iteration and capture variables as args-checking-commands to the scope
+  -- TODO: do we need to make sure that we have unique names here?
+  let scope' = case xi of
+                 Just xi -> setScopeValue xi (checkSens scope (Arg xi JTInt NotRelevant)) scope
+                 Nothing -> scope
+  let scope'' = setValue xc (checkSens scope (Arg xc JTAny IsRelevant)) scope'
 
-   -- check body term in that new scope
-   cbody <- checkSens body scope''
+  -- check body term in that new scope
+  let cbody = checkSens scope'' body
 
-   -- append the computation of removing the args from the context again, remembering their types
-   -- and sensitivities
-   let cbody' = do
-         τ <- cbody
-         WithRelev _ (τi :@ si) <- removeVarMaybe @SensitivityK xi
-         WithRelev _ (τc :@ sc) <- removeVar @SensitivityK xc
-         return (τ, (τi, si), (τc, sc))
+  -- append the computation of removing the args from the context again, remembering their types
+  -- and sensitivities
+  let cbody' = do
+        τ <- cbody
+        WithRelev _ (τi :@ si) <- removeVarMaybe @SensitivityK xi
+        WithRelev _ (τc :@ sc) <- removeVar @SensitivityK xc
+        return (τ, (τi, si), (τc, sc))
 
-   done $ do
 
-      --traceM $ "checking sens Loop: " <> show  (Loop niter cs (xi, xc) body)
-      -- add scalars for iterator, capture and body context
-      -- we compute their values once it is known if the number of iterations is const or not.
-      sit <- newVar
-      scs <- newVar
-      sb <- newVar
+  --traceM $ "checking sens Loop: " <> show  (Loop niter cs (xi, xc) body)
+  -- add scalars for iterator, capture and body context
+  -- we compute their values once it is known if the number of iterations is const or not.
+  sit <- newVar
+  scs <- newVar
+  sb <- newVar
 
-      -- scale and sum contexts
-      -- τit = type of the iterator (i.e. the term describung the number of iterations)
-      -- τcs = type of the capture input tuple
-      -- τb = inferred type of the body
-      -- τbit = type of the iterator variable xi inferred in the body
-      -- τbcs = type of the capture variable xc inferred in the body
-      (τit, τcs, (τb, (τbit, sbit), (τbcs, sbcs))) <- msum3Tup (cniter <* mscale sit, ccs <* mscale scs, cbody' <* mscale sb)
+  -- scale and sum contexts
+  -- τit = type of the iterator (i.e. the term describung the number of iterations)
+  -- τcs = type of the capture input tuple
+  -- τb = inferred type of the body
+  -- τbit = type of the iterator variable xi inferred in the body
+  -- τbcs = type of the capture variable xc inferred in the body
+  (τit, τcs, (τb, (τbit, sbit), (τbcs, sbcs))) <- msum3Tup (cniter <* mscale sit, ccs <* mscale scs, cbody' <* mscale sb)
 
-      unify (NoFun (Numeric (NonConst DMInt))) τbit -- number of iterations must match type requested by body
+  unify (NoFun (Numeric (NonConst DMInt))) τbit -- number of iterations must match type requested by body
 
-      τcsnf <- newVar
-      unify (NoFun τcsnf) τcs -- functions cannot be captured.
+  τcsnf <- newVar
+  unify (NoFun τcsnf) τcs -- functions cannot be captured.
 
-      addConstraint (Solvable (IsLoopResult ((sit, scs, sb), sbcs, τit))) -- compute the right scalars once we know if τ_iter is const or not.
+  addConstraint (Solvable (IsLoopResult ((sit, scs, sb), sbcs, τit))) -- compute the right scalars once we know if τ_iter is const or not.
 
 {-
       -- TODO loops with Const captures/output don't work yet.
@@ -503,13 +472,13 @@ checkSen' (Loop niter cs' (xi, xc) body) scope = do
 
       -- the types of body, input captures and captures as used in the body must all be equal
       -- (except Const-ness, actually. we'll figure that out at some point)
-      unify τb τbcs
-      unify τcs τbcs
+  unify τb τbcs
+  unify τcs τbcs
 
-      return τbcs
+  return τbcs
 
 
-checkSen' (MCreate n m (x1, x2) body) scope =
+checkSen' scope (MCreate n m (x1, x2) body) =
    let setDim :: TC DMMain -> Sensitivity -> TC DMMain
        setDim tm s = do
           τ <- tm -- check dimension term
@@ -534,47 +503,40 @@ checkSen' (MCreate n m (x1, x2) body) scope =
           return τ
    in do
 
-       mn <- checkSens n scope
-       mm <- checkSens m scope
-       mbody <- checkSens body scope
+      let mn    = checkSens scope n
+      let mm    = checkSens scope m
+      let mbody = checkSens scope body
 
-       done $ do
-          -- variables for matrix dimension
-          nv <- newVar
-          mv <- newVar
+      -- variables for matrix dimension
+      nv <- newVar
+      mv <- newVar
 
-          (τbody, _, _) <- msum3Tup (checkBody mbody nv mv, setDim mn nv, setDim mm mv)
+      (τbody, _, _) <- msum3Tup (checkBody mbody nv mv, setDim mn nv, setDim mm mv)
 
-          -- matrix entries cannot be functions.
-          τ <- newVar
-          unify τbody (NoFun τ)
+      -- matrix entries cannot be functions.
+      τ <- newVar
+      unify τbody (NoFun τ)
 
-          nrm <- newVar -- variable for norm
-          return (NoFun (DMMat nrm U nv mv τ))
+      nrm <- newVar -- variable for norm
+      return (NoFun (DMMat nrm U nv mv τ))
 
-checkSen' (Size m) scope = do
-    md <- checkSens m scope
-    done $ do
-        mt <- md
-        
-        -- variables for matrix dimension
-        nv <- newVar
-        mv <- newVar
+checkSen' scope (Size m) = do
+  mt <- checkSens scope m
+  
+  -- variables for matrix dimension
+  nv <- newVar
+  mv <- newVar
 
-        -- and matrix entries
-        τ <- newVar
+  -- and matrix entries
+  τ <- newVar
 
-        nrm <- newVar -- variable for norm
-        clp <- newVar -- variable for clip
-        unify mt (NoFun (DMMat nrm clp nv mv τ))
+  nrm <- newVar -- variable for norm
+  clp <- newVar -- variable for clip
+  unify mt (NoFun (DMMat nrm clp nv mv τ))
 
-        mscale zeroId
+  mscale zeroId
 
-        return (NoFun (DMTup [Numeric (Const nv DMInt), Numeric (Const mv DMInt)]))
-
-
-
--}
+  return (NoFun (DMTup [Numeric (Const nv DMInt), Numeric (Const mv DMInt)]))
 
 
 checkSen' scope (ClipM c m)  = do
