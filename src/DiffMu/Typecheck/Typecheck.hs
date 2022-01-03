@@ -862,30 +862,23 @@ checkPri' scope (Ret t) = do
    log $ "checking privacy " <> show (Ret t) <> ", type is " <> show τ
    return τ
 
-checkPri' scope _ = undefined
-{-
-checkPri' (Rnd t) scope = do
-   done $ do
-      τ <- (createDMTypeBaseNum t)
-      return (NoFun (Numeric (NonConst τ)))
+checkPri' scope (Rnd t) = do
+  τ <- (createDMTypeBaseNum t)
+  return (NoFun (Numeric (NonConst τ)))
 
 -- it is ambiguous if this is an application of a LamStar or an application of a Lam followed by implicit Return.
 -- we handle that by resolving IsFunctionArgument ( T -> T, S ->* S) by setting S's privacies to infinity.
-checkPri' (Apply f args) scope =
+checkPri' scope (Apply f args) =
   let
     -- check the argument in the given scope,
     -- and scale scope by new variable, return both
-    checkArg :: DMTerm -> DMScope -> DelayedT DMScope (State DelayedState) (TC (DMMain :@ Privacy))
-    checkArg arg scope = do
-      τ <- checkSens arg scope
-      let restrictTruncateContext :: TC (DMMain :@ Privacy)
-          restrictTruncateContext =
-            do τ' <- τ
-               restrictAll oneId -- sensitivity of everything in context must be <= 1
-               p <- newPVar
-               mtruncateP p
-               return (τ' :@ p)
-      return (restrictTruncateContext)
+    checkArg :: DMScope -> DMTerm -> (TC (DMMain :@ Privacy))
+    checkArg scope arg = do
+      τ <- checkSens scope arg
+      restrictAll oneId -- sensitivity of everything in context must be <= 1
+      p <- newPVar
+      mtruncateP p
+      return (τ :@ p)
 
     sbranch_check mf margs = do
         (τ_sum :: DMMain, argτs) <- msumTup (mf , msumP margs) -- sum args and f's context
@@ -893,131 +886,121 @@ checkPri' (Apply f args) scope =
         addConstraint (Solvable (IsFunctionArgument (τ_sum, Fun [(argτs :->*: τ_ret) :@ Nothing])))
         return τ_ret
 
-    margs = (\arg -> (checkArg arg scope)) <$> args
+    margs = (\arg -> (checkArg scope arg)) <$> args
 
-    f_check :: DelayedT DMScope (State DelayedState) (TC DMMain) = do
+    f_check :: (TC DMMain) = do
        -- we typecheck the function, but `apply` our current layer on the Later computation
        -- i.e. "typecheck" means here "extracting" the result of the later computation
-       res <- (checkSens f scope)
-       done $ do
-                logForce ("[Apply-Priv]Scope is:\n" <> show (getAllKeys scope))
-                r <- res
-                mtruncateP inftyP -- truncate f's context to ∞
-                return r
+       res <- (checkSens scope f)
+       logForce ("[Apply-Priv]Scope is:\n" <> show (getAllKeys scope))
+       mtruncateP inftyP -- truncate f's context to ∞
+       return res
 
   in do
     --traceM $ "checking priv apply " <> show (f, args)
     -- extract result of f typechecking
-    ff <- f_check
+    mf <- f_check
 
     -- we extract the result of the args computations
-    args <- (sequence margs)
+    fargs <- (sequence margs)
 
     -- we merge the different TC's into a single result TC
-    return (sbranch_check ff args)
+    sbranch_check f_check (margs)
 
 
-checkPri' (SLet (x :- dτ) term body) scope = do
+checkPri' scope (SLet (x :- dτ) term body) = do
 
-   -- put the computation to check the term into the scope
-   --  let scope' = setValueMaybe x (checkSens term scope) scope
-   let scope' = setIfTypesMatchMaybe x (checkSens term scope) scope
+  -- put the computation to check the term into the scope
+  --  let scope' = setValueMaybe x (checkSens term scope) scope
+  let scope' = setIfTypesMatchMaybe x (checkSens scope term) scope
 
-   -- check body with that new scope
-   result <- checkPriv body scope'
+  -- check body with that new scope
+  result <- checkPriv scope' body
 
-   return $ do
-     log $ "checking (transparent) privacy SLet: " <> show (x :- dτ) <> " = " <> show term <> " in " <> show body
-     case dτ of
-        JTAny -> return dτ
-        dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
+  log $ "checking (transparent) privacy SLet: " <> show (x :- dτ) <> " = " <> show term <> " in " <> show body
+  case dτ of
+    JTAny -> return dτ
+    dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
 
-     result' <- result
-     return result'
+  return result
 
-checkPri' (SBind (x :- dτ) term body) scope = do
-   -- this is the bind rule.
-   -- as it does not matter what sensitivity/privacy x has in the body, we put an Arg term in the scope
-   -- and later discard its annotation. we use checkSens because there are no Vars in privacy terms so
-   -- x will only ever be used in a sensitivity term.
-   let scope' = case x of
-                  Just x -> setIfTypesMatch x (checkSens (Arg x dτ NotRelevant) scope) scope
-                  Nothing -> scope
+checkPri' scope (SBind (x :- dτ) term body) = do
+  -- this is the bind rule.
+  -- as it does not matter what sensitivity/privacy x has in the body, we put an Arg term in the scope
+  -- and later discard its annotation. we use checkSens because there are no Vars in privacy terms so
+  -- x will only ever be used in a sensitivity term.
+  let scope' = case x of
+                 Just x -> setIfTypesMatch x (checkSens scope (Arg x dτ NotRelevant)) scope
+                 Nothing -> scope
 
-   -- check body with that new scope
-   dbody <- checkPriv body scope'
-   mbody <- done $ do
-                   τ <- dbody
-                   -- discard x from the context, never mind it's inferred annotation
-                   WithRelev _ (τx :@ _) <- removeVarMaybe @PrivacyK x
-                   return (τ, τx)
+  -- check body with that new scope
+  dbody <- checkPriv scope' body 
+  let mbody = do
+             let τ = dbody
+             -- discard x from the context, never mind it's inferred annotation
+             WithRelev _ (τx :@ _) <- removeVarMaybe @PrivacyK x
+             return (τ, τx)
 
-   -- check term with old scope
-   dterm <- checkPriv term scope
+  -- check term with old scope
+  let dterm = checkPriv scope term
 
-   return $ do
-     case dτ of
-        JTAny -> return dτ
-        dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
+  case dτ of
+    JTAny -> return dτ
+    dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
 
-     -- sum contexts
-     ((τbody, τx), τterm) <- msumTup (mbody, dterm)
+  -- sum contexts
+  ((τbody, τx), τterm) <- msumTup (mbody, dterm)
 
-     -- unify type of x in the body with inferred type of the assignee term
-     unify τx τterm
+  -- unify type of x in the body with inferred type of the assignee term
+  unify τx τterm
 
-     -- make sure that τterm is not a functiontype
-     -- this is necessary because elsewise it might be capturing variables
-     -- which we do not track here. (We can only track that if we put the
-     -- computation for checking the term itself into the scope, instead
-     -- of an arg representing it. But this would not work with the bind rule.)
-     -- See https://github.com/DiffMu/DiffPrivacyInferenceHs/issues/18
-     τnofun <- newVar
-     unify τbody (NoFun τnofun)
+  -- make sure that τterm is not a functiontype
+  -- this is necessary because elsewise it might be capturing variables
+  -- which we do not track here. (We can only track that if we put the
+  -- computation for checking the term itself into the scope, instead
+  -- of an arg representing it. But this would not work with the bind rule.)
+  -- See https://github.com/DiffMu/DiffPrivacyInferenceHs/issues/18
+  τnofun <- newVar
+  unify τbody (NoFun τnofun)
 
-     log $ "checking privacy SLet: " <> show (x :- dτ) <> " = " <> show term <> " in " <> show body<> "\n ==> inferred type is " <> show τx <> ", term type is " <> show τterm <> ", body types is " <> show τbody
-     -- return the type of this bind expression
-     return τbody
+  log $ "checking privacy SLet: " <> show (x :- dτ) <> " = " <> show term <> " in " <> show body<> "\n ==> inferred type is " <> show τx <> ", term type is " <> show τterm <> ", body types is " <> show τbody
+  -- return the type of this bind expression
+  return τbody
 
-
-
-checkPri' (FLet fname term body) scope = do
+checkPri' scope (FLet fname term body) = do
 
   -- make a Choice term to put in the scope
-   let scope' = pushChoice fname (checkSens term scope) scope
+  let scope' = pushChoice fname (checkSens scope term) scope
 
-   -- check body with that new scope. Choice terms will result in IsChoice constraints upon ivocation of fname
-   result <- checkPriv body scope'
+  -- check body with that new scope. Choice terms will result in IsChoice constraints upon ivocation of fname
+  result <- checkPriv scope' body 
 
-   return $ do
-     result' <- result
-     removeVar @PrivacyK fname
-     return result'
+  removeVar @PrivacyK fname
+  return result
+
 
 -----------------------------------
 -- "transparent" privacy tlets
 
-checkPri' curterm@(TLet xs term body) original_scope = do
+checkPri' original_scope curterm@(TLet xs term body) = do
 
   -- put the computations to check the terms into the scope
   -- (in privacy terms we use projections here, making this a "transparent" tlet)
 
-  let addarg scope (Just x :- _, i) = setIfTypesMatch x (checkSens (TProject i term) original_scope) scope
+  let addarg scope (Just x :- _, i) = setIfTypesMatch x (checkSens original_scope (TProject i term)) scope
       addarg scope (Nothing :- _, i) = scope
   let scope_with_args = foldl addarg original_scope (xs `zip` [0..])
 
   -- -- check body with that new scope
-  result <- checkPriv body scope_with_args
+  result <- checkPriv scope_with_args body
 
-  return $ do
-    log $ "checking (transparent) privacy SLet: " <> show xs <> " = " <> show term <> " in " <> show body
-    case and [True | (_ :- JTAny) <- xs] of
-       True  -> return ()
-       False -> throwError (ImpossibleError $ "Type annotations on variables not yet supported\n when checking " <> showPretty curterm)
+  log $ "checking (transparent) privacy SLet: " <> show xs <> " = " <> show term <> " in " <> show body
+  case and [True | (_ :- JTAny) <- xs] of
+      True  -> return ()
+      False -> throwError (ImpossibleError $ "Type annotations on variables not yet supported\n when checking " <> showPretty curterm)
 
-    result
-
-checkPri' curterm@(TBind xs term body) original_scope = do
+  return result
+checkPri' original_scope curterm@(TBind xs term body) = do
   a <- newTeVar "tbind_var"
   -- we check the term
   -- ```
@@ -1025,10 +1008,10 @@ checkPri' curterm@(TBind xs term body) original_scope = do
   --  tlet (xs...) = a
   --  body
   -- ```
-  checkPri' (SBind (Just a :- JTAny) term
+  checkPri' original_scope (SBind (Just a :- JTAny) term
                    (TLet xs (Var (Just a :- JTAny))
                          body))
-            original_scope
+
 
 -----------------------------------
 -- PRIVACY TUPLE HACK
@@ -1071,7 +1054,7 @@ checkPri' (TLet xs term body) scope = do
    checkPriv t2 scope
 -}
 
-checkPri' (Gauss rp εp δp f) scope =
+checkPri' scope (Gauss rp εp δp f) =
   let
    setParam :: TC DMMain -> Sensitivity -> TC ()
    setParam dt v = do -- parameters must be const numbers.
@@ -1095,44 +1078,42 @@ checkPri' (Gauss rp εp δp f) scope =
       return τf
    in do
       -- check all the parameters and f, extract the TC monad from the Delayed monad.
-      drp <- checkSens rp scope
-      dεp <- checkSens εp scope
-      dδp <- checkSens δp scope
-      df <- checkSens f scope
+      let drp = checkSens scope rp
+      let dεp = checkSens scope εp
+      let dδp = checkSens scope δp
+      let df  = checkSens scope f
 
-      done $ do
-         -- create variables for the parameters
-         v_ε :: Sensitivity <- newVar
-         v_δ :: Sensitivity <- newVar
-         v_r :: Sensitivity <- newVar
+      -- create variables for the parameters
+      v_ε :: Sensitivity <- newVar
+      v_δ :: Sensitivity <- newVar
+      v_r :: Sensitivity <- newVar
 
-         -- parameters must be in (0,1) for gauss do be DP
-         addConstraint (Solvable (IsLess (v_ε, oneId :: Sensitivity)))
-         addConstraint (Solvable (IsLess (v_δ, oneId :: Sensitivity)))
-         addConstraint (Solvable (IsLess (zeroId :: Sensitivity, v_ε)))
-         addConstraint (Solvable (IsLess (zeroId :: Sensitivity, v_δ)))
+      -- parameters must be in (0,1) for gauss do be DP
+      addConstraint (Solvable (IsLess (v_ε, oneId :: Sensitivity)))
+      addConstraint (Solvable (IsLess (v_δ, oneId :: Sensitivity)))
+      addConstraint (Solvable (IsLess (zeroId :: Sensitivity, v_ε)))
+      addConstraint (Solvable (IsLess (zeroId :: Sensitivity, v_δ)))
 
-         -- restrict interesting variables in f's context to v_r
-         let mf = setBody df (v_ε, v_δ) v_r
+      -- restrict interesting variables in f's context to v_r
+      let mf = setBody df (v_ε, v_δ) v_r
 
-         let mr = setParam drp v_r
-         let mε = setParam dεp v_ε
-         let mδ = setParam dδp v_δ
+      let mr = setParam drp v_r
+      let mε = setParam dεp v_ε
+      let mδ = setParam dδp v_δ
 
-         (τf, _) <- msumTup (mf, msum3Tup (mr, mε, mδ))
+      (τf, _) <- msumTup (mf, msum3Tup (mr, mε, mδ))
 
-         τgauss <- newVar
-         addConstraint (Solvable (IsGaussResult ((NoFun τgauss), τf))) -- we decide later if its gauss or mgauss according to return type
+      τgauss <- newVar
+      addConstraint (Solvable (IsGaussResult ((NoFun τgauss), τf))) -- we decide later if its gauss or mgauss according to return type
 
-         return (NoFun τgauss)
-
+      return (NoFun τgauss)
 
 -- a loop checked in privacy mode returns its captures into a TBind
 -- the term exists so in sensitivity mode we can use TLet
-checkPri' (LLet cs loop tail) scope = do
-  checkPriv (TBind cs loop tail) scope
+checkPri' scope (LLet cs loop tail) = do
+  checkPriv scope (TBind cs loop tail)
 
-checkPri' (Loop niter cs' (xi, xc) body) scope =
+checkPri' scope (Loop niter cs' (xi, xc) body) =
    --let setInteresting :: ([Symbol],[DMMain :@ PrivacyAnnotation]) -> Sensitivity -> TC ()
    let setInteresting (xs, τps) n = do
           let τs = map fstAnn τps
@@ -1154,7 +1135,7 @@ checkPri' (Loop niter cs' (xi, xc) body) scope =
 
    in do
       --traceM $ "checking privacy Loop: " <> show  (Loop niter cs (xi, xc) body)
-      cniter <- checkSens niter scope
+      let cniter = checkSens scope niter
 
       let cniter' = do
                    τ <- cniter
@@ -1165,7 +1146,7 @@ checkPri' (Loop niter cs' (xi, xc) body) scope =
       let cs = Tup ((\a -> Var (Just a :- JTAny)) <$> cs')
 
       -- check it
-      mcaps <- checkSens cs  scope
+      let mcaps = checkSens scope cs
       let mcaps' = do
                    τ <- mcaps
                    mtruncateP inftyP
@@ -1176,12 +1157,12 @@ checkPri' (Loop niter cs' (xi, xc) body) scope =
       -- capture variable is not relevant bc captures get ∞ privacy anyways
       -- TODO: do we need to make sure that we have unique names here?
       let scope' = case xi of
-                     Just xi -> setIfTypesMatch xi (checkSens (Arg xi JTInt NotRelevant) scope) scope
+                     Just xi -> setIfTypesMatch xi (checkSens scope (Arg xi JTInt NotRelevant)) scope
                      Nothing -> scope
-      let scope'' = setValue xc (checkSens (Arg xc JTAny NotRelevant) scope) scope'
+      let scope'' = setValue xc (checkSens scope (Arg xc JTAny NotRelevant)) scope'
 
       -- check body term in that new scope
-      cbody <- checkPriv body scope''
+      let cbody = checkPriv scope'' body 
 
       -- append the computation of removing the args from the context again, remembering their types
       -- and sensitivities
@@ -1197,49 +1178,46 @@ checkPri' (Loop niter cs' (xi, xc) body) scope =
             setInteresting interesting n
             return (τ, n, τi, τc)
 
-      done $ do
-         -- scale and sum contexts
-         -- τit = type of the iterator (i.e. the term describung the number of iterations)
-         -- τcs = type of the capture input tuple
-         -- τb = inferred type of the body
-         -- n = number of iterations as assumed in the loop body
-         -- τbit = type of the iterator variable xi inferred in the body
-         -- τbcs = type of the capture variable xc inferred in the body
-         (τit, τcs, (τb, n, τbit, τbcs)) <- msum3Tup (cniter', mcaps', cbody')
+      -- scale and sum contexts
+      -- τit = type of the iterator (i.e. the term describung the number of iterations)
+      -- τcs = type of the capture input tuple
+      -- τb = inferred type of the body
+      -- n = number of iterations as assumed in the loop body
+      -- τbit = type of the iterator variable xi inferred in the body
+      -- τbcs = type of the capture variable xc inferred in the body
+      (τit, τcs, (τb, n, τbit, τbcs)) <- msum3Tup (cniter', mcaps', cbody')
 
-         unify τit (NoFun (Numeric (Const n DMInt))) -- number of iterations must be constant integer
-         unify (NoFun (Numeric (NonConst DMInt))) τbit -- number of iterations must match type requested by body
+      unify τit (NoFun (Numeric (Const n DMInt))) -- number of iterations must be constant integer
+      unify (NoFun (Numeric (NonConst DMInt))) τbit -- number of iterations must match type requested by body
 
-         τcsnf <- newVar
-         unify (NoFun τcsnf) τcs -- functions cannot be captured.
+      τcsnf <- newVar
+      unify (NoFun τcsnf) τcs -- functions cannot be captured.
 
 {-
-         -- TODO loops with Const captures/output don't work yet.
-         -- the inferred capture type should be the same as the non-const version of the inferred body type
-         -- so we can loop properly by plugging the loop result into the loop in again
-         -- the inferred type for xc must be non-const, as we cannot assume that it will be the same in each
-         -- iteration.
-         addConstraint (Solvable (IsNonConst (τb, τbcs)))
+      -- TODO loops with Const captures/output don't work yet.
+      -- the inferred capture type should be the same as the non-const version of the inferred body type
+      -- so we can loop properly by plugging the loop result into the loop in again
+      -- the inferred type for xc must be non-const, as we cannot assume that it will be the same in each
+      -- iteration.
+      addConstraint (Solvable (IsNonConst (τb, τbcs)))
 
-         -- also the given capture that we start iteration with should fit into the expected capture
-         addConstraint (Solvable (IsNonConst (τcs, τbcs)))
+      -- also the given capture that we start iteration with should fit into the expected capture
+      addConstraint (Solvable (IsNonConst (τcs, τbcs)))
 -}
 
-         -- the types of body, input captures and captures as used in the body must all be equal
-         -- (except Const-ness, actually. we'll figure that out at some point)
-         unify τb τbcs
-         unify τcs τbcs
+      -- the types of body, input captures and captures as used in the body must all be equal
+      -- (except Const-ness, actually. we'll figure that out at some point)
+      unify τb τbcs
+      unify τcs τbcs
 
-         return τbcs
+      return τbcs
 
-checkPri' (Reorder σ t) scope = do
-  mτ <- checkPriv t scope
-  done $ do
-    τ <- mτ
-    ρ <- newVar
-    addConstraint (Solvable (IsReorderedTuple ((σ , τ) :=: ρ)))
-    return ρ
 
-checkPri' t scope = checkPriv (Ret t) scope -- secretly return if the term has the wrong color.
 
--}
+checkPri' scope (Reorder σ t) = do
+  τ <- checkPriv scope t
+  ρ <- newVar
+  addConstraint (Solvable (IsReorderedTuple ((σ , τ) :=: ρ)))
+  return ρ
+
+checkPri' scope t = checkPriv scope (Ret t) -- secretly return if the term has the wrong color.

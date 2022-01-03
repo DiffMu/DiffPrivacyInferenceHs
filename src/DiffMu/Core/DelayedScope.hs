@@ -162,10 +162,11 @@ instance Default DelayedState where
 
 
 -- in order to create a unique term variable, call this function.
-newTeVar :: (MonadState DelayedState m) => Text -> m (TeVar)
-newTeVar hint = termVars %%= (first GenTeVar . (newName hint))
+-- newTeVar :: (MonadState DelayedState m) => Text -> m (TeVar)
+-- newTeVar hint = termVars %%= (first GenTeVar . (newName hint))
 
-
+newTeVar :: (MonadDMTC m) => Text -> m (TeVar)
+newTeVar hint = undefined -- termVars %%= (first GenTeVar . (newName hint))
 
 ------------------------------------------------------------------------
 -- the scope used by the typechecker
