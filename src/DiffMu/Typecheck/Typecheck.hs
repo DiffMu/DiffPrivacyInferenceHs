@@ -233,20 +233,15 @@ checkSen' scope (BBLet name jτs tail) = do
 
 
 
-checkSen' scope _ = undefined
-{-
 
 checkSen' scope (BBApply app args cs) =
   let
     checkArg arg = do
-      τ <- checkSens scope arg
-      let scaleContext :: TC (DMMain, Sensitivity)
-          scaleContext =
-            do τ' <- τ
-               s <- newVar
-               mscale s -- all args get infinite sensitivity
-               return (τ', s)
-      return (scaleContext)
+      let τ = checkSens scope arg
+      τ' <- τ
+      s <- newVar
+      mscale s -- all args get infinite sensitivity
+      return (τ', s)
 
     checkCap :: TeVar -> TC ()
     checkCap c =
@@ -262,29 +257,16 @@ checkSen' scope (BBApply app args cs) =
     mf = checkSens scope app
 
   in do
-    -- we typecheck the function, no need to `apply` our current layer on the Later computation
-    -- because app can only be pointing to a black box and that's not delayed
-    res <- mf
-
-    -- we apply the current scope to *ALL* (!) layers.
-    -- i.e., all arguments are evaluated fully in the current scope
-    -- this only makes sense because of the parsing rule
-    -- restricting function to modify variables which are
-    -- also modified on an outer level
-    -- this should not have any impact on the sensitivity of things here tho
-    -- because everything happens inside the box and gets scaled by infty
-    -- args <- applyAllDelayedLayers scope (sequence margs)
-    args <- (sequence margs)
-
     -- we merge the different TC's into a single result TC
-    return $ do
-        let caps = checkCap <$> cs
-        (τ_box :: DMMain, argτs, _) <- msum3Tup (res , msumS args, msumS caps) -- sum args and f's context
-        τ_ret <- newVar -- a type var for the function return type
-        addConstraint (Solvable (IsBlackBox (τ_box, fst <$> argτs))) -- constraint makes sure the signature matches the args
-        mapM (\s -> addConstraint (Solvable (IsBlackBoxReturn (τ_ret, s)))) argτs -- constraint sets the sensitivity to the right thing
-        return τ_ret
+    let caps = checkCap <$> cs
+    (τ_box :: DMMain, argτs, _) <- msum3Tup (mf , msumS margs, msumS caps) -- sum args and f's context
+    τ_ret <- newVar -- a type var for the function return type
+    addConstraint (Solvable (IsBlackBox (τ_box, fst <$> argτs))) -- constraint makes sure the signature matches the args
+    mapM (\s -> addConstraint (Solvable (IsBlackBoxReturn (τ_ret, s)))) argτs -- constraint sets the sensitivity to the right thing
+    return τ_ret
 
+
+{-
 checkSen' (Apply f args) scope =
   let
     -- check the argument in the given scope,
