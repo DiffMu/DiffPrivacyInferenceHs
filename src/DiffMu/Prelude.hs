@@ -16,6 +16,7 @@ module DiffMu.Prelude
   , MonadImpossible (..)
   , MonadInternalError (..)
   , TeVar (..)
+  , ScopeVar (..)
   , throwOriginalError
   , blue, green, yellow, red, magenta
   )
@@ -71,6 +72,14 @@ instance Hashable TeVar
 instance Show TeVar where
   show (UserTeVar x) = show x
   show (GenTeVar x) = "gen_" <> show x
+
+
+data ScopeVar = ScopeVar Symbol
+  deriving (Eq,Generic, Ord)
+
+instance Hashable ScopeVar
+instance Show ScopeVar where
+  show (ScopeVar x) = show x
 
 
 class (Eq v, Hashable v) => DictKey v

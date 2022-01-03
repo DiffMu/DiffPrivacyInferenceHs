@@ -881,11 +881,6 @@ instance ShowPretty a => ShowPretty (MutabilityExtension a) where
 instance ShowPretty (EmptyExtension a) where
   showPretty a = undefined
 
---------------------------------------------------------------------------
--- Mutable code
-
-data IsMutated = Mutated | NotMutated
-  deriving (Generic, Show, Eq)
 
 
 --------------------------------------------------------------------------

@@ -23,8 +23,14 @@ import Debug.Trace
 ---------------------------------------------------------
 -- The checking monad
 
+data IsMutated = Mutated | NotMutated
+  deriving (Generic, Show, Eq)
+
 data IsLocalMutation = LocalMutation | NotLocalMutation
   deriving (Show, Eq)
+
+data VarAccessType = ReadSingle ScopeVar | ReadMulti | WriteSingle ScopeVar
+  deriving (Show,Eq)
 
 onlyLocallyMutatedVariables :: [(TeVar,IsLocalMutation)] -> Bool
 onlyLocallyMutatedVariables xs = [v | (v, NotLocalMutation) <- xs] == []
@@ -39,13 +45,14 @@ consumeDefaultValue :: ImmutType -> ImmutType
 consumeDefaultValue (Pure DefaultValue) = Pure UserValue
 consumeDefaultValue a = a
 
--- type ImmutCtx = Ctx TeVar ()
-type MutCtx = Ctx TeVar IsMutated
+-- type ImVarAccessCtx = Ctx TeVar ()
+type VarAccessCtx = Ctx TeVar VarAccessType
 
 data MFull = MFull
   {
-    _mutTypes :: MutCtx
+    _mutTypes :: VarAccessCtx
   , _termVarsOfMut :: NameCtx
+  , _scopeNames :: NameCtx
   , _topLevelInfo :: TopLevelInformation
   }
 
@@ -59,6 +66,8 @@ $(makeLenses ''MFull)
 newTeVarOfMut :: (MonadState MFull m) => Text -> m (TeVar)
 newTeVarOfMut hint = termVarsOfMut %%= (first GenTeVar . (newName hint))
 
+newScopeVar :: (MonadState MFull m) => Text -> m (ScopeVar)
+newScopeVar hint = scopeNames %%= (first ScopeVar . (newName hint))
 
 
 -- the scope
@@ -84,13 +93,14 @@ markMutated var = do
   -- mutTypes %= (⋆! singl)
   mutTypes %=~ (markMutatedInScope var)
     where 
-      markMutatedInScope :: TeVar -> MutCtx -> MTC MutCtx 
+      markMutatedInScope :: TeVar -> VarAccessCtx -> MTC VarAccessCtx 
       markMutatedInScope var _ = throwError (ParseError ("Reassignment of variable " <> show var <> " is not allowed.") "" 0)
 
 markRead :: TeVar -> MTC ()
-markRead var = do
-  let singl = setValue var NotMutated emptyDict
-  mutTypes %= (⋆! singl)
+markRead var = undefined
+  -- do
+  -- let singl = setValue var (ReadSingle undefined) emptyDict
+  -- mutTypes %= (⋆! singl)
 
 markReadMaybe :: Maybe TeVar -> MTC ()
 markReadMaybe (Just x) = markRead x
@@ -783,15 +793,16 @@ elaborateLambda scope args body = do
   -- get the context and check if some variables are now mutated
   ctx <- use mutTypes
   let ctxElems = getAllElems ctx
-  let isMutatingFunction = or [a == Mutated | a <- ctxElems]
+  let isMutatingFunction = or [True | WriteSingle _ <- ctxElems]
 
   -- remove the arguments to this lambda from the context
   let getVar :: (Asgmt JuliaType) -> MTC (Maybe (TeVar, IsMutated))
       getVar (Just a :- t) = do
         mut <- mutTypes %%= popValue a
         case mut of
-          Nothing -> pure (Just (a , NotMutated))
-          Just mut -> pure (Just (a , mut))
+          Nothing              -> pure (Just (a , NotMutated))
+          Just (WriteSingle _) -> pure (Just (a , Mutated))
+          Just _               -> pure (Just (a , NotMutated))
       getVar (Nothing :- t) = pure Nothing
 
   -- call this function on all args given in the signature
