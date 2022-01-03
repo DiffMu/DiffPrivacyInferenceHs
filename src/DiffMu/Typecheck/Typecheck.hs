@@ -84,8 +84,6 @@ checkSen' scope (Sng η τ) = do
   res <- Numeric <$> (Const (constCoeff (Fin η)) <$> (createDMTypeBaseNum τ))
   return (NoFun res)
 
-checkSen' scope _ = undefined
-
 {-
 -- typechecking an op
 checkSen' (Op op args) scope = do
@@ -609,46 +607,46 @@ checkSen' (Size m) scope = do
 
         return (NoFun (DMTup [Numeric (Const nv DMInt), Numeric (Const mv DMInt)]))
 
-checkSen' (ClipM c m) scope = do
-   mb <- checkSens m scope -- check the matrix
-   done $ do
-      τb <- mb
 
-      -- variables for norm and clip parameters and dimension
-      nrm <- newVar
-      clp <- newVar
-      n <- newVar
 
-      -- set correct matrix type
-      unify τb (NoFun (DMGrads nrm clp n (Numeric DMData)))
+-}
 
-      -- change clip parameter to input
-      return (NoFun (DMGrads nrm c n (Numeric DMData)))
 
+checkSen' scope (ClipM c m)  = do
+  τb <- checkSens scope m -- check the matrix
+
+  -- variables for norm and clip parameters and dimension
+  nrm <- newVar
+  clp <- newVar
+  n <- newVar
+
+  -- set correct matrix type
+  unify τb (NoFun (DMGrads nrm clp n (Numeric DMData)))
+
+  -- change clip parameter to input
+  return (NoFun (DMGrads nrm c n (Numeric DMData)))
 
 --------------------
 -- NOTE this is different from what is in the paper, as we scale the result context by 2 not by 1
 -- a proof that this is correct is in the matrixnorm pdf, and the authors told me it's correct too
-checkSen' (ConvertM m) scope = do
-   mb <- checkSens m scope -- check the matrix
-   done $ do
-      τb <- mb
+checkSen' scope (ConvertM m) = do
+  τb <- checkSens scope m -- check the matrix
 
-      -- variables for norm and clip parameters and dimension
-      nrm <- newVar
-      clp <- newVar -- this is a norm, because we do not accept
-                    -- the unbounded clip value
-      n <- newVar
+  -- variables for norm and clip parameters and dimension
+  nrm <- newVar
+  clp <- newVar -- this is a norm, because we do not accept
+                -- the unbounded clip value
+  n <- newVar
 
-      -- set correct matrix type
-      unify τb (NoFun (DMGrads nrm (Clip clp) n (Numeric DMData)))
+  -- set correct matrix type
+  unify τb (NoFun (DMGrads nrm (Clip clp) n (Numeric DMData)))
 
-      -- we have to scale by two unlike in the paper...see the matrixnorms pdf in julia docs
-      mscale (oneId ⋆! oneId)
+  -- we have to scale by two unlike in the paper...see the matrixnorms pdf in julia docs
+  mscale (oneId ⋆! oneId)
 
-      -- move clip to the norm position,
-      -- and forget about old `nrm`
-      return (NoFun (DMGrads clp (Clip clp) n (Numeric (NonConst DMReal))))
+  -- move clip to the norm position,
+  -- and forget about old `nrm`
+  return (NoFun (DMGrads clp (Clip clp) n (Numeric (NonConst DMReal))))
 
 --------------------
 
@@ -670,191 +668,178 @@ checkSen' (Transpose m) scope = do
       -- change clip parameter to input
       return (NoFun (DMMat L1 U m n (Numeric τ)))
 -}
-
-checkSen' (Index m i j) scope = do
+checkSen' scope  (Index m i j) = do
 
       -- check indices and set their sensitivity to infinity
-      di <- checkSens i scope
-      dj <- checkSens j scope
+      let di = checkSens scope i
+      let dj = checkSens scope j
       let dx = do
                    _ <- msumTup (di, dj)
                    mscale inftyS
                    return ()
 
-      dm <- checkSens m scope -- check the matrix
+      let dm = checkSens scope m -- check the matrix
 
-      done $ do
-         (τm, _) <- msumTup (dm, dx)
+      (τm, _) <- msumTup (dm, dx)
 
-         -- variables for element type, norm and clip parameters and dimension
-         τ <- newVar
-         nrm <- newVar
-         clp <- newVar
-         n <- newVar
-         m <- newVar
+      -- variables for element type, norm and clip parameters and dimension
+      τ <- newVar
+      nrm <- newVar
+      clp <- newVar
+      n <- newVar
+      m <- newVar
 
-         -- set matrix type
-         unify τm (NoFun (DMMat nrm clp n m (Numeric τ)))
+      -- set matrix type
+      unify τm (NoFun (DMMat nrm clp n m (Numeric τ)))
 
-         -- we don't restrict matrix dimension or index size, but leave that to the runtime errors...
+      -- we don't restrict matrix dimension or index size, but leave that to the runtime errors...
 
-         return (NoFun (Numeric τ))
+      return (NoFun (Numeric τ))
 
-checkSen' (VIndex v i) scope = do
+
+checkSen' scope (VIndex v i)  = do
 
       -- check index and set the sensitivity to infinity
-      di <- checkSens i scope
+      let di = checkSens scope i
       let dx = do
                    _ <- di
                    mscale inftyS
                    return ()
 
-      dv <- checkSens v scope -- check the vector
+      let dv = checkSens scope v -- check the vector
 
-      done $ do
-         (τv, _) <- msumTup (dv, dx)
+      (τv, _) <- msumTup (dv, dx)
 
-         -- variables for element type, norm and clip parameters and dimension
-         τ <- newVar
-         nrm <- newVar
-         clp <- newVar
-         n <- newVar
+      -- variables for element type, norm and clip parameters and dimension
+      τ <- newVar
+      nrm <- newVar
+      clp <- newVar
+      n <- newVar
 
-         -- set vector type
-         unify τv (NoFun (DMVec nrm clp n (Numeric τ)))
+      -- set vector type
+      unify τv (NoFun (DMVec nrm clp n (Numeric τ)))
 
-         -- we don't restrict vector dimension or index size, but leave that to the runtime errors...
+      -- we don't restrict vector dimension or index size, but leave that to the runtime errors...
 
-         return (NoFun (Numeric τ))
+      return (NoFun (Numeric τ))
 
-checkSen' (Row m i) scope = do
+checkSen' scope (Row m i) = do
       -- check index and set their sensitivity to infinity
-      di <- checkSens i scope
+      let di = checkSens scope i
       let dx = do
                    _ <- di
                    mscale inftyS
                    return ()
 
-      dm <- checkSens m scope -- check the matrix
+      let dm = checkSens scope m -- check the matrix
 
-      done $ do
-         (τm, _) <- msumTup (dm, dx)
+      (τm, _) <- msumTup (dm, dx)
 
-         -- variables for element type, norm and clip parameters and dimension
-         τ <- newVar
-         nrm <- newVar
-         clp <- newVar
-         n <- newVar
-         m <- newVar
+      -- variables for element type, norm and clip parameters and dimension
+      τ <- newVar
+      nrm <- newVar
+      clp <- newVar
+      n <- newVar
+      m <- newVar
 
-         -- set matrix type
-         unify τm (NoFun (DMMat nrm clp n m (Numeric τ)))
+      -- set matrix type
+      unify τm (NoFun (DMMat nrm clp n m (Numeric τ)))
 
-         -- we don't restrict matrix dimension or index size, but leave that to the runtime errors...
+      -- we don't restrict matrix dimension or index size, but leave that to the runtime errors...
 
-         return (NoFun (DMVec nrm clp m (Numeric τ))) -- returns Vector type to accomodate julia behaviour
+      return (NoFun (DMVec nrm clp m (Numeric τ))) -- returns Vector type to accomodate julia behaviour
 
-
-checkSen' (SubGrad ps gs) scope = do
+checkSen' scope (SubGrad ps gs) = do
       -- check model and gradient
-      dps <- checkSens ps scope
-      dgs <- checkSens gs scope
+      let dps = checkSens scope ps
+      let dgs = checkSens scope gs
 
-      done $ do
-         s1 <- newSVar "s1"
-         s2 <- newSVar "s2"
+      s1 <- newSVar "s1"
+      s2 <- newSVar "s2"
 
-         (ps, gs) <- msumTup ((dps <* mscale (svar s1)), (dgs <* mscale (svar s2)))
+      (ps, gs) <- msumTup ((dps <* mscale (svar s1)), (dgs <* mscale (svar s2)))
 
-         -- variables for element types, norm and clip parameters and dimension
-         τps <- newVar
-         τgs <- newVar
-         nrm <- newVar
-         clp <- newVar
-         m <- newVar
+      -- variables for element types, norm and clip parameters and dimension
+      τps <- newVar
+      τgs <- newVar
+      nrm <- newVar
+      clp <- newVar
+      m <- newVar
 
-         -- set argument types
-         unify ps (NoFun (DMParams m (Numeric τps)))
-         unify gs (NoFun (DMGrads nrm clp m (Numeric τgs)))
+      -- set argument types
+      unify ps (NoFun (DMParams m (Numeric τps)))
+      unify gs (NoFun (DMGrads nrm clp m (Numeric τgs)))
 
-         res <- TVar <$> newTVar "τr"
-         addConstraint (Solvable (IsTypeOpResult (Binary DMOpSub ((Numeric τps):@s1, (Numeric τgs):@s2) res)))
+      res <- TVar <$> newTVar "τr"
+      addConstraint (Solvable (IsTypeOpResult (Binary DMOpSub ((Numeric τps):@s1, (Numeric τgs):@s2) res)))
 
-         return (NoFun (DMParams m res))
+      return (NoFun (DMParams m res))
 
-checkSen' (ScaleGrad scalar grad) scope = do
+checkSen' scope (ScaleGrad scalar grad) = do
 
-  dscalar <- checkSens scalar scope
-  dgrad <- checkSens grad scope
+  let dscalar = checkSens scope scalar
+  let dgrad = checkSens scope grad
 
-  done $ do
+  -- Create sensitivity / type variables for the
+  -- multiplication
+  --
+  (τres , types_sens) <- makeTypeOp (IsBinary DMOpMul) 2
 
-    -- Create sensitivity / type variables for the
-    -- multiplication
-    --
-    (τres , types_sens) <- makeTypeOp (IsBinary DMOpMul) 2
+  ((τ1,s1),(τ2,s2)) <- case types_sens of
+    [(τ1,s1),(τ2,s2)] -> pure ((τ1,s1),(τ2,s2))
+    _ -> impossible "Wrong array return size of makeTypeOp"
 
-    ((τ1,s1),(τ2,s2)) <- case types_sens of
-      [(τ1,s1),(τ2,s2)] -> pure ((τ1,s1),(τ2,s2))
-      _ -> impossible "Wrong array return size of makeTypeOp"
+  -- Create variables for the matrix type
+  -- (norm and clip parameters and dimension)
+  nrm <- newVar
+  clp <- newVar
+  m <- newVar
 
-    -- Create variables for the matrix type
-    -- (norm and clip parameters and dimension)
-    nrm <- newVar
-    clp <- newVar
-    m <- newVar
+  -- infer the types of the scalar and the gradient
+  -- we get
+  -- `Γ₁ ⋅ s₁ ⋅ m + Γ₂ ⋅ s₂`
+  --   where (s₁,s₂) ⩯ tscalar ⋅ tgrad
+  (tscalar, tgrad) <- msumTup ((dscalar <* mscale (svar s1) <* mscale m), (dgrad <* mscale (svar s2)))
 
-    -- infer the types of the scalar and the gradient
-    -- we get
-    -- `Γ₁ ⋅ s₁ ⋅ m + Γ₂ ⋅ s₂`
-    --   where (s₁,s₂) ⩯ tscalar ⋅ tgrad
-    (tscalar, tgrad) <- msumTup ((dscalar <* mscale (svar s1) <* mscale m), (dgrad <* mscale (svar s2)))
+  -- set τ1 to the actual type of the scalar
+  unify tscalar (NoFun τ1)
 
-    -- set τ1 to the actual type of the scalar
-    unify tscalar (NoFun τ1)
+  -- and τ2 to the actual content type of the dmgrads
+  -- (we allow any kind of annotation on the dmgrads here)
+  unify tgrad (NoFun (DMGrads nrm clp m τ2))
 
-    -- and τ2 to the actual content type of the dmgrads
-    -- (we allow any kind of annotation on the dmgrads here)
-    unify tgrad (NoFun (DMGrads nrm clp m τ2))
+  -- the return type is the same matrix, but
+  -- the clipping is now changed to unbounded
+  -- and the content type is the result of the multiplication
+  return (NoFun (DMGrads nrm U m τres))
 
-    -- the return type is the same matrix, but
-    -- the clipping is now changed to unbounded
-    -- and the content type is the result of the multiplication
-    return (NoFun (DMGrads nrm U m τres))
+checkSen' scope (Reorder σ t) = do
+  τ <- checkSens scope t
+  ρ <- newVar
+  addConstraint (Solvable (IsReorderedTuple ((σ , τ) :=: ρ)))
+  return ρ
 
+checkSen' scope (TProject i t) = do
+  τ <- checkSens scope t
+  ρ <- newVar
+  addConstraint (Solvable (IsTProject ((i , τ) :=: ρ)))
+  return ρ
 
-checkSen' (Reorder σ t) scope = do
-  mτ <- checkSens t scope
-  done $ do
-    τ <- mτ
-    ρ <- newVar
-    addConstraint (Solvable (IsReorderedTuple ((σ , τ) :=: ρ)))
-    return ρ
-
-checkSen' (TProject i t) scope = do
-  mτ <- checkSens t scope
-  done $ do
-    τ <- mτ
-    ρ <- newVar
-    addConstraint (Solvable (IsTProject ((i , τ) :=: ρ)))
-    return ρ
-
-checkSen' (LastTerm t) scope = do
+checkSen' scope (LastTerm t) = do
   -- typecheck the term t, and apply the current scope to it
   -- applyAllDelayedLayers scope (checkSens t scope)
-  (checkSens t scope)
+  (checkSens scope t)
 
-checkSen' term@(SBind x a b) scope = do
-  throwDelayedError (TypeMismatchError $ "Found the term\n" <> showPretty term <> "\nwhich is a privacy term because of the bind in a place where a sensitivity term was expected.")
+checkSen' scope term@(SBind x a b) = do
+  throwError (TypeMismatchError $ "Found the term\n" <> showPretty term <> "\nwhich is a privacy term because of the bind in a place where a sensitivity term was expected.")
 
 -- Everything else is currently not supported.
-checkSen' t scope = (throwDelayedError (UnsupportedTermError t))
+checkSen' scope t = (throwError (UnsupportedTermError t))
 
 
 --------------------------------------------------------------------------------
 -- Privacy terms
 
--}
 checkPri' :: DMScope -> DMTerm -> TC DMMain
 checkPri' scope (Ret t) = do
    τ <- checkSens scope t
