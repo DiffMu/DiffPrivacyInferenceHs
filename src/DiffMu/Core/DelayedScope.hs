@@ -216,24 +216,6 @@ pushChoice name ma scope =
   in setValue name newval scope
 
 
-
-setIfTypesMatch :: TeVar -> TC DMMain -> DMScope -> DMScope
-setIfTypesMatch name ma scope = undefined
-  -- let oldval = getValue name scope
-  --     newval = case oldval of
-  --       Nothing -> ma
-  --       Just mb -> do
-  --         a <- ma
-  --         b <- mb
-  --         return $ do
-  --           let bWithoutCtx = do
-  --                 b' <- b
-  --                 types %= resetToDefault
-  --                 return b'
-  --           (a',b') <- msumTup (a, bWithoutCtx)
-  --           unify a' b'
-  -- in setValue name newval scope
-
 setScopeValueMaybe :: Maybe TeVar -> TC DMMain -> DMScope -> DMScope
 setScopeValueMaybe Nothing _ scope = scope
 setScopeValueMaybe (Just a) val scope = setScopeValue a val scope
@@ -242,4 +224,5 @@ setScopeValue :: TeVar -> TC DMMain -> DMScope -> DMScope
 setScopeValue a val scope =
     case getValue a scope of
           Nothing -> setValue a val scope
-          Just mb -> setValue a (impossible $ ("Trying to reassign varible " <> show a <> " which should have been caught in demutation.")) scope
+          Just mb -> setValue a val scope
+            -- setValue a (impossible $ ("Trying to reassign varible " <> show a <> " which should have been caught in demutation.")) scope
