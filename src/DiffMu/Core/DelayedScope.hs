@@ -206,17 +206,14 @@ instance Default (DMScope) where
 -- normal variables because if another method of the same function was defined
 -- earlier, their types have to be collected in one type using the `:∧:` operator
 pushChoice :: TeVar -> (TC DMMain) -> DMScope -> DMScope
-pushChoice name ma scope = undefined
-  -- let oldval = getValue name scope
-  --     newval = case oldval of
-  --       Nothing -> ma
-  --       Just mb -> do
-  --         a <- ma
-  --         b <- mb
-  --         return $ do
-  --           (a',b') <- msumTup (a, b)
-  --           return (a' :∧: b')
-  -- in setValue name newval scope
+pushChoice name ma scope =
+  let oldval = getValue name scope
+      newval = case oldval of
+        Nothing -> ma
+        Just mb -> do
+          (a',b') <- msumTup (ma, mb)
+          return (a' :∧: b')
+  in setValue name newval scope
 
 
 
