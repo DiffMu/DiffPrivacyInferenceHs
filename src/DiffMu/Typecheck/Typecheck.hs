@@ -41,7 +41,7 @@ checkPriv t scope = do
   types .= Right def -- cast to privacy context.
 
   -- The checking itself
-  res <- withLogLocation "Check" $ checkPri' t scope
+  res <- withLogLocation "Check" $ checkPri' scope t
 
   -- The computation to do after checking
   γ <- use types
@@ -64,7 +64,7 @@ checkSens t scope = do
 
 
   -- get the delayed value of the sensititivty checking
-  res <- withLogLocation "Check" $ checkSen' t scope
+  res <- withLogLocation "Check" $ checkSen' scope t
 
   -- The computation to do after checking
   γ <- use types
@@ -77,15 +77,16 @@ checkSens t scope = do
 -- Sensitivity terms
 
 
-checkSen' :: DMTerm -> DMScope -> TC DMMain
-checkSen' = undefined
-{-
+checkSen' :: DMScope -> DMTerm -> TC DMMain
 
 -- TODO: Here we assume that η really has type τ, and do not check it. Should maybe do that.
-checkSen' (Sng η τ) scope = done $ do
+checkSen' scope (Sng η τ) = do
   res <- Numeric <$> (Const (constCoeff (Fin η)) <$> (createDMTypeBaseNum τ))
   return (NoFun res)
 
+checkSen' scope _ = undefined
+
+{-
 -- typechecking an op
 checkSen' (Op op args) scope = do
   argsdel :: [TC DMMain] <- mapM (\t -> checkSens t scope) args -- check all the args in the delayed monad
@@ -854,17 +855,15 @@ checkSen' t scope = (throwDelayedError (UnsupportedTermError t))
 -- Privacy terms
 
 -}
-checkPri' :: DMTerm -> DMScope -> TC DMMain
-checkPri' = undefined
-{-
-checkPri' (Ret t) scope = do
-   mτ <- checkSens t scope
-   done $ do
-      τ <- mτ
-      mtruncateP inftyP
-      log $ "checking privacy " <> show (Ret t) <> ", type is " <> show τ
-      return τ
+checkPri' :: DMScope -> DMTerm -> TC DMMain
+checkPri' scope (Ret t) = do
+   τ <- checkSens t scope
+   mtruncateP inftyP
+   log $ "checking privacy " <> show (Ret t) <> ", type is " <> show τ
+   return τ
 
+checkPri' scope _ = undefined
+{-
 checkPri' (Rnd t) scope = do
    done $ do
       τ <- (createDMTypeBaseNum t)
