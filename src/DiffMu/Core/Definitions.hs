@@ -695,7 +695,7 @@ pattern SmpLet a b c = TLetBase SampleLet a b c
 {-# COMPLETE Extra, Ret, Sng, Var, Rnd, Arg, Op, Phi, Lam, LamStar, BBLet, BBApply,
  Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, LLet, Gauss, ConvertM, MCreate, Transpose,
  Size, Length, Index, VIndex, Row, ClipM, Loop, SubGrad, ScaleGrad, Reorder, TProject, LastTerm,
- ZeroGrad, SumGrads #-}
+ ZeroGrad, SumGrads, SmpLet, Sample #-}
 
 
 deriving instance (forall a. Show a => Show (t a)) => Show (PreDMTerm t)
