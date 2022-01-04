@@ -120,7 +120,7 @@ testSLoop pp = describe "Sensitivity loop" $ do
         ty_v = Fun([([int :@ (constCoeff (Fin 1)), int :@ (constCoeff (Fin 2))] :->: int) :@ Just [JTInt, JTInt]])
         ty_v2 = Fun([([int :@ (constCoeff (Fin 1)), int :@ (inftyS)] :->: int) :@ Just [JTInt, JTInt]])
     parseEval pp "static" sloop (pure ty_s)
-    parseEvalFail pp "overwriting" mloop (ParseError "" "" 0)
+    parseEvalFail pp "overwriting" mloop (DemutationError "")
     parseEval pp "variable" vloop (pure ty_v)
     parseEval pp "variable2" vloop2 (pure ty_v2)
     parseEvalFail pp "variable (bad)" uloop (UnsatisfiableConstraint "")

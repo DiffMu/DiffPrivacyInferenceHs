@@ -492,6 +492,18 @@ elaborateMut scname scope (Extra (MutLet ltype term1 term2)) = do
       case p of
         UserValue -> pure (valterm , Pure UserValue)
         SingleArg _ -> pure (valterm , Pure UserValue)
+        -- UserValue -> throwError $ DemutationError $ "Found a local mutation followed by a pure value.\n"
+        --                                           <> "This makes not much sense since only one of both can currently be processed.\n\n"
+        --                                           <> "---- local mutation ----\n"
+        --                                           <> showPretty term1 <> "\n\n"
+        --                                           <> "---- pure value ----\n"
+        --                                           <> showPretty term2 <> "\n"
+        -- SingleArg _ -> throwError $ DemutationError $ "Found a local mutation followed by a pure value.\n"
+        --                                           <> "This makes not much sense since only one of both can currently be processed.\n"
+        --                                           <> "---- local mutation ----\n"
+        --                                           <> showPretty term1 <> "\n\n"
+        --                                           <> "---- pure value ----\n"
+        --                                           <> showPretty term2 <> "\n"
         DefaultValue -> pure (newTerm1 , VirtualMutated mutNames1')
 
     -- the first command has only locally mutated variables,
