@@ -860,6 +860,11 @@ elaborateMut scname scope (SumGrads t1 t2) = do
   (newT1, newT1Type) <- elaborateNonmut scname scope t1
   (newT2, newT2Type) <- elaborateNonmut scname scope t2
   return (SumGrads newT1 newT2, Pure UserValue)
+elaborateMut scname scope (Sample t1 t2 t3) = do
+  (newT1, newT1Type) <- elaborateNonmut scname scope t1
+  (newT2, newT2Type) <- elaborateNonmut scname scope t2
+  (newT3, newT3Type) <- elaborateNonmut scname scope t3
+  return (Sample newT1 newT2 newT3 , Pure UserValue)
 
 -- the unsupported terms
 elaborateMut scname scope term@(Choice t1)        = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))

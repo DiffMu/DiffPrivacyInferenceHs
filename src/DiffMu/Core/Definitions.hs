@@ -483,6 +483,7 @@ instance Show JuliaType where
   show (JTMatrix t) = "Matrix{" ++ show t ++ "}"
   show (JTModel) = "DMModel"
   show (JTGrads) = "DMGrads"
+  show (JTBot) = "Bot"
 
 
 --------------------------------------------------------------------------
