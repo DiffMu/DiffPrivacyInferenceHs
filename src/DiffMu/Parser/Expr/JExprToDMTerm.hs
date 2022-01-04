@@ -87,15 +87,13 @@ pMutLet m tail = do
                    dtail <- pList tail
                    return (Extra (MutLet PureLet assignee dtail))
 
-pSample args tail = do
-                      case args of
-                          [n, m1, m2] -> do
-                                           tn <- pSingle n
-                                           tm1 <- pSingle m1
-                                           tm2 <- pSingle m2
-                                           ttail <- pList tail
-                                           return (Sample tn tm1 tm2 ttail)
-                          _ -> parseError ("Invalid number of arguments for sample, namely " <> (show (length args)) <> " instead of 2.")
+pSample args = case args of
+                    [n, m1, m2] -> do
+                                     tn <- pSingle n
+                                     tm1 <- pSingle m1
+                                     tm2 <- pSingle m2
+                                     return (Sample tn tm1 tm2)
+                    _ -> parseError ("Invalid number of arguments for sample, namely " <> (show (length args)) <> " instead of 2.")
 
 pJRef name refs = case refs of
                        [i1,JEColon] -> do
@@ -161,12 +159,10 @@ pJSLet assignee assignment tail wrapper =
                         dasgmt <- pSingle assignment
                         dtail <- pList tail
                         return (SLet (Nothing :- JTAny) dasgmt (wrapper dtail))
-        JESymbol s -> case assignment of
-                           JECall (JESymbol (Symbol "sample")) args -> pSample args tail
-                           _ -> do
-                                  dasgmt <- pSingle assignment
-                                  dtail <- pList tail
-                                  return (SLet (Just (UserTeVar s) :- JTAny) dasgmt (wrapper dtail))
+        JESymbol s -> do
+                        dasgmt <- pSingle assignment
+                        dtail <- pList tail
+                        return (SLet (Just (UserTeVar s) :- JTAny) dasgmt (wrapper dtail))
         JETypeAnnotation _ _ -> parseError "Type annotations on variables are not supported."
         JENotRelevant _ _ -> parseError "Type annotations on variables are not supported."
         _          -> parseError ("Invalid assignee " <> (show assignee) <> ", must be a variable.")
@@ -218,10 +214,15 @@ pJTLet assignees assignment tail wrapper = do
 
   assignee_vars <- mapM ensureSymbol assignees
 
-  -- parse assignment, tail; and build term
-  dasgmt <- pSingle assignment
-  dtail <- pList tail
-  return (TLet assignee_vars dasgmt (wrapper dtail))
+  case assignment of
+                    JECall (JESymbol (Symbol "sample")) args -> do
+                           smp <- pSample args
+                           dtail <- pList tail
+                           return (SmpLet assignee_vars smp (wrapper dtail))
+                    _ -> do  -- parse assignment, tail; and build term
+                           dasgmt <- pSingle assignment
+                           dtail <- pList tail
+                           return (TLet assignee_vars dasgmt (wrapper dtail))
 
 pJFLet name assignment tail wrapper =
   case name of
