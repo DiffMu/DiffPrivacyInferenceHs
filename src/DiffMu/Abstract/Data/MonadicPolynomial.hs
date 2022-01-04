@@ -74,6 +74,14 @@ class DictKey k => DictLike k v d | d -> k v where
 popValue :: DictLike k v d => k -> d -> (Maybe v , d)
 popValue k d = (getValue k d , deleteValue k d)
 
+restoreValue :: DictLike k v d => d -> k -> d -> (Maybe v , d)
+restoreValue oldDict key dict =
+  let oldValue = getValue key oldDict
+  in case oldValue of
+    Nothing        -> (getValue key dict , deleteValue key dict)
+    Just oldValue  -> (getValue key dict , setValue key oldValue dict)
+
+
 getValueMaybe a scope = a >>= (\x -> getValue x scope)
 setValueMaybe (Just k) v scope = setValue k v scope
 setValueMaybe Nothing v scope = scope
