@@ -1,5 +1,5 @@
 
-module Spec.BrokenScoping where
+module Spec.OriginalScoping where
 
 import Spec.Base
 
@@ -8,8 +8,11 @@ import Spec.Base
 -- of a different type. In this file we keep the previously
 -- written tests, which did this, are kept, but now
 -- we expect them to fail because of this new rule.
+--
+-- 2022-01-04 Because of #144, some of the tests work again
+--
 
-testBrokenScoping pp = do
+testOriginalScoping pp = do
   describe "Scopes do not allow reassignment with different types (#138)" $ do
     testScope01 pp
     testScope02 pp
@@ -44,8 +47,8 @@ testScope01 pp = do
       intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
       ty = Fun([([] :->: intc (Fin 19)) :@ Just []])
 
-  -- parseEval pp "01 works" ex (pure ty)
-  parseEvalFail pp "01 fails" ex (ParseError "" "" 0)
+  parseEval pp "01 works" ex (pure ty)
+  -- parseEvalFail pp "01 fails" ex (ParseError "" "" 0)
 
 
 
@@ -69,7 +72,7 @@ testScope02 pp = do
       ty = Fun([([] :->: intc (Fin 106)) :@ Just []])
 
   -- parseEval pp "02 works" ex (pure ty)
-  parseEvalFail pp "02 fails" ex (ParseError "" "" 0)
+  parseEvalFail pp "02 fails" ex (DemutationVariableAccessTypeError "")
 
 
 testScope03 pp = do
@@ -95,7 +98,7 @@ testScope03 pp = do
       ty = Fun([([] :->: intc (Fin 600)) :@ Just []])
 
   -- parseEval pp "03 works" ex (pure ty)
-  parseEvalFail pp "03 fails" ex (ParseError "" "" 0)
+  parseEvalFail pp "03 fails" ex (DemutationVariableAccessTypeError "")
 
 
 testScope04 pp = do
@@ -147,9 +150,9 @@ testScope04 pp = do
       intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
       ty = Fun([([] :->: intc (Fin 138424)) :@ Just []])
 
-  parseEvalFail pp "04 (bad) fails" ex_bad (ParseError "" "" 0)
+  parseEvalFail pp "04 (bad) fails" ex_bad (DemutationVariableAccessTypeError "")
   -- parseEval pp "04 (good)" ex (pure ty)
-  parseEvalFail pp "04 (good) fails" ex (ParseError "" "" 0)
+  parseEvalFail pp "04 (good) fails" ex (DemutationVariableAccessTypeError "")
 
 
 testScope05 pp = do
@@ -201,8 +204,8 @@ testScope06 pp = do
       intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
       ty1 = Fun([([] :->: intc (Fin 10)) :@ Just []])
 
-  -- parseEval pp "06 works" ex1 (pure ty1)
-  parseEvalFail pp "06 works" ex1 (ParseError "" "" 0)
+  parseEval pp "06 works" ex1 (pure ty1)
+  -- parseEvalFail pp "06 works" ex1 (ParseError "" "" 0)
 
 
 ---------------------------------------------------------------------
@@ -225,7 +228,7 @@ testScope07 pp = do
       ty = Fun([([] :->: intc (Fin 5)) :@ Just []])
 
   -- parseEval pp "07 works" ex (pure ty)
-  parseEvalFail pp "07 fails" ex (ParseError "" "" 0)
+  parseEvalFail pp "07 fails" ex (DemutationVariableAccessTypeError "")
 
 testScope08 pp = do
   let ex1 = " function test9()           \n\
@@ -291,8 +294,8 @@ testScope08 pp = do
 
   -- parseEval pp "08 (version 1) works" ex (pure ty1)
   -- parseEval pp "08 (version 2) works" ex (pure ty2)
-  parseEvalFail pp "08 (version 1) fails" ex1 (ParseError "" "" 0)
-  parseEvalFail pp "08 (version 2) fails" ex2 (ParseError "" "" 0)
+  parseEvalFail pp "08 (version 1) fails" ex1 (DemutationVariableAccessTypeError "")
+  parseEvalFail pp "08 (version 2) fails" ex2 (DemutationVariableAccessTypeError "")
 
 
 
