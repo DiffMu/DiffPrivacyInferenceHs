@@ -177,6 +177,10 @@ markRead scname var = mutTypes %=~ (markReadInScope scname var)
 markReadMaybe :: ScopeVar -> Maybe TeVar -> MTC ()
 markReadMaybe scname (Just x) = markRead scname x
 markReadMaybe scname Nothing = pure ()
+
+markReadOverwritePrevious :: ScopeVar -> TeVar -> MTC ()
+markReadOverwritePrevious scname var = mutTypes %%= (\scope -> ((), setValue var (ReadSingle scname) scope))
+
 --------------------------------------------------------------------------------------
 
 
@@ -879,7 +883,7 @@ elaborateLambda scname scope args body = do
   -- Then, mark all function arguments as "SingleRead"
   -- for the current scope.
   oldVaCtx <- use mutTypes
-  mapM (markRead scname) [a | (Just a :- _) <- args]
+  mapM (markReadOverwritePrevious scname) [a | (Just a :- _) <- args]
 
 
   -- Add args as vars to the scope
