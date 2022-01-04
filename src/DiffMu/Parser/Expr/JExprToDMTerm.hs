@@ -10,6 +10,8 @@ import Debug.Trace
 
 
 -- parse state is (filename, line number, are we inside a function)
+-- the former are for pretty error messages.
+-- the latter is used to error upon non-toplevel back box definitions.
 type ParseState = (StateT (String,Int, Bool) (Except DMException))
 
 parseError :: String -> ParseState a
@@ -17,10 +19,12 @@ parseError message = do
                        (file,line,_) <- get
                        throwOriginalError (ParseError message file line)
 
+-- set parse state to be inside a function
 enter = do
           (file, line, _) <- get
           put (file, line, True)
 
+-- set parse state to be outside a function
 exit = do
           (file, line, _) <- get
           put (file, line, False)
@@ -82,6 +86,16 @@ pMutLet m tail = do
                    assignee <- m
                    dtail <- pList tail
                    return (Extra (MutLet PureLet assignee dtail))
+
+pSample args tail = do
+                      case args of
+                          [n, m1, m2] -> do
+                                           tn <- pSingle n
+                                           tm1 <- pSingle m1
+                                           tm2 <- pSingle m2
+                                           ttail <- pList tail
+                                           return (Sample tn tm1 tm2 ttail)
+                          _ -> parseError ("Invalid number of arguments for sample, namely " <> (show (length args)) <> " instead of 2.")
 
 pJRef name refs = case refs of
                        [i1,JEColon] -> do
@@ -147,10 +161,12 @@ pJSLet assignee assignment tail wrapper =
                         dasgmt <- pSingle assignment
                         dtail <- pList tail
                         return (SLet (Nothing :- JTAny) dasgmt (wrapper dtail))
-        JESymbol s -> do
-                        dasgmt <- pSingle assignment
-                        dtail <- pList tail
-                        return (SLet (Just (UserTeVar s) :- JTAny) dasgmt (wrapper dtail))
+        JESymbol s -> case assignment of
+                           JECall (JESymbol (Symbol "sample")) args -> pSample args tail
+                           _ -> do
+                                  dasgmt <- pSingle assignment
+                                  dtail <- pList tail
+                                  return (SLet (Just (UserTeVar s) :- JTAny) dasgmt (wrapper dtail))
         JETypeAnnotation _ _ -> parseError "Type annotations on variables are not supported."
         JENotRelevant _ _ -> parseError "Type annotations on variables are not supported."
         _          -> parseError ("Invalid assignee " <> (show assignee) <> ", must be a variable.")
@@ -277,7 +293,10 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
 
   (t@"scale_gradient", [a1, a2]) -> ScaleGrad <$> pSingle a1 <*> pSingle a2
   (t@"scale_gradient", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
-
+  
+  (t@"sum_gradients", [a1, a2]) -> SumGrads <$> pSingle a1 <*> pSingle a2
+  (t@"sum_gradients", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 argument, but has been given " <> show (length args)
+  
   (t@"clip", [a1,a2]) -> ClipM <$> pClip a1 <*> pSingle a2
   (t@"clip", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
 
@@ -293,6 +312,9 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
 
   (t@"length", [a1]) -> Length <$> pSingle a1
   (t@"length", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
+  
+  (t@"zero_gradient", [a]) -> ZeroGrad <$> pSingle a
+  (t@"zero_gradient", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
 
   ----------------------
   -- the ops

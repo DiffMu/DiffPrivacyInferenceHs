@@ -680,6 +680,9 @@ data PreDMTerm (t :: * -> *) =
   | TProject Int (PreDMTerm t)
 -- Special Scope terms
   | LastTerm (PreDMTerm t)
+  | Sample (PreDMTerm t) (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
+  | ZeroGrad (PreDMTerm t)
+  | SumGrads (PreDMTerm t) (PreDMTerm t)
   deriving (Generic)
 
 pattern SLet a b c = SLetBase PureLet a b c
@@ -690,7 +693,8 @@ pattern LLet a b c = TLetBase LoopLet a b c
 
 {-# COMPLETE Extra, Ret, Sng, Var, Rnd, Arg, Op, Phi, Lam, LamStar, BBLet, BBApply,
  Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, LLet, Gauss, ConvertM, MCreate, Transpose,
- Size, Length, Index, VIndex, Row, ClipM, Loop, SubGrad, ScaleGrad, Reorder, TProject, LastTerm #-}
+ Size, Length, Index, VIndex, Row, ClipM, Loop, SubGrad, ScaleGrad, Reorder, TProject, LastTerm,
+ Sample, ZeroGrad, SumGrads #-}
 
 
 deriving instance (forall a. Show a => Show (t a)) => Show (PreDMTerm t)
@@ -790,6 +794,9 @@ recDMTermM f h (ScaleGrad a b)    = ScaleGrad <$> (f a) <*> (f b)
 recDMTermM f h (Reorder x a)      = Reorder x <$> (f a)
 recDMTermM f h (TProject x a)     = TProject x <$> f a
 recDMTermM f h (LastTerm x)       = LastTerm <$> (f x)
+recDMTermM f h (ZeroGrad a)       = ZeroGrad <$> (f a)
+recDMTermM f h (SumGrads a b)     = SumGrads <$> (f a) <*> (f b)
+recDMTermM f h (Sample a b c d)     = Sample <$> (f a) <*> (f b) <*> (f c) <*> (f d)
 
 
 
@@ -869,7 +876,9 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (Loop a b x d )    = "Loop (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> show x <> ")" <> parenIndent (showPretty d)
   showPretty (SBind x a b)      = "SBind " <> showPretty x <> " <- " <> (showPretty a) <> "\n" <> (showPretty b)
   showPretty (LastTerm a)       = "LastTerm " <> (showPretty a)
-
+  showPretty (ZeroGrad a)       = "ZeroGrad " <> (showPretty a)
+  showPretty (SumGrads a b)     = "SumGrads (" <> (showPretty a) <> ", " <> (showPretty b) <> ")"
+  showPretty (Sample a b c d)     = "Sample (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ")" <> "\n" <> (showPretty d)
 instance ShowPretty a => ShowPretty (MutabilityExtension a) where
   showPretty (MutLet t a b) = "MutLet{" <> show t <> "} " <> indent (showPretty a) <> indent (showPretty b)
   showPretty (MutLoop a x d) = "MutLoop (" <> (showPretty a) <> ", " <> show x <> ")" <> parenIndent (showPretty d)
