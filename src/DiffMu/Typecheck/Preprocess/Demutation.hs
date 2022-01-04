@@ -101,27 +101,27 @@ computeVarAccessType var a b = do
     [ReadSingle a, ReadSingle b] | a /= b   -> pure (ReadMulti)
     [ReadSingle a, ReadMulti]               -> pure (ReadMulti)
     [ReadSingle a, WriteSingle b] | a == b  -> pure (WriteSingle a)
-    [ReadSingle a, WriteSingle b] | a /= b  -> throwError $ DemutationError $ "The variable '" <> show var <> "' "
+    [ReadSingle a, WriteSingle b] | a /= b  -> throwError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' "
                                                                            <> "' is being mutated and read in two different scopes.\n"
                                                                            <> "This is not allowed."
     -- [ReadSingle a, WriteSingleFunction b] | a == b -> pure (WriteSingleFunction a)
-    -- [ReadSingle a, WriteSingleFunction b] | a /= b -> throwError $ DemutationError $ "The variable '" <> show var <> "' "
+    -- [ReadSingle a, WriteSingleFunction b] | a /= b -> throwError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' "
     --                                                                                <> "' is being mutated and read in two different scopes.\n"
     --                                                                                <> "This is not allowed."
     [ReadSingle a, WriteSingleFunction b]   -> pure (WriteSingleFunction b)
     [ReadMulti,ReadMulti]                   -> pure (ReadMulti)
-    [ReadMulti,WriteSingle _]               -> throwError $ DemutationError $ "The variable '" <> show var <> "' "
+    [ReadMulti,WriteSingle _]               -> throwError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' "
                                                                             <> "' is being mutated and read in two different scopes.\n"
                                                                             <> "This is not allowed."
     [ReadMulti,WriteSingleFunction a]       -> pure (WriteSingleFunction a) -- because of flet reordering it is allowed to mutate functions
     [WriteSingle a, WriteSingle b] | a == b -> pure (WriteSingle a)
-    [WriteSingle a, WriteSingle b] | a /= b -> throwError $ DemutationError $ "The variable '" <> show var <> "' "
+    [WriteSingle a, WriteSingle b] | a /= b -> throwError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' "
                                                                             <> "' is being mutated in two different scopes.\n"
                                                                             <> "This is not allowed."
-    [WriteSingle _, WriteSingleFunction _]  -> throwError $ DemutationError $ "The variable '" <> show var <> "' is defined as function and as value."
+    [WriteSingle _, WriteSingleFunction _]  -> throwError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' is defined as function and as value."
                                                                             <> "This is not allowed."
     [WriteSingleFunction a, WriteSingleFunction b] | a == b -> pure (WriteSingleFunction a)
-    [WriteSingleFunction a, WriteSingleFunction b] | a /= b -> throwError $ DemutationError $ "The variable '" <> show var <> "' "
+    [WriteSingleFunction a, WriteSingleFunction b] | a /= b -> throwError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' "
                                                                             <> "' is being mutated in two different scopes.\n"
                                                                             <> "This is not allowed."
     _ -> impossible "In demutation, while computing var access type. This branch should be inaccessible."
@@ -479,6 +479,7 @@ elaborateMut scname scope (Extra (MutLet ltype term1 term2)) = do
     -- and the second one is pure
     (VirtualMutated mutNames1', Pure (p))
       | onlyLocallyMutatedVariables mutNames1' -> do
+      log $ "[MutLet] We are in the ONLY LOCAL MUTATION BRANCH"
 
       let mutNames1 = fst <$> mutNames1'
       let ns1 = [Just n :- JTAny | (n) <- mutNames1]
@@ -1075,7 +1076,7 @@ preprocessLoopBody scope iter (TLet (vs) term body) = do
 preprocessLoopBody scope iter (FLet f _ _) = throwOriginalError (DemutationError $ "Function definition is not allowed in for loops. (Encountered definition of " <> show f <> ".)")
 preprocessLoopBody scope iter (Ret t) = throwOriginalError (DemutationError $ "Return is not allowed in for loops. (Encountered " <> show (Ret t) <> ".)")
 
--- mutlets make use recurse
+-- mutlets make us recurse
 preprocessLoopBody scope iter (Extra (MutLet mtype t1 t2)) = do
   (t1') <- preprocessLoopBody scope iter t1
   (t2') <- preprocessLoopBody scope iter t2

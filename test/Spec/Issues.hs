@@ -178,7 +178,7 @@ test67 pp = describe "issue 67 (same juliatype choice overwriting)" $ do
          \     f(1)                 \n\
          \ end                      "
 
-  parseEvalFail pp "example variant 1" ex_1 (ParseError "" "" 0)
+  parseEvalFail pp "example variant 1" ex_1 (DemutationVariableAccessTypeError "")
 
 
   let ex_2 =

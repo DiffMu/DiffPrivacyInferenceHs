@@ -902,6 +902,7 @@ data DMException where
   NoChoiceFoundError      :: String -> DMException
   DemutationError         :: String -> DMException
   DemutationDefinitionOrderError :: Show a => a -> DMException
+  DemutationVariableAccessTypeError :: String -> DMException
   BlackBoxError           :: String -> DMException
   FLetReorderError        :: String -> DMException
   UnificationShouldWaitError :: DMTypeOf k -> DMTypeOf k -> DMException
@@ -934,6 +935,7 @@ instance Show DMException where
                                             <> ">  end" <> "\n"
                                             <> ">  a = 3" <> "\n"
                                             <> ">  f()" <> "\n"
+  show (DemutationVariableAccessTypeError e) = "An error regarding variable access types occured:\n" <> e
 
 instance Eq DMException where
   UnsupportedTermError    a        == UnsupportedTermError    b       = True
@@ -950,6 +952,7 @@ instance Eq DMException where
   ParseError e1 file1 line1        == ParseError e2 file2 line2       = True
   FLetReorderError        a        == FLetReorderError        b       = True
   DemutationDefinitionOrderError a == DemutationDefinitionOrderError b = True
+  DemutationVariableAccessTypeError a == DemutationVariableAccessTypeError b = True
   _ == _ = False
 
 

@@ -10,7 +10,7 @@ testTypecheckingExamples pp = do
   testPriv pp
   testBlackBox pp
   testSLoop pp
-  testDPGD pp
+--   testDPGD pp
   
 
 testSens pp = do
