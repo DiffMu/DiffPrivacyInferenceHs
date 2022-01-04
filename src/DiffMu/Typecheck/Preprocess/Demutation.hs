@@ -29,15 +29,6 @@ data IsMutated = Mutated | NotMutated
 data IsLocalMutation = LocalMutation | NotLocalMutation
   deriving (Show, Eq)
 
-data VarAccessType = ReadSingle ScopeVar | ReadMulti | WriteSingleBase IsFLetDefined ScopeVar
-  deriving (Show,Eq,Ord)
-
-data IsFLetDefined = FLetDefined | NotFLetDefined
-  deriving (Show,Eq,Ord)
-
-pattern WriteSingle v = WriteSingleBase NotFLetDefined v
-pattern WriteSingleFunction v = WriteSingleBase FLetDefined v
-
 onlyLocallyMutatedVariables :: [(TeVar,IsLocalMutation)] -> Bool
 onlyLocallyMutatedVariables xs = [v | (v, NotLocalMutation) <- xs] == []
 
@@ -51,8 +42,77 @@ consumeDefaultValue :: ImmutType -> ImmutType
 consumeDefaultValue (Pure DefaultValue) = Pure UserValue
 consumeDefaultValue a = a
 
+
+
+
+-- the scope
+type Scope = Ctx TeVar ImmutType
+
+--------------------------------------------------------
+-- monoid instance for isMutated
+
+instance Monad m => SemigroupM m IsMutated where
+  (NotMutated) ⋆ b = pure b
+  Mutated ⋆ b = pure Mutated
+instance Monad m => MonoidM m IsMutated where
+  neutral = pure NotMutated
+instance Monad m => CheckNeutral m IsMutated where
+  checkNeutral (NotMutated) = pure True
+  checkNeutral (Mutated) = pure False
+
+--------------------------------------------------------------------------------------
+-- Variable Access Type
+--------------------------------------------------------------------------------------
+
+data VarAccessType = ReadSingle ScopeVar | ReadMulti | WriteSingleBase IsFLetDefined ScopeVar
+  deriving (Show,Eq,Ord)
+
+data IsFLetDefined = FLetDefined | NotFLetDefined
+  deriving (Show,Eq,Ord)
+
+pattern WriteSingle v = WriteSingleBase NotFLetDefined v
+pattern WriteSingleFunction v = WriteSingleBase FLetDefined v
+
 -- type ImVarAccessCtx = Ctx TeVar ()
 type VarAccessCtx = Ctx TeVar VarAccessType
+
+
+computeVarAccessType :: TeVar -> VarAccessType -> VarAccessType -> MTC VarAccessType
+computeVarAccessType var a b = do
+  let cur = sort [a,b]
+  case cur of
+    [ReadSingle a, ReadSingle b] | a == b   -> pure (ReadSingle a)
+    [ReadSingle a, ReadSingle b] | a /= b   -> pure (ReadMulti)
+    [ReadSingle a, ReadMulti]               -> pure (ReadMulti)
+    [ReadSingle a, WriteSingle b] | a == b  -> pure (WriteSingle a)
+    [ReadSingle a, WriteSingle b] | a /= b  -> throwError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' "
+                                                                           <> "' is being mutated and read in two different scopes.\n"
+                                                                           <> "This is not allowed."
+    -- [ReadSingle a, WriteSingleFunction b] | a == b -> pure (WriteSingleFunction a)
+    -- [ReadSingle a, WriteSingleFunction b] | a /= b -> throwError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' "
+    --                                                                                <> "' is being mutated and read in two different scopes.\n"
+    --                                                                                <> "This is not allowed."
+    [ReadSingle a, WriteSingleFunction b]   -> pure (WriteSingleFunction b)
+    [ReadMulti,ReadMulti]                   -> pure (ReadMulti)
+    [ReadMulti,WriteSingle _]               -> throwError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' "
+                                                                            <> "' is being mutated and read in two different scopes.\n"
+                                                                            <> "This is not allowed."
+    [ReadMulti,WriteSingleFunction a]       -> pure (WriteSingleFunction a) -- because of flet reordering it is allowed to mutate functions
+    [WriteSingle a, WriteSingle b] | a == b -> pure (WriteSingle a)
+    [WriteSingle a, WriteSingle b] | a /= b -> throwError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' "
+                                                                            <> "' is being mutated in two different scopes.\n"
+                                                                            <> "This is not allowed."
+    [WriteSingle _, WriteSingleFunction _]  -> throwError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' is defined as function and as value."
+                                                                            <> "This is not allowed."
+    [WriteSingleFunction a, WriteSingleFunction b] | a == b -> pure (WriteSingleFunction a)
+    [WriteSingleFunction a, WriteSingleFunction b] | a /= b -> throwError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' "
+                                                                            <> "' is being mutated in two different scopes.\n"
+                                                                            <> "This is not allowed."
+    _ -> impossible "In demutation, while computing var access type. This branch should be inaccessible."
+
+
+--------------------------------------------------------------------------------------
+-- The demutation monad
 
 data MFull = MFull
   {
@@ -76,57 +136,10 @@ newScopeVar :: (MonadState MFull m) => Text -> m (ScopeVar)
 newScopeVar hint = scopeNames %%= (first ScopeVar . (newName hint))
 
 
--- the scope
-type Scope = Ctx TeVar ImmutType
 
---------------------------------------------------------
--- monoid instance for isMutated
+--------------------------------------------------------------------------------------
+-- Accessing the VA-Ctx in the MTC monad
 
-instance Monad m => SemigroupM m IsMutated where
-  (NotMutated) ⋆ b = pure b
-  Mutated ⋆ b = pure Mutated
-instance Monad m => MonoidM m IsMutated where
-  neutral = pure NotMutated
-instance Monad m => CheckNeutral m IsMutated where
-  checkNeutral (NotMutated) = pure True
-  checkNeutral (Mutated) = pure False
-
--- data VarAccessType = ReadSingle ScopeVar | ReadMulti | WriteSingle ScopeVar | WriteSingleFunction ScopeVar
-
-computeVarAccessType :: TeVar -> VarAccessType -> VarAccessType -> MTC VarAccessType
-computeVarAccessType var a b = do
-  let cur = sort [a,b]
-  case cur of
-    [ReadSingle a, ReadSingle b] | a == b   -> pure (ReadSingle a)
-    [ReadSingle a, ReadSingle b] | a /= b   -> pure (ReadMulti)
-    [ReadSingle a, ReadMulti]               -> pure (ReadMulti)
-    [ReadSingle a, WriteSingle b] | a == b  -> pure (WriteSingle a)
-    [ReadSingle a, WriteSingle b] | a /= b  -> throwError $ DemutationError $ "The variable '" <> show var <> "' "
-                                                                           <> "' is being mutated and read in two different scopes.\n"
-                                                                           <> "This is not allowed."
-    -- [ReadSingle a, WriteSingleFunction b] | a == b -> pure (WriteSingleFunction a)
-    -- [ReadSingle a, WriteSingleFunction b] | a /= b -> throwError $ DemutationError $ "The variable '" <> show var <> "' "
-    --                                                                                <> "' is being mutated and read in two different scopes.\n"
-    --                                                                                <> "This is not allowed."
-    [ReadSingle a, WriteSingleFunction b]   -> pure (WriteSingleFunction b)
-    [ReadMulti,ReadMulti]                   -> pure (ReadMulti)
-    [ReadMulti,WriteSingle _]               -> throwError $ DemutationError $ "The variable '" <> show var <> "' "
-                                                                            <> "' is being mutated and read in two different scopes.\n"
-                                                                            <> "This is not allowed."
-    [ReadMulti,WriteSingleFunction a]       -> pure (WriteSingleFunction a) -- because of flet reordering it is allowed to mutate functions
-    [WriteSingle a, WriteSingle b] | a == b -> pure (WriteSingle a)
-    [WriteSingle a, WriteSingle b] | a /= b -> throwError $ DemutationError $ "The variable '" <> show var <> "' "
-                                                                            <> "' is being mutated in two different scopes.\n"
-                                                                            <> "This is not allowed."
-    [WriteSingle _, WriteSingleFunction _]  -> throwError $ DemutationError $ "The variable '" <> show var <> "' is defined as function and as value."
-                                                                            <> "This is not allowed."
-    [WriteSingleFunction a, WriteSingleFunction b] | a == b -> pure (WriteSingleFunction a)
-    [WriteSingleFunction a, WriteSingleFunction b] | a /= b -> throwError $ DemutationError $ "The variable '" <> show var <> "' "
-                                                                            <> "' is being mutated in two different scopes.\n"
-                                                                            <> "This is not allowed."
-    _ -> impossible "In demutation, while computing var access type. This branch should be inaccessible."
-
--- helpers
 markMutatedBase :: IsFLetDefined -> ScopeVar -> TeVar -> MTC ()
 markMutatedBase fletdef scname var = mutTypes %=~ (markMutatedInScope scname var)
     where 
@@ -164,6 +177,8 @@ markRead scname var = mutTypes %=~ (markReadInScope scname var)
 markReadMaybe :: ScopeVar -> Maybe TeVar -> MTC ()
 markReadMaybe scname (Just x) = markRead scname x
 markReadMaybe scname Nothing = pure ()
+--------------------------------------------------------------------------------------
+
 
 wrapReorder :: (Eq a, Show a) => [a] -> [a] -> PreDMTerm t -> PreDMTerm t
 wrapReorder have want term | have == want = term
@@ -479,6 +494,7 @@ elaborateMut scname scope (Extra (MutLet ltype term1 term2)) = do
     -- and the second one is pure
     (VirtualMutated mutNames1', Pure (p))
       | onlyLocallyMutatedVariables mutNames1' -> do
+      log $ "[MutLet] We are in the ONLY LOCAL MUTATION BRANCH"
 
       let mutNames1 = fst <$> mutNames1'
       let ns1 = [Just n :- JTAny | (n) <- mutNames1]
@@ -491,6 +507,18 @@ elaborateMut scname scope (Extra (MutLet ltype term1 term2)) = do
       case p of
         UserValue -> pure (valterm , Pure UserValue)
         SingleArg _ -> pure (valterm , Pure UserValue)
+        -- UserValue -> throwError $ DemutationError $ "Found a local mutation followed by a pure value.\n"
+        --                                           <> "This makes not much sense since only one of both can currently be processed.\n\n"
+        --                                           <> "---- local mutation ----\n"
+        --                                           <> showPretty term1 <> "\n\n"
+        --                                           <> "---- pure value ----\n"
+        --                                           <> showPretty term2 <> "\n"
+        -- SingleArg _ -> throwError $ DemutationError $ "Found a local mutation followed by a pure value.\n"
+        --                                           <> "This makes not much sense since only one of both can currently be processed.\n"
+        --                                           <> "---- local mutation ----\n"
+        --                                           <> showPretty term1 <> "\n\n"
+        --                                           <> "---- pure value ----\n"
+        --                                           <> showPretty term2 <> "\n"
         DefaultValue -> pure (newTerm1 , VirtualMutated mutNames1')
 
     -- the first command has only locally mutated variables,
@@ -843,12 +871,24 @@ elaborateMut scname scope term@(BBApply x a b)    = throwError (UnsupportedError
 
 elaborateLambda :: ScopeVar -> Scope -> [Asgmt JuliaType] -> MutDMTerm -> MTC (DMTerm , ImmutType)
 elaborateLambda scname scope args body = do
-  -- add args as vars to the scope
+  -- First, backup the VA-Ctx to be able to restore those
+  -- variables which have the same name as our arguments
+  --
+  -- See https://github.com/DiffMu/DiffPrivacyInferenceHs/issues/148#issuecomment-1004950955
+  --
+  -- Then, mark all function arguments as "SingleRead"
+  -- for the current scope.
+  oldVaCtx <- use mutTypes
+  mapM (markRead scname) [a | (Just a :- _) <- args]
+
+
+  -- Add args as vars to the scope
   --
   -- NOTE: we do not use `safeSetValue` here, because function
   --       arguments are allowed to have different types than
   --       their eventually preexisting same named variables
-  --       outside of the function
+  --       outside of the function.
+  --       Also, we do not trigger a variable access type error.
   let f (Just a :- _) = setValue a (Pure (SingleArg a))
       f (Nothing :- _) = \x -> x
   let scope' = foldr f -- (\(Just a :- _) -> setValue a (Pure (SingleArg a)))
@@ -863,13 +903,15 @@ elaborateLambda scname scope args body = do
   let ctxElems = getAllElems ctx
   let isMutatingFunction = or [True | WriteSingle _ <- ctxElems]
 
-  -- remove the arguments to this lambda from the context
+  -- restore the VA-Types of the arguments to this lambda from the backup'ed `oldVaCtx`
+  -- and also get their new values
   let getVar :: (Asgmt JuliaType) -> MTC (Maybe (TeVar, IsMutated))
       getVar (Just a :- t) = do
-        mut <- mutTypes %%= popValue a
+        mut <- mutTypes %%= restoreValue oldVaCtx a
         case mut of
           Nothing              -> pure (Just (a , NotMutated))
           Just (WriteSingle _) -> pure (Just (a , Mutated))
+          Just (WriteSingleFunction _) -> pure (Just (a , Mutated))
           Just _               -> pure (Just (a , NotMutated))
       getVar (Nothing :- t) = pure Nothing
 
@@ -901,7 +943,7 @@ elaborateLambda scname scope args body = do
     VirtualMutated vars | [v | (v,NotLocalMutation) <- vars] /= [] -> do
 
       -- Force the context to be empty
-      mutTypes %= (\_ -> def)
+      -- mutTypes %= (\_ -> def)
 
       -- get the permutation which tells us how to go
       -- from the order in which the vars are returned by the body
@@ -1075,7 +1117,7 @@ preprocessLoopBody scope iter (TLet (vs) term body) = do
 preprocessLoopBody scope iter (FLet f _ _) = throwOriginalError (DemutationError $ "Function definition is not allowed in for loops. (Encountered definition of " <> show f <> ".)")
 preprocessLoopBody scope iter (Ret t) = throwOriginalError (DemutationError $ "Return is not allowed in for loops. (Encountered " <> show (Ret t) <> ".)")
 
--- mutlets make use recurse
+-- mutlets make us recurse
 preprocessLoopBody scope iter (Extra (MutLet mtype t1 t2)) = do
   (t1') <- preprocessLoopBody scope iter t1
   (t2') <- preprocessLoopBody scope iter t2

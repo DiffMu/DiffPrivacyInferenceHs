@@ -13,6 +13,7 @@ import Spec.Unification
 import Spec.Issues
 -- import Spec.Parsing
 import Spec.Demutation
+import Spec.DemutationScoping
 import Spec.SingleRun
 
 -- import Test.QuickCheck hiding (Fun)
@@ -40,7 +41,8 @@ runAllTests parse = defaultspec $ do
   testSupremum
   testCheck_Rules
   testScoping parse
-  testBrokenScoping parse
+  testDemutationScoping parse
+  -- testBrokenScoping parse
   testTypecheckingExamples parse
   testIssues parse
   -- testParsing parse
