@@ -853,6 +853,13 @@ elaborateMut scname scope (Size t1) = do
 elaborateMut scname scope (Length t1) = do
   (newT1, newT1Type) <- elaborateMut scname scope t1
   return (Length newT1, Pure UserValue)
+elaborateMut scname scope (ZeroGrad t1) = do
+  (newT1, newT1Type) <- elaborateMut scname scope t1
+  return (ZeroGrad newT1, Pure UserValue)
+elaborateMut scname scope (SumGrads t1 t2) = do
+  (newT1, newT1Type) <- elaborateNonmut scname scope t1
+  (newT2, newT2Type) <- elaborateNonmut scname scope t2
+  return (SumGrads newT1 newT2, Pure UserValue)
 
 -- the unsupported terms
 elaborateMut scname scope term@(Choice t1)        = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
@@ -861,6 +868,8 @@ elaborateMut scname scope term@(Reorder t1 t2)    = throwError (UnsupportedError
 elaborateMut scname scope term@(TProject t1 t2)    = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
 elaborateMut scname scope term@(Arg x a b)        = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
 elaborateMut scname scope term@(BBApply x a b)    = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
+
+
 
 
 
