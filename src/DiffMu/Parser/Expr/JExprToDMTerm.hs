@@ -296,7 +296,7 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
   (t@"scale_gradient", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
   
   (t@"sum_gradients", [a1, a2]) -> SumGrads <$> pSingle a1 <*> pSingle a2
-  (t@"sum_gradients", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 argument, but has been given " <> show (length args)
+  (t@"sum_gradients", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 argument, but has been given " <> show (length args)
   
   (t@"clip", [a1,a2]) -> ClipM <$> pClip a1 <*> pSingle a2
   (t@"clip", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
@@ -315,7 +315,7 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
   (t@"length", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
   
   (t@"zero_gradient", [a]) -> ZeroGrad <$> pSingle a
-  (t@"zero_gradient", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
+  (t@"zero_gradient", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
 
   ----------------------
   -- the ops

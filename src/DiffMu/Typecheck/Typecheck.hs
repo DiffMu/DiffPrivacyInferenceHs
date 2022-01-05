@@ -706,9 +706,7 @@ checkSen' scope (ScaleGrad scalar grad) = do
   let dscalar = checkSens scope scalar
   let dgrad = checkSens scope grad
 
-  -- Create sensitivity / type variables for the
-  -- multiplication
-  --
+  -- Create sensitivity / type variables for the multiplication
   (τres , types_sens) <- makeTypeOp (IsBinary DMOpMul) 2
 
   ((τ1,s1),(τ2,s2)) <- case types_sens of
@@ -723,9 +721,9 @@ checkSen' scope (ScaleGrad scalar grad) = do
 
   -- infer the types of the scalar and the gradient
   -- we get
-  -- `Γ₁ ⋅ s₁ ⋅ m + Γ₂ ⋅ s₂`
+  -- `Γ₁ ⋅ s₁ + Γ₂ ⋅ s₂`
   --   where (s₁,s₂) ⩯ tscalar ⋅ tgrad
-  (tscalar, tgrad) <- msumTup ((dscalar <* mscale (svar s1) <* mscale m), (dgrad <* mscale (svar s2)))
+  (tscalar, tgrad) <- msumTup ((dscalar <* mscale (svar s1)), (dgrad <* mscale (svar s2)))
 
   -- set τ1 to the actual type of the scalar
   unify tscalar (NoFun τ1)
@@ -755,6 +753,59 @@ checkSen' scope (LastTerm t) = do
   -- typecheck the term t, and apply the current scope to it
   -- applyAllDelayedLayers scope (checkSens t scope)
   (checkSens scope t)
+
+
+checkSen' scope (ZeroGrad m) = do
+   -- check model
+   tm <- checkSens scope m
+
+   -- variables for element type, dimension, result norm and clip parameters
+   τps <- newVar
+   n <- newVar
+   nrm <- newVar
+   clp <- newVar -- actually variable, as all entries are zero
+
+   -- input must be a model
+   unify tm (NoFun (DMParams n (Numeric τps)))
+
+   -- model gets copied into the params so it's infinitely sensitive
+   mscale inftyS
+
+   return (NoFun (DMGrads nrm clp n (Numeric τps)))
+
+
+checkSen' scope (SumGrads g1 g2) = do
+
+  -- Create sensitivity / type variables for the addition
+  (τres , types_sens) <- makeTypeOp (IsBinary DMOpAdd) 2
+
+  ((τ1,s1),(τ2,s2)) <- case types_sens of
+    [(τ1,s1),(τ2,s2)] -> pure ((τ1,s1),(τ2,s2))
+    _ -> impossible "Wrong array return size of makeTypeOp"
+
+  -- Create variables for the gradient type
+  -- (norm and clip parameters and dimension)
+  nrm <- newVar
+  clp <- newVar
+  m <- newVar
+
+  -- infer the types of the scalar and the gradient
+  let dg1 = checkSens scope g1
+  let dg2 = checkSens scope g2
+
+  -- sum contexts and scale with corresponding op sensitivities
+  (tg1, tg2) <- msumTup ((dg1 <* mscale (svar s1)), (dg2 <* mscale (svar s2)))
+
+  -- set types to the actual content type of the dmgrads
+  -- (we allow any kind of annotation on the dmgrads here but they gotta match)
+  unify tg1 (NoFun (DMGrads nrm clp m τ1))
+  unify tg2 (NoFun (DMGrads nrm clp m τ2))
+
+  -- the return type is the same matrix, but
+  -- the clipping is now changed to unbounded
+  -- and the content type is the result type of the addition
+  return (NoFun (DMGrads nrm U m τres))
+
 
 checkSen' scope term@(SBind x a b) = do
   throwError (TypeMismatchError $ "Found the term\n" <> showPretty term <> "\nwhich is a privacy term because of the bind in a place where a sensitivity term was expected.")
@@ -1120,4 +1171,68 @@ checkPri' scope (Reorder σ t) = do
   addConstraint (Solvable (IsReorderedTuple ((σ , τ) :=: ρ)))
   return ρ
 
+
+checkPri' scope (SmpLet xs (Sample n m1_in m2_in) tail) =
+  let checkArg :: DMTerm -> (TC (DMMain, Privacy))
+      checkArg arg = do
+         -- check the argument in the given scope,
+         -- and scale scope by new variable, return both
+         τ <- checkSens scope arg
+         restrictAll oneId -- sensitivity of everything in context must be <= 1
+         p <- newPVar
+         mtruncateP p
+         return (τ, p)
+         
+      mn = checkArg n
+      mm1 = checkArg m1_in
+      mm2 = checkArg m2_in
+      msum = msum3Tup (mn, mm1, mm2)
+      
+      mtail = do
+                -- add all variables bound by the sample let as args-checking-commands to the scope
+                -- TODO: do we need to make sure that we have unique names here?
+                let addarg scope' (Just x :- τ) = setValue x (checkSens scope (Arg x τ IsRelevant)) scope'
+                    addarg scope' (Nothing :- τ) = scope'
+                let scope_with_samples = foldl addarg scope xs
+              
+                -- check the tail in the scope with the new args
+                τ <- checkPriv scope_with_samples tail
+              
+                -- append the computation of removing the args from the context again, remembering their types
+                -- and privacies
+                xs_types_privs <- mapM (removeVar @PrivacyK) [ x | (Just x :- _) <- xs]
+                let xs_types_privs' = [ (ty,p) | WithRelev _ (ty :@ PrivacyAnnotation p) <- xs_types_privs ]
+                -- truncate tail context to infinite privacy and return tail type and args types/privacies
+                case xs_types_privs' of
+                     [(t1,p1), (t2,p2)] -> ((return (τ,(t1,p1),(t2,p2))) <* mtruncateP inftyP)
+                     _ -> impossible $ ("sample let assigns two variables but got " <> (show xs_types_privs'))
+  in do
+      -- sum all involved contexts.
+      -- tn, tm1, tm2: types of n_samples and the two matrices that are sampled
+      -- pn, pm1, pm2: privacy vars that truncate the context of n, m1_in and m2_in
+      -- ttail: inferred type of the tail
+      -- (t1, (e1,d1)), (t2, (e2,d2)): inferred types and privacies of the xs in the tail
+      (((tn,pn), (tm1,pm1), (tm2,pm2)), (ttail, (t1, (e1,d1)), (t2, (e2,d2)))) <- msumTup (msum, mtail)
+      
+      -- variables for clip parameter, dimensions and number of samples (m2)
+      clp <- newVar
+      m1 <- newVar
+      m2 <- newVar
+      n1 <- newVar
+      n2 <- newVar
+    
+      -- set number of samples to const m2 and truncate context with 0
+      unify tn (NoFun (Numeric (Const m2 DMInt)))
+      unify pn (zeroId, zeroId)
+      
+      -- set input matrix types and truncate contexts to what it says in the rule
+      unify tm1 (NoFun (DMMat LInf clp m1 n1 (Numeric DMData)))
+      unify tm2 (NoFun (DMMat LInf clp m1 n2 (Numeric DMData)))
+      let two = oneId ⋆! oneId
+      unify pm1 (divide (two ⋅! (m2 ⋅! e1)) m1, divide (m2 ⋅! d1) m1)
+      unify pm2 (divide (two ⋅! (m2 ⋅! e2)) m1, divide (m2 ⋅! d2) m1)
+
+      -- expression has type of the tail
+      return ttail
+    
 checkPri' scope t = checkPriv scope (Ret t) -- secretly return if the term has the wrong color.
