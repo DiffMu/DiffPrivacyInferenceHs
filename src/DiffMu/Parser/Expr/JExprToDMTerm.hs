@@ -280,8 +280,8 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
   -- the non binding builtins
 
   -- 4 arguments
-  (t@"gaussian_mechanism", [a1, a2, a3, a4]) -> Gauss <$> pSingle a1 <*> pSingle a2 <*> pSingle a3 <*> pSingle a4
-  (t@"gaussian_mechanism", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 4 arguments, but has been given " <> show (length args)
+  (t@"gaussian_mechanism!", [a1, a2, a3, a4]) -> Gauss <$> pSingle a1 <*> pSingle a2 <*> pSingle a3 <*> pSingle a4
+  (t@"gaussian_mechanism!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 4 arguments, but has been given " <> show (length args)
 
   -- 3 arguments
   (t@"index", [a1, a2, a3]) -> Index <$> pSingle a1 <*> pSingle a2 <*> pSingle a3
@@ -289,17 +289,17 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
 
   -- 2 arguments
 
-  (t@"subtract_gradient", [a1, a2]) -> SubGrad <$> pSingle a1 <*> pSingle a2
-  (t@"subtract_gradient", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
+  (t@"subtract_gradient!", [a1, a2]) -> SubGrad <$> pSingle a1 <*> pSingle a2
+  (t@"subtract_gradient!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
 
-  (t@"scale_gradient", [a1, a2]) -> ScaleGrad <$> pSingle a1 <*> pSingle a2
-  (t@"scale_gradient", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
+  (t@"scale_gradient!", [a1, a2]) -> ScaleGrad <$> pSingle a1 <*> pSingle a2
+  (t@"scale_gradient!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
   
   (t@"sum_gradients", [a1, a2]) -> SumGrads <$> pSingle a1 <*> pSingle a2
   (t@"sum_gradients", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 argument, but has been given " <> show (length args)
   
-  (t@"clip", [a1,a2]) -> ClipM <$> pClip a1 <*> pSingle a2
-  (t@"clip", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
+  (t@"clip!", [a1,a2]) -> ClipM <$> pClip a1 <*> pSingle a2
+  (t@"clip!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
 
   -- 1 argument
   (t@"norm_convert", [a1]) -> ConvertM <$> pSingle a1
