@@ -76,29 +76,31 @@ sn x = do
   logForce $ "================================================"
   logForce $ "before solving constraints (1)"
   logPrintConstraints
-  solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
-  tres'' <- normalize tres'
-  logForce $ "================================================"
-  logForce $ "before solving constraints (2)"
-  logPrintConstraints
-  solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
-  tres''' <- normalize tres''
-  logForce $ "================================================"
-  logForce $ "before solving constraints (3)"
-  logPrintConstraints
-  return tres'''
+  tres'' <- solveAndNormalize [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal] tres'
+  -- tres'' <- normalize tres'
+  -- logForce $ "================================================"
+  -- logForce $ "before solving constraints (2)"
+  -- logPrintConstraints
+  -- solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
+  -- tres''' <- normalize tres''
+  -- logForce $ "================================================"
+  -- logForce $ "before solving constraints (3)"
+  -- logPrintConstraints
+  -- return tres'''
+  return tres''
 
 
 
 sn_EW :: Normalize TC a => TC a -> TC a
-sn_EW x = do
-  x' <- x
-  solveAllConstraints [SolveExact,SolveAssumeWorst]
-  normalize x'
-  solveAllConstraints [SolveExact,SolveAssumeWorst]
-  normalize x'
-  solveAllConstraints [SolveExact,SolveAssumeWorst]
-  normalize x'
+sn_EW x = x >>= solveAndNormalize [SolveExact,SolveAssumeWorst]
+  -- do
+  -- x' <- x
+  -- solveAllConstraints [SolveExact,SolveAssumeWorst]
+  -- normalize x'
+  -- solveAllConstraints [SolveExact,SolveAssumeWorst]
+  -- normalize x'
+  -- solveAllConstraints [SolveExact,SolveAssumeWorst]
+  -- normalize x'
 
 
 ----------------------------------------------

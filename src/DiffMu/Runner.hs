@@ -90,16 +90,17 @@ typecheckFromDMTermWithPrinter printer logoptions term = do
         -- logForce $ "================================================"
         -- logForce $ "before solving constraints (1)"
         -- logPrintConstraints
-        solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
-        tres'' <- normalize tres'
+        -- solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
+        -- tres'' <- normalize tres'
         -- logForce $ "================================================"
         -- logForce $ "before solving constraints (2)"
         -- logPrintConstraints
-        solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
-        tres''' <- normalize tres''
+        -- solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
+        -- tres''' <- normalize tres''
         -- logForce $ "================================================"
         -- logForce $ "before solving constraints (3)"
         -- logPrintConstraints
+        tres''' <- solveAndNormalize [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal] tres'
         return tres'''
 
   x <- executeTC logoptions r
