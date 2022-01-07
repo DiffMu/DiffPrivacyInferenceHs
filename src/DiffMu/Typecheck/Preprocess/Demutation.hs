@@ -19,6 +19,7 @@ import Data.Foldable
 
 import Debug.Trace
 
+import qualified Prelude as P
 
 ---------------------------------------------------------
 -- The checking monad
@@ -1095,10 +1096,44 @@ elaborateMutList f scname scope mutargs = do
 
   -- check them
   newArgsWithMutTeVars <- mapM checkArg mutargs
+  -- extract for return
   let newArgs = [te | (te , _) <- newArgsWithMutTeVars]
-  let muts = [m | (_ , Just m) <- newArgsWithMutTeVars]
+  let mutVars = [m | (_ , Just m) <- newArgsWithMutTeVars]
 
-  return (newArgs, muts)
+
+  --
+  -- Make sure that all variables in mutated argument positions are unique
+  -- For this, we count the occurences of every variable, simply
+  -- by taking the free variables of the demutated terms.
+  --
+  -- See #95
+  --
+
+  -- let allVars = [t | (t, _) <- newArgsWithMutTeVars] >>= freeVarsDMTerm
+  let allVars = [t | (t, _) <- mutVars]
+
+  let addCount :: (DMTerm , Maybe (TeVar, IsLocalMutation)) -> Ctx TeVar Int -> Ctx TeVar Int
+      addCount (_ , Just (var , _)) counts = case getValue var counts of
+                                              Just a -> setValue var (a P.+ 1) counts
+                                              Nothing -> setValue var 1 counts
+      addCount (_ , Nothing) counts = counts
+
+  -- number of occurences of all variables
+  let varcounts = getAllKeyElemPairs $ foldr addCount def newArgsWithMutTeVars
+  -- number of occurences of all variables, but only for variables which are mutated
+  let mutvarcounts = filter (\(k,n) -> k `elem` (fst <$> mutVars)) varcounts
+  -- number of occurences of all variables, but only for variables which are mutated, with occurence > 1
+  let wrongVarCounts = filter (\(k,n) -> n > 1) mutvarcounts
+
+  -- make sure that such variables do not occur
+  case wrongVarCounts of
+    [] -> return ()
+    xs -> throwError $ DemutationError $ "The function '" <> f <> "' is called with the following vars in mutating positions:\n"
+                                      <> show mutvarcounts <> "\n"
+                                      <> "But it is not allowed to have the same variable occur multiple times "
+
+
+  return (newArgs, mutVars)
 
 
 

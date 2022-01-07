@@ -799,7 +799,18 @@ recDMTermM f h (ZeroGrad a)       = ZeroGrad <$> (f a)
 recDMTermM f h (SumGrads a b)     = SumGrads <$> (f a) <*> (f b)
 recDMTermM f h (Sample a b c)     = Sample <$> (f a) <*> (f b) <*> (f c)
 
+--------------------------------------------------------------------------
+-- Free variables for terms
 
+freeVarsDMTerm :: DMTerm -> [TeVar]
+freeVarsDMTerm (Var (Just v  :- jt)) = [v]
+freeVarsDMTerm (Var (Nothing :- jt)) = []
+freeVarsDMTerm (Lam jts body) = freeVarsDMTerm body \\ [v | (Just v :- _) <- jts]
+freeVarsDMTerm (LamStar jts body) = freeVarsDMTerm body \\ [v | (Just v :- _) <- jts]
+freeVarsDMTerm t = fst $ recDMTermMSameExtension f t
+  where
+    f :: DMTerm -> ([TeVar] , DMTerm)
+    f = (\a -> (freeVarsDMTerm a, a))
 
 --------------------------------------------------------------------------
 -- pretty printing
