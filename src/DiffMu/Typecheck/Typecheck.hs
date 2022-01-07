@@ -571,8 +571,11 @@ checkSen' scope (ConvertM m) = do
   mscale (oneId ⋆! oneId)
 
   -- move clip to the norm position,
-  -- and forget about old `nrm`
-  return (NoFun (DMGrads clp (Clip clp) n (Numeric (NonConst DMReal))))
+  -- and forget about old `nrm
+  -- technically the clipping parameter does not change, but we set it to U so it fits with the rest...
+  -- see issue 
+--  return (NoFun (DMGrads clp (Clip clp) n (Numeric (NonConst DMReal))))
+  return (NoFun (DMGrads clp U n (Numeric (NonConst DMReal))))
 
 --------------------
 
@@ -786,7 +789,8 @@ checkSen' scope (SumGrads g1 g2) = do
   -- Create variables for the gradient type
   -- (norm and clip parameters and dimension)
   nrm <- newVar
-  clp <- newVar
+  clp1 <- newVar
+  clp2 <- newVar
   m <- newVar
 
   -- infer the types of the scalar and the gradient
@@ -798,8 +802,8 @@ checkSen' scope (SumGrads g1 g2) = do
 
   -- set types to the actual content type of the dmgrads
   -- (we allow any kind of annotation on the dmgrads here but they gotta match)
-  unify tg1 (NoFun (DMGrads nrm clp m τ1))
-  unify tg2 (NoFun (DMGrads nrm clp m τ2))
+  unify tg1 (NoFun (DMGrads nrm clp1 m τ1))
+  unify tg2 (NoFun (DMGrads nrm clp2 m τ2))
 
   -- the return type is the same matrix, but
   -- the clipping is now changed to unbounded
@@ -1039,7 +1043,7 @@ checkPri' scope (Gauss rp εp δp f) =
       v_δ :: Sensitivity <- newVar
       v_r :: Sensitivity <- newVar
 
-      -- parameters must be in (0,1) for gauss do be DP
+      -- parameters must be in (0,1) for gauss to be DP
       addConstraint (Solvable (IsLess (v_ε, oneId :: Sensitivity)))
       addConstraint (Solvable (IsLess (v_δ, oneId :: Sensitivity)))
       addConstraint (Solvable (IsLess (zeroId :: Sensitivity, v_ε)))
