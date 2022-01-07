@@ -595,9 +595,29 @@ elaborateMut scname scope (Extra (MutLoop iters iterVar body)) = do
   -- let scope0 = foldr (\v s -> setValue v (Pure) s) scope modifyVars
   scope' <- safeSetValue scname LocalMutation iterVar (Pure UserValue) scope
 
+  --
+  -- [VAR FILTERING/Begin]
+  --
+  vanames <- getAllKeys <$> use mutTypes
+  --
+
   -- we can now elaborate the body, and thus get the actual list
   -- of modified variables
   (newBody, newBodyType) <- elaborateMut scname scope' preprocessedBody
+
+  --
+  -- [VAR FILTERING/End]
+  --
+  -- After the body was elaborated, it might be that we have new
+  -- variables in scope which are only local in the body
+  -- What we do is we filter the VA(Ctx) to only contain the vars
+  -- which were in it before the body was checked
+  --
+  let deleteIfNotOld k ctx = case k `elem` vanames of
+                              True  -> ctx
+                              False -> deleteValue k ctx
+  mutTypes %= (\ctx -> foldr (\k ctx -> deleteIfNotOld k ctx) ctx (getAllKeys ctx))
+  --
 
   -- we accept a full virtual mutated, or a globally pure value
   case newBodyType of

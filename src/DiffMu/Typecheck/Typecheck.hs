@@ -401,11 +401,6 @@ checkSen' original_scope (TLet xs term body) = do
   -- and we return the type of the body
   return τbody
 
--- a loop checked in sensitivity mode returns its captures into a TLet
--- the term exists so in privacy mode we can use TBind
-checkSen' scope (LLet cs loop tail) = do
-  checkSens scope (TLet cs loop tail)
-
 checkSen' scope (Loop niter cs' (xi, xc) body) = do
   let cniter = checkSens scope niter
 
@@ -1063,10 +1058,6 @@ checkPri' scope (Gauss rp εp δp f) =
 
       return (NoFun τgauss)
 
--- a loop checked in privacy mode returns its captures into a TBind
--- the term exists so in sensitivity mode we can use TLet
-checkPri' scope (LLet cs loop tail) = do
-  checkPriv scope (TBind cs loop tail)
 
 checkPri' scope (Loop niter cs' (xi, xc) body) =
    --let setInteresting :: ([Symbol],[DMMain :@ PrivacyAnnotation]) -> Sensitivity -> TC ()
