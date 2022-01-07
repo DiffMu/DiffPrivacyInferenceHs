@@ -206,3 +206,27 @@ solvingAllNewConstraints modes f = withLogLocation "Constr" $ do
   return (closeRes, res)
 
 
+solveAndNormalize :: forall a isT t eC. (MonadImpossible t, MonadLog t, MonadConstraint isT t, MonadNormalize t, IsT isT t, Normalize t a) => [SolvingMode] -> a -> t a
+solveAndNormalize modes value = f 4 value
+  where
+    f :: Int -> a -> t a
+    f n a0 | n <= 0 = impossible "Solving & normalizing needed more than 4 iterations. Cancelling."
+    f n a0          = do
+
+      -- get all constraint names
+      allCs0 <- getAllConstraints
+      let allNames0 = fst <$> allCs0
+
+      solveAllConstraints modes
+      a1 <- normalize a0
+
+      allCs1 <- getAllConstraints
+      let allNames1 = fst <$> allCs1
+
+      case allNames0 == allNames1 of
+        True  -> return a1
+        False -> f (n-1) a1
+
+
+
+
