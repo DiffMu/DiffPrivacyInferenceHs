@@ -47,6 +47,7 @@ pSingle e = case e of
                  JEBlackBox name args -> pJBlackBox name args [name] (Extra . DefaultRet)
                  JERef name refs -> pJRef name refs
                  JECall name args -> pJCall name args
+                 JEBindCall name args -> pMutBind (pJCall name args) (pure (Extra MutRet))
                  JEHole -> parseError "Holes (_) are only allowed in assignments."
                  JEUnsupported s -> parseError ("Unsupported expression " <> show s)
                  JEIter _ _ _ -> parseError ("Iterators can only be used in for-loop statements directly.")
@@ -72,6 +73,7 @@ pList (s : tail) = case s of
                         JEBlackBox name args -> pJBlackBox name args tail (\x -> x)
                         JELoop ivar iter body -> pLoopLet (pJLoop ivar iter body) tail
                         JECall name args -> pMutLet (pJCall name args) tail
+                        JEBindCall name args -> pMutBind (pJCall name args) (pList tail)
                         JEIfElse _ _ _ -> throwOriginalError (InternalError "Conditionals should not have tails!")
                         JEUnsupported s -> parseError ("Unsupported expression " <> show s)
                         _ -> parseError ("Expression " <> show s <> " does not have any effect.")
@@ -86,6 +88,11 @@ pMutLet m tail = do
                    assignee <- m
                    dtail <- pList tail
                    return (Extra (MutLet PureLet assignee dtail))
+
+pMutBind m ptail = do
+                   assignee <- m
+                   dtail <- ptail
+                   return (Extra (MutLet BindLet assignee dtail))
 
 pSample args = case args of
                     [n, m1, m2] -> do

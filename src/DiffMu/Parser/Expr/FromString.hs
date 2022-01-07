@@ -138,6 +138,7 @@ data JExpr =
    | JELineNumber String Int
    | JEUnsupported String
    | JECall JExpr [JExpr]
+   | JEBindCall JExpr [JExpr]
    | JEBlock [JExpr]
    | JEBlackBox JExpr [JExpr]
    | JETypeAnnotation JExpr JuliaType
@@ -261,8 +262,12 @@ pTreeToJExpr tree = case tree of
          [(JAssign [_, iter]), _] -> jParseError ("Iterator has to be a range! Not like " <> show iter)
          _ -> jParseError ("unsupported loop statement " <> show tree)
      JCurly _        -> jParseError ("Did not expect a julia type but got " <> show tree)
+     JTypeAssign [(JCall as), (JCall [JSym "Robust"])] -> case as of
+         (callee : args) -> JEBindCall <$> pTreeToJExpr callee <*> mapM pTreeToJExpr args
+         []              -> error "empty call"
      JTypeAssign _   -> jParseError ("Type annotations are not supported here: " <> show tree)
 
+     
 
 
 parseJExprFromJTree :: JTree -> Either DMException JExpr
