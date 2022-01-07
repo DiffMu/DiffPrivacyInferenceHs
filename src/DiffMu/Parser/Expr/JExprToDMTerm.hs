@@ -40,6 +40,7 @@ pSingle e = case e of
                  JELamStar args body -> pJLamStar args body
                  JEIfElse cond ifb elseb -> (Phi <$> pSingle cond <*> pSingle ifb <*> pSingle elseb)
                  JELoop ivar iter body -> pJLoop ivar iter body
+                 JEPrivLoop ivar iter body -> pLoopRes BindLet (pJLoop ivar iter body) (pure (Extra MutRet))
                  JEAssignment aee amt -> pJSLet aee amt [aee] (Extra . DefaultRet)
                  JEBind aee amt -> pJBind aee amt [aee] (Extra . DefaultRet)
                  JETupAssignment aee amt -> pJTLet aee amt [JETup aee] (Extra . DefaultRet)
@@ -47,7 +48,7 @@ pSingle e = case e of
                  JEBlackBox name args -> pJBlackBox name args [name] (Extra . DefaultRet)
                  JERef name refs -> pJRef name refs
                  JECall name args -> pJCall name args
-                 JEBindCall name args -> pMutBind (pJCall name args) (pure (Extra MutRet))
+                 JEBindCall name args -> pMut BindLet (pJCall name args) (pure (Extra MutRet))
                  JEHole -> parseError "Holes (_) are only allowed in assignments."
                  JEUnsupported s -> parseError ("Unsupported expression " <> show s)
                  JEIter _ _ _ -> parseError ("Iterators can only be used in for-loop statements directly.")
@@ -71,28 +72,24 @@ pList (s : tail) = case s of
                         JETupAssignment aee amt -> pJTLet aee amt tail (\x -> x)
                         JEFunction name term -> pJFLet name term tail (\x -> x)
                         JEBlackBox name args -> pJBlackBox name args tail (\x -> x)
-                        JELoop ivar iter body -> pLoopLet (pJLoop ivar iter body) tail
-                        JECall name args -> pMutLet (pJCall name args) tail
-                        JEBindCall name args -> pMutBind (pJCall name args) (pList tail)
+                        JELoop ivar iter body -> pLoopRes PureLet (pJLoop ivar iter body) (pList tail)
+                        JEPrivLoop ivar iter body -> pLoopRes BindLet (pJLoop ivar iter body) (pList tail)
+                        JECall name args -> pMut PureLet (pJCall name args) (pList tail)
+                        JEBindCall name args -> pMut BindLet (pJCall name args) (pList tail)
                         JEIfElse _ _ _ -> throwOriginalError (InternalError "Conditionals should not have tails!")
                         JEUnsupported s -> parseError ("Unsupported expression " <> show s)
                         _ -> parseError ("Expression " <> show s <> " does not have any effect.")
 
 
-pLoopLet m tail = do
-                   assignee <- m
-                   dtail <- pList tail
-                   return (Extra (MutLet LoopLet assignee dtail))
-
-pMutLet m tail = do
-                   assignee <- m
-                   dtail <- pList tail
-                   return (Extra (MutLet PureLet assignee dtail))
-
-pMutBind m ptail = do
+pLoopRes kind m ptail = do
                    assignee <- m
                    dtail <- ptail
-                   return (Extra (MutLet BindLet assignee dtail))
+                   return (Extra (MutLet kind assignee dtail))
+
+pMut kind m ptail = do
+                   assignee <- m
+                   dtail <- ptail
+                   return (Extra (MutLet kind assignee dtail))
 
 pSample args = case args of
                     [n, m1, m2] -> do

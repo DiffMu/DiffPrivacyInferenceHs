@@ -690,7 +690,6 @@ pattern SLet a b c = SLetBase PureLet a b c
 pattern SBind a b c = SLetBase BindLet a b c
 pattern TLet a b c = TLetBase PureLet a b c
 pattern TBind a b c = TLetBase BindLet a b c
-pattern LLet a b c = TLetBase LoopLet a b c
 pattern SmpLet a b c = TLetBase SampleLet a b c
 
 {-# COMPLETE Extra, Ret, Sng, Var, Rnd, Arg, Op, Phi, Lam, LamStar, BBLet, BBApply,

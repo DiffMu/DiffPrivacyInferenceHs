@@ -145,6 +145,7 @@ data JExpr =
    | JENotRelevant JExpr JuliaType
    | JEIter JExpr JExpr JExpr
    | JELoop JExpr JExpr JExpr
+   | JEPrivLoop JExpr JExpr JExpr
    | JELam [JExpr] JExpr
    | JELamStar [JExpr] JExpr
    | JEFunction JExpr JExpr
@@ -265,10 +266,13 @@ pTreeToJExpr tree = case tree of
      JTypeAssign [(JCall as), (JCall [JSym "Robust"])] -> case as of
          (callee : args) -> JEBindCall <$> pTreeToJExpr callee <*> mapM pTreeToJExpr args
          []              -> error "empty call"
+     JTypeAssign [(JLoop as), (JCall [JSym "Robust"])] -> case as of
+         [(JAssign [ivar, JCall (JColon: iter)]), body] -> JEPrivLoop <$> pTreeToJExpr ivar <*> pIter iter <*> pTreeToJExpr body
+         [(JAssign [_, iter]), _] -> jParseError ("Iterator has to be a range! Not like " <> show iter)
+         _ -> jParseError ("unsupported loop statement " <> show tree)
      JTypeAssign _   -> jParseError ("Type annotations are not supported here: " <> show tree)
 
      
-
 
 parseJExprFromJTree :: JTree -> Either DMException JExpr
 parseJExprFromJTree tree =
