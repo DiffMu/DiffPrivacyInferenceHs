@@ -139,6 +139,6 @@ typecheckFromDMTerm_Detailed term = do
         <> "\n---------------------------------------------------------------------------\n"
         <> "Monad state:\n" <> show full
 
-  typecheckFromDMTermWithPrinter printer (DoShowLog Debug logging_locations) term
+  typecheckFromDMTermWithPrinter printer (DoShowLog Warning logging_locations) term
 
 

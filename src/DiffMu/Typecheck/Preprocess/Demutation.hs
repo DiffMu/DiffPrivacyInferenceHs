@@ -27,12 +27,25 @@ import qualified Prelude as P
 data IsMutated = Mutated | NotMutated
   deriving (Generic, Show, Eq)
 
---
--- NOTE: It is important that the order of the constructors
---       stays the same.
---
 data IsLocalMutation = LocalMutation | NotLocalMutation
-  deriving (Show, Eq, Ord)
+  deriving (Show, Eq)
+
+--
+-- NOTE: We later sort `VarAccessType`s,
+-- and we do not want that the `IsLocalMutation`
+-- content influences this sort --- we need to know
+-- which comes first.
+--
+-- Hence this type is "contractible".
+--
+instance Ord IsLocalMutation where
+  a <= b = True
+
+-- But we need a comparison anyways:
+le_ilm :: IsLocalMutation -> IsLocalMutation -> Bool
+le_ilm LocalMutation _ = True
+le_ilm NotLocalMutation LocalMutation = False
+le_ilm NotLocalMutation NotLocalMutation = True
 
 onlyLocallyMutatedVariables :: [(TeVar,IsLocalMutation)] -> Bool
 onlyLocallyMutatedVariables xs = [v | (v, NotLocalMutation) <- xs] == []
@@ -103,7 +116,7 @@ computeVarAccessType var a b = do
                                                                             <> "' is being mutated and read in two different scopes.\n"
                                                                             <> "This is not allowed."
     [ReadMulti,WriteSingleFunction a l]       -> pure (WriteSingleFunction a l) -- because of flet reordering it is allowed to mutate functions
-    [WriteSingle a l, WriteSingle b k] | a == b, l <= k  -> pure (WriteSingle a l)
+    [WriteSingle a l, WriteSingle b k] | a == b, le_ilm l k  -> pure (WriteSingle a l)
     [WriteSingle a l, WriteSingle b k] | a == b -> throwError $ DemutationError $ "The function argument '" <> show var <> "' has been mutated.\n"
                                                                                 <> "But then a statement follows which assigns a variable with the same name."
                                                                                 <> "This is not allowed, please use a different name here."
@@ -112,7 +125,7 @@ computeVarAccessType var a b = do
                                                                             <> "This is not allowed."
     [WriteSingle _ l, WriteSingleFunction _ k]  -> throwError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' is defined as function and as value."
                                                                             <> "This is not allowed."
-    [WriteSingleFunction a l, WriteSingleFunction b k] | a == b, l <= k -> pure (WriteSingleFunction a k)
+    [WriteSingleFunction a l, WriteSingleFunction b k] | a == b, le_ilm l k -> pure (WriteSingleFunction a k)
     [WriteSingleFunction a l, WriteSingleFunction b k] | a == b         -> throwError $ DemutationError $ "The function argument '" <> show var <> "' has been mutated.\n"
                                                                                 <> "But then a statement follows which assigns a variable with the same name."
                                                                                 <> "This is not allowed, please use a different name here."
@@ -161,6 +174,7 @@ markMutatedBase fletdef scname loc var = mutTypes %=~ (markMutatedInScope scname
                                                        <> show var <> " was not in the VA-Ctx."
           Just oldvatype -> do
             newvatype <- computeVarAccessType var oldvatype (WriteSingleBase fletdef scname loc)
+            debug $ "[markMutatedBase]: VA type for '" <> show var <> "' changes from " <> show oldvatype <> " to " <> show newvatype
             return (setValue var newvatype ctx)
 
 markMutatedFLet :: ScopeVar -> IsLocalMutation -> TeVar -> MTC ()
@@ -215,9 +229,13 @@ safeSetValueBase fletdef scname loc (Nothing) newType scope = pure scope
 safeSetValueBase fletdef scname loc (Just var) newType scope =
   case getValue var scope of
     Nothing -> do
+      debug $ "[safeSetValue]: Var " <> show var <> " not in scope " <> show scname <> ". Marking read."
+      debug $ "[safeSetValue]: (for the record, locality would be " <> show loc <> ")"
       markRead scname var
       return (setValue var newType scope)
     (Just oldType) -> do
+      debug $ "[safeSetValue]: Var " <> show var <> " is already in scope " <> show scname <> ". Marking as mutated."
+      debug $ "[safeSetValue]: (locality: " <> show loc <> ")"
       markMutatedBase fletdef scname loc var -- We say that we are changing this variable. This can throw an error.
       if immutTypeEq oldType newType
                       then pure scope
@@ -321,6 +339,19 @@ elaborateMut scname scope (SLetBase ltype (x :- τ) term body) = do
     VirtualMutated _ -> throwError (DemutationError $ "Found an assignment " <> show x <> " = " <> showPretty term <> " where RHS is a mutating call. This is not allowed.")
     PureBlackBox     -> throwError (DemutationError $ "Found an assignment " <> show x <> " = " <> showPretty term <> " where RHS is a black box. This is not allowed.")
 
+  --
+  -- TODO
+  --
+  -- It is probably not correct to always claim that this is a local mutation,
+  -- what happens if we simply rename a variable here, and then mutate that one?
+  -- ```
+  -- function f(y)
+  --   x = y
+  --   mutate!(x)
+  -- end
+  -- ```
+  --
+  debug $ "[elaborateMut/SLetBase]: The variable " <> show x <> " is being assigned." 
   scope'  <- safeSetValue scname LocalMutation x newTermType scope
   (newBody , newBodyType) <- elaborateMut scname scope' body
 
@@ -1075,6 +1106,7 @@ elaborateMutList f scname scope mutargs = do
             case getValue x scope of
               Nothing -> logForce ("The scope is" <> show scope) >> throwError (DemutationDefinitionOrderError x)
               Just (Pure (SingleArg y)) | x == y -> do
+                debug $ "[elaborateMutList]: The non-local variable " <> show y <> " is being mutated."
                 markMutated scname NotLocalMutation y
                 return (Var (Just x :- a) , Just (x, NotLocalMutation))
               Just (Pure (SingleArg y)) -> throwError (DemutationError $ "When calling the mutating function " <> f <> " found the variable " <> show x <> " as argument in a mutable-argument-position. It is bound to the function argument " <> show y <> ", but it is not allowed to use renamed function arguments in such a position.")
