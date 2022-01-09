@@ -10,6 +10,7 @@ testTypecheckingExamples pp = do
   testPriv pp
   testBlackBox pp
   testSLoop pp
+  testSample pp
 --   testDPGD pp
   
 
@@ -57,8 +58,9 @@ testPriv pp = describe "privacies" $ do
                \ x + x                 \n\
                \ end"
         inv = "function g(x :: Integer) :: Priv() \n\
-               \ y :: Robust() = gaussian_mechanism(0.1, 0.1, 0.1, 0.1*x) \n\
-               \ 200*y \n\
+               \ x = 0.1*x \n\
+               \ gaussian_mechanism!(0.1, 0.1, 0.1, x) :: Robust() \n\
+               \ 200*x \n\
                \ end"
         int = NoFun(Numeric (NonConst DMInt))
         real = NoFun(Numeric (NonConst DMReal))
@@ -124,6 +126,21 @@ testSLoop pp = describe "Sensitivity loop" $ do
     parseEval pp "variable" vloop (pure ty_v)
     parseEval pp "variable2" vloop2 (pure ty_v2)
     parseEvalFail pp "variable (bad)" uloop (UnsatisfiableConstraint "")
+
+testSample pp = describe "Sample" $ do
+    let ex = "foo(d::Vector) :: BlackBox() = d \n\
+              \function bar(data, b) :: Priv() \n\
+              \  D, L = sample(b, data, data) \n\
+              \  gs = foo(D[1,:]) \n\
+              \  clip!(L2,gs) \n\
+              \  norm_convert(gs) \n\
+              \  gaussian_mechanism!(2, 0.2, 0.3, gs) :: Robust() \n\
+              \  gs \n\
+              \end"
+        ty = "Fun([([NoFun(Matrix<n: L∞, c: τ_26>[s_9 × s_18](Num(Data))) @ (0.4⋅s_15⋅(1 / s_9),0.3⋅s_15⋅(1 / s_9)),NoFun(Num(Int[s_15])) @ (0,0)] ->* NoFun(Grads<n: L∞, c: U>[s_20](Num(Real[--])))) @ Just [Any,Any]])"
+        cs = ""
+    parseEvalString_customCheck pp "" ex (ty, cs) (pure $ Right ())
+                                                                                   
 
 testDPGD pp = describe "DPGD" $ do
   let ex = "import Flux \n\

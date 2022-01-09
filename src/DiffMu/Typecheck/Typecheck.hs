@@ -1227,6 +1227,10 @@ checkPri' scope (SmpLet xs (Sample n m1_in m2_in) tail) =
       unify pm1 (divide (two ⋅! (m2 ⋅! e1)) m1, divide (m2 ⋅! d1) m1)
       unify pm2 (divide (two ⋅! (m2 ⋅! e2)) m1, divide (m2 ⋅! d2) m1)
 
+      -- set correct types for sample results in the tail
+      unify tm1 t1
+      unify tm2 t2
+
       -- expression has type of the tail
       return ttail
     
