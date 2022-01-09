@@ -27,6 +27,10 @@ import qualified Prelude as P
 data IsMutated = Mutated | NotMutated
   deriving (Generic, Show, Eq)
 
+--
+-- NOTE: It is important that the order of the constructors
+--       stays the same.
+--
 data IsLocalMutation = LocalMutation | NotLocalMutation
   deriving (Show, Eq, Ord)
 
@@ -99,15 +103,19 @@ computeVarAccessType var a b = do
                                                                             <> "' is being mutated and read in two different scopes.\n"
                                                                             <> "This is not allowed."
     [ReadMulti,WriteSingleFunction a l]       -> pure (WriteSingleFunction a l) -- because of flet reordering it is allowed to mutate functions
-    [WriteSingle a l, WriteSingle b k] | a == b, k == l  -> pure (WriteSingle a l)
-    [WriteSingle a l, WriteSingle b k] | a == b -> throwError $ DemutationError $ "Mix of variable locality for " <> show var
+    [WriteSingle a l, WriteSingle b k] | a == b, l <= k  -> pure (WriteSingle a l)
+    [WriteSingle a l, WriteSingle b k] | a == b -> throwError $ DemutationError $ "The function argument '" <> show var <> "' has been mutated.\n"
+                                                                                <> "But then a statement follows which assigns a variable with the same name."
+                                                                                <> "This is not allowed, please use a different name here."
     [WriteSingle a l, WriteSingle b k]          -> throwError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' "
                                                                             <> "' is being mutated in two different scopes.\n"
                                                                             <> "This is not allowed."
     [WriteSingle _ l, WriteSingleFunction _ k]  -> throwError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' is defined as function and as value."
                                                                             <> "This is not allowed."
-    [WriteSingleFunction a l, WriteSingleFunction b k] | a == b, l == k -> pure (WriteSingleFunction a l)
-    [WriteSingleFunction a l, WriteSingleFunction b k] | a == b         -> throwError $ DemutationError $ "Mix of variable locality for " <> show var
+    [WriteSingleFunction a l, WriteSingleFunction b k] | a == b, l <= k -> pure (WriteSingleFunction a k)
+    [WriteSingleFunction a l, WriteSingleFunction b k] | a == b         -> throwError $ DemutationError $ "The function argument '" <> show var <> "' has been mutated.\n"
+                                                                                <> "But then a statement follows which assigns a variable with the same name."
+                                                                                <> "This is not allowed, please use a different name here."
     [WriteSingleFunction a l, WriteSingleFunction b k] | a /= b -> throwError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' "
                                                                             <> "' is being mutated in two different scopes.\n"
                                                                             <> "This is not allowed."
