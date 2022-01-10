@@ -288,4 +288,3 @@ test127 pp = describe "issue 127 (TLet in loop)" $ do
 
   parseEval pp "example variant 1" ex_1 (pure ty)
 
-
