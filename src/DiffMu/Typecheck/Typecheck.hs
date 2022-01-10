@@ -1200,7 +1200,7 @@ checkPri' scope (SmpLet xs (Sample n m1_in m2_in) tail) =
                 -- truncate tail context to infinite privacy and return tail type and args types/privacies
                 case xs_types_privs' of
                      [(t1,p1), (t2,p2)] -> ((return (τ,(t1,p1),(t2,p2))) <* mtruncateP inftyP)
-                     _ -> impossible $ ("sample let assigns two variables but got " <> (show xs_types_privs'))
+                     _ -> impossible $ ("Both results of sample must be assigned a name. Instead I got " <> (show xs_types_privs'))
   in do
       -- sum all involved contexts.
       -- tn, tm1, tm2: types of n_samples and the two matrices that are sampled

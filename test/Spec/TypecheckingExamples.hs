@@ -133,7 +133,7 @@ testSample pp = describe "Sample" $ do
               \  D, L = sample(b, data, data) \n\
               \  gs = foo(D[1,:]) \n\
               \  clip!(L2,gs) \n\
-              \  norm_convert(gs) \n\
+              \  norm_convert!(gs) \n\
               \  gaussian_mechanism!(2, 0.2, 0.3, gs) :: Robust() \n\
               \  gs \n\
               \end"
