@@ -14,6 +14,7 @@ testIssues pp = do
   test123 pp
   test125 pp
   test127 pp
+  test157 pp
 
 test25 pp = describe "issue 25" $ do
   let ex = " function test() \n\
@@ -288,4 +289,18 @@ test127 pp = describe "issue 127 (TLet in loop)" $ do
 
   parseEval pp "example variant 1" ex_1 (pure ty)
 
+
+
+test157 pp = describe "issue 157 (only local mutation)" $ do
+  let ex_1 = " function g(x :: Integer) :: Priv()                      \n\
+             \   x = 0.1*x                                             \n\
+             \   gaussian_mechanism!(0.1, 0.1, 0.1, x) :: Robust()     \n\
+             \   200*x                                                 \n\
+             \ end                                                     "
+
+      intnc = NoFun(Numeric (NonConst DMInt))
+      realnc = NoFun(Numeric (NonConst DMReal))
+      ty = Fun([([intnc :@ (constCoeff (Fin 0.1), constCoeff (Fin 0.1))] :->*: realnc) :@ Just [JTInt]])
+
+  parseEval pp "example variant 1" ex_1 (pure ty)
 
