@@ -129,15 +129,15 @@ testSLoop pp = describe "Sensitivity loop" $ do
 
 testSample pp = describe "Sample" $ do
     let ex = "foo(d::Vector) :: BlackBox() = d \n\
-              \function bar(data, b) :: Priv() \n\
+              \function bar(data, b, x::Integer) :: Priv() \n\
               \  D, L = sample(b, data, data) \n\
               \  gs = foo(D[1,:]) \n\
               \  clip!(L2,gs) \n\
               \  norm_convert!(gs) \n\
               \  gaussian_mechanism!(2, 0.2, 0.3, gs) :: Robust() \n\
-              \  gs \n\
+              \  x * gs \n\
               \end"
-        ty = "Fun([([NoFun(Matrix<n: L∞, c: τ_26>[s_9 × s_18](Num(Data))) @ (0.4⋅s_15⋅(1 / s_9),0.3⋅s_15⋅(1 / s_9)),NoFun(Num(Int[s_15])) @ (0,0)] ->* NoFun(Grads<n: L∞, c: U>[s_20](Num(Real[--])))) @ Just [Any,Any]])"
+        ty = "Fun([([NoFun(Matrix<n: L∞, c: τ_30>[s_11 × s_20](Num(Data))) @ (0.4⋅(1 / s_11)⋅s_17,0.3⋅(1 / s_11)⋅s_17),NoFun(Num(Int[s_17])) @ (0,0),NoFun(Num(Int[--])) @ (∞,∞)] ->* NoFun(Matrix<n: L∞, c: U>[1 × s_14](Num(Real[--])))) @ Just [Any,Any,Integer]])"
         cs = ""
     parseEvalString_customCheck pp "" ex (ty, cs) (pure $ Right ())
                                                                                    
