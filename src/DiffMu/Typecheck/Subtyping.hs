@@ -127,9 +127,7 @@ subtypingGraph =
                       nrm₀ ⊑! nrm₁
                       clp₀ ⊑! clp₁
                       return ((DMMat nrm₀ clp₀ n m a₀), (DMMat nrm₁ clp₁ n m a₁))
-                 ]
-            ; IsReflexive NotStructural -> [
-                   SingleEdge $
+                 , SingleEdge $
                    do clp₀ <- newVar
                       nrm₀ <- newVar
                       nrm₁ <- newVar
@@ -180,7 +178,8 @@ subtypingGraph =
                       m <- newVar
                       return ((DMGrads L1 clp m (Numeric t)), (DMGrads nrm clp m (Numeric t)))
                       -}
-                  ]
+                 ]
+            ; IsReflexive NotStructural -> []
             ; _ -> []
             }
 

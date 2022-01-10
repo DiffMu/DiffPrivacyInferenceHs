@@ -152,7 +152,8 @@ instance Solve MonadDMTC IsLoopResult ((Sensitivity, Sensitivity, Sensitivity), 
            dischargeConstraint name
         _ -> return ()
 
-
+{-
+-- we don;t allow anything that's not a vector in out additive noise mechanisms, cuz y would any1.
 --------------------------------------------------
 -- is it gauss or mgauss?
 instance FixedVars TVarOf (IsGaussResult (DMTypeOf MainKind, DMTypeOf MainKind)) where
@@ -184,7 +185,7 @@ instance Solve MonadDMTC IsGaussResult (DMTypeOf MainKind, DMTypeOf MainKind) wh
            unify τgauss (NoFun (Numeric (NonConst DMReal)))
 
            dischargeConstraint @MonadDMTC name
-
+-}
 
 --------------------------------------------------
 -- reordering of tuples

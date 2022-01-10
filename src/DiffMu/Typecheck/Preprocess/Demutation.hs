@@ -882,6 +882,17 @@ elaborateMut scname scope (Gauss t1 t2 t3 t4) = do
     -- END NOTE
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
+elaborateMut scname scope (Laplace t1 t2 t3) = do
+  (argTerms, mutVars) <- elaborateMutList "laplace" scname scope [(NotMutated , t1), (NotMutated , t2), (Mutated , t3)]
+  case argTerms of
+    -- NOTE: Because of #95, we say that this function is pure
+    -- NOTE: Reenabled for #142
+    -- [newT1, newT2, newT3] -> pure (Gauss newT1 newT2 newT3, Pure UserValue)
+    [newT1, newT2, newT3] -> pure (Laplace newT1 newT2 newT3, VirtualMutated mutVars)
+    --
+    -- END NOTE
+    _ -> internalError ("Wrong number of terms after elaborateMutList")
+
 elaborateMut scname scope (ConvertM t1) = do
   (argTerms, mutVars) <- elaborateMutList "convert" scname scope [(Mutated , t1)]
   case argTerms of

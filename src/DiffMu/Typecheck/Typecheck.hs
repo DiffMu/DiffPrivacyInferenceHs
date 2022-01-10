@@ -1053,10 +1053,71 @@ checkPri' scope (Gauss rp εp δp f) =
 
       (τf, _) <- msumTup (mf, msum3Tup (mr, mε, mδ))
 
-      τgauss <- newVar
-      addConstraint (Solvable (IsGaussResult ((NoFun τgauss), τf))) -- we decide later if its gauss or mgauss according to return type
+      -- restrict input type to the correct thing
+      n <- newVar -- dimension of input vector can be anything
+      iclp <- newVar -- clip of input vector can be anything
+      τv <- newVar -- input element type can be anything (as long as it's numeric)
+      addConstraint(Solvable(IsLessEqual(τf, (NoFun (DMGrads L2 iclp n (Numeric (τv)))))))
 
-      return (NoFun (DMTup [τgauss]))
+      -- return result type as a tuple bc gauss is a mutating function
+      return (NoFun (DMTup [(DMGrads LInf U n (Numeric (NonConst DMReal)))]))
+
+
+checkPri' scope (Laplace rp εp f) =
+  let
+   setParam :: TC DMMain -> Sensitivity -> TC ()
+   setParam dt v = do -- parameters must be const numbers.
+      τ <- dt
+      τv <- newVar
+      unify τ (NoFun (Numeric (Const v τv)))
+      mtruncateP zeroId
+      return ()
+
+   setBody df ε r = do
+      -- extract f's type from the TC monad
+      τf <- df
+      -- interesting input variables must have sensitivity <= r
+      restrictInteresting r
+      -- interesting output variables are set to (ε, δ), the rest is truncated to ∞
+      mtruncateP inftyP
+      (ivars, itypes) <- getInteresting
+      logForce $ ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>\nInteresting variables: " <> show ivars <> "\n<<<<<<<<<<<<<<<<" 
+      mapM (\(x, (τ :@ _)) -> setVarP x (WithRelev IsRelevant (τ :@ PrivacyAnnotation (ε, zeroId)))) (zip ivars itypes)
+      -- return type is a privacy type.
+      return τf
+   in do
+      -- check all the parameters and f, extract the TC monad from the Delayed monad.
+      let drp = checkSens scope rp
+      let dεp = checkSens scope εp
+      let df  = checkSens scope f
+
+      -- create variables for the parameters
+      v_ε :: Sensitivity <- newVar
+      v_r :: Sensitivity <- newVar
+
+      -- eps parameter must be > 0 for scaling factor to be well-defined
+      addConstraint (Solvable (IsLess (zeroId :: Sensitivity, v_ε)))
+
+      -- sensitivity parameter must be > 0 for laplace distribution to be well-defined
+      addConstraint (Solvable (IsLess (zeroId :: Sensitivity, v_r)))
+
+      -- restrict interesting variables in f's context to v_r
+      let mf = setBody df v_ε v_r
+
+      let mr = setParam drp v_r
+      let mε = setParam dεp v_ε
+
+      (τf, _) <- msumTup (mf, msumTup (mr, mε))
+
+
+      -- restrict input type to the correct thing
+      n <- newVar -- dimension of input vector can be anything
+      iclp <- newVar -- clip of input vector can be anything
+      τv <- newVar -- input element type can be anything (as long as it's numeric)
+      addConstraint(Solvable(IsLessEqual(τf, (NoFun (DMGrads L2 iclp n (Numeric (τv)))))))
+
+      -- return result type as a tuple bc laplace is a mutating function
+      return (NoFun (DMTup [(DMGrads LInf U n (Numeric (NonConst DMReal)))]))
 
 
 checkPri' scope (Loop niter cs' (xi, xc) body) =

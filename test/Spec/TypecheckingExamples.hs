@@ -57,17 +57,36 @@ testPriv pp = describe "privacies" $ do
     let ret = "function f(x :: Integer) :: Priv() \n\
                \ x + x                 \n\
                \ end"
-        inv = "function g(x :: Integer) :: Priv() \n\
+        inv = "function g(x :: DMGrads) :: Priv() \n\
                \ x = 0.1*x \n\
                \ gaussian_mechanism!(0.1, 0.1, 0.1, x) :: Robust() \n\
-               \ 200*x \n\
+               \ x :: Robust() = 200*x \n\
+               \ end"
+        lap = "function g(x :: DMGrads) :: Priv() \n\
+               \    x = 0.1*x \n\
+               \    laplacian_mechanism!(0.1, 0.1, x) :: Robust() \n\
+               \    x :: Robust() = 200*x \n\
                \ end"
         int = NoFun(Numeric (NonConst DMInt))
-        real = NoFun(Numeric (NonConst DMReal))
+        real = (Numeric (NonConst DMReal))
         ty_r = Fun([([int :@ (inftyS, inftyS)] :->*: int) :@ Just [JTInt]])
-        ty_i = Fun([([int :@ (constCoeff (Fin 0.1), constCoeff (Fin 0.1))] :->*: real) :@ Just [JTInt]])
+        ty_i :: TC DMMain = do
+            c <- newVar
+            n <- newVar
+            nt <- newVar
+            let gradin = NoFun (DMGrads L2 c n (Numeric (NonConst nt)))
+            let gradout = NoFun (DMTup [DMGrads LInf U n real])
+            return (Fun ([([gradin :@ (constCoeff (Fin 0.1), constCoeff (Fin 0.1))] :->*: gradout) :@ Just [JTGrads]]))
+        ty_l :: TC DMMain = do
+            c <- newVar
+            n <- newVar
+            nt <- newVar
+            let gradin = NoFun (DMGrads L2 c n (Numeric (NonConst nt)))
+            let gradout = NoFun (DMTup [DMGrads LInf U n real])
+            return (Fun ([([gradin :@ (constCoeff (Fin 0.1), constCoeff (Fin 0))] :->*: gradout) :@ Just [JTGrads]]))
     parseEval pp "return" ret (pure ty_r)
-    parseEval pp "robust" inv (pure ty_i)
+    parseEvalUnify pp "robust" inv (ty_i)
+    parseEvalUnify pp "laplace" lap (ty_l)
 
 
 testBlackBox pp = describe "black box" $ do
