@@ -41,8 +41,8 @@ pSingle e = case e of
                  JEIfElse cond ifb elseb -> (Phi <$> pSingle cond <*> pSingle ifb <*> pSingle elseb)
                  JELoop ivar iter body -> pJLoop ivar iter body
                  JEPrivLoop ivar iter body -> pLoopRes BindLet (pJLoop ivar iter body) (pure (Extra MutRet))
-                 JEAssignment aee amt -> pJSLet aee amt [aee] (Extra . DefaultRet)
-                 JEBind aee amt -> pJBind aee amt [aee] (Extra . DefaultRet)
+                 JEAssignment aee amt -> pJLet SLet aee amt [aee] (Extra . DefaultRet)
+                 JEBind aee amt -> pJLet SBind aee amt [aee] (Extra . DefaultRet)
                  JETupAssignment aee amt -> pJTLet aee amt [JETup aee] (Extra . DefaultRet)
                  JEFunction name term -> pJFLet name term [name] (Extra . DefaultRet)
                  JEBlackBox name args -> pJBlackBox name args [name] (Extra . DefaultRet)
@@ -67,8 +67,8 @@ pList (s : tail) = case s of
                                                     put (file, line, d)
                                                     s <- (pList tail)
                                                     return s
-                        JEAssignment aee amt -> pJSLet aee amt tail (\x -> x)
-                        JEBind aee amt -> pJBind aee amt tail (\x -> x)
+                        JEAssignment aee amt -> pJLet SLet aee amt tail (\x -> x)
+                        JEBind aee amt -> pJLet SBind aee amt tail (\x -> x)
                         JETupAssignment aee amt -> pJTLet aee amt tail (\x -> x)
                         JEFunction name term -> pJFLet name term tail (\x -> x)
                         JEBlackBox name args -> pJBlackBox name args tail (\x -> x)
@@ -157,34 +157,16 @@ pJBlackBox name args tail wrapper =
                                     return (BBLet (UserTeVar pname) (sndA <$> pargs) ptail)
     _ -> parseError $ "Invalid function name expression " <> show name <> ", must be a symbol."
 
-pJSLet assignee assignment tail wrapper =
-   case assignee of
-        JEHole     -> do
-                        dasgmt <- pSingle assignment
-                        dtail <- pList tail
-                        return (SLet (Nothing :- JTAny) dasgmt (wrapper dtail))
-        JESymbol s -> do
-                        dasgmt <- pSingle assignment
-                        dtail <- pList tail
-                        return (SLet (Just (UserTeVar s) :- JTAny) dasgmt (wrapper dtail))
-        JETypeAnnotation _ _ -> parseError "Type annotations on variables are not supported."
-        JENotRelevant _ _ -> parseError "Type annotations on variables are not supported."
-        _          -> parseError ("Invalid assignee " <> (show assignee) <> ", must be a variable.")
 
-
-pJBind assignee assignment tail wrapper =
+pJLet ctor assignee assignment tail wrapper = do
+   dasgmt <- pSingle assignment
+   dtail <- pList tail
    case assignee of
-        JEHole     -> do
-                        dasgmt <- pSingle assignment
-                        dtail <- pList tail
-                        return (SBind (Nothing :- JTAny) dasgmt (wrapper dtail))
-        JESymbol s -> do
-                        dasgmt <- pSingle assignment
-                        dtail <- pList tail
-                        return (SBind (Just (UserTeVar s) :- JTAny) dasgmt (wrapper dtail))
+        JEHole     -> return (ctor (Nothing :- JTAny) dasgmt (wrapper dtail))
+        JESymbol s -> return (ctor (Just (UserTeVar s) :- JTAny) dasgmt (wrapper dtail))
         JETypeAnnotation _ _ -> parseError "Type annotations on variables are not supported."
-        JENotRelevant _ _ -> parseError "Type annotations on variables are not supported."
-        _ -> parseError ("Invalid assignee " <> (show assignee) <> ", must be a variable.")
+        JENotRelevant _ _    -> parseError "Type annotations on variables are not supported."
+        _                    -> parseError ("Invalid assignee " <> (show assignee) <> ", must be a variable.")
 
 
 pJLoop ivar iter body =
