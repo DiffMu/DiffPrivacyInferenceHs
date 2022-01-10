@@ -164,8 +164,20 @@ newScopeVar hint = scopeNames %%= (first ScopeVar . (newName hint))
 --------------------------------------------------------------------------------------
 -- Accessing the VA-Ctx in the MTC monad
 
-markMutatedBase :: IsFLetDefined -> ScopeVar -> IsLocalMutation -> TeVar -> MTC ()
-markMutatedBase fletdef scname loc var = mutTypes %=~ (markMutatedInScope scname var)
+markMutatedBase :: IsFLetDefined -> ScopeVar -> IsLocalMutation -> TeVar -> MTC IsLocalMutation
+markMutatedBase fletdef scname loc var = do
+  mutTypes %=~ (markMutatedInScope scname var)
+
+  newvatype <- getValue var <$> use mutTypes
+
+  -- extracting the new locality
+  newloc <- case newvatype of
+                Just (WriteSingleBase _ _ newloc) -> return newloc
+                _ -> impossible "Expected the resulting locality after `markMutatedBase` to be a `WriteSingleBase`."
+
+  return newloc
+
+    -- The actual updating function
     where 
       markMutatedInScope :: ScopeVar -> TeVar -> VarAccessCtx -> MTC VarAccessCtx 
       markMutatedInScope scname var ctx =
@@ -177,12 +189,18 @@ markMutatedBase fletdef scname loc var = mutTypes %=~ (markMutatedInScope scname
             debug $ "[markMutatedBase]: VA type for '" <> show var <> "' changes from " <> show oldvatype <> " to " <> show newvatype
             return (setValue var newvatype ctx)
 
-markMutatedFLet :: ScopeVar -> IsLocalMutation -> TeVar -> MTC ()
+markMutatedFLet :: ScopeVar -> IsLocalMutation -> TeVar -> MTC IsLocalMutation
 markMutatedFLet scname loc var = do
   log $ "Marking flet mutated for " <> show var
   markMutatedBase FLetDefined scname loc var
 
-markMutated :: ScopeVar -> IsLocalMutation -> TeVar -> MTC ()
+--
+-- Apply a mutation of `loc` locality to the `var`.
+-- This might or might not change `loc`, depending on whether this variable
+-- is already local or not-local.
+-- The resulting locality is returned.
+--
+markMutated :: ScopeVar -> IsLocalMutation -> TeVar -> MTC IsLocalMutation
 markMutated scname loc var = do
   log $ "Marking simple mutated for " <> show var
   markMutatedBase NotFLetDefined scname loc var
@@ -487,11 +505,18 @@ elaborateMut scname scope (Extra (MutLet ltype term1 term2)) = do
     -- only term1 is mutating
     (VirtualMutated mutNames1, VirtualMutated []) -> do
 
-      warn ("Found the term " <> showPretty term2
-                     <> " which is not a mutating function call in a place where only such calls make sense.\n"
-                     <> " => It has the type " <> show (VirtualMutated []) <> "\n"
-                     <> " => In the term:\n" <> parenIndent (showPretty (Extra (MutLet ltype term1 term2))) <> "\n"
-                     <> " => Conclusion: It is ignored in the privacy analysis.")
+      warn $ "Found a term which is not a mutating function call in a place where only such calls make sense.\n"
+                     <> "The full term is:\n"
+                     <> "---------------------------\n"
+                     <> "-- type: " <> show (VirtualMutated mutNames1) <> "\n"
+                     <> showPretty term1 <> "\n"
+                     <> "------------\n"
+                     <> "-- type: " <> show (VirtualMutated []) <> "\n"
+                     <> showPretty term2 <> "\n"
+                     <> "---------------------------\n"
+                    --  <> " => It has the type " <> show (VirtualMutated []) <> "\n"
+                    --  <> " => In the term:\n" <> parenIndent (showPretty (Extra (MutLet ltype term1 term2))) <> "\n"
+                    --  <> " => Conclusion: It is ignored in the privacy analysis.")
 
       let ns1 = [Just n :- JTAny | (n, _) <- mutNames1]
           term = TLetBase ltype ns1 newTerm1
@@ -504,11 +529,20 @@ elaborateMut scname scope (Extra (MutLet ltype term1 term2)) = do
     -- only term2 is mutating
     (VirtualMutated [], VirtualMutated mutNames2) -> do
 
-      warn ("Found the term " <> showPretty term1
-                     <> " which is not a mutating function call in a place where only such calls make sense.\n"
-                     <> " => It has the type " <> show (VirtualMutated []) <> "\n"
-                     <> " => In the term:\n" <> parenIndent (showPretty (Extra (MutLet ltype term1 term2))) <> "\n"
-                     <> " => Conclusion: It is ignored in the privacy analysis.")
+      warn $ "Found a term which is not a mutating function call in a place where only such calls make sense.\n"
+                     <> "The full term is:\n"
+                     <> "---------------------------\n"
+                     <> "-- type: " <> show (VirtualMutated []) <> "\n"
+                     <> showPretty term1 <> "\n"
+                     <> "------------\n"
+                     <> "-- type: " <> show (VirtualMutated mutNames2) <> "\n"
+                     <> showPretty term2 <> "\n"
+                     <> "---------------------------\n"
+      -- warn ("Found the term " <> showPretty term1
+      --                <> " which is not a mutating function call in a place where only such calls make sense.\n"
+      --                <> " => It has the type " <> show (VirtualMutated []) <> "\n"
+      --                <> " => In the term:\n" <> parenIndent (showPretty (Extra (MutLet ltype term1 term2))) <> "\n"
+      --                <> " => Conclusion: It is ignored in the privacy analysis.")
 
       let ns2 = [Just n :- JTAny | (n, _) <- mutNames2]
           term = TLetBase ltype ns2 newTerm2
@@ -595,11 +629,22 @@ elaborateMut scname scope (Extra (MutLet ltype term1 term2)) = do
 
       case p of
         DefaultValue -> return ()
-        _ -> warn ("Found the term " <> showPretty term2
-                     <> " which is not mutating in a place where only mutating terms make sense.\n"
-                     <> " => It has the type " <> show (Pure p) <> "\n"
-                     <> " => In the term:\n" <> parenIndent (showPretty (Extra (MutLet ltype term1 term2))) <> "\n"
-                     <> " => Conclusion: It is ignored in the privacy analysis.")
+        _ ->  do warn $ "Found a term which is not a mutating function call in a place where only such calls make sense.\n"
+                     <> "The full term is:\n"
+                     <> "---------------------------\n"
+                     <> "-- type: " <> show (VirtualMutated mutNames1) <> "\n"
+                     <> showPretty term1 <> "\n"
+                     <> "------------\n"
+                     <> "-- type: " <> show (Pure p) <> "\n"
+                     <> showPretty term2 <> "\n"
+                     <> "---------------------------\n"
+          
+          
+          -- warn ("Found the term " <> showPretty term2
+          --            <> " which is not mutating in a place where only mutating terms make sense.\n"
+          --            <> " => It has the type " <> show (Pure p) <> "\n"
+          --            <> " => In the term:\n" <> parenIndent (showPretty (Extra (MutLet ltype term1 term2))) <> "\n"
+          --            <> " => Conclusion: It is ignored in the privacy analysis.")
 
       -- let mutNames2 = [(v, LocalMutation) | v <- mutNames2']
       --     commonMutNames = nub (mutNames1 <> mutNames2)
@@ -1107,12 +1152,12 @@ elaborateMutList f scname scope mutargs = do
               Nothing -> logForce ("The scope is" <> show scope) >> throwError (DemutationDefinitionOrderError x)
               Just (Pure (SingleArg y)) | x == y -> do
                 debug $ "[elaborateMutList]: The non-local variable " <> show y <> " is being mutated."
-                markMutated scname NotLocalMutation y
-                return (Var (Just x :- a) , Just (x, NotLocalMutation))
+                loc <- markMutated scname NotLocalMutation y
+                return (Var (Just x :- a) , Just (x, loc))
               Just (Pure (SingleArg y)) -> throwError (DemutationError $ "When calling the mutating function " <> f <> " found the variable " <> show x <> " as argument in a mutable-argument-position. It is bound to the function argument " <> show y <> ", but it is not allowed to use renamed function arguments in such a position.")
               Just (Pure _) -> do
-                markMutated scname LocalMutation x
-                return (Var (Just x :- a) , Just (x, LocalMutation))
+                loc <- markMutated scname LocalMutation x
+                return (Var (Just x :- a) , Just (x, loc))
               Just res -> throwError (DemutationError $ "When calling the mutating function " <> f <> " found the variable " <> show x <> " as argument in a mutable-argument-position. It has the type " <> show res <> ", which is not allowed here.")
 
           (Var (Nothing :- a)) -> throwError (DemutationError $ "When calling the mutating function " <> f <> " found the term " <> showPretty arg <> " as argument in a mutable-argument-position. Only named variables are allowed here.")
