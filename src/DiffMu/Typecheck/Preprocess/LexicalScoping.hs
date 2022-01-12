@@ -16,6 +16,8 @@ import Data.Foldable
 
 import Debug.Trace
 
+
+
 -----------------------------------------------------------------------------------
 -- preprocessing step to make function argument names unique
 
@@ -23,6 +25,7 @@ data LSFull = LSFull
   {
     _termVarsOfLS :: NameCtx
   }
+
 
 -- the monad keeping the state we require to generate unique names
 type LSTC = LightTC Location_PrePro_Demutation LSFull

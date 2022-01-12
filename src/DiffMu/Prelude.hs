@@ -17,6 +17,7 @@ module DiffMu.Prelude
   , MonadInternalError (..)
   , TeVar (..)
   , ScopeVar (..)
+  , MemVar (..)
   , throwOriginalError
   , blue, green, yellow, red, magenta
   )
@@ -33,6 +34,9 @@ import DiffMu.Prelude.Data as All
 
 import qualified Prelude (String)
 import Data.Text as T
+
+class (Eq v, Hashable v) => DictKey v
+
 newtype Symbol = Symbol Text
   deriving (Eq,Ord,Hashable,Semigroup,Monoid)
 
@@ -65,6 +69,11 @@ instance Show (SymbolOf k) where
 instance Show Symbol where
   show (Symbol t) = T.unpack t
 
+instance DictKey Symbol
+
+---------------------------
+-- Term variables
+
 data TeVar = UserTeVar Symbol | GenTeVar Symbol
   deriving (Eq,Generic, Ord)
 
@@ -73,6 +82,10 @@ instance Show TeVar where
   show (UserTeVar x) = show x
   show (GenTeVar x) = "gen_" <> show x
 
+instance DictKey TeVar
+
+---------------------------
+-- Scope variables
 
 data ScopeVar = ScopeVar Symbol
   deriving (Eq,Generic, Ord)
@@ -81,10 +94,20 @@ instance Hashable ScopeVar
 instance Show ScopeVar where
   show (ScopeVar x) = show x
 
+instance DictKey ScopeVar
 
-class (Eq v, Hashable v) => DictKey v
-instance DictKey Symbol
-instance DictKey TeVar
+---------------------------
+-- Memory variables
+
+data MemVar = MemVar Symbol
+  deriving (Eq,Generic, Ord)
+
+instance Hashable MemVar
+instance Show MemVar where
+  show (MemVar x) = show x
+
+instance DictKey MemVar
+
 
 -- class (forall k. Hashable (v k)) => KHashable v
 -- class (forall k. Show (v k)) => KShow v

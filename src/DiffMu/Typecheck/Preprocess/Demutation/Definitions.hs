@@ -35,7 +35,7 @@ data IsLocalMutation = LocalMutation | NotLocalMutation
   deriving (Show, Eq)
 
 --
--- NOTE: We later sort `VarAccessType`s,
+-- NOTE: We later sort `MemAccessType`s,
 -- and we do not want that the `IsLocalMutation`
 -- content influences this sort --- we need to know
 -- which comes first.
@@ -54,19 +54,20 @@ le_ilm NotLocalMutation NotLocalMutation = True
 onlyLocallyMutatedVariables :: [(TeVar,IsLocalMutation)] -> Bool
 onlyLocallyMutatedVariables xs = [v | (v, NotLocalMutation) <- xs] == []
 
-data PureType = UserValue | DefaultValue | SingleArg TeVar
+data PureType = UserValue RValue | DefaultValue -- SingleArg TeVar
   deriving (Show)
 
-data ImmutType = Pure PureType | Mutating [IsMutated] | VirtualMutated [(TeVar , IsLocalMutation)] | PureBlackBox
+data ImmutType = Pure PureType | VirtualMutated [(TeVar , MemVar)] -- PureBlackBox
   deriving (Show)
 
 consumeDefaultValue :: ImmutType -> ImmutType
-consumeDefaultValue (Pure DefaultValue) = Pure UserValue
+consumeDefaultValue (Pure DefaultValue) = Pure (UserValue (RAnonymous MemAny))
 consumeDefaultValue a = a
 
 
 -- the scope
-type Scope = Ctx TeVar ImmutType
+-- type Scope = Ctx TeVar ImmutType
+type Scope = Ctx TeVar MemVar
 
 --------------------------------------------------------
 -- monoid instance for isMutated
@@ -84,54 +85,58 @@ instance Monad m => CheckNeutral m IsMutated where
 -- Variable Access Type
 --------------------------------------------------------------------------------------
 
-data VarAccessType = ReadSingle ScopeVar | ReadMulti | WriteSingleBase IsFLetDefined ScopeVar IsLocalMutation
+data MemAccessType = ReadSingle | ReadMulti | WriteSingleBase IsFLetDefined -- IsLocalMutation
   deriving (Show,Eq,Ord)
 
 data IsFLetDefined = FLetDefined | NotFLetDefined
   deriving (Show,Eq,Ord)
 
-pattern WriteSingle v l = WriteSingleBase NotFLetDefined v l
-pattern WriteSingleFunction v l = WriteSingleBase FLetDefined v l
+pattern WriteSingle = WriteSingleBase NotFLetDefined
+pattern WriteSingleFunction = WriteSingleBase FLetDefined
 
 -- type ImVarAccessCtx = Ctx TeVar ()
-type VarAccessCtx = Ctx TeVar VarAccessType
+-- type VarAccessCtx = Ctx MemVar MemAccessType
+
+type MemCtx = Ctx MemVar (MemType, ScopeVar, MemAccessType)
 
 
-computeVarAccessType :: TeVar -> VarAccessType -> VarAccessType -> MTC VarAccessType
-computeVarAccessType var a b = do
-  let cur = sort [a,b]
+computeMemAccessType :: MemVar -> (MemAccessType, ScopeVar) -> (MemAccessType, ScopeVar) -> MTC MemAccessType
+computeMemAccessType var (a, l) (b, k) = do
+  let cur = sort [(a,l),(b,k)]
   case cur of
-    [ReadSingle a, ReadSingle b] | a == b   -> pure (ReadSingle a)
-    [ReadSingle a, ReadSingle b] | a /= b   -> pure (ReadMulti)
-    [ReadSingle a, ReadMulti]               -> pure (ReadMulti)
-    [ReadSingle a, WriteSingle b l] | a == b  -> pure (WriteSingle a l)
-    [ReadSingle a, WriteSingle b l] | a /= b  -> throwError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' "
+    [(ReadSingle, a), (ReadSingle, b)] | a == b   -> pure (ReadSingle)
+    [(ReadSingle, a), (ReadSingle, b)] | a /= b   -> pure (ReadMulti)
+    [(ReadSingle, a), (ReadMulti, _)]             -> pure (ReadMulti)
+    [(ReadSingle, a), (WriteSingle, b)] | a == b  -> pure (WriteSingle)
+    [(ReadSingle, a), (WriteSingle, b)] | a /= b  -> throwError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' "
                                                                            <> "' is being mutated and read in two different scopes.\n"
                                                                            <> "This is not allowed."
     -- [ReadSingle a, WriteSingleFunction b] | a == b -> pure (WriteSingleFunction a)
     -- [ReadSingle a, WriteSingleFunction b] | a /= b -> throwError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' "
     --                                                                                <> "' is being mutated and read in two different scopes.\n"
     --                                                                                <> "This is not allowed."
-    [ReadSingle a, WriteSingleFunction b l]   -> pure (WriteSingleFunction b l)
-    [ReadMulti,ReadMulti]                   -> pure (ReadMulti)
-    [ReadMulti,WriteSingle _ l]               -> throwError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' "
+    [(ReadSingle, a), (WriteSingleFunction, b)]   -> pure (WriteSingleFunction)
+    [(ReadMulti, _),(ReadMulti, _)]               -> pure (ReadMulti)
+    [(ReadMulti, _),(WriteSingle, _)]             -> throwError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' "
                                                                             <> "' is being mutated and read in two different scopes.\n"
                                                                             <> "This is not allowed."
-    [ReadMulti,WriteSingleFunction a l]       -> pure (WriteSingleFunction a l) -- because of flet reordering it is allowed to mutate functions
-    [WriteSingle a l, WriteSingle b k] | a == b, le_ilm l k  -> pure (WriteSingle a l)
-    [WriteSingle a l, WriteSingle b k] | a == b -> throwError $ DemutationError $ "The function argument '" <> show var <> "' has been mutated.\n"
-                                                                                <> "But then a statement follows which assigns a variable with the same name."
-                                                                                <> "This is not allowed, please use a different name here."
-    [WriteSingle a l, WriteSingle b k]          -> throwError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' "
+    [(ReadMulti,_),(WriteSingleFunction, a)]       -> pure (WriteSingleFunction) -- because of flet reordering it is allowed to mutate functions
+    [(WriteSingle, a), (WriteSingle, b)] | a == b              -> pure (WriteSingle)
+    -- [(WriteSingle a l, WriteSingle b k] | a == b, le_ilm l k  -> pure (WriteSingle a l)
+    -- [(WriteSingle a l, WriteSingle b k] | a == b -> throwError $ DemutationError $ "The function argument '" <> show var <> "' has been mutated.\n"
+    --                                                                             <> "But then a statement follows which assigns a variable with the same name."
+    --                                                                             <> "This is not allowed, please use a different name here."
+    [(WriteSingle, a), (WriteSingle, b)]          -> throwError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' "
                                                                             <> "' is being mutated in two different scopes.\n"
                                                                             <> "This is not allowed."
-    [WriteSingle _ l, WriteSingleFunction _ k]  -> throwError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' is defined as function and as value."
+    [(WriteSingle, _), (WriteSingleFunction, _)]  -> throwError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' is defined as function and as value."
                                                                             <> "This is not allowed."
-    [WriteSingleFunction a l, WriteSingleFunction b k] | a == b, le_ilm l k -> pure (WriteSingleFunction a k)
-    [WriteSingleFunction a l, WriteSingleFunction b k] | a == b         -> throwError $ DemutationError $ "The function argument '" <> show var <> "' has been mutated.\n"
-                                                                                <> "But then a statement follows which assigns a variable with the same name."
-                                                                                <> "This is not allowed, please use a different name here."
-    [WriteSingleFunction a l, WriteSingleFunction b k] | a /= b -> throwError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' "
+    [(WriteSingleFunction, a), (WriteSingleFunction, b)] | a == b ->              pure (WriteSingleFunction)
+    -- [(WriteSingleFunction a l, WriteSingleFunction b k] | a == b, le_ilm l k -> pure (WriteSingleFunction a k)
+    -- [(WriteSingleFunction a l, WriteSingleFunction b k] | a == b         -> throwError $ DemutationError $ "The function argument '" <> show var <> "' has been mutated.\n"
+    --                                                                             <> "But then a statement follows which assigns a variable with the same name."
+    --                                                                             <> "This is not allowed, please use a different name here."
+    [(WriteSingleFunction, a), (WriteSingleFunction, b)] | a /= b -> throwError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' "
                                                                             <> "' is being mutated in two different scopes.\n"
                                                                             <> "This is not allowed."
     _ -> impossible "In demutation, while computing var access type. This branch should be inaccessible."
@@ -142,7 +147,11 @@ computeVarAccessType var a b = do
 -- Memory types and local aliasing
 --------------------------------------------------------------------------------------
 
+data MemType = MemTup [RValue] | MemAny | MemMutatingFun [IsMutated] | MemPureFun | MemPureBlackBox
+  deriving (Eq,Show)
 
+data RValue = RMem MemVar | RAnonymous MemType
+  deriving (Eq,Show)
 
 --------------------------------------------------------------------------------------
 -- The demutation monad
@@ -150,9 +159,10 @@ computeVarAccessType var a b = do
 
 data MFull = MFull
   {
-    _mutTypes :: VarAccessCtx
+    _memctx :: MemCtx
   , _termVarsOfMut :: NameCtx
   , _scopeNames :: NameCtx
+  , _memNames :: NameCtx
   , _topLevelInfo :: TopLevelInformation
   }
 
@@ -168,4 +178,8 @@ newTeVarOfMut hint = termVarsOfMut %%= (first GenTeVar . (newName hint))
 
 newScopeVar :: (MonadState MFull m) => Text -> m (ScopeVar)
 newScopeVar hint = scopeNames %%= (first ScopeVar . (newName hint))
+
+newMemVar :: (MonadState MFull m) => Text -> m (MemVar)
+newMemVar hint = scopeNames %%= (first MemVar . (newName hint))
+
 
