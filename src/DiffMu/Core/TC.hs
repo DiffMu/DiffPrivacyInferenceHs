@@ -88,6 +88,9 @@ instance Substitute v a x => Substitute v a (H.HashMap k x) where
 instance Substitute TVarOf DMTypeOf (SVarOf k) where
   substitute σs = pure
 
+instance Substitute SVarOf SensitivityOf (AnnotationKind) where
+  substitute σs = pure
+
 instance Substitute TVarOf DMTypeOf DMTypeOp where
   substitute σs (Unary op arg res) = (Unary op <$> substitute σs arg <*> substitute σs res)
   substitute σs (Binary op args res) = (Binary op <$> substitute σs args <*> substitute σs res)
@@ -96,7 +99,10 @@ instance Substitute TVarOf DMTypeOf (Annotation a) where
   substitute σs (SensitivityAnnotation s) = SensitivityAnnotation <$> (substitute σs s)
   substitute σs (PrivacyAnnotation s) = PrivacyAnnotation <$> (substitute σs s)
 
+instance Substitute TVarOf DMTypeOf (AnnotationKind) where
+  substitute σs = pure
 
+  
 removeVars :: forall t. Monad t => (forall k. (IsKind k) => TVarOf k -> t (DMTypeOf k)) -> [SomeK (TVarOf)] -> t [SomeK (TVarOf)]
 removeVars σs vs = do
   let f :: SomeK (TVarOf) -> t (Maybe (SomeK TVarOf))
@@ -178,6 +184,9 @@ instance FreeVars TVarOf Symbol where
    freeVars a = []
 
 instance FreeVars TVarOf TeVar where
+   freeVars a = []
+
+instance FreeVars TVarOf AnnotationKind where
    freeVars a = []
 
 instance (FreeVars v a, FreeVars v b) => FreeVars v (Either a b) where
@@ -387,8 +396,9 @@ instance DictKey v => DictLike v x (CtxStack v x) where
 instance Normalize t a => Normalize t (CtxStack v a) where
   normalize (CtxStack top other) = CtxStack <$> normalize top <*> normalize other
 
+
 instance (Show v, Show a, DictKey v) => Show (CtxStack v a) where
-  show (CtxStack top other) = "   - top:\n" <> show top <> "\n"
+      show (CtxStack top other) = "   - top:\n" <> show top <> "\n"
                               <> "   - others:\n" <> show other
 
 -- type ConstraintCtx = AnnNameCtx (Ctx Symbol (Solvable' TC))
@@ -860,6 +870,8 @@ instance Monad m => MonadWatch (TCT m) where
 instance Monad t => (Normalize t Symbol) where
   normalize a = pure a
 
+instance Monad t => Normalize t AnnotationKind where
+  normalize a = pure a
 
 
 supremum :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsSupremum ((a k, a k) :=: a k), SingI k, Typeable k, ContentConstraintOnSolvable t ((a k, a k) :=: a k), ConstraintOnSolvable t (IsSupremum ((a k, a k) :=: a k))) => (a k) -> (a k) -> t (a k)

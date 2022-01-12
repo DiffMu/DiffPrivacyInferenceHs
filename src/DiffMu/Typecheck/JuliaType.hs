@@ -44,13 +44,13 @@ juliatypes (Const _ τ) = juliatypes τ
 juliatypes (NonConst τ) = juliatypes τ
 juliatypes (TVar x) = [JTBot] -- TVars fit everywhere
 juliatypes (_ :->: _) = [JTFunction]
-juliatypes (_ :->*: _) = [JTFunction]
+juliatypes (_ :->*: _) = [JTPFunction]
 juliatypes (DMTup xs) =
   let jss :: [[JuliaType]]
       jss = juliatypes `mapM` xs
       f js = JTTuple js
   in f <$> jss
-juliatypes (Fun _) = [JTFunction]
+juliatypes (Fun ((τ :@ _):_)) = juliatypes τ -- TODO i am lazy and assume that the list is homogeneous. see issue #161
 juliatypes (NoFun τ) = juliatypes τ
 juliatypes τ = error $ "juliatypes(" <> show τ <> ") not implemented."
 
@@ -112,7 +112,12 @@ createDMType (t)  = throwError (TypeMismatchError $ "expected " <> show t <> " t
 -- But does nothing if the julia type cannot be mapped to a dmtype, e.g. if it is `Any`
 addJuliaSubtypeConstraint :: IsT MonadDMTC t => DMMain -> JuliaType -> t ()
 addJuliaSubtypeConstraint τ JTAny = pure ()
-addJuliaSubtypeConstraint τ JTFunction = pure ()
+addJuliaSubtypeConstraint τ JTFunction = do
+    addConstraint (Solvable (IsFunction (SensitivityK, τ)))
+    pure ()
+addJuliaSubtypeConstraint τ JTPFunction = do
+    addConstraint (Solvable (IsFunction (PrivacyK, τ)))
+    pure ()
 addJuliaSubtypeConstraint τ jt = do
   ι <- createDMType jt
   τ ≤! (NoFun ι)
@@ -145,3 +150,23 @@ newtype JuliaSignature = JuliaSignature [JuliaType]
 instance PartialOrd JuliaSignature where
   leq (JuliaSignature a) (JuliaSignature b) = and (zipWith leq a b)
 
+
+
+--------------------------------------------------
+-- Things that should be functions
+
+instance FixedVars TVarOf (IsFunction (AnnotationKind, DMTypeOf MainKind)) where
+  fixedVars (IsFunction (b)) = []
+
+instance Solve MonadDMTC IsFunction (AnnotationKind, DMMain) where
+    solve_ Dict _ name (IsFunction (kind, typ)) = let
+        checkKind (f :@ _) = case (f, kind) of
+            (_:->:_, SensitivityK) -> True
+            (_:->*:_, PrivacyK) -> True
+            _ -> False
+        in case typ of
+            Fun ts -> case and (map checkKind ts) of
+                           True -> dischargeConstraint name
+                           False -> failConstraint name
+            NoFun _ -> failConstraint name
+            _ -> pure ()

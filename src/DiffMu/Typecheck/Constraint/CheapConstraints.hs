@@ -370,3 +370,5 @@ instance Solve MonadDMTC IsLess (Sensitivity, Sensitivity) where
                                                        False -> failConstraint name
                          Nothing -> return ()
          Nothing -> return ()
+
+

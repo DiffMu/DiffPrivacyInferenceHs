@@ -59,13 +59,13 @@ testPriv pp = describe "privacies" $ do
                \ end"
         inv = "function g(x :: DMGrads) :: Priv() \n\
                \ x = 0.1*x \n\
-               \ gaussian_mechanism!(0.1, 0.1, 0.1, x) :: Robust() \n\
-               \ x :: Robust() = 200*x \n\
+               \ gaussian_mechanism!(0.1, 0.1, 0.1, x)  \n\
+               \ x = 200*x \n\
                \ end"
         lap = "function g(x :: DMGrads) :: Priv() \n\
                \    x = 0.1*x \n\
-               \    laplacian_mechanism!(0.1, 0.1, x) :: Robust() \n\
-               \    x :: Robust() = 200*x \n\
+               \    laplacian_mechanism!(0.1, 0.1, x)  \n\
+               \    x = 200*x \n\
                \ end"
         int = NoFun(Numeric (NonConst DMInt))
         real = (Numeric (NonConst DMReal))
@@ -153,10 +153,10 @@ testSample pp = describe "Sample" $ do
               \  gs = foo(D[1,:]) \n\
               \  clip!(L2,gs) \n\
               \  norm_convert!(gs) \n\
-              \  gaussian_mechanism!(2, 0.2, 0.3, gs) :: Robust() \n\
+              \  gaussian_mechanism!(2, 0.2, 0.3, gs)  \n\
               \  x * gs \n\
               \end"
-        ty = "Fun([([NoFun(Matrix<n: L∞, c: τ_30>[s_11 × s_20](Num(Data))) @ (0.4⋅(1 / s_11)⋅s_17,0.3⋅(1 / s_11)⋅s_17),NoFun(Num(Int[s_17])) @ (0,0),NoFun(Num(Int[--])) @ (∞,∞)] ->* NoFun(Matrix<n: L∞, c: U>[1 × s_14](Num(Real[--])))) @ Just [Any,Any,Integer]])"
+        ty = "Fun([([NoFun(Matrix<n: L∞, c: τ_31>[s_11 × s_21](Num(Data))) @ (0.4⋅s_18⋅(1 / s_11),0.3⋅s_18⋅(1 / s_11)),NoFun(Num(Int[s_18])) @ (0,0),NoFun(Num(Int[--])) @ (∞,∞)] ->* NoFun(Grads<n: L∞, c: U>[s_16](Num(Real[--])))) @ Just [Any,Any,Integer]])"
         cs = ""
     parseEvalString_customCheck pp "" ex (ty, cs) (pure $ Right ())
                                                                                    
@@ -184,8 +184,8 @@ testDPGD pp = describe "DPGD" $ do
           \           l = labels[i,:] \n\
           \           gs = unbounded_gradient(model, d, l) \n\
           \           gsc = norm_convert(clip(L2,gs)) \n\
-          \           gsg :: Robust() = gaussian_mechanism(2/dim, eps, del, scale_gradient(1/dim,gsc)) \n\
-          \           model :: Robust() = subtract_gradient(model, scale_gradient(eta * dim, gsg)) \n\
+          \           gsg = gaussian_mechanism(2/dim, eps, del, scale_gradient(1/dim,gsc)) \n\
+          \           model = subtract_gradient(model, scale_gradient(eta * dim, gsg)) \n\
           \    end \n\
           \    model \n\
           \ end"

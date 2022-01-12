@@ -138,14 +138,12 @@ data JExpr =
    | JELineNumber String Int
    | JEUnsupported String
    | JECall JExpr [JExpr]
-   | JEBindCall JExpr [JExpr]
    | JEBlock [JExpr]
    | JEBlackBox JExpr [JExpr]
    | JETypeAnnotation JExpr JuliaType
    | JENotRelevant JExpr JuliaType
    | JEIter JExpr JExpr JExpr
    | JELoop JExpr JExpr JExpr
-   | JEPrivLoop JExpr JExpr JExpr
    | JELam [JExpr] JExpr
    | JELamStar [JExpr] JExpr
    | JEFunction JExpr JExpr
@@ -154,22 +152,22 @@ data JExpr =
    | JETupAssignment [JExpr] JExpr
    | JEIfElse JExpr JExpr JExpr
    | JERef JExpr [JExpr]
-   | JEBind JExpr JExpr
    deriving Show
 
 
 
 pJuliaType :: JTree -> JEParseState JuliaType
 pJuliaType (JSym name) = case name of
-    "Any"      -> pure JTAny
-    "Integer"  -> pure JTInt
-    "Real"     -> pure JTReal
-    "Function" -> pure JTFunction
-    "Vector"   -> pure (JTVector JTAny)
-    "Matrix"   -> pure (JTMatrix JTAny)
-    "DMModel"  -> pure JTModel
-    "DMGrads"  -> pure JTGrads
-    _          -> jParseError ("Unsupported julia type " <> show name)
+    "Any"             -> pure JTAny
+    "Integer"         -> pure JTInt
+    "Real"            -> pure JTReal
+    "Function"        -> pure JTFunction
+    "PrivacyFunction" -> pure JTPFunction
+    "Vector"          -> pure (JTVector JTAny)
+    "Matrix"          -> pure (JTMatrix JTAny)
+    "DMModel"         -> pure JTModel
+    "DMGrads"         -> pure JTGrads
+    _                 -> jParseError ("Unsupported julia type " <> show name)
 pJuliaType (JCurly (name : args)) = case name of
     JSym "Tuple"  -> (JTTuple <$> (mapM pJuliaType args))
     JSym "Matrix" -> case args of
@@ -213,7 +211,6 @@ pAss asg asm = case asg of
     JSym _ -> (JEAssignment <$> pTreeToJExpr asg <*> pTreeToJExpr asm)
     JCall _ -> pFLet asg asm
     JTup ts -> (JETupAssignment <$> mapM pTreeToJExpr ts <*> pTreeToJExpr asm)
-    JTypeAssign [(JSym s), (JCall [JSym "Robust"])] -> (JEBind <$> pTreeToJExpr (JSym s) <*> pTreeToJExpr asm)
     JTypeAssign [(JCall _), (JCall [JSym "BlackBox"])] -> pFLet asg asm
     JTypeAssign _ -> jParseError ("Type annotations on variable assignments not yet supported in assignment of " <> show asg)
     _ -> jParseError ("Unsupported assignment " <> show asg)
@@ -263,13 +260,6 @@ pTreeToJExpr tree = case tree of
          [(JAssign [_, iter]), _] -> jParseError ("Iterator has to be a range! Not like " <> show iter)
          _ -> jParseError ("unsupported loop statement " <> show tree)
      JCurly _        -> jParseError ("Did not expect a julia type but got " <> show tree)
-     JTypeAssign [(JCall as), (JCall [JSym "Robust"])] -> case as of
-         (callee : args) -> JEBindCall <$> pTreeToJExpr callee <*> mapM pTreeToJExpr args
-         []              -> error "empty call"
-     JTypeAssign [(JLoop as), (JCall [JSym "Robust"])] -> case as of
-         [(JAssign [ivar, JCall (JColon: iter)]), body] -> JEPrivLoop <$> pTreeToJExpr ivar <*> pIter iter <*> pTreeToJExpr body
-         [(JAssign [_, iter]), _] -> jParseError ("Iterator has to be a range! Not like " <> show iter)
-         _ -> jParseError ("unsupported loop statement " <> show tree)
      JTypeAssign _   -> jParseError ("Type annotations are not supported here: " <> show tree)
 
      

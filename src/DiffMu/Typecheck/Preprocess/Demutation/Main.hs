@@ -192,7 +192,7 @@ elaborateMut scname scope (Op op args) = do
   args' <- mapM (elaborateNonmut scname scope) args
   pure (Op op (fst <$> args') , Pure UserValue)
 elaborateMut scname scope (Sng η τ) = pure (Sng η τ , Pure UserValue)
-elaborateMut scname scope (Rnd jt) = pure (Rnd jt , Pure UserValue)
+--elaborateMut scname scope (Rnd jt) = pure (Rnd jt , Pure UserValue)
 
 elaborateMut scname scope (Var (x :- j)) = do
   let τ = getValueMaybe x scope

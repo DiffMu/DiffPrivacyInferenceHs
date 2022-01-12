@@ -131,6 +131,13 @@ instance TCConstraint IsChoice where
   constr = IsChoice
   runConstr (IsChoice c) = c
 
+---- Functions/Privacy Functions
+newtype IsFunction a = IsFunction a deriving Show
+
+instance TCConstraint IsFunction where
+  constr = IsFunction
+  runConstr (IsFunction c) = c
+
 {-
 ---- Gauss or Mgauss?
 newtype IsGaussResult a = IsGaussResult a deriving Show

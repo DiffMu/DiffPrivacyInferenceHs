@@ -823,9 +823,11 @@ checkPri' scope (Ret t) = do
    log $ "checking privacy " <> show (Ret t) <> ", type is " <> show τ
    return τ
 
+{-
 checkPri' scope (Rnd t) = do
   τ <- (createDMTypeBaseNum t)
   return (NoFun (Numeric (NonConst τ)))
+-}
 
 -- it is ambiguous if this is an application of a LamStar or an application of a Lam followed by implicit Return.
 -- we handle that by resolving IsFunctionArgument ( T -> T, S ->* S) by setting S's privacies to infinity.
@@ -1295,4 +1297,4 @@ checkPri' scope (SmpLet xs (Sample n m1_in m2_in) tail) =
       -- expression has type of the tail
       return ttail
     
-checkPri' scope t = checkPriv scope (Ret t) -- secretly return if the term has the wrong color.
+checkPri' scope t = (throwError (UnsupportedTermError t))

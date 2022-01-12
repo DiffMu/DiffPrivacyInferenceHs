@@ -59,6 +59,7 @@ type SVar   = SVarOf MainSensKind
 -- 1. DMKinds
 
 data AnnotationKind = SensitivityK | PrivacyK
+  deriving Show
 
 -- type family Annotation (a :: AnnotationKind) = (result :: *) | result -> a where
 -- data family Annotation (a :: AnnotationKind) :: *
@@ -463,6 +464,7 @@ data JuliaType =
     | JTInt
     | JTReal
     | JTFunction
+    | JTPFunction
     | JTTuple [JuliaType]
     | JTVector JuliaType
     | JTMatrix JuliaType
@@ -478,6 +480,7 @@ instance Show JuliaType where
   show JTInt = "Integer"
   show JTReal = "Real"
   show JTFunction = "Function"
+  show JTPFunction = "PrivacyFunction"
   show (JTTuple as) = "Tuple{" ++ (intercalate "," (show <$> as)) ++ "}"
   show (JTVector t) = "Vector{" ++ show t ++ "}"
   show (JTMatrix t) = "Matrix{" ++ show t ++ "}"
@@ -646,7 +649,7 @@ data PreDMTerm (t :: * -> *) =
   | Ret ((PreDMTerm t))
   | Sng Float JuliaType
   | Var (Asgmt JuliaType)
-  | Rnd JuliaType
+--  | Rnd JuliaType
   | Arg TeVar JuliaType Relevance
   | Op DMTypeOp_Some [(PreDMTerm t)]
   | Phi (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
@@ -693,7 +696,7 @@ pattern TLet a b c = TLetBase PureLet a b c
 pattern TBind a b c = TLetBase BindLet a b c
 pattern SmpLet a b c = TLetBase SampleLet a b c
 
-{-# COMPLETE Extra, Ret, Sng, Var, Rnd, Arg, Op, Phi, Lam, LamStar, BBLet, BBApply,
+{-# COMPLETE Extra, Ret, Sng, Var, Arg, Op, Phi, Lam, LamStar, BBLet, BBApply,
  Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, Gauss, Laplace, ConvertM, MCreate, Transpose,
  Size, Length, Index, VIndex, Row, ClipM, Loop, SubGrad, ScaleGrad, Reorder, TProject, LastTerm,
  ZeroGrad, SumGrads, SmpLet, Sample #-}
@@ -766,7 +769,7 @@ recDMTermM f h (Extra e)          = h e
 recDMTermM f h (Ret (r))          = Ret <$> (f r)
 recDMTermM f h (Sng g jt)         = pure $ Sng g jt
 recDMTermM f h (Var (v :- jt))    = pure $ Var (v :- jt)
-recDMTermM f h (Rnd jt)           = pure $ Rnd jt
+-- recDMTermM f h (Rnd jt)           = pure $ Rnd jt
 recDMTermM f h (Arg v jt r)       = pure $ Arg v jt r
 recDMTermM f h (Op op ts)         = Op op <$> (mapM (f) ts)
 recDMTermM f h (Phi a b c)        = Phi <$> (f a) <*> (f b) <*> (f c)
@@ -857,7 +860,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (Ret (r))          = "Ret (" <>  showPretty r <> ")"
   showPretty (Sng g jt)         = show g
   showPretty (Var (v :- jt))    = show v
-  showPretty (Rnd jt)           = "Rnd"
+--  showPretty (Rnd jt)           = "Rnd"
   showPretty (Arg v jt r)       = show v
   showPretty (Op op ts)         = showPretty op <> " " <> showPretty ts
   showPretty (Phi a b c)        = "Phi (" <> showPretty a <> ")" <> parenIndent (showPretty b) <> parenIndent (showPretty c)
@@ -931,6 +934,7 @@ data DMException where
   BlackBoxError           :: String -> DMException
   FLetReorderError        :: String -> DMException
   UnificationShouldWaitError :: DMTypeOf k -> DMTypeOf k -> DMException
+  TermColorError          :: AnnotationKind -> DMTerm -> DMException
   ParseError              :: String -> String -> Int -> DMException -- error message, filename, line number
 
 instance Show DMException where
@@ -950,6 +954,7 @@ instance Show DMException where
   show (BlackBoxError e) = "While preprocessing black boxes, the following error was encountered:\n " <> e
   show (FLetReorderError e) = "While processing function signatures, the following error was encountered:\n " <> e
   show (ParseError e file line) = "Unsupported julia expression in file " <> file <> ", line " <> show line <> ":\n " <> e
+  show (TermColorError color t) = "Expected " <> show t <> " to be a " <> show color <> " expression but it is not."
   show (DemutationDefinitionOrderError a) = "The variable '" <> show a <> "' has not been defined before being used.\n"
                                             <> "Note that currently every variable has to be assigned some value prior to its usage.\n"
                                             <> "Here, 'prior to usage' means literally earlier in the code.\n"
@@ -976,6 +981,7 @@ instance Eq DMException where
   UnificationShouldWaitError a a2  == UnificationShouldWaitError b b2 = True
   ParseError e1 file1 line1        == ParseError e2 file2 line2       = True
   FLetReorderError        a        == FLetReorderError        b       = True
+  TermColorError      a b          == TermColorError c d              = True
   DemutationError a                == DemutationError         b       = True
   DemutationDefinitionOrderError a == DemutationDefinitionOrderError b = True
   DemutationVariableAccessTypeError a == DemutationVariableAccessTypeError b = True

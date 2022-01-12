@@ -10,6 +10,7 @@ import DiffMu.Typecheck.Preprocess.TopLevel
 import DiffMu.Typecheck.Preprocess.Demutation
 import DiffMu.Typecheck.Preprocess.FLetReorder
 import DiffMu.Typecheck.Preprocess.LexicalScoping
+import DiffMu.Typecheck.Preprocess.Colors
 
 import qualified Data.HashMap.Strict as H
 
@@ -44,6 +45,12 @@ preprocessAll term = do
   info $ "-----------------------------------"
   info $ "Lexical scoping processed term:\n" <> showPretty term''''
 
+  -- lexical scoping processing
+  term''''' <- liftLightTC (ColorFull def SensitivityK) (\_ -> ()) (processColors term'''')
+
+  info $ "-----------------------------------"
+  info $ "Color processed term:\n" <> showPretty term'''''
+
   -- done
-  return term''''
+  return term'''''
 

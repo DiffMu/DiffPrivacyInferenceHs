@@ -43,8 +43,8 @@ testSingleRun pp = describe "DPGD" $ do
           \           gs = unbounded_gradient(model, d, l) \n\
           \  \n\
           \           gs = norm_convert(clip(L2,gs)) \n\
-          \           gs :: Robust() = gaussian_mechanism(2/dim, eps, del, scale_gradient(1/dim,gs)) \n\
-          \           model :: Robust() = subtract_gradient(model, scale_gradient(eta * dim, gs)) \n\
+          \           gs = gaussian_mechanism(2/dim, eps, del, scale_gradient(1/dim,gs)) \n\
+          \           model = subtract_gradient(model, scale_gradient(eta * dim, gs)) \n\
           \     #      aloss += loss(d,l,model)/(n*dim) \n\
           \        end \n\
           \    end \n\
