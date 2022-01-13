@@ -47,13 +47,13 @@ markMutatedBase fletdef scname loc var = undefined -- do
 
     -- The actual updating function
     where 
-      markMutatedInScope :: ScopeVar -> TeVar -> MemAccessCtx -> MTC MemAccessCtx 
+      markMutatedInScope :: ScopeVar -> TeVar -> VarAccessCtx -> MTC VarAccessCtx 
       markMutatedInScope scname var ctx =
         case getValue var ctx of
           Nothing                      -> impossible $ "When demutating (MarkMutated), the variable "
                                                        <> show var <> " was not in the VA-Ctx."
           Just oldvatype -> do
-            newvatype <- computeMemAccessType var oldvatype (WriteSingleBase fletdef scname loc)
+            newvatype <- computeVarAccessType var oldvatype (WriteSingleBase fletdef scname loc)
             debug $ "[markMutatedBase]: VA type for '" <> show var <> "' changes from " <> show oldvatype <> " to " <> show newvatype
             return (setValue var newvatype ctx)
 -}
@@ -79,12 +79,12 @@ markRead :: ScopeVar -> MemVar -> MTC ()
 markRead scname var = undefined -- mutTypes %=~ (markReadInScope scname var)
 {-
     where 
-      markReadInScope :: ScopeVar -> TeVar -> MemAccessCtx -> MTC MemAccessCtx 
+      markReadInScope :: ScopeVar -> TeVar -> VarAccessCtx -> MTC VarAccessCtx 
       markReadInScope scname var ctx =
         case getValue var ctx of
           Nothing                      -> pure (setValue var (ReadSingle scname) ctx)
           Just oldvatype -> do
-            newvatype <- computeMemAccessType var oldvatype (ReadSingle scname)
+            newvatype <- computeVarAccessType var oldvatype (ReadSingle scname)
             return (setValue var newvatype ctx)
 -}
 
@@ -96,23 +96,37 @@ markRead scname var = undefined -- mutTypes %=~ (markReadInScope scname var)
 -- markReadOverwritePrevious scname var = mutTypes %%= (\scope -> ((), setValue var (ReadSingle scname) scope))
 -}
 
-
-
-applyMemAccess :: ScopeVar -> MemVar -> MemAccessType -> (MemType -> MTC MemType)-> MTC ()
-applyMemAccess scname var mat memtypefun = memctx %=~ (applyMemAccessPure scname var mat)
+applyTeVarAccess :: ScopeVar -> TeVar -> VarAccessType -> MTC ()
+applyTeVarAccess scname var va1 = vactx %=~ (applyMemVarAccessPure scname var va1)
   where
-    applyMemAccessPure :: ScopeVar -> MemVar -> MemAccessType -> MemCtx -> MTC MemCtx
-    applyMemAccessPure scname1 var mat1 ctx = case getValue var ctx of
+    applyMemVarAccessPure :: ScopeVar -> TeVar -> VarAccessType -> VarAccessCtx -> MTC VarAccessCtx
+    applyMemVarAccessPure scname1 var va1 ctx = case getValue var ctx of
+
+      -- the first access is always a "read"
+      Nothing -> return $ setValue var (ReadSingle,scname1) ctx
+
+      -- all others are as passed
+      Just (va0,scname0) -> do
+        va2 <- computeVarAccessType var ((va0, scname0)) ((va1, scname1))
+        return $ setValue var (va2,scname0) ctx
+
+
+applyMemVarAccess :: ScopeVar -> MemVar -> IsMutated -> (MemType -> MTC MemType)-> MTC ()
+applyMemVarAccess scname var mat memtypefun = memctx %=~ (applyMemVarAccessPure scname var mat)
+  where
+    applyMemVarAccessPure :: ScopeVar -> MemVar -> IsMutated -> MemCtx -> MTC MemCtx
+    applyMemVarAccessPure scname1 var mut1 ctx = case getValue var ctx of
       Nothing -> demutationError $ "Expected the memory variable " <> show var <> "to be allocated, but it is not."
-      Just (mt0,scname0,mat0) -> do
-        mat2 <- computeMemAccessType var ((mat0, scname0)) ((mat1, scname1))
+      Just (mt0,mut0,scname0) -> do
+        -- mat2 <- computeVarAccessType var ((mat0, scname0)) ((mat1, scname1))
+        let mut2 = mut0 <> mut1
         mt2 <- memtypefun mt0
-        return $ setValue var (mt2,scname0,mat2) ctx
+        return $ setValue var (mt2,mut2,scname0) ctx
 
 
 readMemVar :: ScopeVar -> MemVar -> MTC MemType
 readMemVar scname var = do
-  applyMemAccess scname var (ReadSingle) pure
+  applyMemVarAccess scname var (NotMutated) pure
   mval <- getValue var <$> use memctx
   case mval of
     Nothing -> impossible $ "Non existing variable when reading memvar " <> show var
@@ -122,11 +136,12 @@ readTeVar :: Scope -> ScopeVar -> TeVar -> MTC MemVar
 readTeVar scope scname var = case getValue var scope of
   Nothing -> demutationError $ ""
   Just mv -> do
+    applyTeVarAccess scname var ReadSingle
     return mv
 
 writeMemVar :: ScopeVar -> MemVar -> MemType -> MTC ()
 writeMemVar scname memvar mt = do
-  applyMemAccess scname memvar (WriteSingle) (\_ -> pure mt)
+  applyMemVarAccess scname memvar (Mutated) (\_ -> pure mt)
 
 -- writeTeVar :: ScopeVar -> TeVar -> MemVar -> MTC ()
 -- writeTeVar = undefined
@@ -137,13 +152,13 @@ writeMemVar scname memvar mt = do
 createMemoryLocation :: Text -> ScopeVar -> MemType -> MTC MemVar
 createMemoryLocation name_hint scname mt = do
   memvar <- newMemVar $ (T.pack $ show scname) <> "_" <> name_hint
-  memctx %%= (\ctx -> ((), setValue memvar (mt,scname,ReadSingle) ctx))
+  memctx %%= (\ctx -> ((), setValue memvar (mt,NotMutated,scname) ctx))
   return memvar
 
 cleanupMemoryLocations :: ScopeVar -> MTC ()
 cleanupMemoryLocations scname = memctx %%= (\ctx -> ((), f ctx))
   where
-    f = fromKeyElemPairs . filter (\(_,(_,scname2,_)) -> scname2 /= scname) . getAllKeyElemPairs
+    f = fromKeyElemPairs . filter (\(_,(_,_,scname2)) -> scname2 /= scname) . getAllKeyElemPairs
 
 
 --
@@ -155,19 +170,31 @@ cleanupMemoryLocations scname = memctx %%= (\ctx -> ((), f ctx))
 --
 assignTeVar :: ScopeVar -> TeVar -> MemType -> Scope -> MTC Scope
 assignTeVar scname tevar mt scope = do
+  applyTeVarAccess scname tevar WriteSingle
+  memvar <- createMemoryLocation (T.pack $ show tevar) scname mt
+  return (setValue tevar memvar scope)
   -- get or create the memory location for `var`.
-  case getValue tevar scope of
-    Nothing   -> do
-                  memvar <- createMemoryLocation (T.pack $ show tevar) scname mt
-                  return (setValue tevar memvar scope)
-    Just mvar -> writeMemVar scname mvar mt >> return scope
+  -- case getValue tevar scope of
+  --   Nothing   -> do
+  --                 memvar <- createMemoryLocation (T.pack $ show tevar) scname mt
+  --                 return (setValue tevar memvar scope)
+  --   Just mvar -> do
+      -- This currently does not quite follow the semantics, probably.
+      -- Our vatypes are associated to memory locations.
+      -- Thus we apply a write access to the previous memory
+      -- location of tevar.
+      -- But since every assignment creates a new memory location,
+      -- we also create a new 
+      -- writeMemVar scname mvar mt >> return scope
 
 assignTeVarRValue :: ScopeVar -> TeVar -> RValue -> Scope -> MTC Scope
 assignTeVarRValue scname tevar (RMem memvar) scope = do
-  mt <- getValue memvar <$> use memctx
-  case mt of
-    Just (mt, _, _) -> assignTeVar scname tevar mt scope
-    Nothing -> impossible $ "Trying to access the contents of memory location " <> show memvar
+  applyTeVarAccess scname tevar WriteSingle
+  return (setValue tevar memvar scope)
+  -- mt <- getValue memvar <$> use memctx
+  -- case mt of
+  --   Just (mt, _, _) -> assignTeVar scname tevar mt scope
+  --   Nothing -> impossible $ "Trying to access the contents of memory location " <> show memvar
 assignTeVarRValue scname tevar (RAnonymous mt) scope = assignTeVar scname tevar mt scope
 
 assignTeVarRValueMaybe :: ScopeVar -> Maybe TeVar -> RValue -> Scope -> MTC Scope
@@ -202,7 +229,7 @@ metaExpectScopeValue var scope =
         Just mv -> return mv
   
 
-metaExpectMemCtxValue :: MemVar -> MTC (MemType,ScopeVar,MemAccessType)
+metaExpectMemCtxValue :: MemVar -> MTC (MemType,IsMutated,ScopeVar)
 metaExpectMemCtxValue mv = do
   mc <- use memctx
   let mt = getValue mv mc
@@ -745,7 +772,7 @@ elaborateMut scname scope (Extra (MutRet)) = do
   let ismutated :: MemVar -> Bool
       ismutated mv = case getValue mv mc of
         Nothing                        -> False
-        Just (_, _, WriteSingleBase _) -> True
+        Just (_, Mutated, _) -> True
         Just (_, _, _)                 -> False
 
   -- mutated vars with their locality
@@ -1002,11 +1029,8 @@ elaborateLambda scname scope args body = do
   -- and get the VAType of their content
   let getVar :: (Asgmt JuliaType) -> MTC (Maybe (TeVar, IsMutated))
       getVar (Just tevar :- t) = do
-        (mt,_,at) <- metaExpectScopeValue tevar scope' >>= metaExpectMemCtxValue
-        case at of
-          (WriteSingle)         -> pure (Just (tevar , Mutated))
-          (WriteSingleFunction) -> pure (Just (tevar , Mutated))
-          _                     -> pure (Just (tevar , NotMutated))
+        (mt,mut,_) <- metaExpectScopeValue tevar scope' >>= metaExpectMemCtxValue
+        pure (Just (tevar , mut))
       getVar (Nothing :- t) = pure Nothing
 
 
@@ -1030,6 +1054,17 @@ elaborateLambda scname scope args body = do
   let mutVars = [v | Just (v , Mutated) <- vars_mutationState]
   let mutationsStates = [m | Just (_ , m) <- vars_mutationState]
 
+
+  mc <- use memctx
+  vac <- use vactx
+  debug $ "[elaborateMut/Lambda] scope' is:\n" <> show scope'
+  debug $ ""
+  debug $ "[elaborateMut/Lambda] memctx is:\n" <> show mc
+  debug $ ""
+  debug $ "[elaborateMut/Lambda] vactx is:\n" <> show vac
+  debug $ ""
+  debug $ "[elaborateMut/Lambda] vars_mutationState are: " <> show vars_mutationState
+
   -- cleanup all memory locations of this scope
   cleanupMemoryLocations scname
 
@@ -1044,7 +1079,7 @@ elaborateLambda scname scope args body = do
     -- and reorder the resulting tuple
     --
     -- VirtualMutated vars | [v | (v,NotLocalMutation) <- vars] /= [] -> do
-    VirtualMutated vars | vars /= [] -> do
+    VirtualMutated vars | mutVars /= [] -> do
 
       -- get the permutation which tells us how to go
       -- from the order in which the vars are returned by the body
@@ -1076,7 +1111,11 @@ elaborateLambda scname scope args body = do
     --
     -- case II : Not Mutating
     --
-    -- simply say that this function is not mutating
+    Pure t | mutVars /= [] -> demutationError $ "Found a function which is mutating, and has a return value. This is not allowed.\n"
+                                       <> "\nThe function is:\n" <> showPretty body <> "\n"
+                                       <> "\nThe function type is: " <> show (Pure t) <> "\n"
+                                       <> "\nThe mutated variables are: " <> show (mutVars) <> "\n"
+
     Pure _ -> pure (newBody , Pure (UserValue (RAnonymous MemPureFun)))
 
     --
@@ -1084,7 +1123,7 @@ elaborateLambda scname scope args body = do
     --
     -- this is not allowed
     -- VirtualMutated vars | [v | (v,NotLocalMutation) <- vars] == []
-    VirtualMutated vars | vars == []
+    VirtualMutated vars | mutVars == []
       -> throwError (DemutationError $ "Found a function which is neither mutating, nor has a return value. This is not allowed."
                                        <> "\nThe function type is: " <> show (VirtualMutated vars)
                                        <> "\nThe function is:\n" <> showPretty body)
@@ -1114,7 +1153,9 @@ elaborateMutList f scname scope mutargs = do
         -- if the argument is given in a mutable position,
         -- it _must_ be a var
         case arg of
-          RMem (mv) -> return (Just (mv))
+          RMem (mv) -> do
+            applyMemVarAccess scname mv Mutated pure
+            return (Just (mv))
           -- (Var (Just x :- a)) -> do
           --   -- get the type of this var from the scope
           --   -- this one needs to be a single arg
@@ -1165,7 +1206,10 @@ elaborateMutList f scname scope mutargs = do
   -- extract for return
   let newArgs = [te | (te , _) <- newArgsWithMutTeVars]
 
-  let f memvar = reverseScopeLookup scope memvar >>= \tevar -> return (tevar,memvar)
+  let f memvar = do
+        tevar <- reverseScopeLookup scope memvar
+        applyTeVarAccess scname tevar WriteSingle
+        return (tevar,memvar)
 
   mutVars <- mapM f [m | (_ , Just m) <- newArgsWithMutTeVars]
 

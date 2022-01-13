@@ -35,7 +35,7 @@ data IsLocalMutation = LocalMutation | NotLocalMutation
   deriving (Show, Eq)
 
 --
--- NOTE: We later sort `MemAccessType`s,
+-- NOTE: We later sort `VarAccessType`s,
 -- and we do not want that the `IsLocalMutation`
 -- content influences this sort --- we need to know
 -- which comes first.
@@ -77,15 +77,18 @@ instance Monad m => SemigroupM m IsMutated where
   Mutated ⋆ b = pure Mutated
 instance Monad m => MonoidM m IsMutated where
   neutral = pure NotMutated
+instance Semigroup IsMutated where
+  (<>) = (⋆!)
 instance Monad m => CheckNeutral m IsMutated where
   checkNeutral (NotMutated) = pure True
   checkNeutral (Mutated) = pure False
+
 
 --------------------------------------------------------------------------------------
 -- Variable Access Type
 --------------------------------------------------------------------------------------
 
-data MemAccessType = ReadSingle | ReadMulti | WriteSingleBase IsFLetDefined -- IsLocalMutation
+data VarAccessType = ReadSingle | ReadMulti | WriteSingleBase IsFLetDefined -- IsLocalMutation
   deriving (Show,Eq,Ord)
 
 data IsFLetDefined = FLetDefined | NotFLetDefined
@@ -95,13 +98,13 @@ pattern WriteSingle = WriteSingleBase NotFLetDefined
 pattern WriteSingleFunction = WriteSingleBase FLetDefined
 
 -- type ImVarAccessCtx = Ctx TeVar ()
--- type VarAccessCtx = Ctx MemVar MemAccessType
+type VarAccessCtx = Ctx TeVar (VarAccessType, ScopeVar)
 
-type MemCtx = Ctx MemVar (MemType, ScopeVar, MemAccessType)
+type MemCtx = Ctx MemVar (MemType, IsMutated, ScopeVar)
 
 
-computeMemAccessType :: MemVar -> (MemAccessType, ScopeVar) -> (MemAccessType, ScopeVar) -> MTC MemAccessType
-computeMemAccessType var (a, l) (b, k) = do
+computeVarAccessType :: TeVar -> (VarAccessType, ScopeVar) -> (VarAccessType, ScopeVar) -> MTC VarAccessType
+computeVarAccessType var (a, l) (b, k) = do
   let cur = sort [(a,l),(b,k)]
   case cur of
     [(ReadSingle, a), (ReadSingle, b)] | a == b   -> pure (ReadSingle)
@@ -160,6 +163,7 @@ data RValue = RMem MemVar | RAnonymous MemType
 data MFull = MFull
   {
     _memctx :: MemCtx
+  , _vactx :: VarAccessCtx
   , _termVarsOfMut :: NameCtx
   , _scopeNames :: NameCtx
   , _memNames :: NameCtx
