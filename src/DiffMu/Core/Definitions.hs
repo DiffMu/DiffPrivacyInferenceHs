@@ -473,6 +473,7 @@ data JuliaType =
     | JTMatrix JuliaType
     | JTModel
     | JTGrads
+    | JTBox
   deriving (Generic, Eq, Ord)
 
 instance Hashable JuliaType where
@@ -489,6 +490,7 @@ instance Show JuliaType where
   show (JTModel) = "DMModel"
   show (JTGrads) = "DMGrads"
   show (JTBot) = "Bot"
+  show (JTBox) = "Box"
 
 
 --------------------------------------------------------------------------

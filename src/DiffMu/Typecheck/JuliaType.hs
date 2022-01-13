@@ -50,6 +50,7 @@ juliatypes (DMTup xs) =
       jss = juliatypes `mapM` xs
       f js = JTTuple js
   in f <$> jss
+juliatypes (DMBox x) = [JTBox]
 juliatypes (Fun _) = [JTFunction]
 juliatypes (NoFun τ) = juliatypes τ
 juliatypes τ = error $ "juliatypes(" <> show τ <> ") not implemented."

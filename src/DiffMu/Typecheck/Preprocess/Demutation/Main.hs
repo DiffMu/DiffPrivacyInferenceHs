@@ -658,7 +658,7 @@ elaborateMut scname scope (Extra (MutLet ltype term1 term2)) = do
                      <> "It (the first, pure part) is thus ignored in the privacy analysis."
           elaborateMut scname scope term2
         VirtualMutated newScope -> do
-          let scope' = fromKeyElemPairs newScope
+          let scope' = fromKeyElemPairs (getAllKeyElemPairs scope <> newScope)
           (newTerm2, newTerm2Type) <- elaborateMut scname scope' term2
           let ns1 = [Just n :- JTAny | (n, _) <- newScope]
           return (TLetBase ltype ns1 newTerm1 newTerm2, newTerm2Type)

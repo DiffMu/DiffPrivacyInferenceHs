@@ -15,8 +15,7 @@ import Spec.Base
 testDemutationLNA pp = do
   describe "Local Name Aliasing demutation. (#158)" $ do
     testLNA01 pp
-    -- testDScope02 pp
-    -- testDScope03 pp
+    testLNA02 pp
 
 testLNA01 pp = do
   let ex = " function test()             \n\
@@ -29,4 +28,37 @@ testLNA01 pp = do
       ty = Fun([([] :->: intc (Fin 3)) :@ Just []])
 
   parseEval pp "01 works (simple mutation via boxes)" ex (pure ty)
+
+testLNA02 pp = do
+  let exa = " function test()               \n\
+           \   m = new_box(3)              \n\
+           \   x = m                       \n\
+           \   function f(x)               \n\
+           \     a = x                     \n\
+           \     map_box!(y -> y * 2, a)   \n\
+           \   end                         \n\
+           \   f(x)                        \n\
+           \   x                           \n\
+           \ end                           "
+
+      intboxc c = NoFun(DMBox $ Numeric (Const (constCoeff c) DMInt))
+      ty = Fun([([] :->: intboxc (Fin 6)) :@ Just []])
+
+  parseEval pp "02a works (mutation after renaming)" exa (pure ty)
+
+  let exb = " function test()                 \n\
+            \   m = new_box(3)                \n\
+            \   x = (m,m)                     \n\
+            \   function f(x)                 \n\
+            \     (a,b) = x                   \n\
+            \     map_box!(y -> y * 2, a)     \n\
+            \   end                           \n\
+            \   f(x)                          \n\
+            \   x                             \n\
+            \ end                             "
+
+      intboxc c = DMBox $ Numeric (Const (constCoeff c) DMInt)
+      ty = Fun([([] :->: NoFun (DMTup [intboxc (Fin 6), intboxc (Fin 6)])) :@ Just []])
+
+  parseEval pp "02b works (mutation after going through tuple)" exb (pure ty)
 
