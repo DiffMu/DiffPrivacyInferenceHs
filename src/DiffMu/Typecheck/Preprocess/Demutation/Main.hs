@@ -110,6 +110,9 @@ applyTeVarAccess scname va1 var = vactx %=~ (applyMemVarAccessPure scname var va
         va2 <- computeVarAccessType var ((va0, scname0)) ((va1, scname1))
         return $ setValue var (va2,scname0) ctx
 
+applyTeVarAccessMaybe :: ScopeVar -> VarAccessType -> Maybe TeVar -> MTC ()
+applyTeVarAccessMaybe scname va1 (Just var) = applyTeVarAccess scname va1 var
+applyTeVarAccessMaybe scname va1 Nothing    = pure ()
 
 overwriteTeVarAccess :: ScopeVar -> VarAccessType -> TeVar -> MTC ()
 overwriteTeVarAccess scname var va1 = vactx %=~ (applyMemVarAccessPure scname va1 var)
@@ -198,11 +201,21 @@ assignTeVarRValue :: ScopeVar -> TeVar -> RValue -> Scope -> MTC Scope
 assignTeVarRValue scname tevar (RMem memvar) scope = do
   applyTeVarAccess scname WriteSingle tevar
   return (setValue tevar memvar scope)
-  -- mt <- getValue memvar <$> use memctx
-  -- case mt of
-  --   Just (mt, _, _) -> assignTeVar scname tevar mt scope
-  --   Nothing -> impossible $ "Trying to access the contents of memory location " <> show memvar
 assignTeVarRValue scname tevar (RAnonymous mt) scope = assignTeVar scname tevar mt scope
+
+--
+-- We need this one, because marking flet defined functions as `write` works
+-- differently than for other values. (Because flets are reordered)
+-- (https://github.com/DiffMu/DiffPrivacyInferenceHs/issues/148#issuecomment-1004404681)
+--
+assignTeVarRValueFunction :: ScopeVar -> TeVar -> RValue -> Scope -> MTC Scope
+assignTeVarRValueFunction scname tevar (RMem memvar) scope = do
+  applyTeVarAccess scname WriteSingleFunction tevar
+  return (setValue tevar memvar scope)
+assignTeVarRValueFunction scname tevar (RAnonymous mt) scope = do
+  applyTeVarAccess scname WriteSingleFunction tevar
+  memvar <- createMemoryLocation (T.pack $ show tevar) scname mt
+  return (setValue tevar memvar scope)
 
 assignTeVarRValueMaybe :: ScopeVar -> Maybe TeVar -> RValue -> Scope -> MTC Scope
 assignTeVarRValueMaybe scname (Just tevar) rv scope = assignTeVarRValue scname tevar rv scope
@@ -419,6 +432,7 @@ elaborateMut scname scope (Sng η τ) = pure (Sng η τ , Pure (UserValue (RAnon
 elaborateMut scname scope (Rnd jt) = pure (Rnd jt , Pure (UserValue (RAnonymous MemAny)))
 
 elaborateMut scname scope (Var (x :- j)) = do
+  applyTeVarAccessMaybe scname ReadSingle x
   let mx = getValueMaybe x scope
   case mx of
     Nothing -> logForce ("checking Var term, scope: " <> show scope) >> throwError (DemutationDefinitionOrderError x)
@@ -542,6 +556,7 @@ elaborateMut scname scope (Apply f args) = do
     Pure ptau -> return ptau
     VirtualMutated _ -> throwError (DemutationError $ "Trying to call the result of a mutating call " <> showPretty f <> ". This is not allowed.")
 
+  -------------------------------------
   --
   -- TODO / WARNING
   --
@@ -550,16 +565,26 @@ elaborateMut scname scope (Apply f args) = do
   -- the inputs.
   -- This is simply not always correct. See #158.
   --
-  case ptau of
-    UserValue (RAnonymous (MemPureBlackBox))     -> applyPureBlackBox
-    UserValue (RAnonymous (MemPureFun))          -> applyMutating (take (length args) (repeat NotMutated)) (\_ -> Pure (UserValue (RAnonymous MemAny)))
-    UserValue (RAnonymous (MemMutatingFun muts)) -> applyMutating muts VirtualMutated
-    UserValue (RAnonymous (MemTup muts))         -> demutationError $ ""
-    UserValue (RAnonymous (MemAny))              -> do
+  ---------
+  --
+  -- Get MemType, if not direct, then look up in mem
+  --
+  mt <- case ptau of
+    UserValue (RAnonymous mt) -> return mt
+    UserValue (RMem mv)       -> do
+      (mt,_,_) <- metaExpectMemCtxValue mv
+      return mt
+    DefaultValue -> demutationError $ "Trying to call a default value."
+
+
+  case mt of
+    (MemPureBlackBox)     -> applyPureBlackBox
+    (MemPureFun)          -> applyMutating (take (length args) (repeat NotMutated)) (\_ -> Pure (UserValue (RAnonymous MemAny)))
+    (MemMutatingFun muts) -> applyMutating muts VirtualMutated
+    (MemTup muts)         -> demutationError $ ""
+    (MemAny)              -> do
       warn $ "Assuming that " <> showPretty f <> " is a pure function call."
       applyMutating (take (length args) (repeat NotMutated)) (\_ -> Pure (UserValue (RAnonymous MemAny)))
-    UserValue (RMem _) -> internalError "Calls on RMem are not implemented yet."
-    DefaultValue -> demutationError $ "Trying to call a default value."
 
         -- Pure _           -> applyMutating (take (length args) (repeat NotMutated)) (\_ -> Pure (UserValue (RAnonymous MemAny)))
         -- Mutating muts    -> applyMutating muts VirtualMutated
@@ -587,9 +612,9 @@ elaborateMut scname scope (FLet fname term body) = do
   -- set the new scope with fname if not already existing
   -- (but only allow pure uservalue-functions, or single-definition mutating functions)
   scope' <- case (\(a,_,_) -> a) <$> ftype of
-        Nothing                   -> assignTeVarRValue scname fname newTermTypeProper scope
+        Nothing                   -> assignTeVarRValueFunction scname fname newTermTypeProper scope
 
-        Just (MemPureFun)         -> assignTeVarRValue scname fname newTermTypeProper scope
+        Just (MemPureFun)         -> assignTeVarRValueFunction scname fname newTermTypeProper scope
         Just (MemMutatingFun _)   -> throwError (DemutationError $ "We do not allow mutating functions to have multiple definitions")
 
         Just _ -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
@@ -1008,6 +1033,13 @@ elaborateLambda scname scope args body = do
   mapM (overwriteTeVarAccess scname ReadSingle) [a | (Just a :- _) <- args]
 
 
+  newVaCtx <- use vactx
+  debug $ "---------------------------------------------"
+  debug $ "[elaborateLambda]: Entering scope " <> show scname
+  debug $ "old VACtx:\n" <> show oldVaCtx <> "\n"
+  debug $ "new VACtx:\n" <> show newVaCtx <> "\n"
+
+
   {-
   -- Add args as vars to the scope
   --
@@ -1046,6 +1078,7 @@ elaborateLambda scname scope args body = do
   -- Restore old VA state for all args
   -- (https://github.com/DiffMu/DiffPrivacyInferenceHs/issues/148#issuecomment-1004950955)
   --
+  vactxBeforeRestoration <- use vactx
   let restoreArg tevar = do
         case getValue tevar oldVaCtx of
           Nothing -> vactx %%= (\ctx -> ((), deleteValue tevar ctx))
@@ -1053,8 +1086,6 @@ elaborateLambda scname scope args body = do
   mapM restoreArg [a | (Just a :- _) <- args]
   --
   -----------
-
-
 
 
   {-
@@ -1080,13 +1111,21 @@ elaborateLambda scname scope args body = do
 
   mc <- use memctx
   vac <- use vactx
-  debug $ "[elaborateMut/Lambda] scope' is:\n" <> show scope'
+
+
+  debug $ "----------------"
+  debug $ "-- scope' is:\n" <> show scope' <> "\n"
+  debug $ "----------------"
+  debug $ "-- memctx is:\n" <> show mc <> "\n"
+  debug $ "----------------"
+  debug $ "-- after-body-vactx is:\n" <> show vactxBeforeRestoration <> "\n"
+  debug $ "----------------"
+  debug $ "-- restored vactx is:\n" <> show vac <> "\n"
+  debug $ "----------------"
+  debug $ "-- vars_mutationState are: " <> show vars_mutationState <> "\n"
   debug $ ""
-  debug $ "[elaborateMut/Lambda] memctx is:\n" <> show mc
-  debug $ ""
-  debug $ "[elaborateMut/Lambda] vactx is:\n" <> show vac
-  debug $ ""
-  debug $ "[elaborateMut/Lambda] vars_mutationState are: " <> show vars_mutationState
+  debug $ "-- Exited scope " <> show scname
+  debug $ "---------------------------------------------"
 
   -- cleanup all memory locations of this scope
   cleanupMemoryLocations scname
@@ -1204,11 +1243,19 @@ elaborateMutList f scname scope mutargs = do
         -- we allow to use the full immut checking
         -- (arg' , τ) <- elaborateMut scname scope arg
 
+        -- 
+        -- get the memory type behind τ
+        --
+        mt <- case τ of
+          (RAnonymous mt) -> return mt
+          (RMem mv)       -> do
+            (mt,_,_) <- metaExpectMemCtxValue mv
+            return mt
+
         -- we require the argument to be of pure type
-        case τ of
-          (RMem _) -> internalError $ "Function call: rmem's currently not allowed in function calls."
-          (RAnonymous (MemMutatingFun _)) -> throwError (DemutationError $ "It is not allowed to pass mutating functions as arguments. " <> "\nWhen checking " <> f <> "(" <> show (fmap snd mutargs) <> ")")
-          (RAnonymous (MemPureBlackBox)) -> throwError (DemutationError $ "It is not allowed to pass black boxes as arguments. " <> "\nWhen checking " <> f <> "(" <> show (fmap snd mutargs) <> ")")
+        case mt of
+          ((MemMutatingFun _)) -> throwError (DemutationError $ "It is not allowed to pass mutating functions as arguments. " <> "\nWhen checking " <> f <> "(" <> show (fmap snd mutargs) <> ")")
+          ((MemPureBlackBox)) -> throwError (DemutationError $ "It is not allowed to pass black boxes as arguments. " <> "\nWhen checking " <> f <> "(" <> show (fmap snd mutargs) <> ")")
           _ -> return ()
           -- Mutating _ -> throwError (DemutationError $ "It is not allowed to pass mutating functions as arguments. " <> "\nWhen checking " <> f <> "(" <> show (fmap snd mutargs) <> ")")
           -- PureBlackBox -> throwError (DemutationError $ "It is not allowed to pass black boxes as arguments. " <> "\nWhen checking " <> f <> "(" <> show (fmap snd mutargs) <> ")")
