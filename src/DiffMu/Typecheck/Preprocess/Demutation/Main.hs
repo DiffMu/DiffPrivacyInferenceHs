@@ -96,8 +96,8 @@ markRead scname var = undefined -- mutTypes %=~ (markReadInScope scname var)
 -- markReadOverwritePrevious scname var = mutTypes %%= (\scope -> ((), setValue var (ReadSingle scname) scope))
 -}
 
-applyTeVarAccess :: ScopeVar -> TeVar -> VarAccessType -> MTC ()
-applyTeVarAccess scname var va1 = vactx %=~ (applyMemVarAccessPure scname var va1)
+applyTeVarAccess :: ScopeVar -> VarAccessType -> TeVar -> MTC ()
+applyTeVarAccess scname va1 var = vactx %=~ (applyMemVarAccessPure scname var va1)
   where
     applyMemVarAccessPure :: ScopeVar -> TeVar -> VarAccessType -> VarAccessCtx -> MTC VarAccessCtx
     applyMemVarAccessPure scname1 var va1 ctx = case getValue var ctx of
@@ -109,6 +109,13 @@ applyTeVarAccess scname var va1 = vactx %=~ (applyMemVarAccessPure scname var va
       Just (va0,scname0) -> do
         va2 <- computeVarAccessType var ((va0, scname0)) ((va1, scname1))
         return $ setValue var (va2,scname0) ctx
+
+
+overwriteTeVarAccess :: ScopeVar -> VarAccessType -> TeVar -> MTC ()
+overwriteTeVarAccess scname var va1 = vactx %=~ (applyMemVarAccessPure scname va1 var)
+  where
+    applyMemVarAccessPure :: ScopeVar -> TeVar -> VarAccessType -> VarAccessCtx -> MTC VarAccessCtx
+    applyMemVarAccessPure scname1 var va1 ctx = return $ setValue var (va1,scname1) ctx
 
 
 applyMemVarAccess :: ScopeVar -> MemVar -> IsMutated -> (MemType -> MTC MemType)-> MTC ()
@@ -136,7 +143,7 @@ readTeVar :: Scope -> ScopeVar -> TeVar -> MTC MemVar
 readTeVar scope scname var = case getValue var scope of
   Nothing -> demutationError $ ""
   Just mv -> do
-    applyTeVarAccess scname var ReadSingle
+    applyTeVarAccess scname ReadSingle var
     return mv
 
 writeMemVar :: ScopeVar -> MemVar -> MemType -> MTC ()
@@ -170,7 +177,7 @@ cleanupMemoryLocations scname = memctx %%= (\ctx -> ((), f ctx))
 --
 assignTeVar :: ScopeVar -> TeVar -> MemType -> Scope -> MTC Scope
 assignTeVar scname tevar mt scope = do
-  applyTeVarAccess scname tevar WriteSingle
+  applyTeVarAccess scname WriteSingle tevar
   memvar <- createMemoryLocation (T.pack $ show tevar) scname mt
   return (setValue tevar memvar scope)
   -- get or create the memory location for `var`.
@@ -189,7 +196,7 @@ assignTeVar scname tevar mt scope = do
 
 assignTeVarRValue :: ScopeVar -> TeVar -> RValue -> Scope -> MTC Scope
 assignTeVarRValue scname tevar (RMem memvar) scope = do
-  applyTeVarAccess scname tevar WriteSingle
+  applyTeVarAccess scname WriteSingle tevar
   return (setValue tevar memvar scope)
   -- mt <- getValue memvar <$> use memctx
   -- case mt of
@@ -990,7 +997,6 @@ elaborateMut scname scope term@(BBApply x a b)    = throwError (UnsupportedError
 
 elaborateLambda :: ScopeVar -> Scope -> [Asgmt JuliaType] -> MutDMTerm -> MTC (DMTerm , ImmutType)
 elaborateLambda scname scope args body = do
-  {-
   -- First, backup the VA-Ctx to be able to restore those
   -- variables which have the same name as our arguments
   --
@@ -998,10 +1004,11 @@ elaborateLambda scname scope args body = do
   --
   -- Then, mark all function arguments as "SingleRead"
   -- for the current scope.
-  oldVaCtx <- use mutTypes
-  mapM (markReadOverwritePrevious scname) [a | (Just a :- _) <- args]
+  oldVaCtx <- use vactx
+  mapM (overwriteTeVarAccess scname ReadSingle) [a | (Just a :- _) <- args]
 
 
+  {-
   -- Add args as vars to the scope
   --
   -- NOTE: we do not use `safeSetValue` here, because function
@@ -1030,8 +1037,24 @@ elaborateLambda scname scope args body = do
   let getVar :: (Asgmt JuliaType) -> MTC (Maybe (TeVar, IsMutated))
       getVar (Just tevar :- t) = do
         (mt,mut,_) <- metaExpectScopeValue tevar scope' >>= metaExpectMemCtxValue
+
         pure (Just (tevar , mut))
       getVar (Nothing :- t) = pure Nothing
+
+
+  -----------
+  -- Restore old VA state for all args
+  -- (https://github.com/DiffMu/DiffPrivacyInferenceHs/issues/148#issuecomment-1004950955)
+  --
+  let restoreArg tevar = do
+        case getValue tevar oldVaCtx of
+          Nothing -> vactx %%= (\ctx -> ((), deleteValue tevar ctx))
+          Just (oldva, oldscname) -> vactx %%= (\ctx -> ((), setValue tevar (oldva, oldscname) ctx))
+  mapM restoreArg [a | (Just a :- _) <- args]
+  --
+  -----------
+
+
 
 
   {-
@@ -1208,7 +1231,7 @@ elaborateMutList f scname scope mutargs = do
 
   let f memvar = do
         tevar <- reverseScopeLookup scope memvar
-        applyTeVarAccess scname tevar WriteSingle
+        applyTeVarAccess scname WriteSingle tevar
         return (tevar,memvar)
 
   mutVars <- mapM f [m | (_ , Just m) <- newArgsWithMutTeVars]
