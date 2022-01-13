@@ -582,193 +582,27 @@ elaborateMut scname scope (Extra (MutLet ltype term1 term2)) = do
   -- elaborate the first term and get its mutated variables
   (newTerm1, newTerm1Type) <- elaborateMut scname scope term1
 
-  -- find out which variables have been locally modified,
-  -- add these to the scope
-  -- let locmutvars1 = case newTerm1Type of
-  --       VirtualMutated xs -> [x | (x,LocalMutation) <- xs]
-  --       _ -> []
-  -- let scope' = foldr (\v s -> setValue v (Pure (UserValue (RAnonymous MemAny))) s) scope (locmutvars1)
-
   --
   -- Change the scope if the first term was virtually mutating,
   -- 
-  let scope' = case newTerm1Type of
-        Pure pt -> scope
-        VirtualMutated newScope -> fromKeyElemPairs newScope
-
-
-  -- elaborate the second term and get its mutated variables
-  (newTerm2, newTerm2Type) <- elaborateMut scname scope' term2
-
-  case (newTerm1Type , newTerm2Type) of
-
-    -----------------------------------
-    -- SINGLE GLOBAL, and irrelevant
-    -- only term1 is mutating
-    (VirtualMutated mutNames1, VirtualMutated []) -> do
-
-      warn $ "Found a term which is not a mutating function call in a place where only such calls make sense.\n"
+  case newTerm1Type of
+        Pure pt -> do
+          warn $ "Found a pure term in a place where it does not have any effects.\n"
                      <> "The full term is:\n"
-                     <> "---------------------------\n"
-                     <> "-- type: " <> show (VirtualMutated mutNames1) <> "\n"
+                     <> "# ---------------------------\n"
+                     <> "# type: " <> show (Pure pt) <> "\n"
                      <> showPretty term1 <> "\n"
-                     <> "------------\n"
-                     <> "-- type: " <> show (VirtualMutated []) <> "\n"
+                     <> "# ------------\n"
+                     <> "# rest:\n"
                      <> showPretty term2 <> "\n"
-                     <> "---------------------------\n"
-                    --  <> " => It has the type " <> show (VirtualMutated []) <> "\n"
-                    --  <> " => In the term:\n" <> parenIndent (showPretty (Extra (MutLet ltype term1 term2))) <> "\n"
-                    --  <> " => Conclusion: It is ignored in the privacy analysis.")
-
-      let ns1 = [Just n :- JTAny | (n, _) <- mutNames1]
-          term = TLetBase ltype ns1 newTerm1
-                (
-                  Tup ((\(a, _) -> Var (Just a :- JTAny)) <$> mutNames1)
-                )
-      pure (term , VirtualMutated mutNames1)
-
-
-    -- only term2 is mutating
-    (VirtualMutated [], VirtualMutated mutNames2) -> do
-
-      warn $ "Found a term which is not a mutating function call in a place where only such calls make sense.\n"
-                     <> "The full term is:\n"
-                     <> "---------------------------\n"
-                     <> "-- type: " <> show (VirtualMutated []) <> "\n"
-                     <> showPretty term1 <> "\n"
-                     <> "------------\n"
-                     <> "-- type: " <> show (VirtualMutated mutNames2) <> "\n"
-                     <> showPretty term2 <> "\n"
-                     <> "---------------------------\n"
-      -- warn ("Found the term " <> showPretty term1
-      --                <> " which is not a mutating function call in a place where only such calls make sense.\n"
-      --                <> " => It has the type " <> show (VirtualMutated []) <> "\n"
-      --                <> " => In the term:\n" <> parenIndent (showPretty (Extra (MutLet ltype term1 term2))) <> "\n"
-      --                <> " => Conclusion: It is ignored in the privacy analysis.")
-
-      let ns2 = [Just n :- JTAny | (n, _) <- mutNames2]
-          term = TLetBase ltype ns2 newTerm2
-                (
-                  Tup ((\(a, _) -> Var (Just a :- JTAny)) <$> mutNames2)
-                )
-      pure (term , VirtualMutated mutNames2)
-
-    -------------------------------------------
-    -- DOUBLE GLOBAL
-    -- both are mutating
-    (VirtualMutated mutNames1, VirtualMutated mutNames2) ->
-      let commonMutNames = nub (mutNames1 <> mutNames2)
-          ns1 = [Just n :- JTAny | (n, _) <- mutNames1]
-          ns2 = [Just n :- JTAny | (n, _) <- mutNames2]
-          term = TLetBase ltype ns1 newTerm1
-                (
-                  newTerm2
-                  -- TLetBase ltype ns2 newTerm2
-                  -- (
-                  --   Tup ((\(a, _) -> Var (Just a :- JTAny)) <$> commonMutNames)
-                  -- )
-                )
-      -- we do not take the union here,
-      -- because this already must have happened
-      -- via tracking the mutated variables in the state
-      in pure (term , VirtualMutated mutNames2)
-
-    -------------------------------------------
-    -- ONLY LOCAL MUTATION
-    --
-    -- the first command has only locally mutated variables,
-    -- and the second one is pure
-    --
-    -- Currently, for #158, this is disabled.
-    --
-    {-
-    (VirtualMutated mutNames1', Pure (p))
-      | onlyLocallyMutatedVariables mutNames1' -> do
-      log $ "[MutLet] We are in the ONLY LOCAL MUTATION BRANCH"
-
-      let mutNames1 = fst <$> mutNames1'
-      let ns1 = [Just n :- JTAny | (n) <- mutNames1]
-
-          valterm = TLetBase ltype ns1 newTerm1
-                (
-                  newTerm2
-                )
-
-      case p of
-        UserValue p -> pure (valterm , Pure (UserValue p))
-        -- SingleArg _ -> pure (valterm , Pure (UserValue (RAnonymous MemAny)))
-        -- UserValue -> throwError $ DemutationError $ "Found a local mutation followed by a pure value.\n"
-        --                                           <> "This makes not much sense since only one of both can currently be processed.\n\n"
-        --                                           <> "---- local mutation ----\n"
-        --                                           <> showPretty term1 <> "\n\n"
-        --                                           <> "---- pure value ----\n"
-        --                                           <> showPretty term2 <> "\n"
-        -- SingleArg _ -> throwError $ DemutationError $ "Found a local mutation followed by a pure value.\n"
-        --                                           <> "This makes not much sense since only one of both can currently be processed.\n"
-        --                                           <> "---- local mutation ----\n"
-        --                                           <> showPretty term1 <> "\n\n"
-        --                                           <> "---- pure value ----\n"
-        --                                           <> showPretty term2 <> "\n"
-        DefaultValue -> pure (newTerm1 , VirtualMutated mutNames1')
-    -}
-
-    -- the first command has only locally mutated variables,
-    -- and the second one is a single arg
-    -- (VirtualMutated mutNames1', Pure (SingleArg _)) -> do
-      -- -- | onlyLocallyMutatedVariables mutNames1' -> do
-
-      -- let mutNames1 = [v | (v, LocalMutation) <- mutNames1']
-      -- let ns1 = [n :- JTAny | (n) <- mutNames1]
-      --     term = TLet ns1 newTerm1
-      --           (
-      --               newTerm2
-      --           )
-      -- pure (term , GloballyPure mutNames1)
-      -- pure (newTerm1 , VirtualMutated mutNames1')
-
-    ------------------------------------
-    -- GLOBAL & PURE
-    -- term1 is globally! mutating
-    --
-    -- this means that we cannot turn this into a pure term
-    -- thus the second term has to be ignored
-    (VirtualMutated mutNames1, Pure p) -> do
-
-      case p of
-        DefaultValue -> return ()
-        _ ->  do warn $ "Found a term which is not a mutating function call in a place where only such calls make sense.\n"
-                     <> "The full term is:\n"
-                     <> "---------------------------\n"
-                     <> "-- type: " <> show (VirtualMutated mutNames1) <> "\n"
-                     <> showPretty term1 <> "\n"
-                     <> "------------\n"
-                     <> "-- type: " <> show (Pure p) <> "\n"
-                     <> showPretty term2 <> "\n"
-                     <> "---------------------------\n"
-          
-          
-          -- warn ("Found the term " <> showPretty term2
-          --            <> " which is not mutating in a place where only mutating terms make sense.\n"
-          --            <> " => It has the type " <> show (Pure p) <> "\n"
-          --            <> " => In the term:\n" <> parenIndent (showPretty (Extra (MutLet ltype term1 term2))) <> "\n"
-          --            <> " => Conclusion: It is ignored in the privacy analysis.")
-
-      -- let mutNames2 = [(v, LocalMutation) | v <- mutNames2']
-      --     commonMutNames = nub (mutNames1 <> mutNames2)
-      --     ns1 = [n :- JTAny | (n, _) <- mutNames1]
-
-      --     term = TLet ns1 newTerm1
-      --           (
-      --             Tup ((\(a, _) -> Var (a :- JTAny)) <$> mutNames1)
-      --           )
-      pure (newTerm1 , VirtualMutated mutNames1)
-
-    ------------------------------------
-    -- UNSUPPORTED
-    -- neither term1 nor term2 are mutating
-    (ty1, ty2) -> throwError (DemutationError $ "Encountered a MutLet where the two commands have the following types: " <> show (ty1, ty2)
-                                                <> "\nThis is not supported."
-                                                <> "\nIn the term:\n" <> showPretty (Extra (MutLet ltype term1 term2)))
+                     <> "\n"
+                     <> "It (the first, pure part) is thus ignored in the privacy analysis."
+          elaborateMut scname scope term2
+        VirtualMutated newScope -> do
+          let scope' = fromKeyElemPairs newScope
+          (newTerm2, newTerm2Type) <- elaborateMut scname scope' term2
+          let ns1 = [Just n :- JTAny | (n, _) <- newScope]
+          return (TLetBase ltype ns1 newTerm1 newTerm2, newTerm2Type)
 
 
 elaborateMut scname scope (Extra (MutLoop iters iterVar body)) = internalError $ "Loop demutation not supported"
