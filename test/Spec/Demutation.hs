@@ -186,6 +186,3 @@ testDemutation = do
 
       (checkMutTerm term) `shouldReturn` True
 
-
-
-

@@ -809,6 +809,21 @@ checkSen' scope (SumGrads g1 g2) = do
 checkSen' scope term@(SBind x a b) = do
   throwError (TypeMismatchError $ "Found the term\n" <> showPretty term <> "\nwhich is a privacy term because of the bind in a place where a sensitivity term was expected.")
 
+
+checkSen' scope (NewBox a) = do
+  res <- checkSens scope a
+  ta <- newVar
+  unify res (NoFun ta)
+  NoFun <$> DMBox <$> normalize ta
+
+checkSen' scope (GetBox a) = do
+  res <- checkSens scope a
+  ta <- newVar
+  unify res (NoFun (DMBox ta))
+  NoFun <$> normalize ta
+
+checkSen' scope (MapBox f a) = checkSens scope (Tup [NewBox (Apply f [GetBox a])])
+
 -- Everything else is currently not supported.
 checkSen' scope t = (throwError (UnsupportedTermError t))
 

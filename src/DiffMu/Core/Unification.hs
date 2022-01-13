@@ -106,6 +106,7 @@ instance MonadDMTC t => Unifyᵢ (INCResT DMException t) (DMTypeOf k) where
   unifyᵢ_ (as :->: a) (bs :->: b)       = (:->:) <$> unifyᵢ as bs <*> unifyᵢ a b
   unifyᵢ_ (as :->*: a) (bs :->*: b)     = (:->*:) <$> unifyᵢ as bs <*> unifyᵢ a b
   unifyᵢ_ (DMTup as) (DMTup bs)         = DMTup <$> unifyᵢ as bs
+  unifyᵢ_ (DMBox a) (DMBox b)           = DMBox <$> unifyᵢ a b
   unifyᵢ_ (TVar x) (TVar y) | x == y    = pure $ TVar x
   unifyᵢ_ (TVar x) t                    = liftINC (addSub (x := t)) >> pure t
   unifyᵢ_ t (TVar x)                    = liftINC (addSub (x := t)) >> pure t

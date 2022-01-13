@@ -287,6 +287,9 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
   (t@"clip!", [a1,a2]) -> ClipM <$> pClip a1 <*> pSingle a2
   (t@"clip!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
 
+  (t@"map_box!", [a1,a2]) -> MapBox <$> pSingle a1 <*> pSingle a2
+  (t@"map_box!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
+
   -- 1 argument
   (t@"norm_convert!", [a1]) -> ConvertM <$> pSingle a1
   (t@"norm_convert!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
@@ -302,6 +305,12 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
   
   (t@"zero_gradient", [a]) -> ZeroGrad <$> pSingle a
   (t@"zero_gradient", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
+
+  (t@"new_box", [a1]) -> NewBox <$> pSingle a1
+  (t@"new_box", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
+
+  (t@"get_box", [a1]) -> GetBox <$> pSingle a1
+  (t@"get_box", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
 
   ----------------------
   -- the ops

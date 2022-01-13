@@ -176,6 +176,9 @@ data DMTypeOf (k :: DMKind) where
   -- the privacy-arrow type
   (:->*:) :: [DMTypeOf MainKind :@ Privacy] -> DMTypeOf MainKind -> DMFun
 
+  -- pointer boxes (for demutation testing)
+  DMBox :: DMType -> DMType
+
   -- tuples
   DMTup :: [DMType] -> DMType
 
@@ -257,6 +260,7 @@ instance Show (DMTypeOf k) where
   show (a :->: b) = "(" <> show a <> " -> " <> show b <> ")"
   show (a :->*: b) = "(" <> show a <> " ->* " <> show b <> ")"
   show (DMTup ts) = "Tupl(" <> show ts <> ")"
+  show (DMBox t) = "Box(" <> show t <> ")"
   show L1 = "L1"
   show L2 = "L2"
   show LInf = "L∞"
@@ -305,6 +309,7 @@ instance ShowPretty (DMTypeOf k) where
   showPretty (a :->: b) = showFunPretty "->" a b
   showPretty (a :->*: b) = showFunPretty "->*" a b
   showPretty (DMTup ts) = showPretty ts
+  showPretty (DMBox t) = "Box[" <> showPretty t <> "]"
   showPretty L1 = "L1"
   showPretty L2 = "L2"
   showPretty LInf = "L∞"
@@ -676,14 +681,18 @@ data PreDMTerm (t :: * -> *) =
 -- Special NN builtins
   | SubGrad (PreDMTerm t) (PreDMTerm t)
   | ScaleGrad (PreDMTerm t) (PreDMTerm t) -- scale (a : Scalar) (g : Mutating Gradient)
+  | ZeroGrad (PreDMTerm t)
+  | SumGrads (PreDMTerm t) (PreDMTerm t)
+  | Sample (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
 -- Special Tuple terms
   | Reorder [Int] (PreDMTerm t)
   | TProject Int (PreDMTerm t)
 -- Special Scope terms
   | LastTerm (PreDMTerm t)
-  | ZeroGrad (PreDMTerm t)
-  | SumGrads (PreDMTerm t) (PreDMTerm t)
-  | Sample (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
+-- Special Demutation terms
+  | NewBox (PreDMTerm t)
+  | GetBox (PreDMTerm t)
+  | MapBox (PreDMTerm t) (PreDMTerm t)
   deriving (Generic)
 
 pattern SLet a b c = SLetBase PureLet a b c
@@ -695,7 +704,7 @@ pattern SmpLet a b c = TLetBase SampleLet a b c
 {-# COMPLETE Extra, Ret, Sng, Var, Rnd, Arg, Op, Phi, Lam, LamStar, BBLet, BBApply,
  Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, Gauss, ConvertM, MCreate, Transpose,
  Size, Length, Index, VIndex, Row, ClipM, Loop, SubGrad, ScaleGrad, Reorder, TProject, LastTerm,
- ZeroGrad, SumGrads, SmpLet, Sample #-}
+ ZeroGrad, SumGrads, SmpLet, Sample, NewBox, GetBox, MapBox #-}
 
 
 deriving instance (forall a. Show a => Show (t a)) => Show (PreDMTerm t)
@@ -798,6 +807,10 @@ recDMTermM f h (LastTerm x)       = LastTerm <$> (f x)
 recDMTermM f h (ZeroGrad a)       = ZeroGrad <$> (f a)
 recDMTermM f h (SumGrads a b)     = SumGrads <$> (f a) <*> (f b)
 recDMTermM f h (Sample a b c)     = Sample <$> (f a) <*> (f b) <*> (f c)
+recDMTermM f h (NewBox x)         = NewBox <$> (f x)
+recDMTermM f h (GetBox x)         = GetBox <$> (f x)
+recDMTermM f h (MapBox x y)       = MapBox <$> (f x) <*> (f y)
+
 
 --------------------------------------------------------------------------
 -- Free variables for terms
@@ -891,6 +904,9 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (SumGrads a b)     = "SumGrads (" <> (showPretty a) <> ", " <> (showPretty b) <> ")"
   showPretty (SmpLet v a b)     = "SmpLet " <> showPretty v <> " <- " <> (showPretty a) <> "\n" <> (showPretty b)
   showPretty (Sample a b c)     = "Sample (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ")"
+  showPretty (NewBox a)         = "NewBox " <> (showPretty a)
+  showPretty (GetBox a)         = "GetBox " <> (showPretty a)
+  showPretty (MapBox f x)       = "MapBox (" <> showPretty f <> ", " <> showPretty x <> ")"
 
 instance ShowPretty a => ShowPretty (MutabilityExtension a) where
   showPretty (MutLet t a b) = "MutLet{" <> show t <> "} " <> indent (showPretty a) <> indent (showPretty b)

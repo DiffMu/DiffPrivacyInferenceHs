@@ -125,6 +125,7 @@ instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs (τ1 :->: τ2) = (:->:) <$> substitute σs τ1 <*> substitute σs τ2
   substitute σs (τ1 :->*: τ2) = (:->*:) <$> substitute σs τ1 <*> substitute σs τ2
   substitute σs (DMTup τs) = DMTup <$> substitute σs τs
+  substitute σs (DMBox x) = DMBox <$> substitute σs x
   substitute σs (DMVec nrm clp n τ) = DMVec <$> substitute σs nrm <*> substitute σs clp <*> substitute σs n <*> substitute σs τ
   substitute σs (DMMat nrm clp n m τ) = DMMat <$> substitute σs nrm <*> substitute σs clp <*> substitute σs n <*> substitute σs m <*> substitute σs τ
   substitute σs (DMParams m τ) = DMParams <$> substitute σs m <*> substitute σs τ
@@ -133,6 +134,7 @@ instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs (Fun xs) = Fun <$> substitute σs xs
   substitute σs (x :∧: y) = (:∧:) <$> substitute σs x <*> substitute σs y
   substitute σs (BlackBox n) = pure (BlackBox n)
+
 
 
 instance Substitute SVarOf SensitivityOf (Annotation a) where
@@ -156,6 +158,7 @@ instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
   substitute σs (τ1 :->: τ2) = (:->:) <$> substitute σs τ1 <*> substitute σs τ2
   substitute σs (τ1 :->*: τ2) = (:->*:) <$> substitute σs τ1 <*> substitute σs τ2
   substitute σs (DMTup τs) = DMTup <$> substitute σs τs
+  substitute σs (DMBox x) = DMBox <$> substitute σs x
   substitute σs (DMVec nrm clp n τ) = DMVec nrm clp <$> substitute σs n <*> substitute σs τ
   substitute σs (DMMat nrm clp n m τ) = DMMat nrm clp <$> substitute σs n <*> substitute σs m <*> substitute σs τ
   substitute σs (DMParams m τ) = DMParams <$> substitute σs m <*> substitute σs τ
@@ -224,6 +227,7 @@ instance Typeable k => FreeVars TVarOf (DMTypeOf k) where
   freeVars (τ1 :->: τ2) = freeVars (τ1) <> freeVars τ2
   freeVars (τ1 :->*: τ2) = freeVars (τ1) <> freeVars τ2
   freeVars (DMTup τs) = freeVars τs
+  freeVars (DMBox x) = freeVars x
   freeVars (DMVec nrm clp n τ) = freeVars nrm <> freeVars clp <> freeVars τ
   freeVars (DMMat nrm clp n m τ) = freeVars nrm <> freeVars clp <> freeVars τ
   freeVars (DMParams m τ) = freeVars τ

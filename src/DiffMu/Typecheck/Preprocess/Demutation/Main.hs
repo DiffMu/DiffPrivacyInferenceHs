@@ -932,6 +932,12 @@ elaborateMut scname scope (ClipM c t) = do
     -- END NOTE
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
+elaborateMut scname scope (MapBox f x) = do
+  (argTerms, mutVars) <- elaborateMutList "map_box!" scname scope [(NotMutated , f), (Mutated, x)]
+  case argTerms of
+    [newF, newX] -> pure (MapBox newF newX, VirtualMutated mutVars)
+    _ -> internalError ("Wrong number of terms after elaborateMutList")
+
 elaborateMut scname scope (Gauss t1 t2 t3 t4) = do
   (argTerms, mutVars) <- elaborateMutList "gauss" scname scope [(NotMutated , t1), (NotMutated , t2), (NotMutated , t3), (Mutated , t4)]
   case argTerms of
@@ -1000,6 +1006,12 @@ elaborateMut scname scope (Sample t1 t2 t3) = do
   (newT2, newT2Type) <- elaborateNonmut scname scope t2
   (newT3, newT3Type) <- elaborateNonmut scname scope t3
   return (Sample newT1 newT2 newT3 , Pure (UserValue (RAnonymous MemAny)))
+elaborateMut scname scope (NewBox t1) = do
+  (newT1, newT1Type) <- elaborateMut scname scope t1
+  return (NewBox newT1, Pure (UserValue (RAnonymous MemAny)))
+elaborateMut scname scope (GetBox t1) = do
+  (newT1, newT1Type) <- elaborateMut scname scope t1
+  return (GetBox newT1, Pure (UserValue (RAnonymous MemAny)))
 
 -- the unsupported terms
 elaborateMut scname scope term@(Choice t1)        = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
