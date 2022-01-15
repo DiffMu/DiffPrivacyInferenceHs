@@ -11,6 +11,7 @@ testTypecheckingExamples pp = do
   testBlackBox pp
   testSLoop pp
   testSample pp
+  testPrivFunc pp
 --   testDPGD pp
   
 
@@ -160,6 +161,52 @@ testSample pp = describe "Sample" $ do
         cs = ""
     parseEvalString_customCheck pp "" ex (ty, cs) (pure $ Right ())
                                                                                    
+
+testPrivFunc pp = describe "PrivacyFunction annotations" $ do
+    let ex_good = "function foo(f :: PrivacyFunction) :: Priv() \n\
+                   \  f(100) \n\
+                   \ end \n\
+                   \function bar(x) :: Priv() \n\
+                   \  1 \n\
+                   \end \n\
+                   \function baz() :: Priv() \n\
+                   \   foo(bar)\n\
+                   \end"
+        ex_bad = "function foo(f) :: Priv() \n\
+                   \  f(100) \n\
+                   \ end \n\
+                   \function bar(x) :: Priv() \n\
+                   \  1 \n\
+                   \end \n\
+                   \function baz() :: Priv() \n\
+                   \   foo(bar)\n\
+                   \end"
+        ex_ugly = "function foo(f :: PrivacyFunction) :: Priv() \n\
+                   \  f(100) \n\
+                   \ end \n\
+                   \function bar(x) \n\
+                   \  1 \n\
+                   \end \n\
+                   \function baz() :: Priv() \n\
+                   \   foo(bar)\n\
+                   \end"
+        ex_uglier = "function foo(f :: PrivacyFunction) \n\
+                   \  f(100) \n\
+                   \ end \n\
+                   \function bar(x) ::Priv() \n\
+                   \  1 \n\
+                   \end \n\
+                   \function baz() :: Priv() \n\
+                   \   foo(bar)\n\
+                   \end"
+        cint =  NoFun (Numeric (Const (constCoeff (Fin 1)) DMInt))
+        ty_good = Fun([([] :->*: cint) :@ Just []])
+    parseEval pp "proper usage" ex_good (pure ty_good)
+    parseEvalFail pp "not annotated" ex_bad (TermColorError PrivacyK (Sng 1 JTInt))
+    parseEvalFail pp "wrong input" ex_ugly (UnsatisfiableConstraint "")
+    parseEvalFail pp "not a privacy function" ex_uglier (TermColorError PrivacyK (Sng 1 JTInt))
+    
+
 
 testDPGD pp = describe "DPGD" $ do
   let ex = "import Flux \n\

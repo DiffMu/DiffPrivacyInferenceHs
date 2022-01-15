@@ -17,8 +17,18 @@ import qualified Data.HashSet as H
 import Debug.Trace
 
 -----------------------------------------------------------------------------------
--- preprocessing step to make Lets into Bind, 
+-- preprocessing step to make Lets into Bind (and add Ret if necessary)
+-- infers the color (whether its a priv or a sens term) recursively and, upon
+-- encountering SLet/TLet, makes them into Bind if they are supposed to be.
+-- they are supposed to be if the term that is assigned is a privacy term.
+-- it is then required for the tial term to be a privacy term too, which is why
+-- the main function takes the required color as input. it inserts Ret if the term
+-- cannot be interpreted as a privacy term otherwise.
 
+------------------------------------------------
+-- the state for our computation:
+--    functionNames = the list of privacy functions in scope
+--    inferredColor = the color that was inferred
 type Color = AnnotationKind
 
 instance Default (H.HashSet TeVar) where
@@ -30,39 +40,45 @@ data ColorFull = ColorFull
     _inferredColor :: Color
   }
 
--- the monad keeping the state we require to generate unique names
 type ColorTC = LightTC Location_PrePro_Demutation ColorFull
 
 $(makeLenses ''ColorFull)
 
+-- set current inferred color
 setColor :: (MonadState ColorFull m) => Color -> m ()
 setColor color = inferredColor %%= (\c -> ((), color))
 
+-- get current inferred color
 getColor :: (MonadState ColorFull m) => m (Color)
 getColor = inferredColor %%= (\c -> (c, c))
 
--- push a function
+-- push a function name to the privacy function scope
 pushFunction :: (MonadState ColorFull m) => TeVar -> m ()
 pushFunction name = functionNames %%= (\set -> ((), H.insert name set))
 
+-- check if a name corresponds t a privacy function
 isPFunction :: (MonadState ColorFull m) => TeVar -> m Bool
 isPFunction name = functionNames %%= (\set -> (H.member name set, set))
 
+-- push all names to the priv function scope that are annotated as privacy
+-- functions in the given argument list.
 pushFunctionArgs :: (MonadState ColorFull m) => [Asgmt JuliaType] -> m ()
 pushFunctionArgs args = let pushArg (Just x :- t) = case t of
-                                JTPFunction -> pushFunction x
+                                JTPFunction -> pushFunction x -- user annotation says its a priva function
                                 _ -> pure ()
                             pushArg (Nothing :- _) = pure ()
                         in do
                             mapM pushArg args
                             pure ()
 
+-- same as above but for argument lists that have relevance annotations too
 pushFunctionArgsRel :: (MonadState ColorFull m) => [Asgmt (JuliaType, Relevance)] -> m ()
 pushFunctionArgsRel args = pushFunctionArgs [(x :- t) | (x :- (t,_)) <- args]
 
-errorExpectSens = throwError . (TermColorError SensitivityK)
-errorExpectPriv = throwError . (TermColorError PrivacyK)
 
+------------------------------------------------
+
+-- the function to be called from the outside, just for the log print
 processColors :: DMTerm -> ColorTC DMTerm
 processColors term = do
     nterm <- handleAnyTerm term
@@ -70,22 +86,25 @@ processColors term = do
     logForce $ "Color corrected term is:\n" <> showPretty nterm
     return nterm
 
+-- handle a term that is required to be a sensitivity term
 handleSensTerm :: DMTerm -> ColorTC DMTerm
 handleSensTerm term = do
     tterm <- transformLets (Just SensitivityK) term
     cterm <- getColor
     case cterm of
-        PrivacyK -> errorExpectSens term
+        PrivacyK -> throwError (TermColorError SensitivityK term)
         SensitivityK -> return tterm
         
+-- handle a term that is required to be a privacy term
 handlePrivTerm :: DMTerm -> ColorTC DMTerm
 handlePrivTerm term = do
     tterm <- transformLets (Just PrivacyK) term
     cterm <- getColor
     case cterm of
         PrivacyK -> return tterm
-        SensitivityK -> errorExpectPriv tterm --return (Ret tterm)
+        SensitivityK -> throwError (TermColorError PrivacyK tterm)
 
+-- handle a term that can be whatever
 handleAnyTerm :: DMTerm -> ColorTC DMTerm
 handleAnyTerm term = transformLets Nothing term
 
@@ -100,20 +119,25 @@ retRequired reqc term = case reqc of
                              Just PrivacyK -> setColor PrivacyK >> return (Ret term)
                              _ -> setColor SensitivityK >> return term
 
--- in a dmterm, apply all variable name substitutions contained in the hashmap recursively.
+-- main function. takes a requested color (or nothing if we don;t care), and the term to
+-- transform. does three interesting things:
+--    Lets are turned into Binds if the thing that is assigned is inferred to be a privacy term.
+--    If so, the trailing term is requested to be a privacy term. If not, the trailing term is
+--    requested to be the requested color.
+--
+--    All privacy functions that occur are collected in a name context. Upon application their
+--    presence in the context is checked to determine the return color.
+--
+--    Sensitivity terms are prepended by a Ret if they are requested to be privacy terms.
 transformLets :: Maybe Color -> DMTerm -> ColorTC DMTerm
 transformLets reqc term = case term of
 
    SLetBase PureLet (Just x :- t) body tail -> do
-       logForce $ "handling slet "<>show x<>"with color "<>show reqc
        tbody <- handleAnyTerm body
        cbody <- getColor
-       logForce $ "handling slet "<>show x<>" with color " <>show reqc<>" got "<>show (tbody, cbody)
-       
        case cbody of
             SensitivityK -> do
                 ttail <- transformLets reqc tail
-                logForce $ "handling slet "<>show x<>" tail got "<>show (ttail)
                 return (SLetBase PureLet (Just x :- t) tbody ttail)
             PrivacyK -> do
                 ttail <- handlePrivTerm tail
@@ -130,6 +154,10 @@ transformLets reqc term = case term of
                 ttail <- handlePrivTerm tail
                 return (TLetBase BindLet ns tbody ttail)
              
+   Reorder σ t -> do
+       tt <- handleAnyTerm t
+       return (Reorder σ tt)
+
    Lam args body -> do
        pushFunctionArgs args
        tbody <- handleSensTerm body
@@ -137,6 +165,7 @@ transformLets reqc term = case term of
 
    LamStar args body -> do
        pushFunctionArgsRel args
+       fn <- use functionNames
        tbody <- handlePrivTerm body
        retSens (LamStar args tbody) -- while the body is a priv term, the LamStar is a sens term
        
@@ -173,7 +202,7 @@ transformLets reqc term = case term of
             _ -> do -- there are no functions that return priv functions, so we can assume here that this is a sens function
                    tf <- handleSensTerm f
                    retSens (Apply tf txs)
-                   
+
    Sng _ _ -> retRequired reqc term
    Var _ -> retRequired reqc term
    Arg _ _ _ -> retRequired reqc term
@@ -181,13 +210,11 @@ transformLets reqc term = case term of
    TLetBase _ _ _ _ -> throwError (InternalError ("Parser spit out a non-pure TLet: " <> show term))
    SLetBase _ _ _ _ -> throwError (InternalError ("Parser spit out a non-pure SLet: " <> show term))
    FLet _ _ _ -> throwError (InternalError ("Parser spit out an FLet that has no lambda in its definition: " <> show term))
-
    Ret _ -> throwError (InternalError ("Parser spit out a return term: " <> show term))
 
    _ -> case reqc of
              Just PrivacyK -> do
                                    tterm <- recDMTermMSameExtension handleAnyTerm term
-                                   logForce $ "handling privacy term "<>show term<>" got " <> show (tterm)
                                    col <- getColor
                                    setColor PrivacyK
                                    case col of
@@ -195,11 +222,8 @@ transformLets reqc term = case term of
                                         PrivacyK -> return tterm
              _ -> do
                              tterm <- recDMTermMSameExtension handleSensTerm term
-                             logForce $ "handling sens term "<>show term<>" as col is " <> show reqc <> " got " <> show (tterm)
                              case term of
                                  Gauss _ _ _ _ -> retPriv tterm
                                  Laplace _ _ _ -> retPriv tterm
                                  _ ->  retSens tterm
 
-{-   
--}
