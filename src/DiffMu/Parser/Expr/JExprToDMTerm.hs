@@ -300,6 +300,9 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
   (t@"zero_gradient", [a]) -> ZeroGrad <$> pSingle a
   (t@"zero_gradient", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
 
+  (t@"internal_expect_const", [a1]) -> InternalExpectConst <$> pSingle a1
+  (t@"internal_expect_const", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
+
   ----------------------
   -- the ops
   -- the + and * operators allow lists as arguments

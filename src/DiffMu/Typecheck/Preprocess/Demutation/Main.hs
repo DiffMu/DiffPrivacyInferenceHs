@@ -861,12 +861,15 @@ elaborateMut scname scope (Sample t1 t2 t3) = do
   (newT2, newT2Type) <- elaborateNonmut scname scope t2
   (newT3, newT3Type) <- elaborateNonmut scname scope t3
   return (Sample newT1 newT2 newT3 , Pure UserValue)
+elaborateMut scname scope (InternalExpectConst t1) = do
+  (newT1, newT1Type) <- elaborateMut scname scope t1
+  return (InternalExpectConst newT1, Pure UserValue)
 
 -- the unsupported terms
 elaborateMut scname scope term@(Choice t1)        = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
 elaborateMut scname scope term@(Loop t1 t2 t3 t4) = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
 elaborateMut scname scope term@(Reorder t1 t2)    = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
-elaborateMut scname scope term@(TProject t1 t2)    = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
+elaborateMut scname scope term@(TProject t1 t2)   = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
 elaborateMut scname scope term@(Arg x a b)        = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
 elaborateMut scname scope term@(BBApply x a b)    = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
 

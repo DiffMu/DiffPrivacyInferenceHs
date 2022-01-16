@@ -688,6 +688,8 @@ data PreDMTerm (t :: * -> *) =
   | ZeroGrad (PreDMTerm t)
   | SumGrads (PreDMTerm t) (PreDMTerm t)
   | Sample (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
+-- Internal terms
+  | InternalExpectConst (PreDMTerm t)
   deriving (Generic)
 
 pattern SLet a b c = SLetBase PureLet a b c
@@ -699,7 +701,7 @@ pattern SmpLet a b c = TLetBase SampleLet a b c
 {-# COMPLETE Extra, Ret, Sng, Var, Arg, Op, Phi, Lam, LamStar, BBLet, BBApply,
  Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, Gauss, Laplace, ConvertM, MCreate, Transpose,
  Size, Length, Index, VIndex, Row, ClipM, Loop, SubGrad, ScaleGrad, Reorder, TProject, LastTerm,
- ZeroGrad, SumGrads, SmpLet, Sample #-}
+ ZeroGrad, SumGrads, SmpLet, Sample, InternalExpectConst #-}
 
 
 deriving instance (forall a. Show a => Show (t a)) => Show (PreDMTerm t)
@@ -803,6 +805,7 @@ recDMTermM f h (LastTerm x)       = LastTerm <$> (f x)
 recDMTermM f h (ZeroGrad a)       = ZeroGrad <$> (f a)
 recDMTermM f h (SumGrads a b)     = SumGrads <$> (f a) <*> (f b)
 recDMTermM f h (Sample a b c)     = Sample <$> (f a) <*> (f b) <*> (f c)
+recDMTermM f h (InternalExpectConst a) = InternalExpectConst <$> (f a)
 
 --------------------------------------------------------------------------
 -- Free variables for terms
@@ -897,6 +900,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (SumGrads a b)     = "SumGrads (" <> (showPretty a) <> ", " <> (showPretty b) <> ")"
   showPretty (SmpLet v a b)     = "SmpLet " <> showPretty v <> " <- " <> (showPretty a) <> "\n" <> (showPretty b)
   showPretty (Sample a b c)     = "Sample (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ")"
+  showPretty (InternalExpectConst a) = "InternalExpectConst " <> (showPretty a)
 
 instance ShowPretty a => ShowPretty (MutabilityExtension a) where
   showPretty (MutLet t a b) = "MutLet{" <> show t <> "} " <> indent (showPretty a) <> indent (showPretty b)
