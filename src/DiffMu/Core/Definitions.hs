@@ -300,7 +300,7 @@ instance ShowPretty (DMTypeOf k) where
   showPretty DMReal = "Real"
   showPretty DMData = "Data"
   showPretty (Const s t) = showPretty t <> "[" <> showPretty s <> "]"
-  showPretty (NonConst t) = showPretty t
+  showPretty (NonConst t) = "NonConst " <> showPretty t
   showPretty (Numeric t) = showPretty t
   showPretty (TVar t) = showPretty t
   showPretty (a :->: b) = showFunPretty "->" a b
