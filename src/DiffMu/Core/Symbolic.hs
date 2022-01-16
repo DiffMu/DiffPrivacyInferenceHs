@@ -99,6 +99,7 @@ tryComputeSym x = case f x of
     extractVal (SingleKinded (LinCom (MonCom h))) =
       let h' = H.toList h
       in case h' of
+        []                               -> Just (Fin 0)
         [(exp,coeff)] | exp == neutralId -> Just coeff
         _                                -> Nothing
 
@@ -171,7 +172,7 @@ instance Show (SymVar k) where
   show (Max te) = "max(" <> show te <> ")"
   show (Minus (t1, t2)) = "(" <> show t1 <> " - " <> show t2 <> ")"
   show (Div t2) = "(1 / " <> show t2 <> ")"
-  show (TruncateSym a b) = "⌉" <> show a <> "⌈" <> "^{" <> show b <> "}"
+  show (TruncateSym a b) = "⌉" <> show a <> "⌈" <> "{" <> show b <> "}"
 
 instance Hashable (SymVar k)
 
