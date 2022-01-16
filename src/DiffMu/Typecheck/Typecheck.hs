@@ -652,7 +652,7 @@ checkSen' scope (Row m i) = do
       let di = checkSens scope i
       let dx = do
                    _ <- di
-                   mscale inftyS
+                   mscale zeroId
                    return ()
 
       let dm = checkSens scope m -- check the matrix
