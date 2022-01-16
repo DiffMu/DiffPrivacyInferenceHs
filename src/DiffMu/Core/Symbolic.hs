@@ -79,6 +79,7 @@ data SymVar (k :: SensKind) =
   | Max [SymTerm MainSensKind]
   | Minus (SymTerm MainSensKind, SymTerm MainSensKind)
   | Div (SymTerm MainSensKind)
+  | TruncateSym (SymTerm MainSensKind) (SymTerm MainSensKind) -- Truncate a b = [ a ]^b
   deriving (Generic, Eq)
 
 ln s = injectVarId (Ln s)
@@ -149,7 +150,16 @@ tryComputeSym x = case f x of
     --       cannot be solved.
     --
     -- f (Minus (a, b)) = constCoeff <$> (dmMinus <$> extractVal a <*> extractVal b)
+
     f (Div b) = constCoeff <$> (join (dmDiv <$> extractVal b))
+    f (TruncateSym a b) = case extractVal a of
+      (Just (Fin 0)) -> Just (constCoeff (Fin 0))
+      (Just a) -> Just b
+      Nothing -> Nothing
+
+
+    -- dmTruncateSym :: SymVal -> SymTerm MainSensKind -> SymVal
+    -- dmTruncateSym (Fin 0) b = (Fin 0)
 
 instance Show (SymVar k) where
   show (HonestVar v) = show v
@@ -161,6 +171,7 @@ instance Show (SymVar k) where
   show (Max te) = "max(" <> show te <> ")"
   show (Minus (t1, t2)) = "(" <> show t1 <> " - " <> show t2 <> ")"
   show (Div t2) = "(1 / " <> show t2 <> ")"
+  show (TruncateSym a b) = "⌉" <> show a <> "⌈" <> "^{" <> show b <> "}"
 
 instance Hashable (SymVar k)
 
@@ -182,6 +193,7 @@ instance CheckContains (SymVar MainSensKind) (SymbolOf MainSensKind) where
   checkContains (Minus _) = Nothing
   checkContains (Div _) = Nothing
   checkContains (HonestVar v) = Just v
+  checkContains (TruncateSym _ _) = Nothing
 
 
 -- WARNING: This is not implemented, we should actually check for zero here!
@@ -215,7 +227,8 @@ instance (Substitute SymVar (CPolyM SymVal Int (SymVar MainSensKind)) (SymVar k2
   substitute σ (Sqrt a)      = tryComputeSym <$> Sqrt <$> substitute σ a
   substitute σ (Max as)      = tryComputeSym <$> Max <$> mapM (substitute σ) as
   substitute σ (Minus (a,b)) = tryComputeSym <$> ((\a b -> Minus (a,b)) <$> substitute σ a <*> substitute σ b)
-  substitute σ (Div a)   = tryComputeSym <$> Div <$> substitute σ a
+  substitute σ (Div a)       = tryComputeSym <$> Div <$> substitute σ a
+  substitute σ (TruncateSym a b) = tryComputeSym <$> (TruncateSym <$> substitute σ a <*> substitute σ b)
 
 
 
