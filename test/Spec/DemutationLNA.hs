@@ -16,6 +16,7 @@ testDemutationLNA pp = do
   describe "Local Name Aliasing demutation. (#158)" $ do
     testLNA01 pp
     testLNA02 pp
+    testLNA03 pp
 
 testLNA01 pp = do
   let ex = " function test()             \n\
@@ -62,3 +63,19 @@ testLNA02 pp = do
 
   parseEval pp "02b works (mutation after going through tuple)" exb (pure ty)
 
+
+testLNA03 pp = do
+  let exa = " function test()              \n\
+           \   m = new_box(3)              \n\
+           \   function f(x)               \n\
+           \     x                         \n\
+           \   end                         \n\
+           \   n = f(m)                    \n\
+           \   map_box!(y -> y * 2, n)     \n\
+           \   m                           \n\
+           \ end                           "
+
+      intboxc c = NoFun(DMBox $ Numeric (Const (constCoeff c) DMInt))
+      ty = Fun([([] :->: intboxc (Fin 6)) :@ Just []])
+
+  parseEval pp "03a works (function-pass-through for identity)" exa (pure ty)
