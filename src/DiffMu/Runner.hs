@@ -100,8 +100,9 @@ typecheckFromDMTermWithPrinter printer logoptions term = do
         -- logForce $ "================================================"
         -- logForce $ "before solving constraints (3)"
         -- logPrintConstraints
-        tres''' <- solveAndNormalize [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal] tres'
-        return tres'''
+        tres''' <- solveAndNormalize ExactNormalization [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal] tres'
+        tres'''' <- solveAndNormalize SimplifyingNormalization [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal] tres'''
+        return tres''''
 
   x <- executeTC logoptions r
 
@@ -126,7 +127,7 @@ typecheckFromDMTerm_Detailed term = do
 
   let logging_locations = [
         -- Location_Check,
-        -- Location_Constraint,
+        Location_Constraint,
         Location_PrePro_Demutation
         -- Location_Subst
         -- Location_INC,

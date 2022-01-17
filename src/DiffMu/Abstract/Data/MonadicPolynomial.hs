@@ -350,7 +350,7 @@ instance forall isT j v r (k :: j). (HasPolyTerm v r k,
 -- Normalize instance
 
 instance Normalize t x => Normalize t (MonCom x v) where
-  normalize (MonCom map) = MonCom <$> mapM normalize map
+  normalize nt (MonCom map) = MonCom <$> mapM (normalize nt) map
 
 
 -- instance (Normalize t x, Normalize t v, Eq v, Hashable v) => Normalize t (MonCom x v) where

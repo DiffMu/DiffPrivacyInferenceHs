@@ -12,7 +12,7 @@ import Data.HashMap.Strict as H
 newtype Ctx v x = Ctx (MonCom x v)
   deriving (Generic, DictLike v x)
 instance (Normalize t x) => Normalize t (Ctx v x) where
-  normalize (Ctx m) = Ctx <$> normalize m
+  normalize nt (Ctx m) = Ctx <$> normalize nt m
 
 deriving instance (Typeable a, Typeable v, Typeable b, KEq v, FreeVars v a, FreeVars v b) => FreeVars v (Ctx a b)
 

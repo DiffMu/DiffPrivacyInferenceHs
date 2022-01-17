@@ -425,12 +425,39 @@ sndAnn :: (a :@ b) -> b
 sndAnn (a :@ b) = b
 
 
--- fstAnnI :: (WithRelev b) -> DMType
--- fstAnnI (WithRelev _ (a :@ b)) = a
-
--- sndAnnI :: WithRelev b -> (Annotation b)
--- sndAnnI (WithRelev _ (a :@ b)) = b
-
+-------------
+-- Recursion into DMTypes
+--
+recDMTypeM :: forall m k. (Monad m)
+           => (forall k. DMTypeOf k -> m (DMTypeOf k)) 
+           -> (Sensitivity -> m (Sensitivity)) 
+           -> DMTypeOf k -> m (DMTypeOf k)
+recDMTypeM typemap sensmap DMAny = pure DMAny
+recDMTypeM typemap sensmap L1 = pure L1
+recDMTypeM typemap sensmap L2 = pure L2
+recDMTypeM typemap sensmap LInf = pure LInf
+recDMTypeM typemap sensmap U = pure U
+recDMTypeM typemap sensmap (Clip n) = Clip <$> typemap n
+recDMTypeM typemap sensmap DMInt = pure DMInt
+recDMTypeM typemap sensmap DMReal = pure DMReal
+recDMTypeM typemap sensmap DMData = pure DMData
+recDMTypeM typemap sensmap (Numeric τ) = Numeric <$> typemap τ
+recDMTypeM typemap sensmap (NonConst τ) = NonConst <$> typemap τ
+recDMTypeM typemap sensmap (Const η τ) = Const <$> sensmap η <*> typemap τ
+recDMTypeM typemap sensmap (TVar x) = pure (TVar x)
+recDMTypeM typemap sensmap (τ1 :->: τ2) = (:->:) <$> mapM (\(a :@ b) -> (:@) <$> typemap a <*> sensmap b) τ1 <*> typemap τ2
+recDMTypeM typemap sensmap (τ1 :->*: τ2) = (:->*:) <$> mapM (\(a :@ (b0, b1)) -> f <$> typemap a <*> sensmap b0 <*> sensmap b1) τ1 <*> typemap τ2
+  where
+    f a b0 b1 = a :@ (b0, b1)
+recDMTypeM typemap sensmap (DMTup τs) = DMTup <$> mapM typemap τs
+recDMTypeM typemap sensmap (DMVec nrm clp n τ) = DMVec <$> typemap nrm <*> typemap clp <*> sensmap n <*> typemap τ
+recDMTypeM typemap sensmap (DMMat nrm clp n m τ) = DMMat <$> typemap nrm <*> typemap clp <*> sensmap n <*> sensmap m <*> typemap τ
+recDMTypeM typemap sensmap (DMParams m τ) = DMParams <$> sensmap m <*> typemap τ
+recDMTypeM typemap sensmap (DMGrads nrm clp m τ) = DMGrads <$> typemap nrm <*> typemap clp <*> sensmap m <*> typemap τ
+recDMTypeM typemap sensmap (NoFun x) = NoFun <$> typemap x
+recDMTypeM typemap sensmap (Fun xs) = Fun <$> mapM (\(a :@ b) -> (:@) <$> typemap a <*> pure b) xs
+recDMTypeM typemap sensmap (x :∧: y) = (:∧:) <$> typemap x <*> typemap y
+recDMTypeM typemap sensmap (BlackBox n) = pure (BlackBox n)
 
 ---------------------------------------------------------
 -- Sensitivity and Privacy

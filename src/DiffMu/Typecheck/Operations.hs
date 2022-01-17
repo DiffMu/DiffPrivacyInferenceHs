@@ -192,13 +192,13 @@ makeNonConstType name a = internalError ("makeNonConstType called on " <> show a
 --          that it only ever creates a single substitution.
 makeNonConstTypeOp :: (IsT MonadDMTC t) => Symbol -> DMTypeOp -> t DMTypeOp
 makeNonConstTypeOp name (Unary op (τ :@ s) ρ) = do
-  τn <- normalize τ
+  τn <- normalizeExact τ
   τn' <- makeNonConstType name τn
   pure (Unary op (τn' :@ s) ρ)
 makeNonConstTypeOp name (Binary op ((τ₁ :@ s₁) , (τ₂ :@ s₂)) ρ) = do
-  τ₁n <- normalize τ₁
+  τ₁n <- normalizeExact τ₁
   τ1' <- makeNonConstType name τ₁n
-  τ₂n <- normalize τ₂
+  τ₂n <- normalizeExact τ₂
   τ2' <- makeNonConstType name τ₂n
   pure (Binary op ((τ1' :@ s₁) , (τ2' :@ s₂)) ρ)
 

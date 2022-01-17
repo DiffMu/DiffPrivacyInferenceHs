@@ -37,24 +37,29 @@ chainM2_R f a b = do
 extractIdentity2 :: (a -> b -> Identity c) -> a -> b -> c
 extractIdentity2 f a b = runIdentity (f a b)
 
+data NormalizationType = ExactNormalization | SimplifyingNormalization
+
 class Monad t => Normalize t n where
-  normalize :: n -> t n
+  normalize :: NormalizationType -> n -> t n
+
+normalizeExact = normalize ExactNormalization
+normalizeSimplifying = normalize SimplifyingNormalization
 
 instance Monad t => Normalize t Int where
-  normalize i = pure i
+  normalize _ i = pure i
 
 instance (Normalize t a, Normalize t b) => Normalize t (a,b) where
-  normalize (a,b) = (,) <$> normalize a <*> normalize b
+  normalize nt (a,b) = (,) <$> normalize nt a <*> normalize nt b
 
 instance (Normalize t a, Normalize t b) => Normalize t (Either a b) where
-  normalize (Left a) = Left <$> normalize a
-  normalize (Right a) = Right <$> normalize a
+  normalize nt (Left a)   = Left <$> normalize nt a
+  normalize nt (Right a)  = Right <$> normalize nt a
 
 instance (Normalize t a, Normalize t b) => Normalize t (a :=: b) where
-  normalize (a :=: b) =  (:=:) <$> normalize a <*> normalize b
+  normalize nt (a :=: b) =  (:=:) <$> normalize nt a <*> normalize nt b
 
 instance Monad t => (Normalize t ()) where
-  normalize () = pure ()
+  normalize nt () = pure ()
 
 
 -- class Has a where

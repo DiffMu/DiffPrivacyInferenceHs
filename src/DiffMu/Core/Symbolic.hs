@@ -9,6 +9,7 @@ import qualified Prelude as P
 
 import Data.Singletons.TH
 import Data.HashMap.Strict as H
+import DiffMu.Prelude.MonadicAlgebra (Normalize)
 
 data SymVal =
   Infty | Fin Float -- a| Ln (SymTerm t)
@@ -91,8 +92,8 @@ maxS s = injectVarId (Max s)
 minus s t = injectVarId (Minus (s, t))
 divide s t = s ⋅! injectVarId (Div t)
 
-tryComputeSym :: SymVar k -> SymVar k
-tryComputeSym x = case f x of
+tryComputeSym :: NormalizationType -> SymVar k -> SymVar k
+tryComputeSym nt x = case f x of
                     Just val -> Id val
                     Nothing -> x
   where
@@ -154,14 +155,18 @@ tryComputeSym x = case f x of
     -- f (Minus (a, b)) = constCoeff <$> (dmMinus <$> extractVal a <*> extractVal b)
 
     f (Div b) = constCoeff <$> (join (dmDiv <$> extractVal b))
-    f (TruncateSym a b) = case extractVal a of
-      (Just (Fin 0)) -> Just (constCoeff (Fin 0))
-      (Just a) -> Just b
-      Nothing -> Nothing
-    f (TruncateDoubleSym (a0, a1) b) = case (extractVal a0, extractVal a1) of
-      (Just (Fin 0), Just (Fin 0)) -> Just (constCoeff (Fin 0))
-      (Just _, Just _)       -> Just b
-      _                      -> Nothing
+    f (TruncateSym a b) = case nt of
+      ExactNormalization -> case extractVal a of
+                              (Just (Fin 0)) -> Just (constCoeff (Fin 0))
+                              (Just a) -> Just b
+                              Nothing -> Nothing
+      SimplifyingNormalization -> Just b
+    f (TruncateDoubleSym (a0, a1) b) = case nt of
+      ExactNormalization -> case (extractVal a0, extractVal a1) of
+                              (Just (Fin 0), Just (Fin 0)) -> Just (constCoeff (Fin 0))
+                              (Just _, Just _)       -> Just b
+                              _                      -> Nothing
+      SimplifyingNormalization -> Just b
 
 
     -- dmTruncateSym :: SymVal -> SymTerm MainSensKind -> SymVal
@@ -228,18 +233,25 @@ instance (CheckNeutral m a, CheckNeutral m b) => CheckNeutral m (a,b) where
 
 instance (Substitute SymVar (CPolyM SymVal Int (SymVar MainSensKind)) (SymVar k2)) where
   substitute σ (HonestVar v) = pure (HonestVar v)
-  substitute σ (Id v)        = tryComputeSym <$> Id <$> substitute σ v
-  substitute σ (Ln a)        = tryComputeSym <$> Ln <$> substitute σ a
-  substitute σ (Exp (b,e))   = tryComputeSym <$> ((\b e -> Exp (b,e)) <$> substitute σ b <*> substitute σ e)
-  substitute σ (Ceil a)      = tryComputeSym <$> Ceil <$> substitute σ a
-  substitute σ (Sqrt a)      = tryComputeSym <$> Sqrt <$> substitute σ a
-  substitute σ (Max as)      = tryComputeSym <$> Max <$> mapM (substitute σ) as
-  substitute σ (Minus (a,b)) = tryComputeSym <$> ((\a b -> Minus (a,b)) <$> substitute σ a <*> substitute σ b)
-  substitute σ (Div a)       = tryComputeSym <$> Div <$> substitute σ a
+  substitute σ (Id v)        = tryComputeSym ExactNormalization <$> Id <$> substitute σ v
+  substitute σ (Ln a)        = tryComputeSym ExactNormalization <$> Ln <$> substitute σ a
+  substitute σ (Exp (b,e))   = tryComputeSym ExactNormalization <$> ((\b e -> Exp (b,e)) <$> substitute σ b <*> substitute σ e)
+  substitute σ (Ceil a)      = tryComputeSym ExactNormalization <$> Ceil <$> substitute σ a
+  substitute σ (Sqrt a)      = tryComputeSym ExactNormalization <$> Sqrt <$> substitute σ a
+  substitute σ (Max as)      = tryComputeSym ExactNormalization <$> Max <$> mapM (substitute σ) as
+  substitute σ (Minus (a,b)) = tryComputeSym ExactNormalization <$> ((\a b -> Minus (a,b)) <$> substitute σ a <*> substitute σ b)
+  substitute σ (Div a)       = tryComputeSym ExactNormalization <$> Div <$> substitute σ a
   substitute σ (TruncateSym a b) =
-     tryComputeSym <$> (TruncateSym <$> substitute σ a <*> substitute σ b)
+     tryComputeSym ExactNormalization <$> (TruncateSym <$> substitute σ a <*> substitute σ b)
   substitute σ (TruncateDoubleSym (a0, a1) b) =
-     tryComputeSym <$> ((\a0 a1 b -> TruncateDoubleSym (a0 , a1) b) <$> substitute σ a0 <*> substitute σ a1 <*> substitute σ b)
+     tryComputeSym ExactNormalization <$> ((\a0 a1 b -> TruncateDoubleSym (a0 , a1) b) <$> substitute σ a0 <*> substitute σ a1 <*> substitute σ b)
+
+
+normalizeSensSpecial :: NormalizationType -> (CPolyM SymVal Int (SymVar MainSensKind) MainSensKind) -> (CPolyM SymVal Int (SymVar MainSensKind) MainSensKind)
+normalizeSensSpecial nt (SingleKinded (LinCom (MonCom m))) = SingleKinded (LinCom (MonCom (f m)))
+  where
+    f :: HashMap (MonCom Int (SymVar 'MainSensKind)) SymVal -> HashMap (MonCom Int (SymVar 'MainSensKind)) SymVal
+    f = H.mapKeys (\(MonCom hmap) -> MonCom $ H.mapKeys (tryComputeSym nt) hmap)
 
 
 

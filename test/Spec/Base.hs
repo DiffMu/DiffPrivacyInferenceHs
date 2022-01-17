@@ -76,7 +76,8 @@ sn x = do
   logForce $ "================================================"
   logForce $ "before solving constraints (1)"
   logPrintConstraints
-  tres'' <- solveAndNormalize [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal] tres'
+  tres'' <- solveAndNormalize ExactNormalization [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal] tres'
+  tres''' <- solveAndNormalize SimplifyingNormalization [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal] tres''
   -- tres'' <- normalize tres'
   -- logForce $ "================================================"
   -- logForce $ "before solving constraints (2)"
@@ -87,12 +88,12 @@ sn x = do
   -- logForce $ "before solving constraints (3)"
   -- logPrintConstraints
   -- return tres'''
-  return tres''
+  return tres'''
 
 
 
 sn_EW :: Normalize TC a => TC a -> TC a
-sn_EW x = x >>= solveAndNormalize [SolveExact,SolveAssumeWorst]
+sn_EW x = x >>= solveAndNormalize ExactNormalization [SolveExact,SolveAssumeWorst]
   -- do
   -- x' <- x
   -- solveAllConstraints [SolveExact,SolveAssumeWorst]
@@ -200,7 +201,7 @@ parseEval_b_customCheck dolog parse desc term (testBy :: TestBy) customTCCheck =
 
           -- we check whether our result is as expected
           unify result expectedT
-          solveAllConstraints [SolveExact]
+          solveAllConstraints ExactNormalization [SolveExact]
 
           -- and additionally if the constraints are empty
           return customCheckResult

@@ -347,7 +347,7 @@ solveSubtyping name path = withLogLocation "Subtyping" $ do
       updateConstraint name (Solvable (IsLessEqual a))
     Wait           -> do
       log $ "Subtyping computation of " <> show path <> " returned `Wait`. Keeping constraint as is."
-      npath <- normalize path
+      npath <- normalizeExact path
       log $ "(With normalizations applied the constraint is now " <> show npath <> " ; it should be the same as the input.)"
       convertSubtypingToSupremum name path -- in this case we try to change this one into a sup
     Fail e         -> throwError (UnsatisfiableConstraint (show (fst path) <> " ⊑ " <> show (snd path) <> "\n\n"
