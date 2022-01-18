@@ -293,7 +293,7 @@ instance Substitute SVarOf SensitivityOf (SensitivityOf k) where
   substitute (σs :: forall k. (IsKind k) => SVarOf k -> t (SensitivityOf k)) s = substitute f s
     where f :: (IsKind l) => SymVar l -> t (SensitivityOf l)
           f (HonestVar a) = σs (a)
-          f (Id a) = pure (coerce a)
+          -- f (Id a) = pure (coerce a)
           f b = pure $ var (b)
 
 instance (Substitute v a x, Substitute v a y) => Substitute v a (x,y) where
@@ -951,7 +951,8 @@ instance (Normalize t a, Normalize t b, Normalize t c, Normalize t d) => Normali
 instance MonadDMTC t => Normalize (t) Sensitivity where
   normalize nt n =
     do σ <- getSubs @_ @SensitivityOf
-       σ ↷ n
+       res <- σ ↷ n
+       return $ normalizeSensSpecial nt res
 
 instance Monad t => Normalize t (SymbolOf k) where
   normalize _ = pure

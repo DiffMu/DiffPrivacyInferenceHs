@@ -72,7 +72,7 @@ instance Monad t => SemiringM t (SymVal) where
 -- like variables with special rules.
 data SymVar (k :: SensKind) =
   HonestVar (SymbolOf k)
-  | Id (SymTerm MainSensKind)
+  -- | Id (SymTerm MainSensKind)
   | Ln (SymTerm MainSensKind)
   | Exp (SymTerm MainSensKind, SymTerm MainSensKind)
   | Ceil (SymTerm MainSensKind)
@@ -92,10 +92,22 @@ maxS s = injectVarId (Max s)
 minus s t = injectVarId (Minus (s, t))
 divide s t = s ⋅! injectVarId (Div t)
 
+
+-- tryComputeSym :: NormalizationType -> SymVar k -> SymVar k
+-- tryComputeSym nt x = case f x of
+--                     Just val -> undefined --Id val
+--                     Nothing -> x
+
 tryComputeSym :: NormalizationType -> SymVar k -> SymVar k
-tryComputeSym nt x = case f x of
-                    Just val -> Id val
-                    Nothing -> x
+tryComputeSym nt x = x
+  -- case f x of
+  --                   Just val -> undefined --Id val
+  --                   Nothing -> x
+
+normalizationSubstitution :: NormalizationType -> SymVar k -> SymTerm k
+normalizationSubstitution nt x = case f x of
+                    Just val -> coerce val --Id val
+                    Nothing -> injectVarId (coerce x)
   where
     extractVal :: SymTerm MainSensKind -> Maybe SymVal
     extractVal (SingleKinded (LinCom (MonCom h))) =
@@ -135,7 +147,7 @@ tryComputeSym nt x = case f x of
 
     f :: SymVar k -> Maybe (SymTerm MainSensKind)
     f (HonestVar _)  = Nothing
-    f (Id t)         = Nothing
+    -- f (Id t)         = Nothing
     f (Ln a)         = constCoeff <$> (dmLog <$> extractVal a)
     f (Exp (a,b))    = constCoeff <$> (dmExp <$> extractVal a <*> extractVal b)
     f (Ceil a)       = constCoeff <$> (dmCeil <$> extractVal a)
@@ -174,7 +186,7 @@ tryComputeSym nt x = case f x of
 
 instance Show (SymVar k) where
   show (HonestVar v) = show v
-  show (Id te) = "id(" <> show te <> ")"
+  -- show (Id te) = "id(" <> show te <> ")"
   show (Ln te) = "ln(" <> show te <> ")"
   show (Exp (b, e)) = show b <> "^(" <> show e <> ")"
   show (Ceil te) = "ceil(" <> show te <> ")"
@@ -196,7 +208,7 @@ type SymTerm :: SensKind -> *
 type SymTerm = CPolyM SymVal Int (SymVar MainSensKind)
 
 instance CheckContains (SymVar MainSensKind) (SymbolOf MainSensKind) where
-  checkContains (Id _) = Nothing
+  -- checkContains (Id _) = Nothing
   checkContains (Ln _) = Nothing
   checkContains (Exp _) = Nothing
   checkContains (Ceil _) = Nothing
@@ -231,9 +243,13 @@ instance (CheckNeutral m a, CheckNeutral m b) => CheckNeutral m (a,b) where
     return (and [x,y])
 
 
+
+--
+-- substitute inside of variables
+--
 instance (Substitute SymVar (CPolyM SymVal Int (SymVar MainSensKind)) (SymVar k2)) where
   substitute σ (HonestVar v) = pure (HonestVar v)
-  substitute σ (Id v)        = tryComputeSym ExactNormalization <$> Id <$> substitute σ v
+  -- substitute σ (Id v)        = tryComputeSym ExactNormalization <$> Id <$> substitute σ v
   substitute σ (Ln a)        = tryComputeSym ExactNormalization <$> Ln <$> substitute σ a
   substitute σ (Exp (b,e))   = tryComputeSym ExactNormalization <$> ((\b e -> Exp (b,e)) <$> substitute σ b <*> substitute σ e)
   substitute σ (Ceil a)      = tryComputeSym ExactNormalization <$> Ceil <$> substitute σ a
@@ -246,14 +262,15 @@ instance (Substitute SymVar (CPolyM SymVal Int (SymVar MainSensKind)) (SymVar k2
   substitute σ (TruncateDoubleSym (a0, a1) b) =
      tryComputeSym ExactNormalization <$> ((\a0 a1 b -> TruncateDoubleSym (a0 , a1) b) <$> substitute σ a0 <*> substitute σ a1 <*> substitute σ b)
 
-
+--
+-- We have an extra normalization which creates substitution for larger variables.
+--
 normalizeSensSpecial :: NormalizationType -> (CPolyM SymVal Int (SymVar MainSensKind) MainSensKind) -> (CPolyM SymVal Int (SymVar MainSensKind) MainSensKind)
-normalizeSensSpecial nt (SingleKinded (LinCom (MonCom m))) = SingleKinded (LinCom (MonCom (f m)))
-  where
-    f :: HashMap (MonCom Int (SymVar 'MainSensKind)) SymVal -> HashMap (MonCom Int (SymVar 'MainSensKind)) SymVal
-    f = H.mapKeys (\(MonCom hmap) -> MonCom $ H.mapKeys (tryComputeSym nt) hmap)
-
-
+normalizeSensSpecial nt s = runIdentity $ substitute (pure . normalizationSubstitution nt) s
+-- nt (SingleKinded (LinCom (MonCom m))) = SingleKinded (LinCom (MonCom (f m)))
+--   where
+--     f :: HashMap (MonCom Int (SymVar 'MainSensKind)) SymVal -> HashMap (MonCom Int (SymVar 'MainSensKind)) SymVal
+--     f = H.mapKeys (\(MonCom hmap) -> MonCom $ H.mapKeys (tryComputeSym nt) hmap)
 
 
 
