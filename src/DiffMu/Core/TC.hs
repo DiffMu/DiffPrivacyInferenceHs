@@ -140,6 +140,7 @@ instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs (Fun xs) = Fun <$> substitute σs xs
   substitute σs (x :∧: y) = (:∧:) <$> substitute σs x <*> substitute σs y
   substitute σs (BlackBox n) = pure (BlackBox n)
+  substitute σs (Deepcopied xs) = Deepcopied <$> substitute σs xs
 
 
 instance Substitute SVarOf SensitivityOf (Annotation a) where
@@ -171,6 +172,7 @@ instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
   substitute σs (Fun xs) = Fun <$> substitute σs xs
   substitute σs (x :∧: y) = (:∧:) <$> substitute σs x <*> substitute σs y
   substitute σs (BlackBox n) = pure (BlackBox n)
+  substitute σs (Deepcopied xs) = Deepcopied <$> substitute σs xs
 
 
 instance Term TVarOf DMTypeOf where
@@ -242,6 +244,7 @@ instance Typeable k => FreeVars TVarOf (DMTypeOf k) where
   freeVars (Fun xs) = freeVars xs
   freeVars (x :∧: y) = freeVars x <> freeVars y
   freeVars (BlackBox n) = []
+  freeVars (Deepcopied xs) = freeVars xs
 
 
 -- Given a list of "multi substitutions", i.e. substitutions of the form

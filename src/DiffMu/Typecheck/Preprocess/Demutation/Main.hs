@@ -864,6 +864,9 @@ elaborateMut scname scope (Sample t1 t2 t3) = do
 elaborateMut scname scope (InternalExpectConst t1) = do
   (newT1, newT1Type) <- elaborateMut scname scope t1
   return (InternalExpectConst newT1, Pure UserValue)
+elaborateMut scname scope (DeepcopyValue t1) = do
+  (newT1, newT1Type) <- elaborateMut scname scope t1
+  return (DeepcopyValue newT1, Pure UserValue)
 
 -- the unsupported terms
 elaborateMut scname scope term@(Choice t1)        = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))

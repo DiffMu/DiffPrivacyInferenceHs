@@ -825,6 +825,19 @@ checkSen' scope term@(InternalExpectConst a) = do
 
   return res'
 
+-- 
+-- The user can explicitly copy return values.
+--
+checkSen' scope term@(DeepcopyValue t) = do
+  res <- checkSens scope t
+
+  ta <- newVar
+  res' <- unify res (NoFun (ta))
+
+  return (NoFun (Deepcopied ta))
+
+
+
 -- Everything else is currently not supported.
 checkSen' scope t = (throwError (UnsupportedTermError t))
 
