@@ -27,8 +27,8 @@ checkMutTerm term = do
         log $ "Type before constraint resolving: " <> show tres'
         log $ "solving constraints:"
         logPrintConstraints
-        solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
-        tres'' <- normalize tres'
+        solveAllConstraints ExactNormalization [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
+        tres'' <- normalize ExactNormalization tres'
         return tres''
 
   -- these are the locations from which the logs will be shown

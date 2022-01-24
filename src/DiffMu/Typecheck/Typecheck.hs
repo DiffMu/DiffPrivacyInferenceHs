@@ -659,7 +659,7 @@ checkSen' scope (Row m i) = do
       let di = checkSens scope i
       let dx = do
                    _ <- di
-                   mscale inftyS
+                   mscale zeroId
                    return ()
 
       let dm = checkSens scope m -- check the matrix
@@ -815,6 +815,15 @@ checkSen' scope (SumGrads g1 g2) = do
 
 checkSen' scope term@(SBind x a b) = do
   throwError (TypeMismatchError $ "Found the term\n" <> showPretty term <> "\nwhich is a privacy term because of the bind in a place where a sensitivity term was expected.")
+
+
+checkSen' scope term@(InternalExpectConst a) = do
+  res <- checkSens scope a
+  sa <- newVar
+  ta <- newVar
+  res' <- unify res (NoFun (Numeric (Const sa ta)))
+
+  return res'
 
 -- Everything else is currently not supported.
 checkSen' scope t = (throwError (UnsupportedTermError t))
@@ -1030,7 +1039,11 @@ checkPri' scope (Gauss rp εp δp f) =
       -- interesting input variables must have sensitivity <= r
       restrictInteresting r
       -- interesting output variables are set to (ε, δ), the rest is truncated to ∞
+      ctxBeforeTrunc <- use types
+      logForce $ "[Gauss] Before truncation, context is:\n" <> show ctxBeforeTrunc
       mtruncateP inftyP
+      ctxAfterTrunc <- use types
+      logForce $ "[Gauss] After truncation, context is:\n" <> show ctxAfterTrunc
       (ivars, itypes) <- getInteresting
       logForce $ ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>\nInteresting variables: " <> show ivars <> "\n<<<<<<<<<<<<<<<<" 
       mapM (\(x, (τ :@ _)) -> setVarP x (WithRelev IsRelevant (τ :@ PrivacyAnnotation (ε, δ)))) (zip ivars itypes)

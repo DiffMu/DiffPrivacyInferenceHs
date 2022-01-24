@@ -59,7 +59,7 @@ instance MonadLog m => MonadLog (ExceptT e m) where
 --
 
 normalizeᵢ :: Normalize t a => a -> INCResT e t a
-normalizeᵢ a = liftINC (normalize a)
+normalizeᵢ a = liftINC (normalizeExact a)
 
 class Monad t => Unifyᵢ t a where
   unifyᵢ_ :: a -> a -> t a
@@ -139,7 +139,7 @@ instance MonadDMTC t => Unifyᵢ (INCResT DMException t) (DMTypeOf k) where
 
 
 instance Monad t => Normalize t JuliaType where
-  normalize = pure
+  normalize nt = pure
 
 
 instance Monad t => Unify t () where

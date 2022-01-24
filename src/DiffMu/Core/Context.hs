@@ -67,13 +67,41 @@ truncate_impl η γ = truncate_annotation <$> γ
              True -> WithRelev i (τ :@ zeroId)
              _    -> WithRelev i (τ :@ η))
 
+truncate_SS :: Sensitivity -> TypeCtx SensitivityK -> TypeCtx SensitivityK
+truncate_SS eta gamma = f <$> gamma 
+  where
+    f (WithRelev i (tau :@ (SensitivityAnnotation ann))) =
+       WithRelev i (tau :@ (SensitivityAnnotation (injectVarId $ TruncateSym ann eta)))
+
+truncate_PS :: Sensitivity -> TypeCtx PrivacyK -> TypeCtx SensitivityK
+truncate_PS eta gamma = f <$> gamma 
+  where
+    f (WithRelev i (tau :@ (PrivacyAnnotation p))) =
+       WithRelev i (tau :@ (SensitivityAnnotation (injectVarId $ TruncateDoubleSym p eta)))
+
+truncate_SP :: Privacy -> TypeCtx SensitivityK -> TypeCtx PrivacyK
+truncate_SP (eps,del) gamma = f <$> gamma
+  where
+    f (WithRelev i (tau :@ (SensitivityAnnotation ann))) =
+       WithRelev i (tau :@ (PrivacyAnnotation (injectVarId $ TruncateSym ann eps, injectVarId $ TruncateSym ann del)))
+
+truncate_PP :: Privacy -> TypeCtx PrivacyK -> TypeCtx PrivacyK
+truncate_PP (pnew0, pnew1) gamma = f <$> gamma 
+  where
+    f (WithRelev i (tau :@ (PrivacyAnnotation (pold)))) =
+       WithRelev i (tau :@ (PrivacyAnnotation (injectVarId $ TruncateDoubleSym pold pnew0, injectVarId $ TruncateDoubleSym pold pnew1)))
+
 truncateS :: Sensitivity -> TypeCtxSP -> TypeCtxSP
-truncateS η (Left γ) = Left (truncate_impl (SensitivityAnnotation η) γ)
-truncateS η (Right γ) = Left (truncate_impl (SensitivityAnnotation η) γ)
+truncateS η (Left γ) = Left (truncate_SS η γ)
+truncateS η (Right γ) = Left (truncate_PS η γ)
+-- truncateS η (Left γ) = Left (truncate_impl (SensitivityAnnotation η) γ)
+-- truncateS η (Right γ) = Left (truncate_impl (SensitivityAnnotation η) γ)
 
 truncateP :: Privacy -> TypeCtxSP -> TypeCtxSP
-truncateP η (Left γ) = Right (truncate_impl (PrivacyAnnotation η) γ)
-truncateP η (Right γ) = Right (truncate_impl (PrivacyAnnotation η) γ)
+truncateP η (Left γ) = Right (truncate_SP η γ)
+truncateP η (Right γ) = Right (truncate_PP η γ)
+-- truncateP η (Left γ) = Right (truncate_impl (PrivacyAnnotation η) γ)
+-- truncateP η (Right γ) = Right (truncate_impl (PrivacyAnnotation η) γ)
 
 -- Truncates the current type context living in our typechecking-state monad by a given Sensitivity `η`.
 mtruncateS :: MonadDMTC t => Sensitivity -> t ()

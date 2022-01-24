@@ -300,7 +300,7 @@ instance ShowPretty (DMTypeOf k) where
   showPretty DMReal = "Real"
   showPretty DMData = "Data"
   showPretty (Const s t) = showPretty t <> "[" <> showPretty s <> "]"
-  showPretty (NonConst t) = showPretty t
+  showPretty (NonConst t) = "NonConst " <> showPretty t
   showPretty (Numeric t) = showPretty t
   showPretty (TVar t) = showPretty t
   showPretty (a :->: b) = showFunPretty "->" a b
@@ -425,12 +425,39 @@ sndAnn :: (a :@ b) -> b
 sndAnn (a :@ b) = b
 
 
--- fstAnnI :: (WithRelev b) -> DMType
--- fstAnnI (WithRelev _ (a :@ b)) = a
-
--- sndAnnI :: WithRelev b -> (Annotation b)
--- sndAnnI (WithRelev _ (a :@ b)) = b
-
+-------------
+-- Recursion into DMTypes
+--
+recDMTypeM :: forall m k. (Monad m)
+           => (forall k. DMTypeOf k -> m (DMTypeOf k)) 
+           -> (Sensitivity -> m (Sensitivity)) 
+           -> DMTypeOf k -> m (DMTypeOf k)
+recDMTypeM typemap sensmap DMAny = pure DMAny
+recDMTypeM typemap sensmap L1 = pure L1
+recDMTypeM typemap sensmap L2 = pure L2
+recDMTypeM typemap sensmap LInf = pure LInf
+recDMTypeM typemap sensmap U = pure U
+recDMTypeM typemap sensmap (Clip n) = Clip <$> typemap n
+recDMTypeM typemap sensmap DMInt = pure DMInt
+recDMTypeM typemap sensmap DMReal = pure DMReal
+recDMTypeM typemap sensmap DMData = pure DMData
+recDMTypeM typemap sensmap (Numeric τ) = Numeric <$> typemap τ
+recDMTypeM typemap sensmap (NonConst τ) = NonConst <$> typemap τ
+recDMTypeM typemap sensmap (Const η τ) = Const <$> sensmap η <*> typemap τ
+recDMTypeM typemap sensmap (TVar x) = pure (TVar x)
+recDMTypeM typemap sensmap (τ1 :->: τ2) = (:->:) <$> mapM (\(a :@ b) -> (:@) <$> typemap a <*> sensmap b) τ1 <*> typemap τ2
+recDMTypeM typemap sensmap (τ1 :->*: τ2) = (:->*:) <$> mapM (\(a :@ (b0, b1)) -> f <$> typemap a <*> sensmap b0 <*> sensmap b1) τ1 <*> typemap τ2
+  where
+    f a b0 b1 = a :@ (b0, b1)
+recDMTypeM typemap sensmap (DMTup τs) = DMTup <$> mapM typemap τs
+recDMTypeM typemap sensmap (DMVec nrm clp n τ) = DMVec <$> typemap nrm <*> typemap clp <*> sensmap n <*> typemap τ
+recDMTypeM typemap sensmap (DMMat nrm clp n m τ) = DMMat <$> typemap nrm <*> typemap clp <*> sensmap n <*> sensmap m <*> typemap τ
+recDMTypeM typemap sensmap (DMParams m τ) = DMParams <$> sensmap m <*> typemap τ
+recDMTypeM typemap sensmap (DMGrads nrm clp m τ) = DMGrads <$> typemap nrm <*> typemap clp <*> sensmap m <*> typemap τ
+recDMTypeM typemap sensmap (NoFun x) = NoFun <$> typemap x
+recDMTypeM typemap sensmap (Fun xs) = Fun <$> mapM (\(a :@ b) -> (:@) <$> typemap a <*> pure b) xs
+recDMTypeM typemap sensmap (x :∧: y) = (:∧:) <$> typemap x <*> typemap y
+recDMTypeM typemap sensmap (BlackBox n) = pure (BlackBox n)
 
 ---------------------------------------------------------
 -- Sensitivity and Privacy
@@ -688,6 +715,8 @@ data PreDMTerm (t :: * -> *) =
   | ZeroGrad (PreDMTerm t)
   | SumGrads (PreDMTerm t) (PreDMTerm t)
   | Sample (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
+-- Internal terms
+  | InternalExpectConst (PreDMTerm t)
   deriving (Generic)
 
 pattern SLet a b c = SLetBase PureLet a b c
@@ -699,7 +728,7 @@ pattern SmpLet a b c = TLetBase SampleLet a b c
 {-# COMPLETE Extra, Ret, Sng, Var, Arg, Op, Phi, Lam, LamStar, BBLet, BBApply,
  Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, Gauss, Laplace, ConvertM, MCreate, Transpose,
  Size, Length, Index, VIndex, Row, ClipM, Loop, SubGrad, ScaleGrad, Reorder, TProject, LastTerm,
- ZeroGrad, SumGrads, SmpLet, Sample #-}
+ ZeroGrad, SumGrads, SmpLet, Sample, InternalExpectConst #-}
 
 
 deriving instance (forall a. Show a => Show (t a)) => Show (PreDMTerm t)
@@ -803,6 +832,7 @@ recDMTermM f h (LastTerm x)       = LastTerm <$> (f x)
 recDMTermM f h (ZeroGrad a)       = ZeroGrad <$> (f a)
 recDMTermM f h (SumGrads a b)     = SumGrads <$> (f a) <*> (f b)
 recDMTermM f h (Sample a b c)     = Sample <$> (f a) <*> (f b) <*> (f c)
+recDMTermM f h (InternalExpectConst a) = InternalExpectConst <$> (f a)
 
 --------------------------------------------------------------------------
 -- Free variables for terms
@@ -897,6 +927,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (SumGrads a b)     = "SumGrads (" <> (showPretty a) <> ", " <> (showPretty b) <> ")"
   showPretty (SmpLet v a b)     = "SmpLet " <> showPretty v <> " <- " <> (showPretty a) <> "\n" <> (showPretty b)
   showPretty (Sample a b c)     = "Sample (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ")"
+  showPretty (InternalExpectConst a) = "InternalExpectConst " <> (showPretty a)
 
 instance ShowPretty a => ShowPretty (MutabilityExtension a) where
   showPretty (MutLet t a b) = "MutLet{" <> show t <> "} " <> indent (showPretty a) <> indent (showPretty b)
