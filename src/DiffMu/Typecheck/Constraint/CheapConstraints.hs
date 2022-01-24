@@ -134,7 +134,6 @@ instance FixedVars TVarOf (IsLoopResult ((Sensitivity, Sensitivity, Sensitivity)
   fixedVars (IsLoopResult (_, _, res)) = freeVars res
 
 
--- TODO implement this
 instance Solve MonadDMTC IsLoopResult ((Sensitivity, Sensitivity, Sensitivity), Annotation SensitivityK, DMMain) where
   solve_ Dict _ name (IsLoopResult ((s1, s2, s3), sa, τ_iter)) = do
      let SensitivityAnnotation s = sa
@@ -372,3 +371,30 @@ instance Solve MonadDMTC IsLess (Sensitivity, Sensitivity) where
          Nothing -> return ()
 
 
+-------------------------------------------------------------------
+-- functions that return DMGrads or DMModel must deepcopy the return value.
+
+newtype IsRefCopy a = IsRefCopy a deriving Show
+
+instance TCConstraint IsRefCopy where
+  constr = IsRefCopy
+  runConstr (IsRefCopy c) = c
+
+instance FixedVars TVarOf (IsRefCopy DMMain) where
+  fixedVars (IsRefCopy res) = freeVars res
+
+
+instance Solve MonadDMTC IsRefCopy DMMain where
+  solve_ Dict _ name (IsRefCopy (TVar _)) = return ()
+  solve_ Dict _ name (IsRefCopy (NoFun τ)) =
+    let isAllowed t = case t of
+                             TVar _ -> Nothing
+                             (DMParams _ _) -> Just False
+                             (DMGrads _ _ _ _) -> Just False
+                             (DMTup ts) -> fmap and (sequence (map isAllowed ts))
+                             _ -> Just True
+    in case (isAllowed τ) of
+            Just True -> dischargeConstraint name
+            Just False -> failConstraint name
+            _ -> return ()
+  solve_ Dict _ name (IsRefCopy _) = dischargeConstraint name

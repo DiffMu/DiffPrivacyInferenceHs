@@ -154,6 +154,9 @@ checkSen' scope (Lam xτs body) =
     let xrτs' = [x :@ s | (x :@ SensitivityAnnotation s) <- xrτs]
     logForce $ "Checking Lam, outer scope: " <> show (getAllKeys scope) <> " | inner: " <> show (getAllKeys scope')
 
+    -- functions can only return deepcopies of DMModel and DMGrads
+    addConstraint (Solvable (IsRefCopy restype))
+
     -- make an arrow type.
     let τ = (xrτs' :->: restype)
     return (Fun [τ :@ (Just sign)])
@@ -197,6 +200,10 @@ checkSen' scope (LamStar xτs body) =
     
     -- build the type signature and proper ->* type
     let xrτs' = [x :@ p | (x :@ PrivacyAnnotation p) <- xrτs]
+
+    -- functions can only return deepcopies of DMModel and DMGrads
+    addConstraint (Solvable (IsRefCopy restype))
+
     let τ = (xrτs' :->*: restype)
     return (Fun [τ :@ (Just sign)])
 
@@ -857,6 +864,7 @@ checkPri' scope (Apply f args) =
     (τ_sum :: DMMain, argτs) <- msumTup (f_check , msumP margs) -- sum args and f's context
     τ_ret <- newVar -- a type var for the function return type
     addConstraint (Solvable (IsFunctionArgument (τ_sum, Fun [(argτs :->*: τ_ret) :@ Nothing])))
+
     return τ_ret
 
 
