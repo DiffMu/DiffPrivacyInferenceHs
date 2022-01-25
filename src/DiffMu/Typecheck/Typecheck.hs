@@ -144,7 +144,7 @@ checkSen' scope (Lam xτs body) =
     let scope' = addArgs scope
 
     -- check the body in the modified scope
-    restype <- checkSens scope' body
+    btype <- checkSens scope' body
 
     -- extract julia signature
     let sign = (sndA <$> xτs)
@@ -155,7 +155,8 @@ checkSen' scope (Lam xτs body) =
     logForce $ "Checking Lam, outer scope: " <> show (getAllKeys scope) <> " | inner: " <> show (getAllKeys scope')
 
     -- functions can only return deepcopies of DMModel and DMGrads
-    addConstraint (Solvable (IsRefCopy restype))
+    restype <- newVar
+    addConstraint (Solvable (IsRefCopy (btype, restype)))
 
     -- make an arrow type.
     let τ = (xrτs' :->: restype)
@@ -174,7 +175,7 @@ checkSen' scope (LamStar xτs body) =
     let scope' = addArgs scope
 
     -- check the body in the modified scope
-    restype <- checkPriv scope' body
+    btype <- checkPriv scope' body
 
     -- extract julia signature
     let sign = (fst <$> sndA <$> xτs)
@@ -202,7 +203,8 @@ checkSen' scope (LamStar xτs body) =
     let xrτs' = [x :@ p | (x :@ PrivacyAnnotation p) <- xrτs]
 
     -- functions can only return deepcopies of DMModel and DMGrads
-    addConstraint (Solvable (IsRefCopy restype))
+    restype <- newVar
+    addConstraint (Solvable (IsRefCopy (btype, restype)))
 
     let τ = (xrτs' :->*: restype)
     return (Fun [τ :@ (Just sign)])

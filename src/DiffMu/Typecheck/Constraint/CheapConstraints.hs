@@ -380,21 +380,18 @@ instance TCConstraint IsRefCopy where
   constr = IsRefCopy
   runConstr (IsRefCopy c) = c
 
-instance FixedVars TVarOf (IsRefCopy DMMain) where
+instance FixedVars TVarOf (IsRefCopy (DMMain, DMMain)) where
   fixedVars (IsRefCopy res) = freeVars res
 
 
-instance Solve MonadDMTC IsRefCopy DMMain where
-  solve_ Dict _ name (IsRefCopy (TVar _)) = return ()
-  solve_ Dict _ name (IsRefCopy (NoFun τ)) =
-    let isAllowed t = case t of
-                             TVar _ -> Nothing
-                             (DMParams _ _) -> Just False
-                             (DMGrads _ _ _ _) -> Just False
-                             (DMTup ts) -> fmap and (sequence (map isAllowed ts))
-                             _ -> Just True
-    in case (isAllowed τ) of
-            Just True -> dischargeConstraint name
-            Just False -> failConstraint name
-            _ -> return ()
-  solve_ Dict _ name (IsRefCopy _) = dischargeConstraint name
+instance Solve MonadDMTC IsRefCopy (DMMain, DMMain) where
+  solve_ Dict _ name (IsRefCopy (TVar v, _)) = return ()
+  solve_ Dict _ name (IsRefCopy (NoFun (DMTup ts), tv)) = do
+     nvs <- mapM (\_ -> newVar) ts
+     unify tv (NoFun (DMTup nvs))
+     mapM (\(tt, nv) -> addConstraint (Solvable (IsRefCopy ((NoFun tt), (NoFun nv))))) (zip ts nvs)
+     dischargeConstraint name
+  solve_ Dict _ name (IsRefCopy (NoFun (DMParams _ _), _)) = failConstraint name
+  solve_ Dict _ name (IsRefCopy (NoFun (DMGrads _ _ _ _), _)) = failConstraint name
+  solve_ Dict _ name (IsRefCopy (NoFun (Deepcopied v), t)) = unify (NoFun v) t >> dischargeConstraint name
+  solve_ Dict _ name (IsRefCopy (ti, tv)) = unify ti tv >> dischargeConstraint name

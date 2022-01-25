@@ -157,7 +157,7 @@ testSample pp = describe "Sample" $ do
               \  gaussian_mechanism!(2, 0.2, 0.3, gs)  \n\
               \  x * gs \n\
               \end"
-        ty = "Fun([([NoFun(Matrix<n: L∞, c: τ_31>[s_11 × s_21](Num(Data))) @ (0.4⋅s_18⋅(1 / s_11),0.3⋅s_18⋅(1 / s_11)),NoFun(Num(Int[s_18])) @ (0,0),NoFun(Num(Int[--])) @ (∞,∞)] ->* NoFun(Grads<n: L∞, c: U>[s_16](Num(Real[--])))) @ Just [Any,Any,Integer]])"
+        ty = "Fun([([NoFun(Matrix<n: L∞, c: τ_32>[s_11 × s_21](Num(Data))) @ (0.4⋅s_18⋅(1 / s_11),0.3⋅s_18⋅(1 / s_11)),NoFun(Num(Int[s_18])) @ (0,0),NoFun(Num(Int[--])) @ (∞,∞)] ->* NoFun(Grads<n: L∞, c: U>[s_16](Num(Real[--])))) @ Just [Any,Any,Integer]])"
         cs = ""
     parseEvalString_customCheck pp "" ex (ty, cs) (pure $ Right ())
                                                                                    
