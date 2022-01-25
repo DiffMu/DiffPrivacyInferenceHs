@@ -30,7 +30,7 @@ preprocessAll term = do
   info $ "Toplevel information:\n" <> show tlinfo
 
   -- -- mutation processing
-  term'' <- liftLightTC (MFull def def def tlinfo) (\_ -> ()) (demutate term')
+  term'' <- liftLightTC (MFull def def def def tlinfo) (\_ -> ()) (demutate term')
   -- term'' <- liftLightTC () (\_ -> ()) (nondemutate term')
 
   -- flet processing

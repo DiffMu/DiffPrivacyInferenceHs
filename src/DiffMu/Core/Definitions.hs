@@ -976,6 +976,7 @@ data DMException where
   UnificationShouldWaitError :: DMTypeOf k -> DMTypeOf k -> DMException
   TermColorError          :: AnnotationKind -> DMTerm -> DMException
   ParseError              :: String -> String -> Int -> DMException -- error message, filename, line number
+  MovedVariableAccessError :: Show a => a -> DMException
 
 instance Show DMException where
   show (UnsupportedError t) = "The term '" <> t <> "' is currently not supported."
@@ -1006,6 +1007,7 @@ instance Show DMException where
                                             <> ">  a = 3" <> "\n"
                                             <> ">  f()" <> "\n"
   show (DemutationVariableAccessTypeError e) = "An error regarding variable access types occured:\n" <> e
+  show (MovedVariableAccessError a) = "Tried to access the variable " <> show a <> ". But this variable is not valid anymore, because it was assigned to something else."
 
 instance Eq DMException where
   UnsupportedTermError    a        == UnsupportedTermError    b       = True
@@ -1025,6 +1027,7 @@ instance Eq DMException where
   DemutationError a                == DemutationError         b       = True
   DemutationDefinitionOrderError a == DemutationDefinitionOrderError b = True
   DemutationVariableAccessTypeError a == DemutationVariableAccessTypeError b = True
+  MovedVariableAccessError a       == MovedVariableAccessError b = True
   _ == _ = False
 
 
