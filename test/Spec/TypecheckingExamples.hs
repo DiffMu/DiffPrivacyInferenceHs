@@ -61,12 +61,12 @@ testPriv pp = describe "privacies" $ do
         inv = "function g(x :: DMGrads) :: Priv() \n\
                \ x = 0.1*x \n\
                \ gaussian_mechanism!(0.1, 0.1, 0.1, x)  \n\
-               \ x = 200*x \n\
+               \ return_copy(200*x) \n\
                \ end"
         lap = "function g(x :: DMGrads) :: Priv() \n\
                \    x = 0.1*x \n\
                \    laplacian_mechanism!(0.1, 0.1, x)  \n\
-               \    x = 200*x \n\
+               \    return_copy(200*x) \n\
                \ end"
         int = NoFun(Numeric (NonConst DMInt))
         real = (Numeric (NonConst DMReal))
@@ -155,9 +155,9 @@ testSample pp = describe "Sample" $ do
               \  clip!(L2,gs) \n\
               \  norm_convert!(gs) \n\
               \  gaussian_mechanism!(2, 0.2, 0.3, gs)  \n\
-              \  x * gs \n\
+              \  return_copy(x * gs) \n\
               \end"
-        ty = "Fun([([NoFun(Matrix<n: L∞, c: τ_32>[s_11 × s_21](Num(Data))) @ (0.4⋅s_18⋅(1 / s_11),0.3⋅s_18⋅(1 / s_11)),NoFun(Num(Int[s_18])) @ (0,0),NoFun(Num(Int[--])) @ (∞,∞)] ->* NoFun(Grads<n: L∞, c: U>[s_16](Num(Real[--])))) @ Just [Any,Any,Integer]])"
+        ty = "Fun([([NoFun(Matrix<n: L∞, c: τ_33>[s_11 × s_21](Num(Data))) @ (0.4⋅s_18⋅(1 / s_11),0.3⋅s_18⋅(1 / s_11)),NoFun(Num(Int[s_18])) @ (0,0),NoFun(Num(Int[--])) @ (∞,∞)] ->* NoFun(Grads<n: L∞, c: U>[s_16](Num(Real[--])))) @ Just [Any,Any,Integer]])"
         cs = ""
     parseEvalString_customCheck pp "" ex (ty, cs) (pure $ Right ())
                                                                                    

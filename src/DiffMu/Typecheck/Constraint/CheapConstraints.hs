@@ -386,6 +386,7 @@ instance FixedVars TVarOf (IsRefCopy (DMMain, DMMain)) where
 
 instance Solve MonadDMTC IsRefCopy (DMMain, DMMain) where
   solve_ Dict _ name (IsRefCopy (TVar v, _)) = return ()
+  solve_ Dict _ name (IsRefCopy (NoFun (TVar v), _)) = return ()
   solve_ Dict _ name (IsRefCopy (NoFun (DMTup ts), tv)) = do
      nvs <- mapM (\_ -> newVar) ts
      unify tv (NoFun (DMTup nvs))
