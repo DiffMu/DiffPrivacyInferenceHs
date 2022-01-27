@@ -6,6 +6,8 @@ import Spec.Subtyping
 import Spec.Supremum
 import Spec.Rules
 import Spec.Scoping
+import Spec.Demutation.AssignmentMoveSemantics
+import Spec.Demutation.NonAliasedMutatingArguments
 import Spec.OriginalScoping
 import Spec.TypecheckingExamples
 import Spec.Unsafe
@@ -43,6 +45,8 @@ runAllTests parse = defaultspec $ do
   testScoping parse
   testDemutationScoping parse
   testOriginalScoping parse
+  testScoping_AssignmentMoveSemantics parse
+  testScoping_NonAliasedMutatingArguments parse
   testTypecheckingExamples parse
   testIssues parse
   -- testParsing parse

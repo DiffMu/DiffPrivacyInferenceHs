@@ -54,7 +54,7 @@ le_ilm NotLocalMutation NotLocalMutation = True
 onlyLocallyMutatedVariables :: [(TeVar,IsLocalMutation)] -> Bool
 onlyLocallyMutatedVariables xs = [v | (v, NotLocalMutation) <- xs] == []
 
-data PureType = UserValue | DefaultValue | SingleArg TeVar
+data PureType = UserValue | DefaultValue | SingleArg TeVar | SingleArgPart TeVar | PureTuple [PureType]
   deriving (Show)
 
 data ImmutType = Pure PureType | Mutating [IsMutated] | VirtualMutated [(TeVar , IsLocalMutation)] | PureBlackBox
@@ -67,6 +67,37 @@ consumeDefaultValue a = a
 
 -- the scope
 type Scope = Ctx TeVar ImmutType
+
+
+---------------------------------------------------
+-- These types describe which variable names
+-- are in the RHS and must be moved on tlet/slet assignment
+-- See #171 #172
+data MoveType = TupleMove [MoveType] | SingleMove TeVar | NoMove
+  deriving (Eq, Show)
+
+singleMoveMaybe :: Maybe TeVar -> MoveType
+singleMoveMaybe (Just a) = SingleMove a
+singleMoveMaybe Nothing  = NoMove
+
+data MoveState = Moved | NotMoved
+
+instance Monad m => SemigroupM m MoveState where
+  (NotMoved) ⋆ b = pure b
+  Moved ⋆ b = pure Moved
+instance Monad m => MonoidM m MoveState where
+  neutral = pure NotMoved
+instance Monad m => CheckNeutral m MoveState where
+  checkNeutral (NotMoved) = pure True
+  checkNeutral (Moved) = pure False
+  
+
+type MoveCtx = Ctx TeVar MoveState
+
+
+--------------------------------------------------
+
+
 
 --------------------------------------------------------
 -- monoid instance for isMutated
@@ -151,6 +182,7 @@ computeVarAccessType var a b = do
 data MFull = MFull
   {
     _mutTypes :: VarAccessCtx
+  , _moveCtx :: MoveCtx
   , _termVarsOfMut :: NameCtx
   , _scopeNames :: NameCtx
   , _topLevelInfo :: TopLevelInformation

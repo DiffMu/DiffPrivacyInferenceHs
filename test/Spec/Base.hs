@@ -197,11 +197,12 @@ parseEval_b_customCheck dolog parse desc term (testBy :: TestBy) customTCCheck =
 
         correctUnification (expected) result = do
           expectedT <- expected
-          customCheckResult <- customTCCheck
 
           -- we check whether our result is as expected
           unify result expectedT
           solveAllConstraints ExactNormalization [SolveExact]
+
+          customCheckResult <- customTCCheck
 
           -- and additionally if the constraints are empty
           return customCheckResult
