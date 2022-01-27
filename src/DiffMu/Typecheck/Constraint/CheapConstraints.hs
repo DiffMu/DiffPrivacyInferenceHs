@@ -168,6 +168,7 @@ instance Solve MonadDMTC IsAdditiveNoiseResult (DMTypeOf MainKind, DMTypeOf Main
   solve_ Dict _ name (IsAdditiveNoiseResult (τgauss, τin)) =
      case τin of
         TVar x -> pure () -- we don't know yet.
+        NoFun (TVar x) -> pure () -- we don't know yet.
         NoFun (DMGrads nrm clp n τ) -> do -- is mgauss
 
            logForce $ ">>>>>>>>>>>>>>>>>>>>>>>>\nIn gauss, type is " <> show (DMGrads nrm clp n τ) <> "<<<<<<<<<<<<<<<<<<<<<"

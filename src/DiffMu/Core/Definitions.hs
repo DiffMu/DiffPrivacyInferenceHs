@@ -938,6 +938,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (SumGrads a b)     = "SumGrads (" <> (showPretty a) <> ", " <> (showPretty b) <> ")"
   showPretty (SmpLet v a b)     = "SmpLet " <> showPretty v <> " <- " <> (showPretty a) <> "\n" <> (showPretty b)
   showPretty (Sample a b c)     = "Sample (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ")"
+  showPretty (DeepcopyValue a)  = "(Copy " <> showPretty a <> ")"
   showPretty (InternalExpectConst a) = "InternalExpectConst " <> (showPretty a)
 
 instance ShowPretty a => ShowPretty (MutabilityExtension a) where
