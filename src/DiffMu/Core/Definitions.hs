@@ -942,7 +942,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
 
 instance ShowPretty a => ShowPretty (MutabilityExtension a) where
   showPretty (DNothing)      = "Nothing"
---  showPretty (MutPhi a b)    = "MutPhi (" <> show a <> " ? " <> show b <> ")"
+  showPretty (MutPhi a b)    = "MutPhi (" <> showPretty a <> " ? " <> showPretty b <> ")"
   showPretty (MutLet t a b)  = "MutLet{" <> show t <> "} " <> indent (showPretty a) <> indent (showPretty b)
   showPretty (MutLoop a x d) = "MutLoop (" <> (showPretty a) <> ", " <> show x <> ")" <> parenIndent (showPretty d)
   showPretty (SModify a x)   = "SModify! (" <> showPretty a <> ", " <> showPretty x <> ")"
