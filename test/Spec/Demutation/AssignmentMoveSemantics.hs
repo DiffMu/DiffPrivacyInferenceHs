@@ -1,5 +1,5 @@
 
-module Spec.Scoping.AssignmentMoveSemantics where
+module Spec.Demutation.AssignmentMoveSemantics where
 
 import Spec.Base
 import DiffMu.Core.Definitions
@@ -32,8 +32,8 @@ testAMS01 pp = do
       ty = Fun([([intc (Fin 3) :@ oneId] :->: intc (Fin 3)) :@ Just [JTAny]])
 
 
-  parseEvalFail pp "01a errors (mutation after move is not allowed)" exa (MovedVariableAccessError "")
-  parseEvalFail pp "01b errors (value after move is not allowed)" exb (MovedVariableAccessError "")
+  parseEvalFail pp "01a errors (mutation after move is not allowed)" exa (DemutationMovedVariableAccessError "")
+  parseEvalFail pp "01b errors (value after move is not allowed)" exb (DemutationMovedVariableAccessError "")
   parseEvalUnify pp "01c succeeds (correct value after move is allowed)" exc (pure ty)
 
 
@@ -57,7 +57,7 @@ testAMS02 pp = do
             \   norm_convert!(v)  \n\
             \ end                 "
 
-  parseEvalFail pp "02a errors (mutation after tuple move is not allowed)" exa (MovedVariableAccessError "")
+  parseEvalFail pp "02a errors (mutation after tuple move is not allowed)" exa (DemutationMovedVariableAccessError "")
   parseEvalFail pp "02b errors (mutation of tuple part is not allowed)" exb (DemutationError "")
   parseEvalFail pp "02c errors (mutation of tuple part is not allowed)" exc (DemutationError "")
 

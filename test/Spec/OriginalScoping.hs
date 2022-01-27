@@ -51,7 +51,7 @@ testScope01 pp = do
       ty = Fun([([] :->: intc (Fin 19)) :@ Just []])
 
   -- parseEval pp "01 works" ex (pure ty)
-  parseEvalFail pp "01 fails" ex (MovedVariableAccessError "")
+  parseEvalFail pp "01 fails" ex (DemutationMovedVariableAccessError "")
 
 
 
@@ -208,7 +208,7 @@ testScope06 pp = do
       ty1 = Fun([([] :->: intc (Fin 10)) :@ Just []])
 
   -- parseEval pp "06 works" ex1 (pure ty1)
-  parseEvalFail pp "06 works" ex1 (MovedVariableAccessError "")
+  parseEvalFail pp "06 works" ex1 (DemutationMovedVariableAccessError "")
 
 
 ---------------------------------------------------------------------
@@ -297,8 +297,8 @@ testScope08 pp = do
 
   -- parseEval pp "08 (version 1) works" ex (pure ty1)
   -- parseEval pp "08 (version 2) works" ex (pure ty2)
-  parseEvalFail pp "08 (version 1) fails" ex1 (MovedVariableAccessError "")
-  parseEvalFail pp "08 (version 2) fails" ex2 (MovedVariableAccessError "")
+  parseEvalFail pp "08 (version 1) fails" ex1 (DemutationMovedVariableAccessError "")
+  parseEvalFail pp "08 (version 2) fails" ex2 (DemutationMovedVariableAccessError "")
 
 
 

@@ -159,7 +159,7 @@ checkIsNotMoved var = do
   mc <- use moveCtx
   case getValue var mc of
     Nothing          -> pure ()
-    Just (Moved)     -> throwError $ MovedVariableAccessError var
+    Just (Moved)     -> throwError $ DemutationMovedVariableAccessError var
     Just (NotMoved)  -> pure ()
 
 
@@ -1220,9 +1220,13 @@ elaborateMutList f scname scope mutargs = do
   -- make sure that such variables do not occur
   case wrongVarCounts of
     [] -> return ()
-    xs -> throwError $ DemutationError $ "The function '" <> f <> "' is called with the following vars in mutating positions:\n"
-                                      <> show mutvarcounts <> "\n"
-                                      <> "But it is not allowed to have the same variable occur multiple times "
+    xs -> throwError $ DemutationNonAliasedMutatingArgumentError
+                     $ "The function '" <> f <> "' is called with the following vars in mutating positions:\n\n"
+                        <> showvarcounts mutvarcounts <> "\n"
+                        <> "But it is not allowed to have the same variable occur multiple times "
+                        where showvarcounts ((name,count):rest) = " - variable `" <> show name <> "` occurs " <> show count <> " times." <> "\n"
+                                                                  <> showvarcounts rest
+                              showvarcounts [] = ""
 
 
   return (newArgs, mutVars)
