@@ -1146,7 +1146,7 @@ elaborateMutList f scname scope mutargs = do
   ---------
 
   -- function for typechecking a single argument
-  let checkArg :: (IsMutated , MutDMTerm) -> MTC (DMTerm , Maybe (TeVar, IsLocalMutation))
+  let checkArg :: (IsMutated , MutDMTerm) -> MTC (DMTerm , ImmutType, Maybe (TeVar, IsLocalMutation))
       checkArg (Mutated , arg) = do
         -- if the argument is given in a mutable position,
         -- it _must_ be a var
@@ -1159,14 +1159,14 @@ elaborateMutList f scname scope mutargs = do
               Just (Pure (SingleArg y)) | x == y -> do
                 debug $ "[elaborateMutList]: The non-local variable " <> show y <> " is being mutated."
                 loc <- markMutated scname NotLocalMutation y
-                return (Var (Just x :- a) , Just (x, loc))
+                return (Var (Just x :- a) , Pure (SingleArg x), Just (x, loc))
               Just (Pure (SingleArg y)) -> throwError (DemutationError $ "When calling the mutating function " <> f <> " found the variable " <> show x <> " as argument in a mutable-argument-position. It is bound to the function argument " <> show y <> ", but it is not allowed to use renamed function arguments in such a position.")
               Just (Pure (SingleArgPart y)) -> demutationError $ "When calling the mutating function " <> f <> " found the variable " <> show x <> " as argument in a mutable-argument-position. It is a (tuple-)part of the function argument "
                                                           <> show y <> ", and it is not allowed to mutate parts of arguments.\n"
                                                           <> "If you want to mutate " <> show x <> " you need to pass it in as a seperate argument to the function."
               Just (Pure _) -> do
                 loc <- markMutated scname LocalMutation x
-                return (Var (Just x :- a) , Just (x, loc))
+                return (Var (Just x :- a) , Pure (SingleArg x), Just (x, loc))
               Just res -> throwError (DemutationError $ "When calling the mutating function " <> f <> " found the variable " <> show x <> " as argument in a mutable-argument-position. It has the type " <> show res <> ", which is not allowed here.")
 
           (Var (Nothing :- a)) -> throwError (DemutationError $ "When calling the mutating function " <> f <> " found the term " <> showPretty arg <> " as argument in a mutable-argument-position. Only named variables are allowed here.")
@@ -1186,34 +1186,43 @@ elaborateMutList f scname scope mutargs = do
           VirtualMutated _ -> throwError (DemutationError $ "It is not allowed to use the result of mutating functions as arguments in other mutating functions. " <> "\nWhen checking " <> f <> "(" <> show (fmap snd mutargs) <> ")")
           PureBlackBox -> throwError (DemutationError $ "It is not allowed to pass black boxes as arguments. " <> "\nWhen checking " <> f <> "(" <> show (fmap snd mutargs) <> ")")
 
-        return (arg' , Nothing)
+        return (arg' , τ, Nothing)
 
   -- check them
   newArgsWithMutTeVars <- mapM checkArg mutargs
+
+  ------------------------- 
   -- extract for return
-  let newArgs = [te | (te , _) <- newArgsWithMutTeVars]
-  let mutVars = [m | (_ , Just m) <- newArgsWithMutTeVars]
+  --
+  -- these types of the arguments carry the contained "possibly aliased variable names"
+  let newArgs = [te | (te , _, _) <- newArgsWithMutTeVars]
+  let argTypes = [ty | (_ , Pure ty, _) <- newArgsWithMutTeVars]
+  let mutVars = [m | (_ , _, Just m) <- newArgsWithMutTeVars]
 
 
   --
-  -- Make sure that all variables in mutated argument positions are unique
-  -- For this, we count the occurences of every variable, simply
-  -- by taking the free variables of the demutated terms.
+  -- Make sure that all variables in mutated argument positions are not aliased.
+  -- For this we look at the types of the inputs.
   --
   -- See #95
   --
+  let getPossiblyAliasedVars (SingleArg a) = [a]
+      getPossiblyAliasedVars (SingleArgPart a) = [a]
+      getPossiblyAliasedVars (PureTuple as) = getPossiblyAliasedVars =<< as
+      getPossiblyAliasedVars DefaultValue = []
+      getPossiblyAliasedVars UserValue = []
 
   -- let allVars = [t | (t, _) <- newArgsWithMutTeVars] >>= freeVarsDMTerm
   let allVars = [t | (t, _) <- mutVars]
 
-  let addCount :: (DMTerm , Maybe (TeVar, IsLocalMutation)) -> Ctx TeVar Int -> Ctx TeVar Int
-      addCount (_ , Just (var , _)) counts = case getValue var counts of
-                                              Just a -> setValue var (a P.+ 1) counts
-                                              Nothing -> setValue var 1 counts
-      addCount (_ , Nothing) counts = counts
+  -- Counting how many vars with a given name there are
+  let addCount :: (TeVar) -> Ctx TeVar Int -> Ctx TeVar Int
+      addCount var counts = case getValue var counts of
+                              Just a -> setValue var (a P.+ 1) counts
+                              Nothing -> setValue var 1 counts
 
   -- number of occurences of all variables
-  let varcounts = getAllKeyElemPairs $ foldr addCount def newArgsWithMutTeVars
+  let varcounts = getAllKeyElemPairs $ foldr addCount def (getPossiblyAliasedVars =<< argTypes)
   -- number of occurences of all variables, but only for variables which are mutated
   let mutvarcounts = filter (\(k,n) -> k `elem` (fst <$> mutVars)) varcounts
   -- number of occurences of all variables, but only for variables which are mutated, with occurence > 1
@@ -1229,7 +1238,6 @@ elaborateMutList f scname scope mutargs = do
                         where showvarcounts ((name,count):rest) = " - variable `" <> show name <> "` occurs " <> show count <> " times." <> "\n"
                                                                   <> showvarcounts rest
                               showvarcounts [] = ""
-
 
   return (newArgs, mutVars)
 
