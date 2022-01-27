@@ -347,6 +347,8 @@ elaborateMut scname scope (FLet fname term body) = do
 
   return (FLet fname newTerm newBody, consumeDefaultValue newBodyType)
 
+elaborateMut scname scope (Extra DNothing) = undefined
+elaborateMut scname scope (Extra (MutPhi _ _)) = undefined
 elaborateMut scname scope (Extra (MutLet ltype term1 term2)) = do
 
   -- elaborate the first term and get its mutated variables

@@ -768,6 +768,8 @@ data MutabilityExtension a =
   | MutLoop a (Maybe TeVar) a
   | SModify (Asgmt JuliaType) a
   | TModify [Asgmt JuliaType] a
+  | MutPhi a [a]
+  | DNothing
   | MutRet
   | DefaultRet a
   deriving (Show, Eq, Functor, Foldable, Traversable)
@@ -939,12 +941,14 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (InternalExpectConst a) = "InternalExpectConst " <> (showPretty a)
 
 instance ShowPretty a => ShowPretty (MutabilityExtension a) where
-  showPretty (MutLet t a b) = "MutLet{" <> show t <> "} " <> indent (showPretty a) <> indent (showPretty b)
+  showPretty (DNothing)      = "Nothing"
+--  showPretty (MutPhi a b)    = "MutPhi (" <> show a <> " ? " <> show b <> ")"
+  showPretty (MutLet t a b)  = "MutLet{" <> show t <> "} " <> indent (showPretty a) <> indent (showPretty b)
   showPretty (MutLoop a x d) = "MutLoop (" <> (showPretty a) <> ", " <> show x <> ")" <> parenIndent (showPretty d)
-  showPretty (SModify a x) = "SModify! (" <> showPretty a <> ", " <> showPretty x <> ")"
-  showPretty (TModify a x) = "TModify! (" <> showPretty a <> ", " <> showPretty x <> ")"
-  showPretty (MutRet) = "MutRet"
-  showPretty (DefaultRet x) = "DefaultRet (" <> showPretty x <> ")"
+  showPretty (SModify a x)   = "SModify! (" <> showPretty a <> ", " <> showPretty x <> ")"
+  showPretty (TModify a x)   = "TModify! (" <> showPretty a <> ", " <> showPretty x <> ")"
+  showPretty (MutRet)        = "MutRet"
+  showPretty (DefaultRet x)  = "DefaultRet (" <> showPretty x <> ")"
 
 instance ShowPretty (EmptyExtension a) where
   showPretty a = undefined

@@ -28,6 +28,7 @@ preprocessAll term = do
   (tlinfo, term') <- liftLightTC def def (checkTopLevel term)
   info $ "-----------------------------------"
   info $ "Toplevel information:\n" <> show tlinfo
+  info $ "term prior to preprocessing:\n" <> showPretty term
 
   -- -- mutation processing
   term'' <- liftLightTC (MFull def def def tlinfo) (\_ -> ()) (demutate term')

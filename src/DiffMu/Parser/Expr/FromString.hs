@@ -33,10 +33,11 @@ data JTree =
    | JAssign [JTree]
    | JTypeAssign [JTree]
    | JRef [JTree]
-   | JIfElse [JTree]
+   | JIf [JTree]
    | JLoop [JTree]
    | JBlock [JTree]
    | JTup [JTree]
+   | JNothing
    | JUnsupported String
    deriving Show
 
@@ -84,6 +85,7 @@ pTree :: Parser JTree
 pTree =     try pTLineNumber
         <|> try (string ":_" >> return JHole)
         <|> try (string ":(==)" >> return (JSym "=="))
+        <|> try (":nothing" >> return JNothing)
         <|> try (JSym <$> pSymbolString)
         <|> try (JReal <$> (wskip float))
         <|> try ((JInteger . fromIntegral) <$> (wskip decimal))
@@ -95,7 +97,8 @@ pTree =     try pTLineNumber
         <|> try (":(::)"     `pWithCtor` JTypeAssign)
         <|> try (string ":(:)" >> return JColon)
         <|> try (":ref"      `pWithCtor` JRef)
-        <|> try (":if"       `pWithCtor` JIfElse)
+        <|> try (":if"       `pWithCtor` JIf)
+        <|> try (":elseif"   `pWithCtor` JIf)
         <|> try (":for"      `pWithCtor` JLoop)
         <|> try (":block"    `pWithCtor` JBlock)
         <|> try (":tuple"    `pWithCtor` JTup)
@@ -150,8 +153,9 @@ data JExpr =
    | JEAssignment JExpr JExpr
    | JETup [JExpr]
    | JETupAssignment [JExpr] JExpr
-   | JEIfElse JExpr JExpr JExpr
+   | JEIfElse JExpr [JExpr]
    | JERef JExpr [JExpr]
+   | JENothing
    deriving Show
 
 
@@ -241,9 +245,10 @@ pTreeToJExpr tree = case tree of
          [JTup args, body] -> JELam <$> pArgs args <*> pTreeToJExpr body
          [s, body]         -> JELam <$> pArgs [s] <*> pTreeToJExpr body
          _                 -> error ("invalid shape or number of args in lam " <> show tree)
-     JIfElse as      -> case as of
-         [cond, tr, fs] -> JEIfElse <$> pTreeToJExpr cond <*> pTreeToJExpr tr <*> pTreeToJExpr fs
-         _              -> error ("wrong number of arguments in ifelse expression " <> show tree <> ", the sanitizer should have prevented this")
+     JIf as          -> case as of
+         [cond, tr, fs] -> JEIfElse <$> pTreeToJExpr cond <*> (mapM pTreeToJExpr [tr, fs])
+         [cond, tr]     -> JEIfElse <$> pTreeToJExpr cond <*> (mapM  pTreeToJExpr [tr])
+         _              -> error ("wrong number of arguments in ifelse expression " <> show tree)
      JFunction as    -> case as of
          [call, body] -> pFLet call body
          _            -> error ("invalid shape of function definition in " <> show tree)
@@ -254,6 +259,7 @@ pTreeToJExpr tree = case tree of
          (name:refs) -> JERef <$> pTreeToJExpr name <*> mapM pTreeToJExpr refs
          _ -> error ("unsupported reference " <> show tree)
      JHole           -> pure JEHole
+     JNothing        -> pure JENothing
      JColon          -> pure JEColon
      JLoop as        -> case as of
          [(JAssign [ivar, JCall (JColon: iter)]), body] -> JELoop <$> pTreeToJExpr ivar <*> pIter iter <*> pTreeToJExpr body
