@@ -267,7 +267,7 @@ instance (Typeable j, Typeable r, Typeable v, IsKind (k :: j), KEq v, Eq r, KHas
 -- type CPolyM r e v = SingleKinded (LinCom r (MonCom e v))
 
 instance (Show r , Show v, Eq r, SemiringM Identity r) => Show (LinCom r (MonCom Int v)) where
-  show (poly) = showWith " + " (\vars r -> factor r vars <> showWith "⋅" f vars "") poly "0"
+  show (poly) = showWith " + " (\vars r -> factor r vars <> showWith "⋅" f vars "") poly "∑∅"
     where f v 1 = show v
           f v e = show v <> "^" <> show e
           factor r (MonCom vars) = case (H.null vars, (r == oneId)) of
@@ -315,6 +315,7 @@ instance forall isT j v r (k :: j). (HasPolyTerm v r k,
   solve_ Dict _ name (IsEqual (x, y)) = solve_impl x y
     where solve_impl (SingleKinded (LinCom (MonCom a))) (SingleKinded (LinCom (MonCom b))) = f (H.toList a) (H.toList b)
           f a b | a == b = dischargeConstraint @isT name
+          f a b | and [isZero a, isZero b] = dischargeConstraint @isT name
           f [(MonCom avars, ar)] [(MonCom bvars, br)] = g (toList avars) (toList bvars)
               where g [] []     | ar == br    = dischargeConstraint @isT name
                     g [] []     | otherwise   = failConstraint @isT name
@@ -339,6 +340,11 @@ instance forall isT j v r (k :: j). (HasPolyTerm v r k,
                     g _       = return ()
 
           f _ _ = return ()
+
+          -- we need a special test for zero, since there are two representation for it
+          isZero [] = True
+          isZero [(MonCom avars, ar)] | ar == zeroId = True
+          isZero _ = False
 
 
 
