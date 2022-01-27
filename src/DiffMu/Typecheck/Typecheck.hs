@@ -1060,7 +1060,6 @@ checkPri' scope (Gauss rp εp δp f) =
       ctxAfterTrunc <- use types
       logForce $ "[Gauss] After truncation, context is:\n" <> show ctxAfterTrunc
       (ivars, itypes) <- getInteresting
-      logForce $ ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>\nInteresting variables: " <> show ivars <> "\n<<<<<<<<<<<<<<<<" 
       mapM (\(x, (τ :@ _)) -> setVarP x (WithRelev IsRelevant (τ :@ PrivacyAnnotation (ε, δ)))) (zip ivars itypes)
       -- return type is a privacy type.
       return τf
@@ -1091,14 +1090,10 @@ checkPri' scope (Gauss rp εp δp f) =
 
       (τf, _) <- msumTup (mf, msum3Tup (mr, mε, mδ))
 
-      -- restrict input type to the correct thing
-      n <- newVar -- dimension of input vector can be anything
-      iclp <- newVar -- clip of input vector can be anything
-      τv <- newVar -- input element type can be anything (as long as it's numeric)
-      addConstraint(Solvable(IsLessEqual(τf, (NoFun (DMGrads L2 iclp n (Numeric (τv)))))))
-
-      -- return result type as a tuple bc gauss is a mutating function
-      return (NoFun (DMTup [(DMGrads LInf U n (Numeric (NonConst DMReal)))]))
+      τgauss <- newVar
+      addConstraint (Solvable (IsAdditiveNoiseResult ((NoFun τgauss), τf))) -- we decide later if its gauss or mgauss according to return type
+ 
+      return (NoFun (DMTup [τgauss]))
 
 
 checkPri' scope (Laplace rp εp f) =
@@ -1119,7 +1114,6 @@ checkPri' scope (Laplace rp εp f) =
       -- interesting output variables are set to (ε, δ), the rest is truncated to ∞
       mtruncateP inftyP
       (ivars, itypes) <- getInteresting
-      logForce $ ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>\nInteresting variables: " <> show ivars <> "\n<<<<<<<<<<<<<<<<" 
       mapM (\(x, (τ :@ _)) -> setVarP x (WithRelev IsRelevant (τ :@ PrivacyAnnotation (ε, zeroId)))) (zip ivars itypes)
       -- return type is a privacy type.
       return τf
@@ -1147,15 +1141,10 @@ checkPri' scope (Laplace rp εp f) =
 
       (τf, _) <- msumTup (mf, msumTup (mr, mε))
 
-
-      -- restrict input type to the correct thing
-      n <- newVar -- dimension of input vector can be anything
-      iclp <- newVar -- clip of input vector can be anything
-      τv <- newVar -- input element type can be anything (as long as it's numeric)
-      addConstraint(Solvable(IsLessEqual(τf, (NoFun (DMGrads L2 iclp n (Numeric (τv)))))))
-
-      -- return result type as a tuple bc laplace is a mutating function
-      return (NoFun (DMTup [(DMGrads LInf U n (Numeric (NonConst DMReal)))]))
+      τlap <- newVar
+      addConstraint (Solvable (IsAdditiveNoiseResult ((NoFun τlap), τf))) -- we decide later if its lap or mlap according to return type
+ 
+      return (NoFun (DMTup [τlap]))
 
 
 checkPri' scope (Loop niter cs' (xi, xc) body) =

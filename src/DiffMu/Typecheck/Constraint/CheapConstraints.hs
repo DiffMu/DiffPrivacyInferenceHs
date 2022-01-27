@@ -151,15 +151,21 @@ instance Solve MonadDMTC IsLoopResult ((Sensitivity, Sensitivity, Sensitivity), 
            dischargeConstraint name
         _ -> return ()
 
-{-
--- we don;t allow anything that's not a vector in out additive noise mechanisms, cuz y would any1.
 --------------------------------------------------
 -- is it gauss or mgauss?
-instance FixedVars TVarOf (IsGaussResult (DMTypeOf MainKind, DMTypeOf MainKind)) where
-  fixedVars (IsGaussResult (gauss,_)) = freeVars gauss
+--
+newtype IsAdditiveNoiseResult a = IsAdditiveNoiseResult a deriving Show
 
-instance Solve MonadDMTC IsGaussResult (DMTypeOf MainKind, DMTypeOf MainKind) where
-  solve_ Dict _ name (IsGaussResult (τgauss, τin)) =
+instance TCConstraint IsAdditiveNoiseResult where
+  constr = IsAdditiveNoiseResult
+  runConstr (IsAdditiveNoiseResult c) = c
+
+
+instance FixedVars TVarOf (IsAdditiveNoiseResult (DMTypeOf MainKind, DMTypeOf MainKind)) where
+  fixedVars (IsAdditiveNoiseResult (gauss,_)) = freeVars gauss
+
+instance Solve MonadDMTC IsAdditiveNoiseResult (DMTypeOf MainKind, DMTypeOf MainKind) where
+  solve_ Dict _ name (IsAdditiveNoiseResult (τgauss, τin)) =
      case τin of
         TVar x -> pure () -- we don't know yet.
         NoFun (DMGrads nrm clp n τ) -> do -- is mgauss
@@ -184,7 +190,7 @@ instance Solve MonadDMTC IsGaussResult (DMTypeOf MainKind, DMTypeOf MainKind) wh
            unify τgauss (NoFun (Numeric (NonConst DMReal)))
 
            dischargeConstraint @MonadDMTC name
--}
+
 
 --------------------------------------------------
 -- reordering of tuples
