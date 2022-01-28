@@ -119,8 +119,8 @@ instance MonadDMTC t => Unifyᵢ (INCResT DMException t) (DMTypeOf k) where
       DMMat <$> unifyᵢ nrm1 nrm2 <*> unifyᵢ clp1 clp2 <*> unifyᵢ n1 n2 <*> unifyᵢ m1 m2 <*> unifyᵢ τ1 τ2
   unifyᵢ_ (DMVec nrm1 clp1 n1 τ1) (DMVec nrm2 clp2 n2 τ2) =
       DMVec <$> unifyᵢ nrm1 nrm2 <*> unifyᵢ clp1 clp2 <*> unifyᵢ n1 n2 <*> unifyᵢ τ1 τ2
-  unifyᵢ_ (DMParams m1 τ1) (DMParams m2 τ2) =
-      DMParams <$> unifyᵢ m1 m2 <*> unifyᵢ τ1 τ2
+  unifyᵢ_ (DMModel m1 τ1) (DMModel m2 τ2) =
+      DMModel <$> unifyᵢ m1 m2 <*> unifyᵢ τ1 τ2
   unifyᵢ_ (DMGrads nrm1 clp1 m1 τ1) (DMGrads nrm2 clp2 m2 τ2) =
       DMGrads <$> unifyᵢ nrm1 nrm2 <*> unifyᵢ clp1 clp2 <*> unifyᵢ m1 m2 <*> unifyᵢ τ1 τ2
   unifyᵢ_ (NoFun a) (v :∧: w)              = do

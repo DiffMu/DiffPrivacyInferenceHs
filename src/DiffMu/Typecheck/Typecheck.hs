@@ -700,13 +700,13 @@ checkSen' scope (SubGrad ps gs) = do
       m <- newVar
 
       -- set argument types
-      unify ps (NoFun (DMParams m (Numeric τps)))
+      unify ps (NoFun (DMModel m (Numeric τps)))
       unify gs (NoFun (DMGrads nrm clp m (Numeric τgs)))
 
       res <- TVar <$> newTVar "τr"
       addConstraint (Solvable (IsTypeOpResult (Binary DMOpSub ((Numeric τps):@s1, (Numeric τgs):@s2) res)))
 
-      return (NoFun (DMTup [DMParams m res]))
+      return (NoFun (DMTup [DMModel m res]))
 
 checkSen' scope (ScaleGrad scalar grad) = do
 
@@ -773,7 +773,7 @@ checkSen' scope (ZeroGrad m) = do
    clp <- newVar -- actually variable, as all entries are zero
 
    -- input must be a model
-   unify tm (NoFun (DMParams n (Numeric τps)))
+   unify tm (NoFun (DMModel n (Numeric τps)))
 
    -- model gets copied into the params so it's infinitely sensitive
    mscale inftyS

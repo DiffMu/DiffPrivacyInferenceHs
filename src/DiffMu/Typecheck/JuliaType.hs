@@ -95,7 +95,7 @@ createDMType (JTMatrix t) = do
   return (DMMat nrm clp m n (Numeric (dt)))
 createDMType (JTModel) = do
   n <- newVar
-  return (DMParams n (Numeric (DMAny)))
+  return (DMModel n (Numeric (DMAny)))
 createDMType (JTGrads) = do
   nrm <- newVar
   clp <- newVar

@@ -399,7 +399,7 @@ instance Solve MonadDMTC IsRefCopy (DMMain, DMMain) where
      unify tv (NoFun (DMTup nvs))
      mapM (\(tt, nv) -> addConstraint (Solvable (IsRefCopy ((NoFun tt), (NoFun nv))))) (zip ts nvs)
      dischargeConstraint name
-  solve_ Dict _ name (IsRefCopy (NoFun (DMParams _ _), _)) = failConstraint name
+  solve_ Dict _ name (IsRefCopy (NoFun (DMModel _ _), _)) = failConstraint name
   solve_ Dict _ name (IsRefCopy (NoFun (DMGrads _ _ _ _), _)) = failConstraint name
   solve_ Dict _ name (IsRefCopy (NoFun (Deepcopied v), t)) = unify (NoFun v) t >> dischargeConstraint name
   solve_ Dict _ name (IsRefCopy (ti, tv)) = unify ti tv >> dischargeConstraint name
