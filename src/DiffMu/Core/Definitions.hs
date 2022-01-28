@@ -119,15 +119,6 @@ instance Show DMKind where
   show FunKind = "Fun"
   show NoFunKind = "NoFun"
 
--- distinguish between vectors and gradients bc we need to do that in julia
-data VecKind =
-    Vector
-  | Gradient
-  deriving (Typeable)
-
-pattern DMVec n c d t = DMVecLike Vector n c d t
-pattern DMGrads n c d t = DMVecLike Gradient n c d t
-
 -- so we don't get incomplete pattern warnings for them
 {-# COMPLETE DMInt, DMReal, Const, NonConst, DMData, Numeric, TVar, (:->:), (:->*:), DMTup, L1, L2, LInf, U, Clip,
  DMVec, DMGrads, DMMat, DMParams, NoFun, Fun, (:∧:), BlackBox, Deepcopied #-}
@@ -143,7 +134,7 @@ type DMType = DMTypeOf NoFunKind
 type DMFun = DMTypeOf FunKind
 
 -- And we give a similar abbreviation for numeric dmtypes:
-type DMNumType = DMTypeOf NumKind
+type DMNum = DMTypeOf NumKind
 
 -- The actual, generic definition of `DMTypeOf` for types of any kind `k` (for `k` in `DMKind`) is given as follows.
 -- NOTE: We can write `(k :: DMKind)` here, because we use the `DataKinds` ghc-extension, which allows us to use
@@ -190,9 +181,10 @@ data DMTypeOf (k :: DMKind) where
   Clip :: DMTypeOf NormKind -> DMTypeOf ClipKind
 
   -- matrices
-  DMVecLike :: VecKind -> (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> DMType -> DMType
-  DMMat :: (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> Sensitivity -> DMType -> DMType
-  DMParams :: Sensitivity -> DMType -> DMType -- number of parameters and element type
+  DMVec :: (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> DMMain -> DMType
+  DMGrads :: (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> DMNum -> DMType
+  DMMat :: (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> Sensitivity -> DMMain -> DMType
+  DMParams :: Sensitivity -> DMNum -> DMType -- number of parameters and element type
 
   -- annotations
   NoFun :: DMType -> DMTypeOf MainKind
