@@ -288,6 +288,7 @@ elaborateMut scname scope fullterm@(TLetBase ltype vars term body) = do
     Pure (UserValue)       -> pure (repeat UserValue)
     Pure (SingleArg a)     -> pure (repeat $ SingleArgPart a)
     Pure (SingleArgPart a) -> pure (repeat $ SingleArgPart a)
+    Pure (SingleRef)       -> pure (repeat $ SingleRef)
     Pure (DefaultValue)    -> pure (repeat $ UserValue)
     Mutating _             -> pure (repeat $ UserValue)
     VirtualMutated _ -> throwError (DemutationError $ "Found an assignment " <> show vars <> " = " <> showPretty term <> " where RHS is a mutating call. This is not allowed.")
@@ -400,6 +401,7 @@ elaborateMut scname scope (FLet fname term body) = do
         Just (Mutating _) -> throwError (DemutationError $ "We do not allow mutating functions to have multiple definitions")
         Just (Pure DefaultValue) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
         Just (Pure (PureTuple _)) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
+        Just (Pure (SingleRef)) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
         Just (Pure (SingleArg _)) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
         Just (Pure (SingleArgPart _)) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
         Just (VirtualMutated _) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
@@ -529,9 +531,10 @@ elaborateMut scname scope (Extra (MutLet ltype term1 term2)) = do
 
       case p of
         UserValue -> pure (valterm , Pure UserValue, NoMove)
-        PureTuple _ -> pure (valterm , Pure UserValue, NoMove)
-        SingleArg _ -> pure (valterm , Pure UserValue, NoMove)
-        SingleArgPart _ -> pure (valterm , Pure UserValue, NoMove)
+        PureTuple as -> pure (valterm , Pure (PureTuple as), NoMove)
+        SingleRef -> pure (valterm , Pure (SingleRef), NoMove)
+        SingleArg a -> pure (valterm , Pure (SingleArg a), NoMove)
+        SingleArgPart x -> pure (valterm , Pure (SingleArgPart x), NoMove)
         -- UserValue -> throwError $ DemutationError $ "Found a local mutation followed by a pure value.\n"
         --                                           <> "This makes not much sense since only one of both can currently be processed.\n\n"
         --                                           <> "---- local mutation ----\n"
@@ -861,6 +864,33 @@ elaborateMut scname scope term@(Phi cond t1 t2) = do
 
 
 ----
+-- Demutation of vector / matrix likes
+--
+-- We return the type `SingleRef`, as that is not allowed
+-- to be passed in mutating positions, which is important
+-- since the results of these functions are aliased references
+-- to matrices.
+--
+-- See #183.
+--
+
+elaborateMut scname scope (Index t1 t2 t3) = do
+  (newT1, newT1Type, _) <- elaborateNonmut scname scope t1
+  (newT2, newT2Type, _) <- elaborateNonmut scname scope t2
+  (newT3, newT3Type, _) <- elaborateNonmut scname scope t3
+  return (Index newT1 newT2 newT3 , Pure SingleRef, NoMove)
+elaborateMut scname scope (VIndex t1 t2) = do
+  (newT1, newT1Type, _) <- elaborateNonmut scname scope t1
+  (newT2, newT2Type, _) <- elaborateNonmut scname scope t2
+  return (VIndex newT1 newT2 , Pure SingleRef, NoMove)
+elaborateMut scname scope (Row t1 t2) = do
+  (newT1, newT1Type, _) <- elaborateNonmut scname scope t1
+  (newT2, newT2Type, _) <- elaborateNonmut scname scope t2
+  return (Row newT1 newT2, Pure SingleRef, NoMove)
+
+
+
+----
 -- the mutating builtin cases
 
 elaborateMut scname scope (SubGrad t1 t2) = do
@@ -952,19 +982,6 @@ elaborateMut scname scope (MCreate t1 t2 t3 t4) = do
   (newT2, newT2Type, _) <- elaborateNonmut scname scope t2
   (newT4, newT4Type, _) <- elaborateNonmut scname scope t4
   return (MCreate newT1 newT2 t3 newT4 , Pure UserValue, NoMove)
-elaborateMut scname scope (Index t1 t2 t3) = do
-  (newT1, newT1Type, _) <- elaborateNonmut scname scope t1
-  (newT2, newT2Type, _) <- elaborateNonmut scname scope t2
-  (newT3, newT3Type, _) <- elaborateNonmut scname scope t3
-  return (Index newT1 newT2 newT3 , Pure UserValue, NoMove)
-elaborateMut scname scope (VIndex t1 t2) = do
-  (newT1, newT1Type, _) <- elaborateNonmut scname scope t1
-  (newT2, newT2Type, _) <- elaborateNonmut scname scope t2
-  return (VIndex newT1 newT2 , Pure UserValue, NoMove)
-elaborateMut scname scope (Row t1 t2) = do
-  (newT1, newT1Type, _) <- elaborateNonmut scname scope t1
-  (newT2, newT2Type, _) <- elaborateNonmut scname scope t2
-  return (Row newT1 newT2, Pure UserValue, NoMove)
 elaborateMut scname scope (Size t1) = do
   (newT1, newT1Type, _) <- elaborateMut scname scope t1
   return (Size newT1, Pure UserValue, NoMove)
@@ -1185,6 +1202,8 @@ elaborateMutList f scname scope mutargs = do
               Just (Pure (SingleArgPart y)) -> demutationError $ "When calling the mutating function " <> f <> " found the variable " <> show x <> " as argument in a mutable-argument-position. It is a (tuple-)part of the function argument "
                                                           <> show y <> ", and it is not allowed to mutate parts of arguments.\n"
                                                           <> "If you want to mutate " <> show x <> " you need to pass it in as a seperate argument to the function."
+              Just (Pure (SingleRef)) -> demutationError $ "When calling the mutating function " <> f <> " found the variable " <> show x <> " as argument in a mutable-argument-position. It is a reference to a part of a vector or matrix."
+                                                          <> "It is not allowed to mutate matrices or vectors.\n"
               Just (Pure _) -> do
                 loc <- markMutated scname LocalMutation x
                 return (Var (Just x :- a) , Pure (SingleArg x), Just (x, loc))
@@ -1229,6 +1248,7 @@ elaborateMutList f scname scope mutargs = do
   --
   let getPossiblyAliasedVars (SingleArg a) = [a]
       getPossiblyAliasedVars (SingleArgPart a) = [a]
+      getPossiblyAliasedVars (SingleRef) = []
       getPossiblyAliasedVars (PureTuple as) = getPossiblyAliasedVars =<< as
       getPossiblyAliasedVars DefaultValue = []
       getPossiblyAliasedVars UserValue = []
