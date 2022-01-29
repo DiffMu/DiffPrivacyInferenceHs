@@ -37,7 +37,7 @@ class TCConstraint c => Solve (isT :: (* -> *) -> Constraint) c a where
   solve_ :: Dict ((IsT isT t)) -> SolvingMode -> Symbol -> c a -> t ()
 
 class MonadNormalize t where
-  normalizeState :: t ()
+  normalizeState :: NormalizationType -> t ()
 
 data Solvable  (extraConstr :: * -> Constraint) (extraContentConstr :: * -> Constraint) isT where
   Solvable :: (Solve isT c a, (HasNormalize isT a), Show (c a), Typeable c, Typeable a, extraContentConstr a, extraConstr (c a)) => c a -> Solvable extraConstr extraContentConstr isT
@@ -46,11 +46,11 @@ data Solvable  (extraConstr :: * -> Constraint) (extraContentConstr :: * -> Cons
 solve :: (Monad (t), IsT isT t) => SolvingMode -> Symbol -> (Solvable eC eC2 isT) -> t ()
 solve mode name (Solvable (c :: c a) :: Solvable eC eC2 isT) = f Proxy
   where f :: (Monad (t), IsT isT t) => Proxy (t) -> t ()
-        f (_ :: Proxy (t)) = (insideConstr normalize c >>= solve_ @isT Dict mode name)
+        f (_ :: Proxy (t)) = (insideConstr normalizeExact c >>= solve_ @isT Dict mode name)
 
 
 instance (isT t, Monad (t)) => Normalize (t) (Solvable eC eC2 isT) where
-  normalize (Solvable (c :: c a)) = (Solvable @isT <$> insideConstr (normalize @(t)) c)
+  normalize nt (Solvable (c :: c a)) = (Solvable @isT <$> insideConstr (normalize @(t) nt) c)
 
 instance Show (Solvable eC eC2 isT) where
   show (Solvable c) = show c
@@ -131,12 +131,13 @@ instance TCConstraint IsChoice where
   constr = IsChoice
   runConstr (IsChoice c) = c
 
----- Gauss or Mgauss?
-newtype IsGaussResult a = IsGaussResult a deriving Show
+---- Functions/Privacy Functions
+newtype IsFunction a = IsFunction a deriving Show
 
-instance TCConstraint IsGaussResult where
-  constr = IsGaussResult
-  runConstr (IsGaussResult c) = c
+instance TCConstraint IsFunction where
+  constr = IsFunction
+  runConstr (IsFunction c) = c
+
 
 ----------------------------------------------------------
 -- functions for Constraint
@@ -146,8 +147,8 @@ instance TCConstraint IsGaussResult where
 -- Returns if no "changed" constraints remains.
 -- An unchanged constraint is marked "changed", if it is affected by a new substitution.
 -- A changed constraint is marked "unchanged" if it is read by a call to `getUnsolvedConstraintMarkNormal`.
-solveAllConstraints :: forall isT t eC. (MonadImpossible t, MonadLog t, MonadConstraint isT t, MonadNormalize t, IsT isT t) => [SolvingMode] -> t ()
-solveAllConstraints modes = withLogLocation "Constr" $ do
+solveAllConstraints :: forall isT t eC. (MonadImpossible t, MonadLog t, MonadConstraint isT t, MonadNormalize t, IsT isT t) => NormalizationType -> [SolvingMode] -> t ()
+solveAllConstraints nt modes = withLogLocation "Constr" $ do
 
   -- get events which came before us
   oldEvents <- clearSolvingEvents
@@ -158,7 +159,7 @@ solveAllConstraints modes = withLogLocation "Constr" $ do
       log $ intercalate "\n" (fmap ("           - " <>) xs)
       log ""
 
-  normalizeState
+  normalizeState nt
   openConstr <- getUnsolvedConstraintMarkNormal modes
 
   case openConstr of
@@ -187,16 +188,16 @@ solveAllConstraints modes = withLogLocation "Constr" $ do
           log $ intercalate "\n" (fmap ("             - " <>) xs)
           log $ "          => " <> if b then green "Discharged" else yellow "Wait/Update"
 
-      solveAllConstraints modes
+      solveAllConstraints nt modes
 
-solvingAllNewConstraints :: (MonadImpossible t, MonadLog t, MonadConstraint isT t, MonadNormalize t, IsT isT t) => [SolvingMode] -> t a -> t (CloseConstraintSetResult, a)
-solvingAllNewConstraints modes f = withLogLocation "Constr" $ do
+solvingAllNewConstraints :: (MonadImpossible t, MonadLog t, MonadConstraint isT t, MonadNormalize t, IsT isT t) => NormalizationType -> [SolvingMode] -> t a -> t (CloseConstraintSetResult, a)
+solvingAllNewConstraints nt modes f = withLogLocation "Constr" $ do
   log ""
   log "============ BEGIN solve all new constraints >>>>>>>>>>>>>>>>"
   openNewConstraintSet
   logPrintConstraints
   res <- f
-  solveAllConstraints modes
+  solveAllConstraints nt modes
   log "============ AFTER solving all new constraints >>>>>>>>>>>>>>>>"
   logPrintConstraints
   closeRes <- mergeTopConstraintSet
@@ -206,8 +207,8 @@ solvingAllNewConstraints modes f = withLogLocation "Constr" $ do
   return (closeRes, res)
 
 
-solveAndNormalize :: forall a isT t eC. (MonadImpossible t, MonadLog t, MonadConstraint isT t, MonadNormalize t, IsT isT t, Normalize t a) => [SolvingMode] -> a -> t a
-solveAndNormalize modes value = f 4 value
+solveAndNormalize :: forall a isT t eC. (MonadImpossible t, MonadLog t, MonadConstraint isT t, MonadNormalize t, IsT isT t, Normalize t a) => NormalizationType -> [SolvingMode] -> a -> t a
+solveAndNormalize nt modes value = f 4 value
   where
     f :: Int -> a -> t a
     f n a0 | n <= 0 = impossible "Solving & normalizing needed more than 4 iterations. Cancelling."
@@ -217,8 +218,8 @@ solveAndNormalize modes value = f 4 value
       allCs0 <- getAllConstraints
       let allNames0 = fst <$> allCs0
 
-      solveAllConstraints modes
-      a1 <- normalize a0
+      solveAllConstraints nt modes
+      a1 <- normalize nt a0
 
       allCs1 <- getAllConstraints
       let allNames1 = fst <$> allCs1

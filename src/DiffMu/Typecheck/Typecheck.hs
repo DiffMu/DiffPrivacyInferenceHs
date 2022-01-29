@@ -144,7 +144,7 @@ checkSen' scope (Lam xτs body) =
     let scope' = addArgs scope
 
     -- check the body in the modified scope
-    restype <- checkSens scope' body
+    btype <- checkSens scope' body
 
     -- extract julia signature
     let sign = (sndA <$> xτs)
@@ -153,6 +153,10 @@ checkSen' scope (Lam xτs body) =
     xrτs <- getArgList @_ @SensitivityK xτs
     let xrτs' = [x :@ s | (x :@ SensitivityAnnotation s) <- xrτs]
     logForce $ "Checking Lam, outer scope: " <> show (getAllKeys scope) <> " | inner: " <> show (getAllKeys scope')
+
+    -- functions can only return deepcopies of DMModel and DMGrads
+    restype <- newVar
+    addConstraint (Solvable (IsRefCopy (btype, restype)))
 
     -- make an arrow type.
     let τ = (xrτs' :->: restype)
@@ -171,7 +175,7 @@ checkSen' scope (LamStar xτs body) =
     let scope' = addArgs scope
 
     -- check the body in the modified scope
-    restype <- checkPriv scope' body
+    btype <- checkPriv scope' body
 
     -- extract julia signature
     let sign = (fst <$> sndA <$> xτs)
@@ -197,6 +201,11 @@ checkSen' scope (LamStar xτs body) =
     
     -- build the type signature and proper ->* type
     let xrτs' = [x :@ p | (x :@ PrivacyAnnotation p) <- xrτs]
+
+    -- functions can only return deepcopies of DMModel and DMGrads
+    restype <- newVar
+    addConstraint (Solvable (IsRefCopy (btype, restype)))
+
     let τ = (xrτs' :->*: restype)
     return (Fun [τ :@ (Just sign)])
 
@@ -652,7 +661,7 @@ checkSen' scope (Row m i) = do
       let di = checkSens scope i
       let dx = do
                    _ <- di
-                   mscale inftyS
+                   mscale zeroId
                    return ()
 
       let dm = checkSens scope m -- check the matrix
@@ -810,19 +819,26 @@ checkSen' scope term@(SBind x a b) = do
   throwError (TypeMismatchError $ "Found the term\n" <> showPretty term <> "\nwhich is a privacy term because of the bind in a place where a sensitivity term was expected.")
 
 
-checkSen' scope (NewBox a) = do
+checkSen' scope term@(InternalExpectConst a) = do
   res <- checkSens scope a
+  sa <- newVar
   ta <- newVar
-  unify res (NoFun ta)
-  NoFun <$> DMBox <$> normalize ta
+  res' <- unify res (NoFun (Numeric (Const sa ta)))
 
-checkSen' scope (GetBox a) = do
-  res <- checkSens scope a
+  return res'
+
+-- 
+-- The user can explicitly copy return values.
+--
+checkSen' scope term@(DeepcopyValue t) = do
+  res <- checkSens scope t
+
   ta <- newVar
-  unify res (NoFun (DMBox ta))
-  NoFun <$> normalize ta
+  res' <- unify res (NoFun (ta))
 
-checkSen' scope (MapBox f a) = checkSens scope (Tup [NewBox (Apply f [GetBox a])])
+  return (NoFun (Deepcopied ta))
+
+
 
 -- Everything else is currently not supported.
 checkSen' scope t = (throwError (UnsupportedTermError t))
@@ -838,9 +854,11 @@ checkPri' scope (Ret t) = do
    log $ "checking privacy " <> show (Ret t) <> ", type is " <> show τ
    return τ
 
+{-
 checkPri' scope (Rnd t) = do
   τ <- (createDMTypeBaseNum t)
   return (NoFun (Numeric (NonConst τ)))
+-}
 
 -- it is ambiguous if this is an application of a LamStar or an application of a Lam followed by implicit Return.
 -- we handle that by resolving IsFunctionArgument ( T -> T, S ->* S) by setting S's privacies to infinity.
@@ -870,6 +888,7 @@ checkPri' scope (Apply f args) =
     (τ_sum :: DMMain, argτs) <- msumTup (f_check , msumP margs) -- sum args and f's context
     τ_ret <- newVar -- a type var for the function return type
     addConstraint (Solvable (IsFunctionArgument (τ_sum, Fun [(argτs :->*: τ_ret) :@ Nothing])))
+
     return τ_ret
 
 
@@ -1035,9 +1054,12 @@ checkPri' scope (Gauss rp εp δp f) =
       -- interesting input variables must have sensitivity <= r
       restrictInteresting r
       -- interesting output variables are set to (ε, δ), the rest is truncated to ∞
+      ctxBeforeTrunc <- use types
+      logForce $ "[Gauss] Before truncation, context is:\n" <> show ctxBeforeTrunc
       mtruncateP inftyP
+      ctxAfterTrunc <- use types
+      logForce $ "[Gauss] After truncation, context is:\n" <> show ctxAfterTrunc
       (ivars, itypes) <- getInteresting
-      logForce $ ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>\nInteresting variables: " <> show ivars <> "\n<<<<<<<<<<<<<<<<" 
       mapM (\(x, (τ :@ _)) -> setVarP x (WithRelev IsRelevant (τ :@ PrivacyAnnotation (ε, δ)))) (zip ivars itypes)
       -- return type is a privacy type.
       return τf
@@ -1069,9 +1091,60 @@ checkPri' scope (Gauss rp εp δp f) =
       (τf, _) <- msumTup (mf, msum3Tup (mr, mε, mδ))
 
       τgauss <- newVar
-      addConstraint (Solvable (IsGaussResult ((NoFun τgauss), τf))) -- we decide later if its gauss or mgauss according to return type
-
+      addConstraint (Solvable (IsAdditiveNoiseResult ((NoFun τgauss), τf))) -- we decide later if its gauss or mgauss according to return type
+ 
       return (NoFun (DMTup [τgauss]))
+
+
+checkPri' scope (Laplace rp εp f) =
+  let
+   setParam :: TC DMMain -> Sensitivity -> TC ()
+   setParam dt v = do -- parameters must be const numbers.
+      τ <- dt
+      τv <- newVar
+      unify τ (NoFun (Numeric (Const v τv)))
+      mtruncateP zeroId
+      return ()
+
+   setBody df ε r = do
+      -- extract f's type from the TC monad
+      τf <- df
+      -- interesting input variables must have sensitivity <= r
+      restrictInteresting r
+      -- interesting output variables are set to (ε, δ), the rest is truncated to ∞
+      mtruncateP inftyP
+      (ivars, itypes) <- getInteresting
+      mapM (\(x, (τ :@ _)) -> setVarP x (WithRelev IsRelevant (τ :@ PrivacyAnnotation (ε, zeroId)))) (zip ivars itypes)
+      -- return type is a privacy type.
+      return τf
+   in do
+      -- check all the parameters and f, extract the TC monad from the Delayed monad.
+      let drp = checkSens scope rp
+      let dεp = checkSens scope εp
+      let df  = checkSens scope f
+
+      -- create variables for the parameters
+      v_ε :: Sensitivity <- newVar
+      v_r :: Sensitivity <- newVar
+
+      -- eps parameter must be > 0 for scaling factor to be well-defined
+      addConstraint (Solvable (IsLess (zeroId :: Sensitivity, v_ε)))
+
+      -- sensitivity parameter must be > 0 for laplace distribution to be well-defined
+      addConstraint (Solvable (IsLess (zeroId :: Sensitivity, v_r)))
+
+      -- restrict interesting variables in f's context to v_r
+      let mf = setBody df v_ε v_r
+
+      let mr = setParam drp v_r
+      let mε = setParam dεp v_ε
+
+      (τf, _) <- msumTup (mf, msumTup (mr, mε))
+
+      τlap <- newVar
+      addConstraint (Solvable (IsAdditiveNoiseResult ((NoFun τlap), τf))) -- we decide later if its lap or mlap according to return type
+ 
+      return (NoFun (DMTup [τlap]))
 
 
 checkPri' scope (Loop niter cs' (xi, xc) body) =
@@ -1249,4 +1322,4 @@ checkPri' scope (SmpLet xs (Sample n m1_in m2_in) tail) =
       -- expression has type of the tail
       return ttail
     
-checkPri' scope t = checkPriv scope (Ret t) -- secretly return if the term has the wrong color.
+checkPri' scope t = (throwError (UnsupportedTermError t))

@@ -59,7 +59,7 @@ instance MonadLog m => MonadLog (ExceptT e m) where
 --
 
 normalizeᵢ :: Normalize t a => a -> INCResT e t a
-normalizeᵢ a = liftINC (normalize a)
+normalizeᵢ a = liftINC (normalizeExact a)
 
 class Monad t => Unifyᵢ t a where
   unifyᵢ_ :: a -> a -> t a
@@ -115,6 +115,7 @@ instance MonadDMTC t => Unifyᵢ (INCResT DMException t) (DMTypeOf k) where
   unifyᵢ_ LInf LInf                     = pure LInf
   unifyᵢ_ U U                           = pure U
   unifyᵢ_ (Clip k) (Clip s)             = Clip <$> unifyᵢ k s
+  unifyᵢ_ (Deepcopied k) (Deepcopied s) = Deepcopied <$> unifyᵢ k s
   unifyᵢ_ (DMMat nrm1 clp1 n1 m1 τ1) (DMMat nrm2 clp2 n2 m2 τ2) =
       DMMat <$> unifyᵢ nrm1 nrm2 <*> unifyᵢ clp1 clp2 <*> unifyᵢ n1 n2 <*> unifyᵢ m1 m2 <*> unifyᵢ τ1 τ2
   unifyᵢ_ (DMVec nrm1 clp1 n1 τ1) (DMVec nrm2 clp2 n2 τ2) =
@@ -140,7 +141,7 @@ instance MonadDMTC t => Unifyᵢ (INCResT DMException t) (DMTypeOf k) where
 
 
 instance Monad t => Normalize t JuliaType where
-  normalize = pure
+  normalize nt = pure
 
 
 instance Monad t => Unify t () where

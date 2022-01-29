@@ -285,7 +285,7 @@ findSupremumM relevance (GraphM graph) ((a,b) :=: x,isShortestSup) =
             Finished ((a₀,a₁),isShortestPath) -> do
               debug "Since finding path successfull, solving leftover constraints."
               debug "============ BEFORE solving all new constraints >>>>>>>>>>>>>>>>"
-              solveAllConstraints [SolveExact]
+              solveAllConstraints ExactNormalization [SolveExact]
               debug "============ AFTER solving all new constraints >>>>>>>>>>>>>>>>"
               logPrintConstraints
               closedRes <- mergeTopConstraintSet
@@ -328,7 +328,7 @@ findSupremumM relevance (GraphM graph) ((a,b) :=: x,isShortestSup) =
             Finished ((a₀,a₁),isShortestPath) -> do
               debug "Since finding path successfull, solving leftover constraints."
               debug "============ BEFORE solving all new constraints >>>>>>>>>>>>>>>>"
-              solveAllConstraints [SolveExact]
+              solveAllConstraints ExactNormalization [SolveExact]
               debug "============ AFTER solving all new constraints >>>>>>>>>>>>>>>>"
               logPrintConstraints
               closedRes <- mergeTopConstraintSet
@@ -383,7 +383,7 @@ findSupremumM relevance (GraphM graph) ((a,b) :=: x,isShortestSup) =
       -- simply do the actual supremum computation
       _  -> do
         -- since our args may have been updated, first normalize them
-        wantedSup <- normalize ((a,b) :=: x)
+        wantedSup <- normalizeExact ((a,b) :=: x)
         reflResult <- evalINC (INC reflComputations) wantedSup
         case reflResult of
           Wait      -> put state0 >> return Wait -- In these two cases we rewind to before the quick path check,

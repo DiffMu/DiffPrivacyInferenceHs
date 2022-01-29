@@ -134,7 +134,6 @@ instance FixedVars TVarOf (IsLoopResult ((Sensitivity, Sensitivity, Sensitivity)
   fixedVars (IsLoopResult (_, _, res)) = freeVars res
 
 
--- TODO implement this
 instance Solve MonadDMTC IsLoopResult ((Sensitivity, Sensitivity, Sensitivity), Annotation SensitivityK, DMMain) where
   solve_ Dict _ name (IsLoopResult ((s1, s2, s3), sa, τ_iter)) = do
      let SensitivityAnnotation s = sa
@@ -152,16 +151,24 @@ instance Solve MonadDMTC IsLoopResult ((Sensitivity, Sensitivity, Sensitivity), 
            dischargeConstraint name
         _ -> return ()
 
-
 --------------------------------------------------
 -- is it gauss or mgauss?
-instance FixedVars TVarOf (IsGaussResult (DMTypeOf MainKind, DMTypeOf MainKind)) where
-  fixedVars (IsGaussResult (gauss,_)) = freeVars gauss
+--
+newtype IsAdditiveNoiseResult a = IsAdditiveNoiseResult a deriving Show
 
-instance Solve MonadDMTC IsGaussResult (DMTypeOf MainKind, DMTypeOf MainKind) where
-  solve_ Dict _ name (IsGaussResult (τgauss, τin)) =
+instance TCConstraint IsAdditiveNoiseResult where
+  constr = IsAdditiveNoiseResult
+  runConstr (IsAdditiveNoiseResult c) = c
+
+
+instance FixedVars TVarOf (IsAdditiveNoiseResult (DMTypeOf MainKind, DMTypeOf MainKind)) where
+  fixedVars (IsAdditiveNoiseResult (gauss,_)) = freeVars gauss
+
+instance Solve MonadDMTC IsAdditiveNoiseResult (DMTypeOf MainKind, DMTypeOf MainKind) where
+  solve_ Dict _ name (IsAdditiveNoiseResult (τgauss, τin)) =
      case τin of
         TVar x -> pure () -- we don't know yet.
+        NoFun (TVar x) -> pure () -- we don't know yet.
         NoFun (DMGrads nrm clp n τ) -> do -- is mgauss
 
            logForce $ ">>>>>>>>>>>>>>>>>>>>>>>>\nIn gauss, type is " <> show (DMGrads nrm clp n τ) <> "<<<<<<<<<<<<<<<<<<<<<"
@@ -369,3 +376,30 @@ instance Solve MonadDMTC IsLess (Sensitivity, Sensitivity) where
                                                        False -> failConstraint name
                          Nothing -> return ()
          Nothing -> return ()
+
+
+-------------------------------------------------------------------
+-- functions that return DMGrads or DMModel must deepcopy the return value.
+
+newtype IsRefCopy a = IsRefCopy a deriving Show
+
+instance TCConstraint IsRefCopy where
+  constr = IsRefCopy
+  runConstr (IsRefCopy c) = c
+
+instance FixedVars TVarOf (IsRefCopy (DMMain, DMMain)) where
+  fixedVars (IsRefCopy res) = freeVars res
+
+
+instance Solve MonadDMTC IsRefCopy (DMMain, DMMain) where
+  solve_ Dict _ name (IsRefCopy (TVar v, _)) = return ()
+  solve_ Dict _ name (IsRefCopy (NoFun (TVar v), _)) = return ()
+  solve_ Dict _ name (IsRefCopy (NoFun (DMTup ts), tv)) = do
+     nvs <- mapM (\_ -> newVar) ts
+     unify tv (NoFun (DMTup nvs))
+     mapM (\(tt, nv) -> addConstraint (Solvable (IsRefCopy ((NoFun tt), (NoFun nv))))) (zip ts nvs)
+     dischargeConstraint name
+  solve_ Dict _ name (IsRefCopy (NoFun (DMParams _ _), _)) = failConstraint name
+  solve_ Dict _ name (IsRefCopy (NoFun (DMGrads _ _ _ _), _)) = failConstraint name
+  solve_ Dict _ name (IsRefCopy (NoFun (Deepcopied v), t)) = unify (NoFun v) t >> dischargeConstraint name
+  solve_ Dict _ name (IsRefCopy (ti, tv)) = unify ti tv >> dischargeConstraint name

@@ -16,12 +16,12 @@ testScoping pp = do
 testScope01 pp = do
   let ex = " function test()                \n\
            \   function f(a)                \n\
-           \      backup = a                \n\
+           \      backup = a * 1            \n\
            \      b = a * 2                 \n\
-           \      a1 = b                    \n\
-           \      a2 = 3 * a1               \n\
-           \      b1 = a2 * b               \n\
-           \      result = backup + a2 + b1 \n\
+           \      a = b * 1                  \n\
+           \      a = 3 * a               \n\
+           \      b = a * b               \n\
+           \      result = backup + a + b \n\
            \      result                    \n\
            \   end                          \n\
            \   f(1)                         \n\

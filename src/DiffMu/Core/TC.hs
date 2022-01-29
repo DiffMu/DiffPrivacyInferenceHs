@@ -16,6 +16,7 @@ import {-# SOURCE #-} DiffMu.Core.Unification
 import qualified Data.HashMap.Strict as H
 
 import Debug.Trace
+import DiffMu.Core.Symbolic (normalizeSensSpecial)
 
 --------------------------------------------------------------------------------
 -- TC.hs
@@ -88,6 +89,9 @@ instance Substitute v a x => Substitute v a (H.HashMap k x) where
 instance Substitute TVarOf DMTypeOf (SVarOf k) where
   substitute σs = pure
 
+instance Substitute SVarOf SensitivityOf (AnnotationKind) where
+  substitute σs = pure
+
 instance Substitute TVarOf DMTypeOf DMTypeOp where
   substitute σs (Unary op arg res) = (Unary op <$> substitute σs arg <*> substitute σs res)
   substitute σs (Binary op args res) = (Binary op <$> substitute σs args <*> substitute σs res)
@@ -96,7 +100,10 @@ instance Substitute TVarOf DMTypeOf (Annotation a) where
   substitute σs (SensitivityAnnotation s) = SensitivityAnnotation <$> (substitute σs s)
   substitute σs (PrivacyAnnotation s) = PrivacyAnnotation <$> (substitute σs s)
 
+instance Substitute TVarOf DMTypeOf (AnnotationKind) where
+  substitute σs = pure
 
+  
 removeVars :: forall t. Monad t => (forall k. (IsKind k) => TVarOf k -> t (DMTypeOf k)) -> [SomeK (TVarOf)] -> t [SomeK (TVarOf)]
 removeVars σs vs = do
   let f :: SomeK (TVarOf) -> t (Maybe (SomeK TVarOf))
@@ -134,6 +141,7 @@ instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs (Fun xs) = Fun <$> substitute σs xs
   substitute σs (x :∧: y) = (:∧:) <$> substitute σs x <*> substitute σs y
   substitute σs (BlackBox n) = pure (BlackBox n)
+  substitute σs (Deepcopied xs) = Deepcopied <$> substitute σs xs
 
 
 
@@ -167,6 +175,7 @@ instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
   substitute σs (Fun xs) = Fun <$> substitute σs xs
   substitute σs (x :∧: y) = (:∧:) <$> substitute σs x <*> substitute σs y
   substitute σs (BlackBox n) = pure (BlackBox n)
+  substitute σs (Deepcopied xs) = Deepcopied <$> substitute σs xs
 
 
 instance Term TVarOf DMTypeOf where
@@ -181,6 +190,9 @@ instance FreeVars TVarOf Symbol where
    freeVars a = []
 
 instance FreeVars TVarOf TeVar where
+   freeVars a = []
+
+instance FreeVars TVarOf AnnotationKind where
    freeVars a = []
 
 instance (FreeVars v a, FreeVars v b) => FreeVars v (Either a b) where
@@ -236,6 +248,7 @@ instance Typeable k => FreeVars TVarOf (DMTypeOf k) where
   freeVars (Fun xs) = freeVars xs
   freeVars (x :∧: y) = freeVars x <> freeVars y
   freeVars (BlackBox n) = []
+  freeVars (Deepcopied xs) = freeVars xs
 
 
 -- Given a list of "multi substitutions", i.e. substitutions of the form
@@ -287,7 +300,7 @@ instance Substitute SVarOf SensitivityOf (SensitivityOf k) where
   substitute (σs :: forall k. (IsKind k) => SVarOf k -> t (SensitivityOf k)) s = substitute f s
     where f :: (IsKind l) => SymVar l -> t (SensitivityOf l)
           f (HonestVar a) = σs (a)
-          f (Id a) = pure (coerce a)
+          -- f (Id a) = pure (coerce a)
           f b = pure $ var (b)
 
 instance (Substitute v a x, Substitute v a y) => Substitute v a (x,y) where
@@ -365,9 +378,9 @@ instance Show a => Show (Watched a) where
   show (Watched (NormalForMode m) a) = show m <> " " <> show a
 
 instance (MonadWatch t, Normalize t a) => Normalize t (Watched a) where
-  normalize (Watched c a) =
+  normalize nt (Watched c a) =
     do resetChanged
-       a' <- normalize a
+       a' <- normalize nt a
        newc <- getChanged
        return (Watched (updateNormalizationLevel newc c) a')
 
@@ -389,17 +402,18 @@ instance DictKey v => DictLike v x (CtxStack v x) where
   isEmptyDict (CtxStack top others) = isEmptyDict top
 
 instance Normalize t a => Normalize t (CtxStack v a) where
-  normalize (CtxStack top other) = CtxStack <$> normalize top <*> normalize other
+  normalize nt (CtxStack top other) = CtxStack <$> normalize nt top <*> normalize nt other
+
 
 instance (Show v, Show a, DictKey v) => Show (CtxStack v a) where
-  show (CtxStack top other) = "   - top:\n" <> show top <> "\n"
+      show (CtxStack top other) = "   - top:\n" <> show top <> "\n"
                               <> "   - others:\n" <> show other
 
 -- type ConstraintCtx = AnnNameCtx (Ctx Symbol (Solvable' TC))
 
 instance (MonadWatch t, Normalize t ks) => Normalize t (AnnNameCtx ks) where
-  normalize (AnnNameCtx names ks) =
-    do res <- AnnNameCtx names <$> normalize ks
+  normalize nt (AnnNameCtx names ks) =
+    do res <- AnnNameCtx names <$> normalize nt ks
        -- isC <- getChanged
        -- traceShowM $ "CHANGED: " <> show isC <> "\n"
        return res
@@ -474,7 +488,7 @@ instance (Cast a b) => Cast (Maybe a) (Maybe b) where
 
 
 instance (MonadDMTC t) => Normalize t (WithRelev e) where
-  normalize (WithRelev i x) = WithRelev i <$> normalize x
+  normalize nt (WithRelev i x) = WithRelev i <$> normalize nt x
 
 
 
@@ -862,8 +876,10 @@ instance Monad m => MonadWatch (TCT m) where
 
 
 instance Monad t => (Normalize t Symbol) where
-  normalize a = pure a
+  normalize nt a = pure a
 
+instance Monad t => Normalize t AnnotationKind where
+  normalize nt a = pure a
 
 
 supremum :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsSupremum ((a k, a k) :=: a k), SingI k, Typeable k, ContentConstraintOnSolvable t ((a k, a k) :=: a k), ConstraintOnSolvable t (IsSupremum ((a k, a k) :=: a k))) => (a k) -> (a k) -> t (a k)
@@ -887,10 +903,10 @@ instance Monad m => MonadInternalError (TCT m) where
 
 
 -- Normalizes all contexts in our typechecking monad, i.e., applies all available substitutions.
-normalizeContext :: (MonadDMTC t) => t ()
-normalizeContext = do
-  types %=~ normalize
-  meta.constraints %=~ normalize
+normalizeContext :: (MonadDMTC t) => NormalizationType -> t ()
+normalizeContext nt = do
+  types %=~ normalize nt
+  meta.constraints %=~ normalize nt
 
 
 
@@ -912,7 +928,7 @@ instance Monad m => MonadImpossible (TCT m) where
   impossible err = throwError (ImpossibleError err)
 
 instance (MonadDMTC t) => Normalize t (DMTypeOf k) where
-  normalize n =
+  normalize nt n =
     do -- we apply all type variable substitutions
        σ <- getSubs @_ @DMTypeOf
        n₂ <- σ ↷ n
@@ -923,42 +939,43 @@ instance (MonadDMTC t) => Normalize t (DMTypeOf k) where
 
        -- finally we normalize the uppermost "annotation" layer (if there is one)
        -- , i.e., compute {↷,∧,Trunc}-terms
-       normalizeAnn n₃
+       normalizeAnn nt n₃
 
 instance (Normalize t a, Normalize t b) => Normalize t (a :@ b) where
-  normalize (a :@ b) = (:@) <$> normalize a <*> normalize b
+  normalize nt (a :@ b) = (:@) <$> normalize nt a <*> normalize nt b
 
 instance (Normalize t a) => Normalize t [a] where
-  normalize as = mapM normalize as
+  normalize nt as = mapM (normalize nt) as
 
 instance (Normalize t a, Normalize t b, Normalize t c) => Normalize t (a, b, c) where
-  normalize (a,b,c) = (,,) <$> normalize a <*> normalize b <*> normalize c
+  normalize nt (a,b,c) = (,,) <$> normalize nt a <*> normalize nt b <*> normalize nt c
 
 instance (Normalize t a, Normalize t b, Normalize t c, Normalize t d) => Normalize t (a, b, c, d) where
-  normalize (a,b,c,d) = (,,,) <$> normalize a <*> normalize b <*> normalize c <*> normalize d
+  normalize nt (a,b,c,d) = (,,,) <$> normalize nt a <*> normalize nt b <*> normalize nt c <*> normalize nt d
 -- instance Monad t => Normalize t DMNumType where
 --   normalize = pure
 
 instance MonadDMTC t => Normalize (t) Sensitivity where
-  normalize n =
+  normalize nt n =
     do σ <- getSubs @_ @SensitivityOf
-       σ ↷ n
+       res <- σ ↷ n
+       return $ normalizeSensSpecial nt res
 
 instance Monad t => Normalize t (SymbolOf k) where
-  normalize = pure
+  normalize _ = pure
 
 instance MonadDMTC t => Normalize t (Annotation a) where
-  normalize (SensitivityAnnotation s) = SensitivityAnnotation <$> normalize s
-  normalize (PrivacyAnnotation s) = PrivacyAnnotation <$> normalize s
+  normalize nt (SensitivityAnnotation s) = SensitivityAnnotation <$> normalize nt s
+  normalize nt (PrivacyAnnotation s) = PrivacyAnnotation <$> normalize nt s
 
 instance (Monad t, Normalize t a) => Normalize t (Maybe a) where
-  normalize Nothing = pure Nothing
-  normalize (Just a) = Just <$> normalize a
+  normalize _ Nothing = pure Nothing
+  normalize nt (Just a) = Just <$> normalize nt a
 
 
 instance (MonadDMTC t) => Normalize (t) DMTypeOp where
-  normalize (Unary op τ res) = Unary op <$> normalize τ <*> normalize res
-  normalize (Binary op τ res) = Binary op <$> normalize τ <*> normalize res
+  normalize nt (Unary op τ res) = Unary op <$> normalize nt τ <*> normalize nt res
+  normalize nt (Binary op τ res) = Binary op <$> normalize nt τ <*> normalize nt res
 
 
 instance (MonadDMTC t => Normalize (t) a) => MonadDMTC t :=> Normalize (t) a where
@@ -1039,15 +1056,14 @@ scaleExtra η (SensitivityAnnotation s) = SensitivityAnnotation (η ⋅! s)
 scaleExtra η (PrivacyAnnotation (ε, δ)) = PrivacyAnnotation (η ⋅! ε , η ⋅! δ)
 
 
-normalizeAnn :: forall t k. (MonadDMTC t) => DMTypeOf k -> t (DMTypeOf k)
-normalizeAnn (TVar a) = pure $ TVar a
-normalizeAnn (Fun as) = do
-  let normalizeInside (f :@ annot) = (:@ annot) <$> normalizeAnn f
+normalizeAnn :: forall t k. NormalizationType -> (MonadDMTC t) => DMTypeOf k -> t (DMTypeOf k)
+normalizeAnn nt (Fun as) = do
+  let normalizeInside (f :@ annot) = (:@) <$> normalizeAnn nt f <*> pure annot
   Fun <$> mapM normalizeInside as
-normalizeAnn (NoFun fs) = pure $ NoFun fs
-normalizeAnn (a :∧: b) = do
-  a' <- normalizeAnn a
-  b' <- normalizeAnn b
+normalizeAnn nt (NoFun fs) = pure $ NoFun fs
+normalizeAnn nt (a :∧: b) = do
+  a' <- normalizeAnn nt a
+  b' <- normalizeAnn nt b
 
   let makeNoFunInf :: DMTypeOf NoFunKind -> DMTypeOf NoFunKind -> t (DMMain)
       makeNoFunInf x y = do
@@ -1079,13 +1095,13 @@ normalizeAnn (a :∧: b) = do
     (NoFun x, Fun y) -> throwError (UnificationError (NoFun x) (Fun y))
     (Fun x, NoFun y) -> throwError (UnificationError (Fun x) (NoFun y))
     (_ , _) -> return (a' :∧: b')
-normalizeAnn (xs :->: y) = do
-  let normalizeInside (x :@ annot) = (:@ annot) <$> normalizeAnn x
-  (:->:) <$> mapM normalizeInside xs <*> normalizeAnn y
-normalizeAnn (xs :->*: y) = do
-  let normalizeInside (x :@ annot) = (:@ annot) <$> normalizeAnn x
-  (:->*:) <$> mapM normalizeInside xs <*> normalizeAnn y
-normalizeAnn x = pure x
+normalizeAnn nt (xs :->: y) = do
+  let normalizeInside (x :@ annot) = (:@) <$> normalizeAnn nt x <*> pure (normalizeSensSpecial nt annot)
+  (:->:) <$> mapM normalizeInside xs <*> normalizeAnn nt y
+normalizeAnn nt (xs :->*: y) = do
+  let normalizeInside (x :@ (annot0, annot1)) = (:@) <$> normalizeAnn nt x <*> pure (normalizeSensSpecial nt annot0, normalizeSensSpecial nt annot1)
+  (:->*:) <$> mapM normalizeInside xs <*> normalizeAnn nt y
+normalizeAnn nt x = recDMTypeM (normalizeAnn nt) (pure . normalizeSensSpecial nt) x
 
 
 

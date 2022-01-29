@@ -18,6 +18,6 @@ class Monad t => Unify t a where
   unify_ :: a -> a -> t a
 
 unify :: (Unify t a, Normalize (t) a) => a -> a -> t a
-unify a b = (chainM2 unify_ (normalize a) (normalize b))
+unify a b = (chainM2 unify_ (normalizeExact a) (normalizeExact b))
 
 

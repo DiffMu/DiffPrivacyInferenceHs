@@ -59,6 +59,7 @@ type SVar   = SVarOf MainSensKind
 -- 1. DMKinds
 
 data AnnotationKind = SensitivityK | PrivacyK
+  deriving Show
 
 -- type family Annotation (a :: AnnotationKind) = (result :: *) | result -> a where
 -- data family Annotation (a :: AnnotationKind) :: *
@@ -129,7 +130,7 @@ pattern DMGrads n c d t = DMVecLike Gradient n c d t
 
 -- so we don't get incomplete pattern warnings for them
 {-# COMPLETE DMInt, DMReal, Const, NonConst, DMData, Numeric, TVar, (:->:), (:->*:), DMTup, L1, L2, LInf, U, Clip,
- DMVec, DMGrads, DMMat, DMParams, NoFun, Fun, (:∧:), BlackBox #-}
+ DMVec, DMGrads, DMMat, DMParams, NoFun, Fun, (:∧:), BlackBox, Deepcopied #-}
 
 --------------------
 -- 2. DMTypes
@@ -204,6 +205,8 @@ data DMTypeOf (k :: DMKind) where
   -- black box functions (and a wrapper to make them MainKind but still have a BlackBoxKind so we can have TVars of it)
   BlackBox :: [JuliaType] -> DMTypeOf MainKind
 
+  -- deep copied type, thus allowed to be returned from functions
+  Deepcopied :: DMType -> DMType
 
 
 
@@ -232,6 +235,7 @@ instance Hashable (DMTypeOf k) where
   hashWithSalt s (NoFun t) = s `hashWithSalt` t
   hashWithSalt s (n :∧: t) = s `hashWithSalt` n `hashWithSalt` t
   hashWithSalt s (BlackBox n) = s `hashWithSalt` n
+  hashWithSalt s (Deepcopied n) = s `hashWithSalt` n
 
 instance (Hashable a, Hashable b) => Hashable (a :@ b) where
   hashWithSalt s (a:@ b) = s `hashWithSalt` a `hashWithSalt` b
@@ -274,6 +278,7 @@ instance Show (DMTypeOf k) where
   show (Fun xs) = "Fun(" <> show xs <> ")"
   show (x :∧: y) = "(" <> show x <> "∧" <> show y <> ")"
   show (BlackBox n) = "BlackBox [" <> show n <> "]"
+  show (Deepcopied n) = "Deepcopied [" <> show n <> "]"
 
 showArgPretty :: (ShowPretty a, ShowPretty b) => (a :@ b) -> String
 showArgPretty (a :@ b) = "-  " <> showPretty a <> "\n"
@@ -303,7 +308,7 @@ instance ShowPretty (DMTypeOf k) where
   showPretty DMReal = "Real"
   showPretty DMData = "Data"
   showPretty (Const s t) = showPretty t <> "[" <> showPretty s <> "]"
-  showPretty (NonConst t) = showPretty t
+  showPretty (NonConst t) = "NonConst " <> showPretty t
   showPretty (Numeric t) = showPretty t
   showPretty (TVar t) = showPretty t
   showPretty (a :->: b) = showFunPretty "->" a b
@@ -323,6 +328,7 @@ instance ShowPretty (DMTypeOf k) where
   showPretty (Fun xs) = showPrettyEnumVertical (fmap fstAnn xs)
   showPretty (x :∧: y) = "(" <> showPretty x <> "∧" <> showPretty y <> ")"
   showPretty (BlackBox n) = "BlackBox[" <> showPretty n <> "]"
+  showPretty (Deepcopied n) = "Deepcopied[" <> showPretty n <> "]"
 
 
 -- instance Eq (DMTypeOf NormKind) where
@@ -429,12 +435,40 @@ sndAnn :: (a :@ b) -> b
 sndAnn (a :@ b) = b
 
 
--- fstAnnI :: (WithRelev b) -> DMType
--- fstAnnI (WithRelev _ (a :@ b)) = a
-
--- sndAnnI :: WithRelev b -> (Annotation b)
--- sndAnnI (WithRelev _ (a :@ b)) = b
-
+-------------
+-- Recursion into DMTypes
+--
+recDMTypeM :: forall m k. (Monad m)
+           => (forall k. DMTypeOf k -> m (DMTypeOf k)) 
+           -> (Sensitivity -> m (Sensitivity)) 
+           -> DMTypeOf k -> m (DMTypeOf k)
+recDMTypeM typemap sensmap DMAny = pure DMAny
+recDMTypeM typemap sensmap L1 = pure L1
+recDMTypeM typemap sensmap L2 = pure L2
+recDMTypeM typemap sensmap LInf = pure LInf
+recDMTypeM typemap sensmap U = pure U
+recDMTypeM typemap sensmap (Clip n) = Clip <$> typemap n
+recDMTypeM typemap sensmap DMInt = pure DMInt
+recDMTypeM typemap sensmap DMReal = pure DMReal
+recDMTypeM typemap sensmap DMData = pure DMData
+recDMTypeM typemap sensmap (Numeric τ) = Numeric <$> typemap τ
+recDMTypeM typemap sensmap (NonConst τ) = NonConst <$> typemap τ
+recDMTypeM typemap sensmap (Const η τ) = Const <$> sensmap η <*> typemap τ
+recDMTypeM typemap sensmap (TVar x) = pure (TVar x)
+recDMTypeM typemap sensmap (τ1 :->: τ2) = (:->:) <$> mapM (\(a :@ b) -> (:@) <$> typemap a <*> sensmap b) τ1 <*> typemap τ2
+recDMTypeM typemap sensmap (τ1 :->*: τ2) = (:->*:) <$> mapM (\(a :@ (b0, b1)) -> f <$> typemap a <*> sensmap b0 <*> sensmap b1) τ1 <*> typemap τ2
+  where
+    f a b0 b1 = a :@ (b0, b1)
+recDMTypeM typemap sensmap (DMTup τs) = DMTup <$> mapM typemap τs
+recDMTypeM typemap sensmap (DMVec nrm clp n τ) = DMVec <$> typemap nrm <*> typemap clp <*> sensmap n <*> typemap τ
+recDMTypeM typemap sensmap (DMMat nrm clp n m τ) = DMMat <$> typemap nrm <*> typemap clp <*> sensmap n <*> sensmap m <*> typemap τ
+recDMTypeM typemap sensmap (DMParams m τ) = DMParams <$> sensmap m <*> typemap τ
+recDMTypeM typemap sensmap (DMGrads nrm clp m τ) = DMGrads <$> typemap nrm <*> typemap clp <*> sensmap m <*> typemap τ
+recDMTypeM typemap sensmap (NoFun x) = NoFun <$> typemap x
+recDMTypeM typemap sensmap (Fun xs) = Fun <$> mapM (\(a :@ b) -> (:@) <$> typemap a <*> pure b) xs
+recDMTypeM typemap sensmap (x :∧: y) = (:∧:) <$> typemap x <*> typemap y
+recDMTypeM typemap sensmap (BlackBox n) = pure (BlackBox n)
+recDMTypeM typemap sensmap (Deepcopied n) = Deepcopied <$> typemap n
 
 ---------------------------------------------------------
 -- Sensitivity and Privacy
@@ -468,6 +502,7 @@ data JuliaType =
     | JTInt
     | JTReal
     | JTFunction
+    | JTPFunction
     | JTTuple [JuliaType]
     | JTVector JuliaType
     | JTMatrix JuliaType
@@ -484,6 +519,7 @@ instance Show JuliaType where
   show JTInt = "Integer"
   show JTReal = "Real"
   show JTFunction = "Function"
+  show JTPFunction = "PrivacyFunction"
   show (JTTuple as) = "Tuple{" ++ (intercalate "," (show <$> as)) ++ "}"
   show (JTVector t) = "Vector{" ++ show t ++ "}"
   show (JTMatrix t) = "Matrix{" ++ show t ++ "}"
@@ -653,7 +689,7 @@ data PreDMTerm (t :: * -> *) =
   | Ret ((PreDMTerm t))
   | Sng Float JuliaType
   | Var (Asgmt JuliaType)
-  | Rnd JuliaType
+--  | Rnd JuliaType
   | Arg TeVar JuliaType Relevance
   | Op DMTypeOp_Some [(PreDMTerm t)]
   | Phi (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
@@ -668,6 +704,7 @@ data PreDMTerm (t :: * -> *) =
   | Tup [(PreDMTerm t)]
   | TLetBase LetKind [(Asgmt JuliaType)] (PreDMTerm t) (PreDMTerm t)
   | Gauss (PreDMTerm t) (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
+  | Laplace (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
 -- matrix related things
   | ConvertM (PreDMTerm t)
   | MCreate (PreDMTerm t) (PreDMTerm t) (TeVar, TeVar) (PreDMTerm t)
@@ -691,10 +728,13 @@ data PreDMTerm (t :: * -> *) =
   | TProject Int (PreDMTerm t)
 -- Special Scope terms
   | LastTerm (PreDMTerm t)
--- Special Demutation terms
-  | NewBox (PreDMTerm t)
-  | GetBox (PreDMTerm t)
-  | MapBox (PreDMTerm t) (PreDMTerm t)
+  | ZeroGrad (PreDMTerm t)
+  | SumGrads (PreDMTerm t) (PreDMTerm t)
+  | Sample (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
+-- Internal terms
+  | InternalExpectConst (PreDMTerm t)
+-- Demutation related, but user specified
+  | DeepcopyValue (PreDMTerm t)
   deriving (Generic)
 
 pattern SLet a b c = SLetBase PureLet a b c
@@ -703,10 +743,10 @@ pattern TLet a b c = TLetBase PureLet a b c
 pattern TBind a b c = TLetBase BindLet a b c
 pattern SmpLet a b c = TLetBase SampleLet a b c
 
-{-# COMPLETE Extra, Ret, Sng, Var, Rnd, Arg, Op, Phi, Lam, LamStar, BBLet, BBApply,
- Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, Gauss, ConvertM, MCreate, Transpose,
+{-# COMPLETE Extra, Ret, Sng, Var, Arg, Op, Phi, Lam, LamStar, BBLet, BBApply,
+ Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, Gauss, Laplace, ConvertM, MCreate, Transpose,
  Size, Length, Index, VIndex, Row, ClipM, Loop, SubGrad, ScaleGrad, Reorder, TProject, LastTerm,
- ZeroGrad, SumGrads, SmpLet, Sample, NewBox, GetBox, MapBox #-}
+ ZeroGrad, SumGrads, SmpLet, Sample, InternalExpectConst #-}
 
 
 deriving instance (forall a. Show a => Show (t a)) => Show (PreDMTerm t)
@@ -738,6 +778,8 @@ data MutabilityExtension a =
   | MutLoop a (Maybe TeVar) a
   | SModify (Asgmt JuliaType) a
   | TModify [Asgmt JuliaType] a
+  | MutPhi a [a]
+  | DNothing
   | MutRet
   | DefaultRet a
   deriving (Show, Eq, Functor, Foldable, Traversable)
@@ -776,7 +818,7 @@ recDMTermM f h (Extra e)          = h e
 recDMTermM f h (Ret (r))          = Ret <$> (f r)
 recDMTermM f h (Sng g jt)         = pure $ Sng g jt
 recDMTermM f h (Var (v :- jt))    = pure $ Var (v :- jt)
-recDMTermM f h (Rnd jt)           = pure $ Rnd jt
+-- recDMTermM f h (Rnd jt)           = pure $ Rnd jt
 recDMTermM f h (Arg v jt r)       = pure $ Arg v jt r
 recDMTermM f h (Op op ts)         = Op op <$> (mapM (f) ts)
 recDMTermM f h (Phi a b c)        = Phi <$> (f a) <*> (f b) <*> (f c)
@@ -791,6 +833,7 @@ recDMTermM f h (SLetBase x jt a b) = SLetBase x jt <$> (f a) <*> (f b)
 recDMTermM f h (Tup as)           = Tup <$> (mapM (f) as)
 recDMTermM f h (TLetBase x jt a b) = TLetBase x jt <$> (f a) <*> (f b)
 recDMTermM f h (Gauss a b c d)    = Gauss <$> (f a) <*> (f b) <*> (f c) <*> (f d)
+recDMTermM f h (Laplace a b c)    = Laplace <$> (f a) <*> (f b) <*> (f c)
 recDMTermM f h (ConvertM a)       = ConvertM <$> (f a)
 recDMTermM f h (MCreate a b x c ) = MCreate <$> (f a) <*> (f b) <*> pure x <*> (f c)
 recDMTermM f h (Transpose a)      = Transpose <$> (f a)
@@ -809,10 +852,8 @@ recDMTermM f h (LastTerm x)       = LastTerm <$> (f x)
 recDMTermM f h (ZeroGrad a)       = ZeroGrad <$> (f a)
 recDMTermM f h (SumGrads a b)     = SumGrads <$> (f a) <*> (f b)
 recDMTermM f h (Sample a b c)     = Sample <$> (f a) <*> (f b) <*> (f c)
-recDMTermM f h (NewBox x)         = NewBox <$> (f x)
-recDMTermM f h (GetBox x)         = GetBox <$> (f x)
-recDMTermM f h (MapBox x y)       = MapBox <$> (f x) <*> (f y)
-
+recDMTermM f h (DeepcopyValue t) = DeepcopyValue <$> (f t)
+recDMTermM f h (InternalExpectConst a) = InternalExpectConst <$> (f a)
 
 --------------------------------------------------------------------------
 -- Free variables for terms
@@ -870,7 +911,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (Ret (r))          = "Ret (" <>  showPretty r <> ")"
   showPretty (Sng g jt)         = show g
   showPretty (Var (v :- jt))    = show v
-  showPretty (Rnd jt)           = "Rnd"
+--  showPretty (Rnd jt)           = "Rnd"
   showPretty (Arg v jt r)       = show v
   showPretty (Op op ts)         = showPretty op <> " " <> showPretty ts
   showPretty (Phi a b c)        = "Phi (" <> showPretty a <> ")" <> parenIndent (showPretty b) <> parenIndent (showPretty c)
@@ -884,15 +925,16 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (SLet v a b)       = "SLet " <> showPretty v <> " = " <> (showPretty a) <> "\n" <> (showPretty b)
   showPretty (Tup as)           = "Tup " <> (showPretty as)
   showPretty (TLet v a b)       = "TLet " <> showPretty v <> " = " <> (showPretty a) <> "\n" <> (showPretty b)
-  showPretty (TBind v a b)       = "TBind " <> showPretty v <> " <- " <> (showPretty a) <> "\n" <> (showPretty b)
+  showPretty (TBind v a b)      = "TBind " <> showPretty v <> " <- " <> (showPretty a) <> "\n" <> (showPretty b)
   showPretty (Gauss a b c d)    = "Gauss (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ", " <> (showPretty d) <> ")"
+  showPretty (Laplace a b c)    = "Laplace (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ")"
   showPretty (ConvertM a)       = "ConvertM (" <> (showPretty a) <> ")"
   showPretty (MCreate a b x c ) = "MCreate (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> show x <> ", " <> (showPretty c) <> ")"
   showPretty (Transpose a)      = "Transpose (" <> (showPretty a) <> ")"
   showPretty (Size a)           = "Size (" <> (showPretty a) <> ")"
   showPretty (Length a)         = "Length (" <> (showPretty a) <> ")"
   showPretty (Index a b c)      = "Index (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> (showPretty c) <> ")"
-  showPretty (VIndex a b)      = "VIndex (" <> (showPretty a) <> ", " <> (showPretty b)  <> ")"
+  showPretty (VIndex a b)       = "VIndex (" <> (showPretty a) <> ", " <> (showPretty b)  <> ")"
   showPretty (Row a b)          = "Row (" <> (showPretty a) <> ", " <> (showPretty b) <> ")"
   showPretty (ClipM c a)        = "ClipM (" <> show c <> ", " <> (showPretty a) <> ")"
   showPretty (SubGrad a b)      = "SubGrad (" <> (showPretty a) <> ", " <> (showPretty b) <>  ")"
@@ -906,17 +948,18 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (SumGrads a b)     = "SumGrads (" <> (showPretty a) <> ", " <> (showPretty b) <> ")"
   showPretty (SmpLet v a b)     = "SmpLet " <> showPretty v <> " <- " <> (showPretty a) <> "\n" <> (showPretty b)
   showPretty (Sample a b c)     = "Sample (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ")"
-  showPretty (NewBox a)         = "NewBox " <> (showPretty a)
-  showPretty (GetBox a)         = "GetBox " <> (showPretty a)
-  showPretty (MapBox f x)       = "MapBox (" <> showPretty f <> ", " <> showPretty x <> ")"
+  showPretty (DeepcopyValue a)  = "(Copy " <> showPretty a <> ")"
+  showPretty (InternalExpectConst a) = "InternalExpectConst " <> (showPretty a)
 
 instance ShowPretty a => ShowPretty (MutabilityExtension a) where
-  showPretty (MutLet t a b) = "MutLet{" <> show t <> "} " <> indent (showPretty a) <> indent (showPretty b)
+  showPretty (DNothing)      = "Nothing"
+  showPretty (MutPhi a b)    = "MutPhi (" <> showPretty a <> " ? " <> showPretty b <> ")"
+  showPretty (MutLet t a b)  = "MutLet{" <> show t <> "} " <> indent (showPretty a) <> indent (showPretty b)
   showPretty (MutLoop a x d) = "MutLoop (" <> (showPretty a) <> ", " <> show x <> ")" <> parenIndent (showPretty d)
-  showPretty (SModify a x) = "SModify! (" <> showPretty a <> ", " <> showPretty x <> ")"
-  showPretty (TModify a x) = "TModify! (" <> showPretty a <> ", " <> showPretty x <> ")"
-  showPretty (MutRet) = "MutRet"
-  showPretty (DefaultRet x) = "DefaultRet (" <> showPretty x <> ")"
+  showPretty (SModify a x)   = "SModify! (" <> showPretty a <> ", " <> showPretty x <> ")"
+  showPretty (TModify a x)   = "TModify! (" <> showPretty a <> ", " <> showPretty x <> ")"
+  showPretty (MutRet)        = "MutRet"
+  showPretty (DefaultRet x)  = "DefaultRet (" <> showPretty x <> ")"
 
 instance ShowPretty (EmptyExtension a) where
   showPretty a = undefined
@@ -946,7 +989,10 @@ data DMException where
   BlackBoxError           :: String -> DMException
   FLetReorderError        :: String -> DMException
   UnificationShouldWaitError :: DMTypeOf k -> DMTypeOf k -> DMException
+  TermColorError          :: AnnotationKind -> DMTerm -> DMException
   ParseError              :: String -> String -> Int -> DMException -- error message, filename, line number
+  DemutationMovedVariableAccessError :: Show a => a -> DMException
+  DemutationNonAliasedMutatingArgumentError :: String -> DMException
 
 instance Show DMException where
   show (UnsupportedError t) = "The term '" <> t <> "' is currently not supported."
@@ -965,6 +1011,7 @@ instance Show DMException where
   show (BlackBoxError e) = "While preprocessing black boxes, the following error was encountered:\n " <> e
   show (FLetReorderError e) = "While processing function signatures, the following error was encountered:\n " <> e
   show (ParseError e file line) = "Unsupported julia expression in file " <> file <> ", line " <> show line <> ":\n " <> e
+  show (TermColorError color t) = "Expected " <> show t <> " to be a " <> show color <> " expression but it is not."
   show (DemutationDefinitionOrderError a) = "The variable '" <> show a <> "' has not been defined before being used.\n"
                                             <> "Note that currently every variable has to be assigned some value prior to its usage.\n"
                                             <> "Here, 'prior to usage' means literally earlier in the code.\n"
@@ -976,6 +1023,8 @@ instance Show DMException where
                                             <> ">  a = 3" <> "\n"
                                             <> ">  f()" <> "\n"
   show (DemutationVariableAccessTypeError e) = "An error regarding variable access types occured:\n" <> e
+  show (DemutationMovedVariableAccessError a) = "Tried to access the variable " <> show a <> ". But this variable is not valid anymore, because it was assigned to something else."
+  show (DemutationNonAliasedMutatingArgumentError a) = "An error regarding non-aliasing of mutating arguments occured:\n" <> a
 
 instance Eq DMException where
   UnsupportedTermError    a        == UnsupportedTermError    b       = True
@@ -991,9 +1040,12 @@ instance Eq DMException where
   UnificationShouldWaitError a a2  == UnificationShouldWaitError b b2 = True
   ParseError e1 file1 line1        == ParseError e2 file2 line2       = True
   FLetReorderError        a        == FLetReorderError        b       = True
+  TermColorError      a b          == TermColorError c d              = True
   DemutationError a                == DemutationError         b       = True
   DemutationDefinitionOrderError a == DemutationDefinitionOrderError b = True
   DemutationVariableAccessTypeError a == DemutationVariableAccessTypeError b = True
+  DemutationMovedVariableAccessError a       == DemutationMovedVariableAccessError b = True
+  DemutationNonAliasedMutatingArgumentError a       == DemutationNonAliasedMutatingArgumentError b = True
   _ == _ = False
 
 

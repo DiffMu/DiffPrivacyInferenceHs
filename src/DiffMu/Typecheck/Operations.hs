@@ -142,8 +142,16 @@ solveBinary op (τ1, τ2) = f op τ1 τ2
     f DMOpEq (Numeric (NonConst t1)) (Numeric (Const s2 t2)) = ret oneId  zeroId (pure $ Numeric (NonConst DMInt))
     f DMOpEq (Numeric (NonConst t1)) (Numeric (NonConst t2)) = ret oneId  oneId  (pure $ Numeric (NonConst DMInt))
 
-    f op (DMVecLike _ n cl c t) t2 = f op (DMMat n cl oneId c t) t2 -- for vectors its the same as for 1-row matrices
-    f op t2 (DMVecLike _ n cl c t) = f op t2 (DMMat n cl oneId c t)
+    f op (DMVecLike k n cl c t) t2 = do
+                                       res <- f op (DMMat n cl oneId c t) t2 -- for vectors its the same scalars as for 1-row matrices
+                                       case res of
+                                           Just (s1, s2, (DMMat rn rcl _ rc rt)) -> ret s1 s2 (pure $ DMVecLike k rn rcl rc rt)
+                                           _ -> return res
+    f op t2 (DMVecLike k n cl c t) = do
+                                       res <- f op t2 (DMMat n cl oneId c t) -- for vectors its the same scalars as for 1-row matrices
+                                       case res of
+                                           Just (s1, s2, (DMMat rn rcl _ rc rt)) -> ret s1 s2 (pure $ DMVecLike k rn rcl rc rt)
+                                           _ -> return res
 
     f _ _ _                            = return Nothing
 
@@ -184,13 +192,13 @@ makeNonConstType name a = internalError ("makeNonConstType called on " <> show a
 --          that it only ever creates a single substitution.
 makeNonConstTypeOp :: (IsT MonadDMTC t) => Symbol -> DMTypeOp -> t DMTypeOp
 makeNonConstTypeOp name (Unary op (τ :@ s) ρ) = do
-  τn <- normalize τ
+  τn <- normalizeExact τ
   τn' <- makeNonConstType name τn
   pure (Unary op (τn' :@ s) ρ)
 makeNonConstTypeOp name (Binary op ((τ₁ :@ s₁) , (τ₂ :@ s₂)) ρ) = do
-  τ₁n <- normalize τ₁
+  τ₁n <- normalizeExact τ₁
   τ1' <- makeNonConstType name τ₁n
-  τ₂n <- normalize τ₂
+  τ₂n <- normalizeExact τ₂
   τ2' <- makeNonConstType name τ₂n
   pure (Binary op ((τ1' :@ s₁) , (τ2' :@ s₂)) ρ)
 

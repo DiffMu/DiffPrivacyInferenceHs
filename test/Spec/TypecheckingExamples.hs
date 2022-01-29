@@ -2,7 +2,9 @@
 module Spec.TypecheckingExamples where
 
 import Spec.Base
+import Data.String
 
+import DiffMu.Typecheck.Constraint.CheapConstraints
 
 testTypecheckingExamples pp = do
   testSens pp
@@ -11,11 +13,13 @@ testTypecheckingExamples pp = do
   testBlackBox pp
   testSLoop pp
   testSample pp
+  testPrivFunc pp
 --   testDPGD pp
   
 
 testSens pp = do
   describe "checkSens" $ do
+
     parseEvalSimple pp"3 + 7 * 9" (pure $ NoFun (Numeric (Const (constCoeff (Fin 66)) DMInt)))
     parseEvalSimple pp"2.2 * 3"   (pure $ NoFun (Numeric (Const (constCoeff (Fin 6.6000004)) DMReal)))
 
@@ -25,9 +29,33 @@ testSens pp = do
     let ty   = do
           τ <- newTVar ""
           return $ Fun([([TVar τ :@ oneId] :->: TVar τ) :@ Just [JTAny]])
-    parseEvalUnify pp"Checks the identity function" test ty
+    parseEvalUnify_customCheck pp "Checks the identity function" test ty $ do
+        ctrs <- getConstraintsByType (Proxy @(IsRefCopy (DMMain,DMMain))) 
+        -- make sure that there is one constraint which requires a refcopy
+        -- and that there are no other constraints
+        allctrs <- getAllConstraints
+        case (length ctrs, length allctrs) of
+            (1,1) -> return $ Right ()
+            _ -> return $ Left $ "Expected a single RefCopy constraint but got:\n" <> show allctrs
 
 
+    let test2 = "function test(a :: Integer)\n"
+            <> "  a\n"
+            <> "end"
+    let ty2   = do
+          τ <- newTVar ""
+          return $ Fun([([NoFun (Numeric (TVar τ)) :@ oneId] :->: NoFun (Numeric (TVar τ))) :@ Just [JTInt]])
+
+    parseEvalUnify_customCheck pp "Checks the identity function for integers" test2 ty2 $ do
+        ctrs <- getConstraintsByType (Proxy @(IsLessEqual (DMTypeOf NumKind,DMTypeOf NumKind))) 
+        -- make sure that the only constraint we get is (a `IsLessEqual` Int[--])
+        allctrs <- getAllConstraints
+        case (ctrs, length allctrs) of
+            ([(_,IsLessEqual (_,(NonConst DMInt)))],1) -> return $ Right ()
+            _ -> return $ Left $ "Expected a single LessEqual constraint but got:\n" <> show allctrs
+
+
+testOps :: IsString t => (t -> IO String) -> SpecWith ()
 testOps pp = describe "Ops" $ do
     let ex_num = "function foo(w::Integer, x::Integer, y::Integer, z::Integer) \n\
                  \ if z == 1 \n\
@@ -57,17 +85,36 @@ testPriv pp = describe "privacies" $ do
     let ret = "function f(x :: Integer) :: Priv() \n\
                \ x + x                 \n\
                \ end"
-        inv = "function g(x :: Integer) :: Priv() \n\
+        inv = "function g(x :: DMGrads) :: Priv() \n\
                \ x = 0.1*x \n\
-               \ gaussian_mechanism!(0.1, 0.1, 0.1, x) :: Robust() \n\
-               \ 200*x \n\
+               \ gaussian_mechanism!(0.1, 0.1, 0.1, x)  \n\
+               \ return_copy(200*x) \n\
+               \ end"
+        lap = "function g(x :: DMGrads) :: Priv() \n\
+               \    x = 0.1*x \n\
+               \    laplacian_mechanism!(0.1, 0.1, x)  \n\
+               \    return_copy(200*x) \n\
                \ end"
         int = NoFun(Numeric (NonConst DMInt))
-        real = NoFun(Numeric (NonConst DMReal))
+        real = (Numeric (NonConst DMReal))
         ty_r = Fun([([int :@ (inftyS, inftyS)] :->*: int) :@ Just [JTInt]])
-        ty_i = Fun([([int :@ (constCoeff (Fin 0.1), constCoeff (Fin 0.1))] :->*: real) :@ Just [JTInt]])
+        ty_i :: TC DMMain = do
+            c <- newVar
+            n <- newVar
+            nt <- newVar
+            let gradin = NoFun (DMGrads L2 c n (Numeric (NonConst nt)))
+            let gradout = NoFun (DMGrads LInf U n real)
+            return (Fun ([([gradin :@ (constCoeff (Fin 0.1), constCoeff (Fin 0.1))] :->*: gradout) :@ Just [JTGrads]]))
+        ty_l :: TC DMMain = do
+            c <- newVar
+            n <- newVar
+            nt <- newVar
+            let gradin = NoFun (DMGrads L2 c n (Numeric (NonConst nt)))
+            let gradout = NoFun (DMGrads LInf U n real)
+            return (Fun ([([gradin :@ (constCoeff (Fin 0.1), constCoeff (Fin 0))] :->*: gradout) :@ Just [JTGrads]]))
     parseEval pp "return" ret (pure ty_r)
-    parseEval pp "robust" inv (pure ty_i)
+    parseEvalUnify pp "robust" inv (ty_i) -- this is issue #157
+    parseEvalUnify pp "laplace" lap (ty_l)
 
 
 testBlackBox pp = describe "black box" $ do
@@ -134,13 +181,59 @@ testSample pp = describe "Sample" $ do
               \  gs = foo(D[1,:]) \n\
               \  clip!(L2,gs) \n\
               \  norm_convert!(gs) \n\
-              \  gaussian_mechanism!(2, 0.2, 0.3, gs) :: Robust() \n\
-              \  x * gs \n\
+              \  gaussian_mechanism!(2, 0.2, 0.3, gs)  \n\
+              \  return_copy(x * gs) \n\
               \end"
-        ty = "Fun([([NoFun(Matrix<n: L∞, c: τ_30>[s_11 × s_20](Num(Data))) @ (0.4⋅(1 / s_11)⋅s_17,0.3⋅(1 / s_11)⋅s_17),NoFun(Num(Int[s_17])) @ (0,0),NoFun(Num(Int[--])) @ (∞,∞)] ->* NoFun(Matrix<n: L∞, c: U>[1 × s_14](Num(Real[--])))) @ Just [Any,Any,Integer]])"
+        ty = "Fun([([NoFun(Matrix<n: L∞, c: τ_33>[s_11 × s_21](Num(Data))) @ (0.4⋅s_18⋅(1 / s_11),0.3⋅s_18⋅(1 / s_11)),NoFun(Num(Int[s_18])) @ (0,0),NoFun(Num(Int[--])) @ (∞,∞)] ->* NoFun(Grads<n: L∞, c: U>[s_16](Num(Real[--])))) @ Just [Any,Any,Integer]])"
         cs = ""
     parseEvalString_customCheck pp "" ex (ty, cs) (pure $ Right ())
                                                                                    
+
+testPrivFunc pp = describe "PrivacyFunction annotations" $ do
+    let ex_good = "function foo(f :: PrivacyFunction) :: Priv() \n\
+                   \  f(100) \n\
+                   \ end \n\
+                   \function bar(x) :: Priv() \n\
+                   \  1 \n\
+                   \end \n\
+                   \function baz() :: Priv() \n\
+                   \   foo(bar)\n\
+                   \end"
+        ex_bad = "function foo(f) :: Priv() \n\
+                   \  f(100) \n\
+                   \ end \n\
+                   \function bar(x) :: Priv() \n\
+                   \  1 \n\
+                   \end \n\
+                   \function baz() :: Priv() \n\
+                   \   foo(bar)\n\
+                   \end"
+        ex_ugly = "function foo(f :: PrivacyFunction) :: Priv() \n\
+                   \  f(100) \n\
+                   \ end \n\
+                   \function bar(x) \n\
+                   \  1 \n\
+                   \end \n\
+                   \function baz() :: Priv() \n\
+                   \   foo(bar)\n\
+                   \end"
+        ex_uglier = "function foo(f :: PrivacyFunction) \n\
+                   \  f(100) \n\
+                   \ end \n\
+                   \function bar(x) ::Priv() \n\
+                   \  1 \n\
+                   \end \n\
+                   \function baz() :: Priv() \n\
+                   \   foo(bar)\n\
+                   \end"
+        cint =  NoFun (Numeric (Const (constCoeff (Fin 1)) DMInt))
+        ty_good = Fun([([] :->*: cint) :@ Just []])
+    parseEval pp "proper usage" ex_good (pure ty_good)
+    parseEvalFail pp "not annotated" ex_bad (TermColorError PrivacyK (Sng 1 JTInt))
+    parseEvalFail pp "wrong input" ex_ugly (UnsatisfiableConstraint "")
+    parseEvalFail pp "not a privacy function" ex_uglier (TermColorError PrivacyK (Sng 1 JTInt))
+    
+
 
 testDPGD pp = describe "DPGD" $ do
   let ex = "import Flux \n\
@@ -165,8 +258,8 @@ testDPGD pp = describe "DPGD" $ do
           \           l = labels[i,:] \n\
           \           gs = unbounded_gradient(model, d, l) \n\
           \           gsc = norm_convert(clip(L2,gs)) \n\
-          \           gsg :: Robust() = gaussian_mechanism(2/dim, eps, del, scale_gradient(1/dim,gsc)) \n\
-          \           model :: Robust() = subtract_gradient(model, scale_gradient(eta * dim, gsg)) \n\
+          \           gsg = gaussian_mechanism(2/dim, eps, del, scale_gradient(1/dim,gsc)) \n\
+          \           model = subtract_gradient(model, scale_gradient(eta * dim, gsg)) \n\
           \    end \n\
           \    model \n\
           \ end"

@@ -127,9 +127,7 @@ subtypingGraph =
                       nrm₀ ⊑! nrm₁
                       clp₀ ⊑! clp₁
                       return ((DMMat nrm₀ clp₀ n m a₀), (DMMat nrm₁ clp₁ n m a₁))
-                 ]
-            ; IsReflexive NotStructural -> [
-                   SingleEdge $
+                 , SingleEdge $
                    do clp₀ <- newVar
                       nrm₀ <- newVar
                       nrm₁ <- newVar
@@ -180,7 +178,8 @@ subtypingGraph =
                       m <- newVar
                       return ((DMGrads L1 clp m (Numeric t)), (DMGrads nrm clp m (Numeric t)))
                       -}
-                  ]
+                 ]
+            ; IsReflexive NotStructural -> []
             ; _ -> []
             }
 
@@ -348,7 +347,7 @@ solveSubtyping name path = withLogLocation "Subtyping" $ do
       updateConstraint name (Solvable (IsLessEqual a))
     Wait           -> do
       log $ "Subtyping computation of " <> show path <> " returned `Wait`. Keeping constraint as is."
-      npath <- normalize path
+      npath <- normalizeExact path
       log $ "(With normalizations applied the constraint is now " <> show npath <> " ; it should be the same as the input.)"
       convertSubtypingToSupremum name path -- in this case we try to change this one into a sup
     Fail e         -> throwError (UnsatisfiableConstraint (show (fst path) <> " ⊑ " <> show (snd path) <> "\n\n"
