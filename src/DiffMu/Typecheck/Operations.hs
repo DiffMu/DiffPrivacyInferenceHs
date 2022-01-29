@@ -52,20 +52,80 @@ solveUnary op τ = f op τ
     f DMOpCeil (Numeric (NonConst t2)) = ret oneId (return (Numeric (NonConst DMInt)))
     f DMOpCeil _             = return Nothing
 
+
+
+makeNoFunNumeric :: forall t. IsT MonadDMTC t =>  DMMain -> t (DMTypeOf NumKind)
+makeNoFunNumeric t = case t of
+    NoFun (Numeric v) -> return v
+    _ -> do
+           v <- newVar
+           unify t (NoFun (Numeric v))
+           return v
+
 -- We can solve a binary typeop constraint.
-solveBinary :: forall t e. IsT MonadDMTC t => DMTypeOps_Binary -> (DMType, DMType) -> t (Maybe (Sensitivity , Sensitivity, DMType))
-solveBinary op (τ1, τ2) = f op τ1 τ2
+solveBinary :: forall t. IsT MonadDMTC t => DMTypeOps_Binary -> (DMType, DMType) -> t (Maybe (Sensitivity , Sensitivity, DMType))
+solveBinary op (τ1, τ2) = traceM ("solving " <> show op <> show (τ1, τ2)) >> f op τ1 τ2
   where
     ret :: Sensitivity -> Sensitivity -> t (DMType) -> t (Maybe (Sensitivity, Sensitivity, DMType))
     ret s1 s2 τ = do
       τ' <- τ
       return (Just (s1, s2, τ'))
       
-    makeNumeric :: DMType -> t (Maybe (Sensitivity, Sensitivity, DMType))
-    makeNumeric t = do
-        v <- newVar
-        unify t (Numeric v)
-        return Nothing
+    matchType :: SymbolOf NoFunKind -> DMType -> t (Maybe (Sensitivity, Sensitivity, DMType))
+    matchType a m = case m of
+        (Numeric _) -> do
+           v <- newVar
+           unify (TVar a) (Numeric v)
+           return Nothing
+        (DMVec n cl r t) -> do
+           makeNoFunNumeric t
+           clv <- newVar
+           τ <- newVar
+           unify (TVar a) (DMVec n clv r τ)
+           return Nothing
+        (DMGrads n cl r t) -> do
+           clv <- newVar
+           τ <- newVar
+           unify (TVar a) (DMGrads n clv r τ)
+           return Nothing
+        (DMMat n cl r c t) -> do
+           makeNoFunNumeric t
+           clv <- newVar
+           τ <- newVar
+           unify (TVar a) (DMMat n clv r c τ)
+           return Nothing
+        _ -> return Nothing
+
+    applyOp op t1 t2 = do
+           tt1 <- makeNoFunNumeric t1
+           tt2 <- makeNoFunNumeric t2
+           solveBinary op (Numeric tt1, Numeric tt2)
+           
+    applyMatOp op (n1, r1, c1, t1) (n2, r2, c2, t2) = do
+           unify n1 n2
+           unify r1 r2
+           unify c1 c2
+           s <- applyOp op t1 t2
+           case s of
+              Nothing -> return Nothing
+              Just (s1, s2, τ) -> return (Just (s1, s2, (DMMat n1 U r1 c1 (NoFun τ))))
+
+    applyVecOp op (n1, r1, t1) (n2, r2, t2) = do
+           unify n1 n2
+           unify r1 r2
+           s <- applyOp op t1 t2
+           case s of
+              Nothing -> return Nothing
+              Just (s1, s2, τ) -> return (Just (s1, s2, (DMVec n1 U r1 (NoFun τ))))
+              
+    applyGradsOp op (n1, r1, t1) (n2, r2, t2) = do
+           unify n1 n2
+           unify r1 r2
+           s <- applyOp op (NoFun (Numeric t1)) (NoFun (Numeric t2))
+           case s of
+              Nothing -> return Nothing
+              Just (s1, s2, (Numeric τ)) -> return (Just (s1, s2, (DMGrads n1 U r1 τ)))
+              _ -> internalError $ "solveBinary of numerics returned non-numeric type"
         
     -- all possible type signatures for arithmetic operations, and the resulting sensitivities and result types
     f :: DMTypeOps_Binary -> (DMType) -> (DMType) -> t (Maybe (Sensitivity , Sensitivity, DMType))
@@ -73,55 +133,50 @@ solveBinary op (τ1, τ2) = f op τ1 τ2
     f DMOpAdd (Numeric (Const s1 t1)) (Numeric (NonConst t2)) = ret zeroId oneId  ((Numeric . NonConst) <$> supremum t1 t2)
     f DMOpAdd (Numeric (NonConst t1)) (Numeric (Const s2 t2)) = ret oneId  zeroId ((Numeric . NonConst) <$> supremum t1 t2)
     f DMOpAdd (Numeric (NonConst t1)) (Numeric (NonConst t2)) = ret oneId  oneId  ((Numeric . NonConst) <$> supremum t1 t2)
-    f DMOpAdd (Numeric t) (TVar a)                            = makeNumeric (TVar a)
-    f DMOpAdd (TVar a) (Numeric t)                            = makeNumeric (TVar a)
-    f DMOpAdd (DMMat n1 cl1 r1 c1 t1) (DMMat n2 cl2 r2 c2 t2) = do
-                                                             s <- solveBinary op (t1, t2)
-                                                             unify n1 n2
-                                                             unify r1 r2
-                                                             unify c1 c2
-                                                             case s of
-                                                                Nothing -> return Nothing
-                                                                Just (s1, s2, τ) -> return (Just (s1, s2, (DMMat n1 U r1 c1 τ)))
-    f DMOpAdd (DMMat n cl r c t) (TVar a) = do
-                                               clv <- newVar
-                                               τ <- newVar
-                                               unify (TVar a) (DMMat n clv r c τ)
-                                               return Nothing
-    f DMOpAdd (TVar a) (DMMat n cl r c t) = solveBinary DMOpAdd ((DMMat n cl r c t), (TVar a))
+    f DMOpAdd (DMMat n1 cl1 r1 c1 t1) (DMMat n2 cl2 r2 c2 t2) = applyMatOp DMOpAdd (n1, r1, c1, t1) (n2, r2, c2, t2)
+    f DMOpAdd (DMVec n1 cl1 r1 t1) (DMVec n2 cl2 r2 t2) = applyVecOp DMOpAdd (n1, r1, t1) (n2, r2, t2)
+    f DMOpAdd (DMGrads n1 cl1 r1 t1) (DMGrads n2 cl2 r2 t2) = applyGradsOp DMOpAdd (n1, r1, t1) (n2, r2, t2)
+    f DMOpAdd t (TVar a)                            = matchType a t
+    f DMOpAdd (TVar a) t                            = matchType a t
 
 
-    f DMOpMul (Numeric (Const s1 t1)) (Numeric (Const s2 t2)) = ret zeroId zeroId ((Numeric . (Const (s1 ⋅! s2))) <$> supremum t1 t2)
-    f DMOpMul (Numeric (Const s1 t1)) (Numeric (NonConst t2)) = ret zeroId s1 ((Numeric . NonConst) <$> supremum t1 t2)
-    f DMOpMul (Numeric (NonConst t1)) (Numeric (Const s2 t2)) = ret s2 zeroId ((Numeric . NonConst) <$> supremum t1 t2)
-    f DMOpMul (Numeric (NonConst t1)) (Numeric (NonConst t2)) = ret (constCoeff Infty) (constCoeff Infty) ((Numeric . NonConst) <$> supremum t1 t2)
-    f DMOpMul (Numeric τs) (DMMat n cl r c τm)                = do
-                                                             s <- solveBinary op (Numeric τs, τm)
-                                                             case s of
-                                                                Nothing -> return Nothing
-                                                                Just (s1, s2, τ) -> return (Just (r ⋅! c ⋅! s1, s2, (DMMat n U r c τ)))
 
     -- TODO figure out how to handle negative numbers.
     f DMOpSub (Numeric (Const s1 t1)) (Numeric (Const s2 t2)) = ret zeroId zeroId ((Numeric . (Const (minus s1 s2))) <$> supremum t1 t2)
     f DMOpSub (Numeric (Const s1 t1)) (Numeric (NonConst t2)) = ret zeroId oneId ((Numeric . NonConst) <$> supremum t1 t2)
     f DMOpSub (Numeric (NonConst t1)) (Numeric (Const s2 t2)) = ret oneId zeroId ((Numeric . NonConst) <$> supremum t1 t2)
     f DMOpSub (Numeric (NonConst t1)) (Numeric (NonConst t2)) = ret oneId oneId ((Numeric . NonConst) <$> supremum t1 t2)
-    f DMOpSub (Numeric t) (TVar a)                            = makeNumeric (TVar a)
-    f DMOpSub (TVar a) (Numeric t)                            = makeNumeric (TVar a)
-    f DMOpSub (DMMat n1 cl1 r1 c1 t1) (DMMat n2 cl2 r2 c2 t2) = do
-                                                             s <- solveBinary op (t1, t2)
-                                                             unify n1 n2
-                                                             unify r1 r2
-                                                             unify c1 c2
-                                                             case s of
-                                                                Nothing -> return Nothing
-                                                                Just (s1, s2, τ) -> return (Just (s1, s2, (DMMat n1 U r1 c1 τ)))
-    f DMOpSub (DMMat n cl r c t) (TVar a) = do
-                                               clv <- newVar
-                                               τ <- newVar
-                                               unify (TVar a) (DMMat n clv r c τ)
-                                               return Nothing
-    f DMOpSub (TVar a) (DMMat n cl r c t) = solveBinary DMOpSub ((DMMat n cl r c t), (TVar a))
+    f DMOpSub (DMMat n1 cl1 r1 c1 t1) (DMMat n2 cl2 r2 c2 t2) = applyMatOp DMOpSub (n1, r1, c1, t1) (n2, r2, c2, t2)
+    f DMOpSub (DMVec n1 cl1 r1 t1) (DMVec n2 cl2 r2 t2) = applyVecOp DMOpSub (n1, r1, t1) (n2, r2, t2)
+    f DMOpSub (DMGrads n1 cl1 r1 t1) (DMGrads n2 cl2 r2 t2) = applyGradsOp DMOpSub (n1, r1, t1) (n2, r2, t2)
+    f DMOpSub t (TVar a)                            = matchType a t
+    f DMOpSub (TVar a) t                            = matchType a t
+
+
+
+    f DMOpMul (Numeric (Const s1 t1)) (Numeric (Const s2 t2)) = ret zeroId zeroId ((Numeric . (Const (s1 ⋅! s2))) <$> supremum t1 t2)
+    f DMOpMul (Numeric (Const s1 t1)) (Numeric (NonConst t2)) = ret zeroId s1 ((Numeric . NonConst) <$> supremum t1 t2)
+    f DMOpMul (Numeric (NonConst t1)) (Numeric (Const s2 t2)) = ret s2 zeroId ((Numeric . NonConst) <$> supremum t1 t2)
+    f DMOpMul (Numeric (NonConst t1)) (Numeric (NonConst t2)) = ret (constCoeff Infty) (constCoeff Infty) ((Numeric . NonConst) <$> supremum t1 t2)
+    f DMOpMul (Numeric τs) (DMMat n cl r c t) = do
+                                                  tt <- makeNoFunNumeric t
+                                                  s <- solveBinary op (Numeric τs, Numeric tt)
+                                                  case s of
+                                                     Nothing -> return Nothing
+                                                     Just (s1, s2, τ) -> return (Just (r ⋅! c ⋅! s1, s2, (DMMat n U r c (NoFun τ))))
+    f DMOpMul (Numeric τs) (DMVec n cl r t)   = do
+                                                  tt <- makeNoFunNumeric t
+                                                  s <- solveBinary op (Numeric τs, Numeric tt)
+                                                  case s of
+                                                     Nothing -> return Nothing
+                                                     Just (s1, s2, τ) -> return (Just (r ⋅! s1, s2, (DMVec n U r (NoFun τ))))
+    f DMOpMul (Numeric τs) (DMGrads n cl r t) = do
+                                                  s <- solveBinary op (Numeric τs, Numeric t)
+                                                  case s of
+                                                     Nothing -> return Nothing
+                                                     Just (s1, s2, Numeric τ) -> return (Just (r ⋅! s1, s2, (DMGrads n U r τ)))
+                                                     _ -> internalError $ "solveBinary of numerics returned non-numeric type"
+
 
 
     -- TODO notZero constraints for divisor?
@@ -129,29 +184,18 @@ solveBinary op (τ1, τ2) = f op τ1 τ2
     f DMOpDiv (Numeric (Const s1 t1)) (Numeric (NonConst t2)) = ret zeroId (constCoeff Infty) (return (Numeric (NonConst DMReal)))
     f DMOpDiv (Numeric (NonConst t1)) (Numeric (Const s2 t2)) = ret (divide oneId s2) zeroId (return (Numeric (NonConst DMReal)))
     f DMOpDiv (Numeric (NonConst t1)) (Numeric (NonConst t2)) = ret (constCoeff Infty) (constCoeff Infty) (return (Numeric (NonConst DMReal)))
-    f DMOpDiv (Numeric t) (TVar a)                            = makeNumeric (TVar a)
+    f DMOpDiv (Numeric t) (TVar a)                            = matchType a (Numeric t)
 
     f DMOpMod (Numeric (NonConst t1)) (Numeric (Const s2 t2)) = ret s2 zeroId ((Numeric . NonConst) <$> supremum t1 t2)
     f DMOpMod (Numeric (NonConst t1)) (Numeric (NonConst t2)) = ret (constCoeff Infty) (constCoeff Infty) ((Numeric . NonConst) <$> supremum t1 t2)
-    f DMOpMod (Numeric t) (TVar a)                            = makeNumeric (TVar a)
-    f DMOpMod (TVar a) (Numeric t)                            = makeNumeric (TVar a)
+    f DMOpMod (Numeric t) (TVar a)                            = matchType a (Numeric t)
+    f DMOpMod (TVar a) (Numeric t)                            = matchType a (Numeric t)
 
     -- TODO: Don't we need to return a "Bool" type?
     f DMOpEq (Numeric (Const s1 t1)) (Numeric (Const s2 t2)) = ret zeroId zeroId (pure $ Numeric (NonConst DMInt))
     f DMOpEq (Numeric (Const s1 t1)) (Numeric (NonConst t2)) = ret zeroId oneId  (pure $ Numeric (NonConst DMInt))
     f DMOpEq (Numeric (NonConst t1)) (Numeric (Const s2 t2)) = ret oneId  zeroId (pure $ Numeric (NonConst DMInt))
     f DMOpEq (Numeric (NonConst t1)) (Numeric (NonConst t2)) = ret oneId  oneId  (pure $ Numeric (NonConst DMInt))
-
-    f op (DMVecLike k n cl c t) t2 = do
-                                       res <- f op (DMMat n cl oneId c t) t2 -- for vectors its the same scalars as for 1-row matrices
-                                       case res of
-                                           Just (s1, s2, (DMMat rn rcl _ rc rt)) -> ret s1 s2 (pure $ DMVecLike k rn rcl rc rt)
-                                           _ -> return res
-    f op t2 (DMVecLike k n cl c t) = do
-                                       res <- f op t2 (DMMat n cl oneId c t) -- for vectors its the same scalars as for 1-row matrices
-                                       case res of
-                                           Just (s1, s2, (DMMat rn rcl _ rc rt)) -> ret s1 s2 (pure $ DMVecLike k rn rcl rc rt)
-                                           _ -> return res
 
     f _ _ _                            = return Nothing
 
@@ -179,8 +223,19 @@ makeNonConstType myConstrName (Numeric (TVar a)) = do
 makeNonConstType name (Numeric (NonConst t)) = pure $ Numeric (NonConst t)
 makeNonConstType name (Numeric (Const s t)) = pure $ Numeric (Const s t)
 makeNonConstType name (Numeric DMData) = pure $ (Numeric DMData) -- TODO: Check, we do nothing with DMData?
-makeNonConstType name (DMVecLike k a b c e)  = (DMVecLike k a b c) <$> (makeNonConstType name e)
-makeNonConstType name (DMMat a b c d e)  = (DMMat a b c d) <$> (makeNonConstType name e)
+makeNonConstType name (DMVec a b c e) = do
+    en <- makeNoFunNumeric e
+    enc <- makeNonConstType name (Numeric en)
+    return $ DMVec a b c (NoFun enc)
+makeNonConstType name (DMGrads a b c e) = do
+    enc <- makeNonConstType name (Numeric e)
+    case enc of
+         Numeric en ->  return $ DMGrads a b c en
+         _ -> internalError $ "makeNonConst on numeric returned non-numeric"
+makeNonConstType name (DMMat a b c d e) = do
+    en <- makeNoFunNumeric e
+    enc <- makeNonConstType name (Numeric en)
+    return $ DMMat a b c d (NoFun enc)
 makeNonConstType name (TVar a)  = pure $ (TVar a) -- TODO: Check, we do nothing with TVar?
 makeNonConstType name a = internalError ("makeNonConstType called on " <> show a)
 
@@ -272,21 +327,9 @@ instance Solve MonadDMTC (IsTypeOpResult) DMTypeOp where
 
 
 
-
 opAdd x y = Op (IsBinary DMOpAdd) [x,y]
 opSub x y = Op (IsBinary DMOpSub) [x,y]
 opMul x y = Op (IsBinary DMOpMul) [x,y]
 opCeil x = Op (IsUnary DMOpCeil) [x]
 opDiv x y = Op (IsBinary DMOpDiv) [x,y]
-
-
-
-
-
-
-
-
-
-
-
 

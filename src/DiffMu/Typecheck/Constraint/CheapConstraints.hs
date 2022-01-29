@@ -179,8 +179,8 @@ instance Solve MonadDMTC IsAdditiveNoiseResult (DMTypeOf MainKind, DMTypeOf Main
            -- set in- and output types as given in the mgauss rule
            -- input type gets a LessEqual so convert can happen implicitly if necessary
            -- (convert is implemented as a special subtyping rule, see there)
-           addConstraint(Solvable(IsLessEqual(τin, (NoFun (DMGrads L2 iclp n (Numeric (τv)))))))
-           unify τgauss (NoFun (DMGrads LInf U n (Numeric (NonConst DMReal))))
+           addConstraint(Solvable(IsLessEqual(τin, (NoFun (DMGrads L2 iclp n τv)))))
+           unify τgauss (NoFun (DMGrads LInf U n (NonConst DMReal)))
 
            dischargeConstraint @MonadDMTC name
         _ -> do -- regular gauss or unification errpr later
@@ -293,14 +293,31 @@ instance Solve MonadDMTC IsBlackBoxReturn (DMMain, (DMMain, Sensitivity)) where
                           dischargeConstraint @MonadDMTC name
      in case ret of
           TVar _ -> pure ()
-          NoFun (DMVecLike vret nret cret dret tret) -> do
-              unify ret (NoFun (DMVecLike vret LInf U dret (Numeric DMData)))
+          
+          NoFun (DMVec nret cret dret (NoFun (Numeric tret))) -> do
+              unify ret (NoFun (DMVec LInf U dret (NoFun (Numeric DMData))))
               case argt of
                    TVar _ -> pure ()
-                   NoFun (DMVecLike _ _ _ _ targ) -> do
-                       unify targ (Numeric DMData)
+                   NoFun (DMGrads _ _ _ targ) -> do
+                       unify targ DMData
+                       discharge oneId
+                   NoFun (DMVec _ _ _ (NoFun (Numeric targ))) -> do
+                       unify targ DMData
                        discharge oneId
                    _ -> discharge inftyS
+                   
+          NoFun (DMGrads nret cret dret tret) -> do
+              unify ret (NoFun (DMGrads LInf U dret DMData))
+              case argt of
+                   TVar _ -> pure ()
+                   NoFun (DMGrads _ _ _ targ) -> do
+                       unify targ DMData
+                       discharge oneId
+                   NoFun (DMVec _ _ _ (NoFun (Numeric targ))) -> do
+                       unify targ DMData
+                       discharge oneId
+                   _ -> discharge inftyS
+
           _ -> discharge inftyS
 
 {-

@@ -69,17 +69,26 @@ testOps pp = describe "Ops" $ do
         ex_mat = "function foo(x::Matrix{Integer}, y::Matrix{Integer}, z::Matrix{Integer}) \n\
                  \ 2.0*x + y - z \n\
                  \ end"
+        ex_vec = "function foo(x::Vector{Integer}, y::Vector{Integer}, z::Vector{Integer}) \n\
+                 \ 2.0*x + y - z \n\
+                 \ end"
         int = NoFun(Numeric (NonConst DMInt))
         real = NoFun(Numeric (NonConst DMReal))
         ty_num = Fun([([int :@ (constCoeff (Fin 1)), int :@ (constCoeff (Fin 11)), int :@ (constCoeff (Fin 5.5)), int :@ inftyS] :->: real) :@ Just [JTInt, JTInt, JTInt, JTInt]])
         ty_mat :: TC DMMain = do
             n <- newVar
             m <- newVar
-            let mat1 = NoFun (DMMat L1 U n m (Numeric (NonConst DMInt)))
-            let mat2 = NoFun (DMMat L1 U n m (Numeric (NonConst DMReal)))
+            let mat1 = NoFun (DMMat L1 U n m (NoFun (Numeric (NonConst DMInt))))
+            let mat2 = NoFun (DMMat L1 U n m (NoFun (Numeric (NonConst DMReal))))
             return (Fun [([mat1 :@ constCoeff (Fin 2), mat1 :@ constCoeff (Fin 1), mat1 :@ constCoeff (Fin 1)] :->: mat2) :@ Just [JTMatrix JTInt, JTMatrix JTInt, JTMatrix JTInt]])
+        ty_vec :: TC DMMain = do
+            n <- newVar
+            let vec1 = NoFun (DMVec L1 U n (NoFun (Numeric (NonConst DMInt))))
+            let vec2 = NoFun (DMVec L1 U n (NoFun (Numeric (NonConst DMReal))))
+            return (Fun [([vec1 :@ constCoeff (Fin 2), vec1 :@ constCoeff (Fin 1), vec1 :@ constCoeff (Fin 1)] :->: vec2) :@ Just [JTVector JTInt, JTVector JTInt, JTVector JTInt]])
     parseEval pp "numeric ops sensitivity" ex_num (pure ty_num)
     parseEvalUnify pp "matrix ops sensitivity" ex_mat (ty_mat)
+    parseEvalUnify pp "vector ops sensitivity" ex_vec (ty_vec)
 
 testPriv pp = describe "privacies" $ do
     let ret = "function f(x :: Integer) :: Priv() \n\
@@ -96,20 +105,20 @@ testPriv pp = describe "privacies" $ do
                \    return_copy(200*x) \n\
                \ end"
         int = NoFun(Numeric (NonConst DMInt))
-        real = (Numeric (NonConst DMReal))
+        real = NonConst DMReal
         ty_r = Fun([([int :@ (inftyS, inftyS)] :->*: int) :@ Just [JTInt]])
         ty_i :: TC DMMain = do
             c <- newVar
             n <- newVar
             nt <- newVar
-            let gradin = NoFun (DMGrads L2 c n (Numeric (NonConst nt)))
+            let gradin = NoFun (DMGrads L2 c n (NonConst nt))
             let gradout = NoFun (DMGrads LInf U n real)
             return (Fun ([([gradin :@ (constCoeff (Fin 0.1), constCoeff (Fin 0.1))] :->*: gradout) :@ Just [JTGrads]]))
         ty_l :: TC DMMain = do
             c <- newVar
             n <- newVar
             nt <- newVar
-            let gradin = NoFun (DMGrads L2 c n (Numeric (NonConst nt)))
+            let gradin = NoFun (DMGrads L2 c n (NonConst nt))
             let gradout = NoFun (DMGrads LInf U n real)
             return (Fun ([([gradin :@ (constCoeff (Fin 0.1), constCoeff (Fin 0))] :->*: gradout) :@ Just [JTGrads]]))
     parseEval pp "return" ret (pure ty_r)
