@@ -24,6 +24,8 @@ import qualified Prelude as P
 import Test.QuickCheck.Property (Result(expect))
 import DiffMu.Typecheck.Preprocess.Demutation.Definitions (cleanupMem)
 
+import Control.Monad.Trans.Class
+
 
 
 fst3 (a,b,c) = a
@@ -551,8 +553,18 @@ elaborateMut scname scope (Extra (MutLet ltype term1 term2)) = do
                      <> "It (the first, pure part) is thus ignored in the privacy analysis."
           elaborateMut scname scope term2
         VirtualMutated newScope -> do
+          debug $ "[elaborateMut/MutLet]: After first term, have mutctx:"
+          logmutctx <- use mutCtx
+          debug $ show logmutctx <> "\n"
+
+
           let scope' = fromKeyElemPairs (getAllKeyElemPairs scope <> [(s, Pure UserValue) | s <- newScope])
           (newTerm2, newTerm2Type, newTerm2MoveType) <- elaborateMut scname scope' term2
+
+          debug $ "[elaborateMut/MutLet]: After second term, have mutctx:"
+          logmutctx <- use mutCtx
+          debug $ show logmutctx <> "\n"
+
           let ns1 = [Just n :- JTAny | n <- newScope]
           return (TLetBase ltype ns1 newTerm1 newTerm2, newTerm2Type, newTerm2MoveType)
 
@@ -742,9 +754,7 @@ elaborateMut scname scope (Extra (MutLet ltype term1 term2)) = do
 
                                                 -}
 
-elaborateMut scname scope (Extra (MutLoop iters iterVar body)) = undefined
-{-
-do
+elaborateMut scname scope (Extra (MutLoop iters iterVar body)) = do
   -- first, elaborate the iters
   (newIters , newItersType, _) <- elaborateNonmut scname scope iters
 
@@ -842,7 +852,6 @@ do
     -- if there was no mutation, throw error
     other -> throwError (DemutationError $ "Expected a loop body to be mutating, but it was of type " <> show other)
 
--}
 
 -- the loop-body-preprocessing creates these modify! terms
 -- they get elaborated into tlet assignments again.
@@ -875,6 +884,21 @@ elaborateMut scname scope (Extra (MutRet)) = do
 
   -- return all these vars
   return (Tup [Var (Just v :- JTAny) | v <- mutTeVars ] , VirtualMutated mutTeVars, NoMove)
+
+elaborateMut scname scope (Extra (LoopRet xs)) = do
+  ---------
+  -- get mutated variables from the (VA)context
+
+  -- all accessed vars
+  avars <- getAllKeyElemPairs <$> (use mutCtx)
+  -- mutated memvars with their locality
+  let mutMemVars = [(v) | (v, (_, Mutated)) <- avars ]
+  mutTeVars <- mapM (reverseMemLookup) mutMemVars
+
+  let extraMutTeVars = xs <> mutTeVars
+
+  -- return all these vars
+  return (Tup [Var (Just v :- JTAny) | v <- extraMutTeVars ] , VirtualMutated extraMutTeVars, NoMove)
 
 elaborateMut scname scope (LastTerm t) = do
   (newTerm, newType, moveType) <- elaborateMut scname scope t
@@ -1434,7 +1458,7 @@ elaborateMutList f scname scope mutargs = do
 
 runPreprocessLoopBody :: Scope -> Maybe TeVar -> MutDMTerm -> MTC (MutDMTerm, [TeVar])
 runPreprocessLoopBody scope iter t = do
-  (a,x) <- runWriterT (preprocessLoopBody scope iter t)
+  (a,x) <- runStateT (preprocessLoopBody scope iter t) def
   return (a, nub x)
 
 -- | Walks through the loop term and changes SLet's to `modify!`
@@ -1442,7 +1466,7 @@ runPreprocessLoopBody scope iter t = do
 --   Also makes sure that the iteration variable `iter` is not assigned,
 --   and that no `FLet`s are found.
 --   Returns the variables which were changed to `modify!`.
-preprocessLoopBody :: Scope -> Maybe TeVar -> MutDMTerm -> WriterT [TeVar] MTC MutDMTerm
+preprocessLoopBody :: Scope -> Maybe TeVar -> MutDMTerm -> StateT [TeVar] MTC MutDMTerm
 
 preprocessLoopBody scope iter (SLetBase ltype (v :- jt) term body) = do
   -- it is not allowed to change the iteration variable
@@ -1459,15 +1483,21 @@ preprocessLoopBody scope iter (SLetBase ltype (v :- jt) term body) = do
   -- and we do not change the term
 
   (term') <- preprocessLoopBody scope iter term
-  (body') <- preprocessLoopBody scope iter body
   -- let newVars = nub (termVars <> bodyVars)
 
   case v of
     Just v -> case getValue v scope of
-                Just _  -> tell [v] >> return (Extra (MutLet ltype (Extra (SModify (Just v :- jt) term')) (body')))
-                Nothing -> return (SLetBase ltype (Just v :- jt) term' body')
+                Just _  -> do
+                  state (\a -> ((), a <> [v])) 
+                  (body') <- preprocessLoopBody scope iter body -- this has to be done after the state change
+                  return (Extra (MutLet ltype (Extra (SModify (Just v :- jt) term')) (body')))
+                Nothing -> do
+                  (body') <- preprocessLoopBody scope iter body
+                  return (SLetBase ltype (Just v :- jt) term' body')
 
-    Nothing -> return (SLetBase ltype (v :- jt) term' body')
+    Nothing -> do
+      (body') <- preprocessLoopBody scope iter body
+      return (SLetBase ltype (v :- jt) term' body')
 
 
 preprocessLoopBody scope iter (TLet (vs) term body) = do
@@ -1485,14 +1515,18 @@ preprocessLoopBody scope iter (TLet (vs) term body) = do
   -- and we do not change the term
 
   (term') <- preprocessLoopBody scope iter term
-  (body') <- preprocessLoopBody scope iter body
 
   -- we collect those values of vs for which there is something in the scope
   let vs_in_scope = [v | (Just v :- _) <- vs, (Just _) <- [getValue v scope]]
 
   case vs_in_scope of
-    [] -> return (TLet vs term' body')
-    tv : tvs -> tell vs_in_scope >> return (Extra (MutLet PureLet (Extra (TModify (vs) term')) (body')))
+    [] -> do
+      body' <- preprocessLoopBody scope iter body
+      return (TLet vs term' body')
+    tv : tvs -> do
+      state (\a -> ((), a <> vs_in_scope))
+      body' <- preprocessLoopBody scope iter body -- this has to be done after the state change
+      return (Extra (MutLet PureLet (Extra (TModify (vs) term')) (body')))
 
 preprocessLoopBody scope iter (FLet f _ _) = throwOriginalError (DemutationError $ "Function definition is not allowed in for loops. (Encountered definition of " <> show f <> ".)")
 preprocessLoopBody scope iter (Ret t) = throwOriginalError (DemutationError $ "Return is not allowed in for loops. (Encountered " <> show (Ret t) <> ".)")
@@ -1502,6 +1536,11 @@ preprocessLoopBody scope iter (Extra (MutLet mtype t1 t2)) = do
   (t1') <- preprocessLoopBody scope iter t1
   (t2') <- preprocessLoopBody scope iter t2
   return (Extra (MutLet mtype t1' t2'))
+
+preprocessLoopBody scope iter (Extra (DefaultRet a)) = do
+  captureVars <- get
+  lift $ debug $ "[preprocessLoopBody]: default ret in loop, building loopret with captures: " <> show captureVars
+  return $ Extra $ LoopRet captureVars
 
 -- for the rest we simply recurse
 preprocessLoopBody scope iter t = do
@@ -1598,195 +1637,5 @@ optimizeTLet t      = recDMTermSameExtension (optimizeTLet) t
 
 
 
-
-
-
-  {-
---------------------------------------------------------
--- the elaboration
-
-elaborateImmut :: MutDMTerm -> MTC (MutDMTerm , ImmutType)
-elaborateImmut (MutLam vars body) = do
-
-  -- typecheck/infer the body
-  newBody <- elaborateMut body
-
-  -- -- assert that the immutable gamma context has not been used
-  -- imvaCtx <- use strongImvaCtx
-  -- case isEmptyDict imvaCtx of
-  --   True -> pure ()
-  --   False -> throwError (DemutationError $ "Functions which are mutating (f!) are not allowed to use variables from outside.")
-
-  -- construct the type, while at the same type
-  -- removing the variables from the mutable context
-  --
-  -- this function does this for one variable
-  let getVar :: (Asgmt JuliaType , Maybe IsMutated) -> MTC (Asgmt JuliaType , IsMutated)
-      getVar (_ , Just _) = internalError "While demutating, did not except to encounter a mutation annotation already in the term"
-      getVar (a :- t , Nothing) = do
-        mut <- vaCtx %%= popValue a
-        case mut of
-          Nothing -> pure (a :- t , NotMutated)
-          Just mut -> pure (a :- t , Mutated)
-
-  -- call this function on all vars given in the signature
-  vars_mut <- mapM getVar vars
-
-  -- assert that now the mutable M context is empty
-  -- (i.e., only defined variables where used)
-  vaCtx <- use vaCtx
-  case isEmptyDict vaCtx of
-    True -> pure ()
-    False -> throwError (DemutationDefinitionOrderError $ "The variables " <> show vaCtx <> " are not in scope.")
-
-  -- construct the type of this lambda term
-  let typ = [m | (_ , m) <- vars_mut]
-
-  -- construct the new lambda annotation
-  let newAnnot = [(ann , Just m) | (ann , m) <- vars_mut]
-
-  let newTerm = MutLam newAnnot newBody
-
-  return (newTerm , Mutating typ)
-
-elaborateImmut t = undefined
-
-
-
---------------------------
--- the mutating part
-
-elaborateMut :: MutDMTerm -> MTC (MutDMTerm)
-
-elaborateMut (MutLam vars body) = throwError (DemutationError $ "Mutating lambda are not allowed in mutated positions, when checking " <> show (MutLam vars body))
-
-elaborateMut (MutApply f args) = do
-  -- typecheck the function f
-  (newF , τ) <- elaborateImmut f
-
-  -- make sure that it is a mutating function, and get the type
-  muts <- case τ of
-    Pure _ -> throwError (DemutationError $ "Trying to call the pure function '" <> show f <> "' using a mutating call.")
-    Mutating muts -> pure muts
-
-  -- make sure that there are as many arguments as the function requires
-  case length muts == length args of
-    True -> pure ()
-    False -> throwError (DemutationError $ "Trying to call the function '" <> show f <> "' with a wrong number of arguments.")
-
-  -- function for typechecking a single argument
-  let checkArg :: (IsMutated , MutDMTerm) -> MTC MutDMTerm
-      checkArg (Mutated , arg) = do
-        -- if the argument is given in a mutable position,
-        -- it _must_ be a var
-        case arg of
-          -- mark this arg as mutated
-          (Var x a) -> do
-            markReassigned x
-            return (Var x a)
-
-          -- if argument is not a var, throw error
-          _ -> throwError (DemutationError $ "When calling the mutating function " <> show f <> " found the term " <> show arg <> " as argument in a mutable-argument-position. Only function arguments themselves are allowed here.")
-
-      checkArg (NotMutated , arg) = do
-        -- if the argument is given in an immutable position,
-        -- we allow to use the full immut checking
-        (arg' , τ) <- elaborateImmut arg
-
-        -- we require the argument to be of pure type
-        case τ of
-          Pure _ -> pure ()
-          _ -> throwError (DemutationError $ "It is not allowed to pass mutating functions as arguments. " <> "\nWhen checking '" <> show (MutApply f args) <> "'")
-
-        return arg'
-
-  -- the mutation status and the argument terms
-  let mutargs = zip muts args
-
-  -- check them
-  newArgs <- mapM checkArg mutargs
-
-  -- the new term
-  return (MutApply newF newArgs)
-
--- all other terms we try to parse as not mutating
-elaborateMut t = do
-  (t' , τ) <- elaborateImmut t
-
-  case τ of
-    Pure _ -> pure t'
-    (Mutating τ') -> internalError $ "Did not expect to get the mutating type " <> show τ'
-
-
-
-
-
--- elaborateMutated :: MutDMTerm -> (MutType , MutDMTerm)
--- elaborateMutated t = undefined
-
-
--- elaborateMutated :: MutDMTerm -> TC MutDMTerm
-
--- elaborateMutated (FLet var def rest) = do
---   let FindFLetsResult defs rest' = findFLets var rest
---       alldefs = (def:defs)
-
---   -- we derive the julia type from the term, appending the corresponding julia types to their definitions
---   allsigs <- mapM getJuliaSig alldefs
---   let alldefsWithJuliaSig = zip allsigs alldefs
-
---       -- we thread the elements through a hashmap => if we have terms with the same juliatype,
---       -- the second one overwrites the first one
---       alldefsWithJuliaSig' = H.elems (H.fromList alldefsWithJuliaSig)
---   debug $ "-----------------"
---   debug $ "for var " <> show var <> " found the signatures:"
---   debug $ show alldefsWithJuliaSig
---   debug $ "after removing duplicates, we have: "
---   debug $ show alldefsWithJuliaSig'
-
---   updatedAllDefs <- mapM elaborateMutated alldefsWithJuliaSig'
---   updatedRest <- elaborateMutated rest'
---   return $ expandFLets var updatedAllDefs updatedRest
--- elaborateMutated (SLet var def rest) = SLet var <$> (elaborateMutated def) <*> (elaborateMutated rest)
--- elaborateMutated (TLet var def rest) = TLet var <$> (elaborateMutated def) <*> (elaborateMutated rest)
-
--- elaborateMutated (Ret t)           = Ret <$> (elaborateMutated t)
--- elaborateMutated (Sng a t)         = pure $ Sng a t
--- elaborateMutated (Var a t)         = pure $ Var a t
--- elaborateMutated (Rnd t)           = pure $ Rnd t
--- elaborateMutated (Arg a b c)       = pure $ Arg a b c
--- elaborateMutated (Op o ts)         = Op o <$> (mapM elaborateMutated ts)
--- elaborateMutated (Phi a b c)       = Phi <$> (elaborateMutated a) <*> (elaborateMutated b) <*> (elaborateMutated c)
--- elaborateMutated (Lam a t)         = Lam a <$> (elaborateMutated t)
--- elaborateMutated (LamStar a t)     = LamStar a <$> (elaborateMutated t)
--- elaborateMutated (Apply t ts)      = Apply <$> (elaborateMutated t) <*> (mapM elaborateMutated ts)
--- elaborateMutated (Choice m)        = Choice <$> (mapM elaborateMutated m)
--- elaborateMutated (Tup ts)          = Tup <$> (mapM elaborateMutated ts)
--- elaborateMutated (Gauss a b c d)   = Gauss <$> (elaborateMutated a) <*> (elaborateMutated b) <*> (elaborateMutated c) <*> (elaborateMutated d)
--- elaborateMutated (MCreate a b x c) = MCreate <$> (elaborateMutated a) <*> (elaborateMutated b) <*> pure x <*> (elaborateMutated c)
--- elaborateMutated (Transpose a)     = Transpose <$> (elaborateMutated a)
--- elaborateMutated (Index a b c)     = Index <$> (elaborateMutated a) <*> (elaborateMutated b) <*> (elaborateMutated c)
--- elaborateMutated (ClipM x a)       = ClipM x <$> (elaborateMutated a)
--- elaborateMutated (Iter a b c)      = Iter <$> (elaborateMutated a) <*> (elaborateMutated b) <*> (elaborateMutated c)
--- elaborateMutated (Loop a b x c)    = Loop <$> (elaborateMutated a) <*> (elaborateMutated b) <*> pure x <*> (elaborateMutated c)
-
-
-
-rewriteMut :: MutDMTerm -> MTC MutDMTerm
-rewriteMut = undefined
-
-
--}
-
-
-
-          -- let newType = Mutating [m | (_ , m) <- vars_mut]
-          -- let mutatedvars = [a | (a , Mutated) <- vars_mut]
-          -- newBodyWithLet <- case mutatedvars of
-          --                 [] -> impossible "In this execution there should be existing mutated variables."
-          --                 [n] -> pure (SLet (n :- JTAny) newBody _)
-          --                 xs  -> pure (TLet (ns) newBody)
-          --                           where
-          --                             ns = [n :- JTAny | n <- xs]
 
 
