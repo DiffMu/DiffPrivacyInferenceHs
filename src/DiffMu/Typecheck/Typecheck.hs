@@ -550,7 +550,7 @@ checkSen' scope (ClipM c m)  = do
   unify τb (NoFun (DMGrads nrm clp n DMData))
 
   -- change clip parameter to input
-  return (NoFun (DMTup [DMGrads nrm c n DMData]))
+  return (NoFun (DMGrads nrm c n DMData))
 
 --------------------
 -- NOTE this is different from what is in the paper, as we scale the result context by 2 not by 1
@@ -575,7 +575,7 @@ checkSen' scope (ConvertM m) = do
   -- technically the clipping parameter does not change, but we set it to U so it fits with the rest...
   -- see issue 
 --  return (NoFun (DMGrads clp (Clip clp) n (Numeric (NonConst DMReal))))
-  return (NoFun (DMTup [DMGrads clp U n (NonConst DMReal)]))
+  return (NoFun (DMGrads clp U n (NonConst DMReal)))
 
 --------------------
 
@@ -702,7 +702,7 @@ checkSen' scope (SubGrad ps gs) = do
       res <- TVar <$> newTVar "τr"
       addConstraint (Solvable (IsTypeOpResult (Binary DMOpSub ((Numeric τps):@s1, (Numeric τgs):@s2) (Numeric res))))
 
-      return (NoFun (DMTup [DMModel m res]))
+      return (NoFun (DMModel m res))
 
 checkSen' scope (ScaleGrad scalar grad) = do
 
@@ -740,7 +740,7 @@ checkSen' scope (ScaleGrad scalar grad) = do
   -- and the content type is the result of the multiplication
   τresnum <- newVar
   unify (Numeric τresnum) τres                          
-  return (NoFun (DMTup [DMGrads nrm U m τresnum]))
+  return (NoFun (DMGrads nrm U m τresnum))
 
 checkSen' scope (Reorder σ t) = do
   τ <- checkSens scope t
@@ -1098,7 +1098,7 @@ checkPri' scope (Gauss rp εp δp f) =
       τgauss <- newVar
       addConstraint (Solvable (IsAdditiveNoiseResult ((NoFun τgauss), τf))) -- we decide later if its gauss or mgauss according to return type
  
-      return (NoFun (DMTup [τgauss]))
+      return (NoFun τgauss)
 
 
 checkPri' scope (MutLaplace rp εp f) = checkPri' scope (Laplace rp εp f)
@@ -1150,7 +1150,7 @@ checkPri' scope (Laplace rp εp f) =
       τlap <- newVar
       addConstraint (Solvable (IsAdditiveNoiseResult ((NoFun τlap), τf))) -- we decide later if its lap or mlap according to return type
  
-      return (NoFun (DMTup [τlap]))
+      return (NoFun τlap)
 
 
 checkPri' scope (Loop niter cs' (xi, xc) body) =
