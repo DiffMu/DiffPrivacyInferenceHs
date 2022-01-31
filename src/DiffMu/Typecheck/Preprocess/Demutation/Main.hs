@@ -163,9 +163,13 @@ checkIsNotMoved var = do
     Just (NotMoved)  -> pure ()
 
 
--- make MutPhi into Phi by appending the tail to both branches.
+
 rearrangePhi :: MutDMTerm -> MTC MutDMTerm
-rearrangePhi (Extra (MutLet PureLet (Extra (MutPhi condition branches)) tail)) =
+rearrangePhi term = recDMTermM rearrangePhi rearrangePhiExt term
+
+-- make MutPhi into Phi by appending the tail to both branches.
+rearrangePhiExt :: MutabilityExtension MutDMTerm -> MTC (MutDMTerm)
+rearrangePhiExt ((MutLet PureLet (Extra (MutPhi condition branches)) tail)) =
     case branches of
          [ifb] -> do
              rcond <- rearrangePhi condition
@@ -179,7 +183,10 @@ rearrangePhi (Extra (MutLet PureLet (Extra (MutPhi condition branches)) tail)) =
              rtail <- rearrangePhi tail
              return (Phi condition (Extra (MutLet PureLet rifb rtail)) (Extra (MutLet PureLet relseb rtail)))
          _ -> internalError $ "MutPhi has too many branches"
-rearrangePhi term = recDMTermMSameExtension rearrangePhi term
+rearrangePhiExt term = do
+  let x = (recDMTermM rearrangePhi rearrangePhiExt) <$> term
+  x' <- sequence x
+  return $ Extra x'
 
 
 ---
@@ -191,9 +198,12 @@ rearrangePhi term = recDMTermMSameExtension rearrangePhi term
 
 demutate :: MutDMTerm -> MTC (DMTerm)
 demutate term = do
-  logForce $ "Term before mutation elaboration:\n" <> showPretty term
+  logForce $ "Term before phi rearranging:\n" <> showPretty term
 
   term' <- rearrangePhi term
+
+  logForce $ "-----------------------------------"
+  logForce $ "Term before mutation elaboration:\n" <> showPretty term'
 
   topscname <- newScopeVar "toplevel"
 

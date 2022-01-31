@@ -48,7 +48,7 @@ runAllTests parse = defaultspec $ do
   testOriginalScoping parse
   testScoping_AssignmentMoveSemantics parse
   testScoping_NonAliasedMutatingArguments parse
-  testScoping_AliasedVectorIndexing
+  testScoping_AliasedVectorIndexing parse
   testTypecheckingExamples parse
   testIssues parse
   -- testParsing parse
