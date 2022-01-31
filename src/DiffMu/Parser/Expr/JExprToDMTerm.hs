@@ -47,12 +47,12 @@ pSingle e = case e of
                  JEBlock stmts -> pList stmts
                  JEInteger n -> pure $ Sng n JTInt
                  JEReal r -> pure $ Sng r JTReal
-                 JENothing -> pure (Extra (MutLet PureLet (Extra DNothing) (Extra MutRet)))
+                 JENothing -> pure (Extra MutRet)
                  JESymbol s -> return (Var (Just (UserTeVar s) :- JTAny))
                  JETup elems -> (Tup <$> (mapM pSingle elems))
                  JELam args body -> pJLam args body
                  JELamStar args body -> pJLamStar args body
-                 JEIfElse cond bs -> pIf cond bs (pure (Extra DNothing))
+                 JEIfElse cond bs -> pIf cond bs (pure (Extra MutRet))
                  JELoop ivar iter body -> pJLoop ivar iter body
                  JEAssignment aee amt -> pJLet SLet aee amt [aee] (Extra . DefaultRet)
                  JETupAssignment aee amt -> pJTLet aee amt [JETup aee] (Extra . DefaultRet)
@@ -87,7 +87,6 @@ pList (s : tail) = case s of
                         JECall name args -> pMut (pJCall name args) (pList tail)
                         JEIfElse cond bs -> pIf cond bs (pList tail)
                         JEBlock stmts -> pList (stmts ++ tail) -- handle nested blocks
-                        JENothing -> Extra <$> MutLet PureLet (Extra DNothing) <$> (pList tail)
                         JEUnsupported s -> parseError ("Unsupported expression " <> show s)
                         _ -> parseError ("Expression " <> show s <> " does not have any effect.")
 
@@ -200,7 +199,7 @@ pJLoop ivar iter body =
        return (ceil [div [sub [dend, sub [dstart, (Sng 1 JTInt)]], dstep]]) -- compute number of steps
   in case iter of
        JEIter start step end -> do
-                                 dbody <- pSingle body
+                                 dbody <- pList [body, JENothing] -- make last loop statement be MutRet
                                  nit <- pIter start step end
                                  i <- case ivar of
                                               JEHole -> pure Nothing

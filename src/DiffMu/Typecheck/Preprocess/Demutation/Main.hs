@@ -263,7 +263,7 @@ rearrangePhiExt (MutPhi condition branches tail) =
              rcond <- rearrangePhi condition
              rifb <- rearrangePhi ifb
              case tail of
-                  (Extra DNothing) -> return (Phi condition rifb (Extra MutRet))
+                  (Extra MutRet) -> return (Phi condition rifb (Extra MutRet))
                   _ -> do
                          rtail <- rearrangePhi tail
                          return (Phi condition (Extra (MutLet PureLet rifb rtail)) rtail)
@@ -272,7 +272,7 @@ rearrangePhiExt (MutPhi condition branches tail) =
              rifb <- rearrangePhi ifb
              relseb <- rearrangePhi elseb
              case tail of
-                  (Extra DNothing) -> return (Phi condition rifb relseb)
+                  (Extra MutRet) -> return (Phi condition rifb relseb)
                   _ -> do
                          rtail <- rearrangePhi tail
                          return (Phi condition (Extra (MutLet PureLet rifb rtail)) (Extra (MutLet PureLet relseb rtail)))
