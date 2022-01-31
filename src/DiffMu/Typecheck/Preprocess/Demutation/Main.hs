@@ -855,7 +855,10 @@ elaborateMut scname scope (Extra (MutLoop iters iterVar body)) = do
 
       let globalMutVars = filter (inScope) mutvars
 
-      let newBodyWithLet = TLet [(Just v :- JTAny) | (v) <- globalMutVars] (Var (Just captureVar :- JTAny)) (wrapReorder mutvars globalMutVars newBody)
+      let newBodyWithLet = case globalMutVars of
+            [globalMutVar] -> SLet (Just globalMutVar :- JTAny) (Var (Just captureVar :- JTAny)) (wrapReorder mutvars globalMutVars newBody)
+            globalMutVars -> TLet [(Just v :- JTAny) | v <- globalMutVars] (Var (Just captureVar :- JTAny)) (wrapReorder mutvars globalMutVars newBody)
+
       let newTerm = Loop newIters (globalMutVars) (iterVar , captureVar) newBodyWithLet
 
       return (newTerm , VirtualMutated globalMutVars, NoMove)
@@ -893,8 +896,7 @@ elaborateMut scname scope (Extra (MutLoop iters iterVar body)) = do
 elaborateMut scname scope (Extra (SModify (Nothing :- _) t1)) = throwError (DemutationError $ "Found a nameless variable in a modify term.")
 elaborateMut scname scope (Extra (SModify (Just v :- _) t1)) = do
   (newT1, newT1Type, moveType) <- elaborateNonmut scname scope t1
-  return (Tup [newT1], VirtualMutated [(v)], SingleMove v)
-
+  return (newT1, VirtualMutated [(v)], SingleMove v)
 
 -- We also have tuple modify
 elaborateMut scname scope (Extra (TModify xs t1)) = do
@@ -937,8 +939,13 @@ elaborateMut scname scope (Extra (LoopRet xs)) = do
 
   let extraMutTeVars = xs <> mutTeVars
 
-  -- return all these vars
-  return (Tup [Var (Just v :- JTAny) | v <- extraMutTeVars ] , VirtualMutated extraMutTeVars, NoMove)
+  case extraMutTeVars of
+    [extraMutTeVar] -> 
+        -- a single var is returned as value, not as tuple
+        return (Var (Just extraMutTeVar :- JTAny) , VirtualMutated extraMutTeVars, NoMove)
+    extraMutTeVars -> 
+        -- return all these vars
+        return (Tup [Var (Just v :- JTAny) | v <- extraMutTeVars ] , VirtualMutated extraMutTeVars, NoMove)
 
 elaborateMut scname scope (LastTerm t) = do
   (newTerm, newType, moveType) <- elaborateMut scname scope t
