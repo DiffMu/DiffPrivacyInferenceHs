@@ -177,6 +177,7 @@ moveGetMem scname (SingleMove a) = do
   memCtx %= (setValue a (MemMoved))
   return memvar
 moveGetMem scname (TupleMove as) = TupleMem <$> mapM (moveGetMem scname) as
+moveGetMem scname (RefMove) = pure RefMem
 
 setMemMaybe :: Maybe TeVar -> MemType -> MTC () 
 setMemMaybe (Just x) mt = memCtx %= (setValue x (MemExists mt))
@@ -191,6 +192,8 @@ setMemTuple scname xs (SingleMem a) = do
         memCtx %= (setValue x (MemExists (SingleMem mx)))
       f Nothing = pure ()
   mapM_ f xs
+setMemTuple scname xs (RefMem) = do
+  mapM_ (\(x) -> setMemMaybe x (RefMem)) xs
 
 setMemTuple scname xs (TupleMem as) | length xs == length as = do
   let xas = zip xs as
@@ -217,6 +220,7 @@ ensureNotMovedMaybe Nothing = return ()
 getAllMemVars :: MemType -> [MemVar]
 getAllMemVars (SingleMem a) = [a]
 getAllMemVars (TupleMem a) = a >>= getAllMemVars
+getAllMemVars (RefMem) = []
 
 expectSingleMem :: MemType -> MTC MemVar
 expectSingleMem mt = do
@@ -403,7 +407,7 @@ elaborateMut scname scope fullterm@(TLetBase ltype vars term body) = do
     Pure (UserValue)       -> pure (repeat UserValue)
     Pure (SingleArg a)     -> pure (repeat $ SingleArgPart a)
     Pure (SingleArgPart a) -> pure (repeat $ SingleArgPart a)
-    Pure (SingleRef)       -> pure (repeat $ SingleRef)
+    -- Pure (SingleRef)       -> pure (repeat $ SingleRef)
     Pure (DefaultValue)    -> pure (repeat $ UserValue)
     Mutating _             -> pure (repeat $ UserValue)
     VirtualMutated _ -> throwError (DemutationError $ "Found an assignment " <> show vars <> " = " <> showPretty term <> " where RHS is a mutating call. This is not allowed.")
@@ -527,7 +531,7 @@ elaborateMut scname scope (FLet fname term body) = do
         Just (Mutating _) -> throwError (DemutationError $ "We do not allow mutating functions to have multiple definitions")
         Just (Pure DefaultValue) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
         Just (Pure (PureTuple _)) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
-        Just (Pure (SingleRef)) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
+        -- Just (Pure (SingleRef)) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
         Just (Pure (SingleArg _)) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
         Just (Pure (SingleArgPart _)) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
         Just (VirtualMutated _) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
@@ -1076,15 +1080,15 @@ elaborateMut scname scope (Index t1 t2 t3) = do
   (newT1, newT1Type, _) <- elaborateNonmut scname scope t1
   (newT2, newT2Type, _) <- elaborateNonmut scname scope t2
   (newT3, newT3Type, _) <- elaborateNonmut scname scope t3
-  return (Index newT1 newT2 newT3 , Pure SingleRef, NoMove)
+  return (Index newT1 newT2 newT3 , Pure UserValue, RefMove)
 elaborateMut scname scope (VIndex t1 t2) = do
   (newT1, newT1Type, _) <- elaborateNonmut scname scope t1
   (newT2, newT2Type, _) <- elaborateNonmut scname scope t2
-  return (VIndex newT1 newT2 , Pure SingleRef, NoMove)
+  return (VIndex newT1 newT2 , Pure UserValue, RefMove)
 elaborateMut scname scope (Row t1 t2) = do
   (newT1, newT1Type, _) <- elaborateNonmut scname scope t1
   (newT2, newT2Type, _) <- elaborateNonmut scname scope t2
-  return (Row newT1 newT2, Pure SingleRef, NoMove)
+  return (Row newT1 newT2, Pure UserValue, RefMove)
 
 
 
@@ -1486,7 +1490,7 @@ elaborateMutList f scname scope mutargs = do
   --
   let getPossiblyAliasedVars (SingleArg a) = [a]
       getPossiblyAliasedVars (SingleArgPart a) = [a]
-      getPossiblyAliasedVars (SingleRef) = []
+      -- getPossiblyAliasedVars (SingleRef) = []
       getPossiblyAliasedVars (PureTuple as) = getPossiblyAliasedVars =<< as
       getPossiblyAliasedVars DefaultValue = []
       getPossiblyAliasedVars UserValue = []

@@ -59,7 +59,7 @@ data PureType =
   | DefaultValue
   | SingleArg TeVar 
   | SingleArgPart TeVar 
-  | SingleRef
+  -- | SingleRef
   | PureTuple [PureType] 
   deriving (Show)
 
@@ -79,7 +79,7 @@ type Scope = Ctx TeVar ImmutType
 -- These types describe which variable names
 -- are in the RHS and must be moved on tlet/slet assignment
 -- See #171 #172
-data MoveType = TupleMove [MoveType] | SingleMove TeVar | NoMove
+data MoveType = TupleMove [MoveType] | SingleMove TeVar | RefMove | NoMove
   deriving (Eq, Show)
 
 singleMoveMaybe :: Maybe TeVar -> MoveType
@@ -100,7 +100,7 @@ singleMoveMaybe Nothing  = NoMove
 -- See #185.
 --
 
-data MemType = TupleMem [MemType] | SingleMem MemVar
+data MemType = TupleMem [MemType] | SingleMem MemVar | RefMem
   deriving (Eq, Show)
 
 data MemState = MemExists MemType | MemMoved
