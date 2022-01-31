@@ -215,11 +215,11 @@ transformLets reqc term = case term of
    _ -> case reqc of
              Just PrivacyK -> do
                                    tterm <- recDMTermMSameExtension handleAnyTerm term
-                                   col <- getColor
-                                   setColor PrivacyK
-                                   case col of
-                                        SensitivityK -> return (Ret tterm)
-                                        PrivacyK -> return tterm
+                                   case term of
+                                       Gauss _ _ _ _ -> retPriv tterm
+                                       Laplace _ _ _ -> retPriv  tterm
+                                       AboveThresh _ _ _ _ -> retPriv tterm
+                                       _ ->  retPriv (Ret tterm)
              _ -> do
                              tterm <- recDMTermMSameExtension handleSensTerm term
                              case term of
