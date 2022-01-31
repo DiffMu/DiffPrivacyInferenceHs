@@ -915,9 +915,7 @@ elaborateMut scname scope (Extra (DefaultRet x)) = do
     -- to say that it is default: we keep the actual type
     t -> return (newX , t, moveType)
 
-elaborateMut scname scope term@(Phi cond t1 t2) = undefined
-{-
-do
+elaborateMut scname scope term@(Phi cond t1 t2) = do
   --
   -- Concerning moves: We need to backup the MoveCtx,
   -- and run the elaboration on both branches with the same input, 
@@ -934,27 +932,35 @@ do
   (newCond , newCondType, _) <- elaborateNonmut scname scope cond
 
   -- backup
-  originalMoves <- use moveCtx
+  originalMoves <- use memCtx
 
   -- 2nd a) elaborate branch 1
   (newT1 , newT1Type, moveType1) <- elaborateMut scname scope t1
-  moves1 <- use moveCtx
+  moves1 <- use memCtx
 
   -- 2nd b) elaborate branch 2
-  moveCtx %= (\_ -> originalMoves)
+  memCtx %= (\_ -> originalMoves)
   (newT2 , newT2Type, moveType2) <- elaborateMut scname scope t2
-  moves2 <- use moveCtx
+  moves2 <- use memCtx
 
-  -- make sure that the movetypes are the same,
-  -- and write new movectx
-  let newMoves = moves1 ⋆! moves2
-  moveCtx %= (\_ -> newMoves)
-  case moveType1 == moveType2 of
-    True -> return ()
-    False -> demutationError $ "The two branches of an if expression do not have the same movetype.\n"
-                              <> "(" <> show moveType1 <> " /= " <> show moveType2 <> ")\n"
-                              <> "In the expression\n"
-                              <> showPretty term
+  -- 
+  -- It is only correct to reset the memctx
+  -- and not check the movetypes because
+  -- phis are preprocessed and their is nothing
+  -- after the phi - only the end of the function
+  -- in which they are defined.
+  -- And at the end of a function the memctx
+  -- and movetypes do not play any role. Only 
+  -- the mutCtx.
+
+  let newMoves = originalMoves -- moves1 ⋆! moves2
+  memCtx %= (\_ -> newMoves)
+  -- case moveType1 == moveType2 of
+  --   True -> return ()
+  --   False -> demutationError $ "The two branches of an if expression do not have the same movetype.\n"
+  --                             <> "(" <> show moveType1 <> " /= " <> show moveType2 <> ")\n"
+  --                             <> "In the expression\n"
+  --                             <> showPretty term
 
   -- End of move processing
   --
@@ -962,10 +968,10 @@ do
 
   ----
   -- mutated if case
-  let buildMutatedPhi :: [(TeVar, IsLocalMutation)] -> [(TeVar,IsLocalMutation)] -> MTC (DMTerm , ImmutType, MoveType)
+  let buildMutatedPhi :: [(TeVar)] -> [(TeVar)] -> MTC (DMTerm , ImmutType, MoveType)
       buildMutatedPhi m1 m2 = do
-        let globalM1 = [v | (v , NotLocalMutation) <- m1]
-        let globalM2 = [v | (v , NotLocalMutation) <- m2]
+        let globalM1 = [v | (v) <- m1]
+        let globalM2 = [v | (v) <- m2]
 
         -- the common mutated vars are
         let mutvars = nub (globalM1 <> globalM2)
@@ -978,7 +984,7 @@ do
                          <> " => In the term:\n" <> parenIndent (showPretty term) <> "\n"
                          <> " => Conclusion: This computated value is not allowed to be used in the computation, \nand accordingly, it is ignored in the privacy analysis.")
                    pure $ (Tup [Var (Just v :- JTAny) | (v) <- mutvars])
-          _ ->     pure $ TLet [(Just v :- JTAny) | (v, _) <- m1] newT1 (Tup [Var (Just v :- JTAny) | (v) <- mutvars])
+          _ ->     pure $ TLet [(Just v :- JTAny) | (v) <- m1] newT1 (Tup [Var (Just v :- JTAny) | (v) <- mutvars])
 
         unifiedT2 <- case globalM2 of
           [] -> do warn ("Found the term " <> showPretty t2
@@ -986,9 +992,9 @@ do
                          <> " => In the term:\n" <> parenIndent (showPretty term) <> "\n"
                          <> " => Conclusion: This computated value is not allowed to be used in the computation, \nand accordingly, it is ignored in the privacy analysis.")
                    pure $ (Tup [Var (Just v :- JTAny) | (v) <- mutvars])
-          _ ->     pure $ TLet [(Just v :- JTAny) | (v, _) <- m2] newT2 (Tup [Var (Just v :- JTAny) | (v) <- mutvars])
+          _ ->     pure $ TLet [(Just v :- JTAny) | (v) <- m2] newT2 (Tup [Var (Just v :- JTAny) | (v) <- mutvars])
 
-        return (Phi newCond unifiedT1 unifiedT2 , VirtualMutated ([(v , NotLocalMutation) | v <- mutvars]), moveType1)
+        return (Phi newCond unifiedT1 unifiedT2 , VirtualMutated ([(v) | v <- mutvars]), moveType1)
 
   -- mutated if case end
   ----
@@ -1018,7 +1024,6 @@ do
     -- (GloballyPure p1, SingleArg _) -> return (Phi newCond newT1 newT2 , GloballyPure p1)
     -- (SingleArg _, GloballyPure p2) -> return (Phi newCond newT1 newT2 , GloballyPure p2)
     (_, _) -> return (Phi newCond newT1 newT2 , Pure UserValue, moveType1)
--}
 
 ----
 -- the mutating builtin cases
