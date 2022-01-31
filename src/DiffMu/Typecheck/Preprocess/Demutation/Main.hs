@@ -559,7 +559,7 @@ elaborateMut scname scope (Extra (MutLet ltype term1 term2)) = do
   -- 
   case newTerm1Type of
         Pure pt -> do
-          warn $ "Found a pure term in a place where it does not have any effects.\n"
+          demutationError $ "Found a pure term in a place where it does not have any effects.\n"
                      <> "The full term is:\n"
                      <> "# ---------------------------\n"
                      <> "# type: " <> show (Pure pt) <> "\n"
@@ -568,8 +568,9 @@ elaborateMut scname scope (Extra (MutLet ltype term1 term2)) = do
                      <> "# rest:\n"
                      <> showPretty term2 <> "\n"
                      <> "\n"
-                     <> "It (the first, pure part) is thus ignored in the privacy analysis."
-          elaborateMut scname scope term2
+                     <> "This implies a misunderstanding of semantics, and is thus not allowed."
+                    --  "It (the first, pure part) is thus ignored in the privacy analysis."
+          -- elaborateMut scname scope term2
         VirtualMutated newScope -> do
           debug $ "[elaborateMut/MutLet]: After first term, have mutctx:"
           logmutctx <- use mutCtx
@@ -583,8 +584,19 @@ elaborateMut scname scope (Extra (MutLet ltype term1 term2)) = do
           logmutctx <- use mutCtx
           debug $ show logmutctx <> "\n"
 
-          let ns1 = [Just n :- JTAny | n <- newScope]
-          return (TLetBase ltype ns1 newTerm1 newTerm2, newTerm2Type, newTerm2MoveType)
+          case newScope of
+            [] -> demutationError $ "Found a mutating term which does not mutate anything. This does not make sense.\n"
+                                  <> "In the first branch of a mutlet, the full term is:"
+                                  <> "# ---------------------------\n"
+                                  <> "# type: " <> show (Pure pt) <> "\n"
+                                  <> showPretty term1 <> "\n"
+                                  <> "# ------------\n"
+                                  <> "# rest:\n"
+                                  <> showPretty term2 <> "\n"
+            [a] -> return (SLetBase ltype (Just a :- JTAny) newTerm1 newTerm2, newTerm2Type, newTerm2MoveType)
+            newScope -> do
+                          let ns1 = [Just n :- JTAny | n <- newScope]
+                          return (TLetBase ltype ns1 newTerm1 newTerm2, newTerm2Type, newTerm2MoveType)
 
         mt -> demutationError $ "Unexpected type in first part of mutlet: " <> show mt
 
