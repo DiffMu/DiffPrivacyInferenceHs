@@ -1636,7 +1636,12 @@ preprocessLoopBody scope iter (Extra (MutLet mtype t1 t2)) = do
 preprocessLoopBody scope iter (Extra (DefaultRet a)) = do
   captureVars <- get
   lift $ debug $ "[preprocessLoopBody]: default ret in loop, building loopret with captures: " <> show captureVars
-  return $ Extra $ MutRet
+  return $ Extra $ LoopRet captureVars
+
+preprocessLoopBody scope iter (Extra (MutRet)) = do
+  captureVars <- get
+  lift $ debug $ "[preprocessLoopBody]: mutret in loop, building loopret with captures: " <> show captureVars
+  return $ Extra $ LoopRet captureVars
 
 -- for the rest we simply recurse
 preprocessLoopBody scope iter t = do
