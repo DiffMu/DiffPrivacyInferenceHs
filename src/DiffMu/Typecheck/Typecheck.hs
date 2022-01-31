@@ -1042,6 +1042,7 @@ checkPri' (TLet xs term body) scope = do
    checkPriv t2 scope
 -}
 
+checkPri' scope (MutGauss rp εp δp f) = checkPri' scope (Gauss rp εp δp f)
 checkPri' scope (Gauss rp εp δp f) =
   let
    setParam :: TC DMMain -> Sensitivity -> TC ()
@@ -1100,6 +1101,7 @@ checkPri' scope (Gauss rp εp δp f) =
       return (NoFun (DMTup [τgauss]))
 
 
+checkPri' scope (MutLaplace rp εp f) = checkPri' scope (Laplace rp εp f)
 checkPri' scope (Laplace rp εp f) =
   let
    setParam :: TC DMMain -> Sensitivity -> TC ()

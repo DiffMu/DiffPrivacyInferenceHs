@@ -294,15 +294,21 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
   -- the non binding builtins
 
   -- 4 arguments
-  (t@"gaussian_mechanism!", [a1, a2, a3, a4]) -> Gauss <$> pSingle a1 <*> pSingle a2 <*> pSingle a3 <*> pSingle a4
+  (t@"gaussian_mechanism!", [a1, a2, a3, a4]) -> MutGauss <$> pSingle a1 <*> pSingle a2 <*> pSingle a3 <*> pSingle a4
   (t@"gaussian_mechanism!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 4 arguments, but has been given " <> show (length args)
+
+  (t@"gaussian_mechanism", [a1, a2, a3, a4]) -> Gauss <$> pSingle a1 <*> pSingle a2 <*> pSingle a3 <*> pSingle a4
+  (t@"gaussian_mechanism", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 4 arguments, but has been given " <> show (length args)
 
   -- 3 arguments
   (t@"index", [a1, a2, a3]) -> Index <$> pSingle a1 <*> pSingle a2 <*> pSingle a3
   (t@"index", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 3 arguments, but has been given " <> show (length args)
 
-  (t@"laplacian_mechanism!", [a1, a2, a3]) -> Laplace <$> pSingle a1 <*> pSingle a2 <*> pSingle a3
+  (t@"laplacian_mechanism!", [a1, a2, a3]) -> MutLaplace <$> pSingle a1 <*> pSingle a2 <*> pSingle a3
   (t@"laplacian_mechanism!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 3 arguments, but has been given " <> show (length args)
+
+  (t@"laplacian_mechanism", [a1, a2, a3]) -> Laplace <$> pSingle a1 <*> pSingle a2 <*> pSingle a3
+  (t@"laplacian_mechanism", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 3 arguments, but has been given " <> show (length args)
 
 -- 2 arguments
 

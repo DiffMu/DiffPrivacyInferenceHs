@@ -49,6 +49,7 @@ library:
     - pomaps
     - lattices
     - void
+    - transformers
     # For testing
     - hspec
     - hspec-core
