@@ -54,7 +54,13 @@ le_ilm NotLocalMutation NotLocalMutation = True
 onlyLocallyMutatedVariables :: [(TeVar,IsLocalMutation)] -> Bool
 onlyLocallyMutatedVariables xs = [v | (v, NotLocalMutation) <- xs] == []
 
-data PureType = UserValue | DefaultValue | SingleArg TeVar | SingleArgPart TeVar | PureTuple [PureType]
+data PureType =
+  UserValue
+  | DefaultValue
+  | SingleArg TeVar 
+  | SingleArgPart TeVar 
+  | SingleRef
+  | PureTuple [PureType] 
   deriving (Show)
 
 data ImmutType = Pure PureType | Mutating [IsMutated] | VirtualMutated [TeVar] | PureBlackBox

@@ -65,9 +65,9 @@ createDMTypeBaseNum (JTReal)  = pure DMReal
 createDMTypeBaseNum (t) = pure DMAny
 
 -- get a NumKind DMType corresponding to the given JuliaType
-createDMTypeNum :: MonadDMTC t => JuliaType -> t (DMTypeOf NumKind)
-createDMTypeNum (JTInt) = pure (NonConst DMInt)
-createDMTypeNum (JTReal)  = pure (NonConst DMReal)
+createDMTypeNum :: MonadDMTC t => JuliaType -> t DMMain
+createDMTypeNum (JTInt) = pure (NoFun (Numeric (NonConst DMInt)))
+createDMTypeNum (JTReal)  = pure (NoFun (Numeric (NonConst DMReal)))
 createDMTypeNum (t) = pure DMAny
 
 -- get the DMType corresponding to a given JuliaType
@@ -85,22 +85,22 @@ createDMType (JTVector t) = do
   nrm <- newVar
   clp <- newVar
   n <- newVar
-  return (DMVec nrm clp n (Numeric (dt)))
+  return (DMVec nrm clp n dt)
 createDMType (JTMatrix t) = do
   dt <- createDMTypeNum t
   nrm <- newVar
   clp <- newVar
   n <- newVar
   m <- newVar
-  return (DMMat nrm clp m n (Numeric (dt)))
+  return (DMMat nrm clp m n dt)
 createDMType (JTModel) = do
   n <- newVar
-  return (DMParams n (Numeric (DMAny)))
+  return (DMModel n DMAny)
 createDMType (JTGrads) = do
   nrm <- newVar
   clp <- newVar
   n <- newVar
-  return (DMGrads nrm clp n (Numeric (DMAny)))
+  return (DMGrads nrm clp n DMAny)
 createDMType JTAny = return DMAny
 createDMType (t)  = throwError (TypeMismatchError $ "expected " <> show t <> " to not be a function.")
 

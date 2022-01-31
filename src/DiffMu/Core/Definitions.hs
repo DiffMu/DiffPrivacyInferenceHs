@@ -119,18 +119,9 @@ instance Show DMKind where
   show FunKind = "Fun"
   show NoFunKind = "NoFun"
 
--- distinguish between vectors and gradients bc we need to do that in julia
-data VecKind =
-    Vector
-  | Gradient
-  deriving (Typeable)
-
-pattern DMVec n c d t = DMVecLike Vector n c d t
-pattern DMGrads n c d t = DMVecLike Gradient n c d t
-
 -- so we don't get incomplete pattern warnings for them
 {-# COMPLETE DMInt, DMReal, Const, NonConst, DMData, Numeric, TVar, (:->:), (:->*:), DMTup, L1, L2, LInf, U, Clip,
- DMVec, DMGrads, DMMat, DMParams, NoFun, Fun, (:∧:), BlackBox, Deepcopied #-}
+ DMVec, DMGrads, DMMat, DMModel, NoFun, Fun, (:∧:), BlackBox, Deepcopied #-}
 
 --------------------
 -- 2. DMTypes
@@ -143,7 +134,7 @@ type DMType = DMTypeOf NoFunKind
 type DMFun = DMTypeOf FunKind
 
 -- And we give a similar abbreviation for numeric dmtypes:
-type DMNumType = DMTypeOf NumKind
+type DMNum = DMTypeOf NumKind
 
 -- The actual, generic definition of `DMTypeOf` for types of any kind `k` (for `k` in `DMKind`) is given as follows.
 -- NOTE: We can write `(k :: DMKind)` here, because we use the `DataKinds` ghc-extension, which allows us to use
@@ -190,9 +181,10 @@ data DMTypeOf (k :: DMKind) where
   Clip :: DMTypeOf NormKind -> DMTypeOf ClipKind
 
   -- matrices
-  DMVecLike :: VecKind -> (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> DMType -> DMType
-  DMMat :: (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> Sensitivity -> DMType -> DMType
-  DMParams :: Sensitivity -> DMType -> DMType -- number of parameters and element type
+  DMVec :: (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> DMMain -> DMType
+  DMGrads :: (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> DMNum -> DMType
+  DMMat :: (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> Sensitivity -> DMMain -> DMType
+  DMModel :: Sensitivity -> DMNum -> DMType -- number of parameters and element type
 
   -- annotations
   NoFun :: DMType -> DMTypeOf MainKind
@@ -226,7 +218,7 @@ instance Hashable (DMTypeOf k) where
   hashWithSalt s (Clip t) = s `hashWithSalt` t
   hashWithSalt s (DMVec n t u v) = s `hashWithSalt` n `hashWithSalt` t `hashWithSalt` u `hashWithSalt` v
   hashWithSalt s (DMMat n t u v w) = s `hashWithSalt` n `hashWithSalt` t `hashWithSalt` u `hashWithSalt` v `hashWithSalt` w
-  hashWithSalt s (DMParams u v) = s `hashWithSalt` u `hashWithSalt` v
+  hashWithSalt s (DMModel u v) = s `hashWithSalt` u `hashWithSalt` v
   hashWithSalt s (DMGrads n t v w) = s `hashWithSalt` n `hashWithSalt` t `hashWithSalt` v `hashWithSalt` w
   hashWithSalt s (Fun t) = s `hashWithSalt` t
   hashWithSalt s (NoFun t) = s `hashWithSalt` t
@@ -268,7 +260,7 @@ instance Show (DMTypeOf k) where
   show (Clip n) = "Clip(" <> show n <> ")"
   show (DMVec nrm clp n τ) = "Vector<n: "<> show nrm <> ", c: " <> show clp <> ">[" <> show n <> "](" <> show τ <> ")"
   show (DMMat nrm clp n m τ) = "Matrix<n: "<> show nrm <> ", c: " <> show clp <> ">[" <> show n <> " × " <> show m <> "](" <> show τ <> ")"
-  show (DMParams m τ) = "Params[" <> show m <> "](" <> show τ <> ")"
+  show (DMModel m τ) = "Model[" <> show m <> "](" <> show τ <> ")"
   show (DMGrads nrm clp m τ) = "Grads<n: "<> show nrm <> ", c: " <> show clp <> ">[" <> show m <> "](" <> show τ <> ")"
   show (NoFun x) = "NoFun(" <> show x <> ")"
   show (Fun xs) = "Fun(" <> show xs <> ")"
@@ -317,7 +309,7 @@ instance ShowPretty (DMTypeOf k) where
   showPretty (Clip n) = showPretty n
   showPretty (DMVec nrm clp n τ) = "Vector<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty n <> "](" <> showPretty τ <> ")"
   showPretty (DMMat nrm clp n m τ) = "Matrix<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty n <> " × " <> showPretty m <> "](" <> showPretty τ <> ")"
-  showPretty (DMParams m τ) = "DMModel[" <> showPretty m <> "](" <> showPretty τ <> ")"
+  showPretty (DMModel m τ) = "DMModel[" <> showPretty m <> "](" <> showPretty τ <> ")"
   showPretty (DMGrads nrm clp m τ) = "DMGrads<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty m <> "](" <> showPretty τ <> ")"
   showPretty (NoFun x) = showPretty x
   showPretty (Fun xs) = showPrettyEnumVertical (fmap fstAnn xs)
@@ -457,7 +449,7 @@ recDMTypeM typemap sensmap (τ1 :->*: τ2) = (:->*:) <$> mapM (\(a :@ (b0, b1)) 
 recDMTypeM typemap sensmap (DMTup τs) = DMTup <$> mapM typemap τs
 recDMTypeM typemap sensmap (DMVec nrm clp n τ) = DMVec <$> typemap nrm <*> typemap clp <*> sensmap n <*> typemap τ
 recDMTypeM typemap sensmap (DMMat nrm clp n m τ) = DMMat <$> typemap nrm <*> typemap clp <*> sensmap n <*> sensmap m <*> typemap τ
-recDMTypeM typemap sensmap (DMParams m τ) = DMParams <$> sensmap m <*> typemap τ
+recDMTypeM typemap sensmap (DMModel m τ) = DMModel <$> sensmap m <*> typemap τ
 recDMTypeM typemap sensmap (DMGrads nrm clp m τ) = DMGrads <$> typemap nrm <*> typemap clp <*> sensmap m <*> typemap τ
 recDMTypeM typemap sensmap (NoFun x) = NoFun <$> typemap x
 recDMTypeM typemap sensmap (Fun xs) = Fun <$> mapM (\(a :@ b) -> (:@) <$> typemap a <*> pure b) xs

@@ -516,12 +516,8 @@ checkSen' scope (MCreate n m (x1, x2) body) =
 
       (τbody, _, _) <- msum3Tup (checkBody mbody nv mv, setDim mn nv, setDim mm mv)
 
-      -- matrix entries cannot be functions.
-      τ <- newVar
-      unify τbody (NoFun τ)
-
       nrm <- newVar -- variable for norm
-      return (NoFun (DMMat nrm U nv mv τ))
+      return (NoFun (DMMat nrm U nv mv τbody))
 
 checkSen' scope (Size m) = do
   mt <- checkSens scope m
@@ -551,10 +547,10 @@ checkSen' scope (ClipM c m)  = do
   n <- newVar
 
   -- set correct matrix type
-  unify τb (NoFun (DMGrads nrm clp n (Numeric DMData)))
+  unify τb (NoFun (DMGrads nrm clp n DMData))
 
   -- change clip parameter to input
-  return (NoFun (DMTup [DMGrads nrm c n (Numeric DMData)]))
+  return (NoFun (DMTup [DMGrads nrm c n DMData]))
 
 --------------------
 -- NOTE this is different from what is in the paper, as we scale the result context by 2 not by 1
@@ -569,7 +565,7 @@ checkSen' scope (ConvertM m) = do
   n <- newVar
 
   -- set correct matrix type
-  unify τb (NoFun (DMGrads nrm (Clip clp) n (Numeric DMData)))
+  unify τb (NoFun (DMGrads nrm (Clip clp) n DMData))
 
   -- we have to scale by two unlike in the paper...see the matrixnorms pdf in julia docs
   mscale (oneId ⋆! oneId)
@@ -579,7 +575,7 @@ checkSen' scope (ConvertM m) = do
   -- technically the clipping parameter does not change, but we set it to U so it fits with the rest...
   -- see issue 
 --  return (NoFun (DMGrads clp (Clip clp) n (Numeric (NonConst DMReal))))
-  return (NoFun (DMTup [DMGrads clp U n (Numeric (NonConst DMReal))]))
+  return (NoFun (DMTup [DMGrads clp U n (NonConst DMReal)]))
 
 --------------------
 
@@ -623,11 +619,11 @@ checkSen' scope  (Index m i j) = do
       m <- newVar
 
       -- set matrix type
-      unify τm (NoFun (DMMat nrm clp n m (Numeric τ)))
+      unify τm (NoFun (DMMat nrm clp n m τ))
 
       -- we don't restrict matrix dimension or index size, but leave that to the runtime errors...
 
-      return (NoFun (Numeric τ))
+      return τ
 
 
 checkSen' scope (VIndex v i)  = do
@@ -650,14 +646,14 @@ checkSen' scope (VIndex v i)  = do
       n <- newVar
 
       -- set vector type
-      unify τv (NoFun (DMVec nrm clp n (Numeric τ)))
+      unify τv (NoFun (DMVec nrm clp n τ))
 
       -- we don't restrict vector dimension or index size, but leave that to the runtime errors...
 
-      return (NoFun (Numeric τ))
+      return τ
 
 checkSen' scope (Row m i) = do
-      -- check index and set their sensitivity to infinity
+          -- check index and set their sensitivity to infinity
       let di = checkSens scope i
       let dx = do
                    _ <- di
@@ -676,11 +672,11 @@ checkSen' scope (Row m i) = do
       m <- newVar
 
       -- set matrix type
-      unify τm (NoFun (DMMat nrm clp n m (Numeric τ)))
+      unify τm (NoFun (DMMat nrm clp n m τ))
 
       -- we don't restrict matrix dimension or index size, but leave that to the runtime errors...
 
-      return (NoFun (DMVec nrm clp m (Numeric τ))) -- returns Vector type to accomodate julia behaviour
+      return (NoFun (DMVec nrm clp m τ)) -- returns Vector type to accomodate julia behaviour
 
 checkSen' scope (SubGrad ps gs) = do
       -- check model and gradient
@@ -700,13 +696,13 @@ checkSen' scope (SubGrad ps gs) = do
       m <- newVar
 
       -- set argument types
-      unify ps (NoFun (DMParams m (Numeric τps)))
-      unify gs (NoFun (DMGrads nrm clp m (Numeric τgs)))
+      unify ps (NoFun (DMModel m τps))
+      unify gs (NoFun (DMGrads nrm clp m τgs))
 
       res <- TVar <$> newTVar "τr"
-      addConstraint (Solvable (IsTypeOpResult (Binary DMOpSub ((Numeric τps):@s1, (Numeric τgs):@s2) res)))
+      addConstraint (Solvable (IsTypeOpResult (Binary DMOpSub ((Numeric τps):@s1, (Numeric τgs):@s2) (Numeric res))))
 
-      return (NoFun (DMTup [DMParams m res]))
+      return (NoFun (DMTup [DMModel m res]))
 
 checkSen' scope (ScaleGrad scalar grad) = do
 
@@ -717,7 +713,7 @@ checkSen' scope (ScaleGrad scalar grad) = do
   (τres , types_sens) <- makeTypeOp (IsBinary DMOpMul) 2
 
   ((τ1,s1),(τ2,s2)) <- case types_sens of
-    [(τ1,s1),(τ2,s2)] -> pure ((τ1,s1),(τ2,s2))
+    [(τ1,s1),(Numeric τ2,s2)] -> pure ((τ1,s1),(τ2,s2))
     _ -> impossible "Wrong array return size of makeTypeOp"
 
   -- Create variables for the matrix type
@@ -742,7 +738,9 @@ checkSen' scope (ScaleGrad scalar grad) = do
   -- the return type is the same matrix, but
   -- the clipping is now changed to unbounded
   -- and the content type is the result of the multiplication
-  return (NoFun (DMTup [DMGrads nrm U m τres]))
+  τresnum <- newVar
+  unify (Numeric τresnum) τres                          
+  return (NoFun (DMTup [DMGrads nrm U m τresnum]))
 
 checkSen' scope (Reorder σ t) = do
   τ <- checkSens scope t
@@ -773,12 +771,12 @@ checkSen' scope (ZeroGrad m) = do
    clp <- newVar -- actually variable, as all entries are zero
 
    -- input must be a model
-   unify tm (NoFun (DMParams n (Numeric τps)))
+   unify tm (NoFun (DMModel n τps))
 
    -- model gets copied into the params so it's infinitely sensitive
    mscale inftyS
 
-   return (NoFun (DMGrads nrm clp n (Numeric τps)))
+   return (NoFun (DMGrads nrm clp n τps))
 
 
 checkSen' scope (SumGrads g1 g2) = do
@@ -806,13 +804,19 @@ checkSen' scope (SumGrads g1 g2) = do
 
   -- set types to the actual content type of the dmgrads
   -- (we allow any kind of annotation on the dmgrads here but they gotta match)
-  unify tg1 (NoFun (DMGrads nrm clp1 m τ1))
-  unify tg2 (NoFun (DMGrads nrm clp2 m τ2))
+  τ1num <- newVar
+  τ2num <- newVar
+  unify τ1 (Numeric τ1num)
+  unify τ2 (Numeric τ2num)
+  unify tg1 (NoFun (DMGrads nrm clp1 m τ1num))
+  unify tg2 (NoFun (DMGrads nrm clp2 m τ2num))
 
   -- the return type is the same matrix, but
   -- the clipping is now changed to unbounded
   -- and the content type is the result type of the addition
-  return (NoFun (DMGrads nrm U m τres))
+  τresnum <- newVar
+  unify τres (Numeric τresnum)
+  return (NoFun (DMGrads nrm U m τresnum))
 
 
 checkSen' scope term@(SBind x a b) = do
@@ -1309,8 +1313,8 @@ checkPri' scope (SmpLet xs (Sample n m1_in m2_in) tail) =
       unify pn (zeroId, zeroId)
       
       -- set input matrix types and truncate contexts to what it says in the rule
-      unify tm1 (NoFun (DMMat LInf clp m1 n1 (Numeric DMData)))
-      unify tm2 (NoFun (DMMat LInf clp m1 n2 (Numeric DMData)))
+      unify tm1 (NoFun (DMMat LInf clp m1 n1 (NoFun (Numeric DMData))))
+      unify tm2 (NoFun (DMMat LInf clp m1 n2 (NoFun (Numeric DMData))))
       let two = oneId ⋆! oneId
       unify pm1 (divide (two ⋅! (m2 ⋅! e1)) m1, divide (m2 ⋅! d1) m1)
       unify pm2 (divide (two ⋅! (m2 ⋅! e2)) m1, divide (m2 ⋅! d2) m1)
