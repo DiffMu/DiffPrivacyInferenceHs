@@ -85,7 +85,7 @@ pTree :: Parser JTree
 pTree =     try pTLineNumber
         <|> try (string ":_" >> return JHole)
         <|> try (string ":(==)" >> return (JSym "=="))
-        <|> try (":nothing" >> return JNothing)
+        <|> try (wskip (string ":nothing") >> return JNothing)
         <|> try (JSym <$> pSymbolString)
         <|> try (JReal <$> (wskip float))
         <|> try ((JInteger . fromIntegral) <$> (wskip decimal))
