@@ -207,8 +207,7 @@ testScope06 pp = do
       intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
       ty1 = Fun([([] :->: intc (Fin 10)) :@ Just []])
 
-  -- parseEval pp "06 works" ex1 (pure ty1)
-  parseEvalFail pp "06 works" ex1 (DemutationMovedVariableAccessError "")
+  parseEval pp "06 works" ex1 (pure ty1)
 
 
 ---------------------------------------------------------------------

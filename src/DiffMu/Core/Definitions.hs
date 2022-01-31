@@ -764,7 +764,8 @@ data MutabilityExtension a =
   | TModify [Asgmt JuliaType] a
   | MutPhi a [a]
   | DNothing
-  | MutRet
+  | MutRet -- we return all mutated variables
+  | LoopRet [TeVar] -- we return all mutated, and all capture variables in the list
   | DefaultRet a
   deriving (Show, Eq, Functor, Foldable, Traversable)
 
@@ -947,6 +948,7 @@ instance ShowPretty a => ShowPretty (MutabilityExtension a) where
   showPretty (SModify a x)   = "SModify! (" <> showPretty a <> ", " <> showPretty x <> ")"
   showPretty (TModify a x)   = "TModify! (" <> showPretty a <> ", " <> showPretty x <> ")"
   showPretty (MutRet)        = "MutRet"
+  showPretty (LoopRet as)    = "LoopRet " <> showPretty as
   showPretty (DefaultRet x)  = "DefaultRet (" <> showPretty x <> ")"
 
 instance ShowPretty (EmptyExtension a) where

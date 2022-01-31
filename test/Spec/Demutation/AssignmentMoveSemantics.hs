@@ -28,6 +28,12 @@ testAMS01 pp = do
            \   x                  \n\
            \ end                  "
 
+  let exd = " function f(a)       \n\
+           \   x = a              \n\
+           \   a = x              \n\
+           \   a                  \n\
+           \ end                  "
+
       intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
       ty = Fun([([intc (Fin 3) :@ oneId] :->: intc (Fin 3)) :@ Just [JTAny]])
 
@@ -35,6 +41,7 @@ testAMS01 pp = do
   parseEvalFail pp "01a errors (mutation after move is not allowed)" exa (DemutationMovedVariableAccessError "")
   parseEvalFail pp "01b errors (value after move is not allowed)" exb (DemutationMovedVariableAccessError "")
   parseEvalUnify pp "01c succeeds (correct value after move is allowed)" exc (pure ty)
+  parseEvalUnify pp "01d succeeds (double move is allowed)" exd (pure ty)
 
 
 

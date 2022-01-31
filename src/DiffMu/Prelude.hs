@@ -17,6 +17,7 @@ module DiffMu.Prelude
   , MonadInternalError (..)
   , TeVar (..)
   , ScopeVar (..)
+  , MemVar (..)
   , throwOriginalError
   , blue, green, yellow, red, magenta
   )
@@ -59,11 +60,19 @@ instance FromSymbol SymbolOf where
 --   hashWithSalt salt (SymbolOf a) = hashWithSalt salt a
 -- -- instance Eq (SymbolOf (k :: j)) where
 
+class (Eq v, Hashable v) => DictKey v
+
+-- symbols
+
 instance Show (SymbolOf k) where
   show (SymbolOf s :: SymbolOf k) = show s --  <> " : " <> show (demote @k)
 
 instance Show Symbol where
   show (Symbol t) = T.unpack t
+
+instance DictKey Symbol
+
+-- term variables
 
 data TeVar = UserTeVar Symbol | GenTeVar Symbol
   deriving (Eq,Generic, Ord)
@@ -73,6 +82,11 @@ instance Show TeVar where
   show (UserTeVar x) = show x
   show (GenTeVar x) = "gen_" <> show x
 
+instance DictKey TeVar
+
+
+
+-- scope variables
 
 data ScopeVar = ScopeVar Symbol
   deriving (Eq,Generic, Ord)
@@ -80,11 +94,19 @@ data ScopeVar = ScopeVar Symbol
 instance Hashable ScopeVar
 instance Show ScopeVar where
   show (ScopeVar x) = show x
+instance DictKey ScopeVar
 
+-- memory variables
 
-class (Eq v, Hashable v) => DictKey v
-instance DictKey Symbol
-instance DictKey TeVar
+data MemVar = MemVar Symbol
+  deriving (Eq,Generic, Ord)
+
+instance Hashable MemVar
+instance Show MemVar where
+  show (MemVar x) = show x
+
+instance DictKey MemVar
+
 
 -- class (forall k. Hashable (v k)) => KHashable v
 -- class (forall k. Show (v k)) => KShow v
