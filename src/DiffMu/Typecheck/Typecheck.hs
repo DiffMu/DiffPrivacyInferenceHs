@@ -1153,6 +1153,27 @@ checkPri' scope (Laplace rp εp f) =
       return (NoFun (τlap))
 
 
+checkPri' scope (AboveThresh qs e d t) = do
+      eps <- newVar
+
+      let mqs = checkSens scope qs <* mtruncateP inftyP
+      let me = checkSens scope e   <* mtruncateP (zeroId, zeroId)
+      let md  = checkSens scope d  <* mtruncateP (eps, zeroId)
+      let mt  = checkSens scope t  <* mtruncateP inftyP
+
+      n <- newVar -- number of queries
+      nrm <- newVar -- norm of query vector
+      clp <- newVar -- clip of query vector
+
+      (τqs, (τe, τd, τt)) <- msumTup (mqs, msum3Tup (me, md, mt))
+
+      unify τqs (NoFun (DMVec nrm clp n (Fun [([τd :@ (oneId :: Sensitivity)] :->: (NoFun (Numeric (NonConst DMReal)))) :@ Just [JTAny]])))
+      addConstraint (Solvable (IsLessEqual (τe, (NoFun (Numeric (Const eps DMReal))))))
+      addConstraint (Solvable (IsLessEqual (τt, (NoFun (Numeric (NonConst DMReal))))))
+
+      return (NoFun (Numeric (NonConst DMInt)))
+
+
 checkPri' scope (Loop niter cs' (xi, xc) body) =
    --let setInteresting :: ([Symbol],[DMMain :@ PrivacyAnnotation]) -> Sensitivity -> TC ()
    let setInteresting (xs, τps) n = do
@@ -1175,23 +1196,13 @@ checkPri' scope (Loop niter cs' (xi, xc) body) =
 
    in do
       --traceM $ "checking privacy Loop: " <> show  (Loop niter cs (xi, xc) body)
-      let cniter = checkSens scope niter
-
-      let cniter' = do
-                   τ <- cniter
-                   mtruncateP zeroId
-                   return τ
+      let cniter = checkSens scope niter <* mtruncateP zeroId
 
       -- build the tup of variables
       let cs = Tup ((\a -> Var (Just a :- JTAny)) <$> cs')
 
       -- check it
-      let mcaps = checkSens scope cs
-      let mcaps' = do
-                   τ <- mcaps
-                   mtruncateP inftyP
-                   return τ
-
+      let mcaps = checkSens scope cs <* mtruncateP inftyP
 
       -- add iteration and capture variables as args-checking-commands to the scope
       -- capture variable is not relevant bc captures get ∞ privacy anyways
@@ -1225,7 +1236,7 @@ checkPri' scope (Loop niter cs' (xi, xc) body) =
       -- n = number of iterations as assumed in the loop body
       -- τbit = type of the iterator variable xi inferred in the body
       -- τbcs = type of the capture variable xc inferred in the body
-      (τit, τcs, (τb, n, τbit, τbcs)) <- msum3Tup (cniter', mcaps', cbody')
+      (τit, τcs, (τb, n, τbit, τbcs)) <- msum3Tup (cniter, mcaps, cbody')
 
       unify τit (NoFun (Numeric (Const n DMInt))) -- number of iterations must be constant integer
       unify (NoFun (Numeric (NonConst DMInt))) τbit -- number of iterations must match type requested by body

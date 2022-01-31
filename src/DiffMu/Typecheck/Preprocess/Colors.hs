@@ -225,5 +225,6 @@ transformLets reqc term = case term of
                              case term of
                                  Gauss _ _ _ _ -> retPriv tterm
                                  Laplace _ _ _ -> retPriv tterm
+                                 AboveThresh _ _ _ _ -> retPriv tterm
                                  _ ->  retSens tterm
 

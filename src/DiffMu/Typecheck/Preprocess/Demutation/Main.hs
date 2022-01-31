@@ -1219,6 +1219,12 @@ elaborateMut scname scope (Laplace t1 t2 t3) = do
   (newT2, newT2Type, _) <- elaborateNonmut scname scope t2
   (newT3, newT3Type, _) <- elaborateNonmut scname scope t3
   return (Laplace newT1 newT2 newT3 , Pure UserValue, NoMove)
+elaborateMut scname scope (AboveThresh t1 t2 t3 t4) = do
+  (newT1, newT1Type, _) <- elaborateNonmut scname scope t1
+  (newT2, newT2Type, _) <- elaborateNonmut scname scope t2
+  (newT3, newT3Type, _) <- elaborateNonmut scname scope t3
+  (newT4, newT4Type, _) <- elaborateNonmut scname scope t4
+  return (AboveThresh newT1 newT2 newT3 newT4 , Pure UserValue, NoMove)
 
 -- the unsupported terms
 elaborateMut scname scope term@(Choice t1)        = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
