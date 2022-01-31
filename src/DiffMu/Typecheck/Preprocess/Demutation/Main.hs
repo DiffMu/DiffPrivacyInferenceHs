@@ -801,10 +801,12 @@ elaborateMut scname scope (Extra (MutLoop iters iterVar body)) = do
   logForce $ "Preprocessed loop body. The modified vars are: " <> show modifyVars
         <> "\nThe body is:\n" <> showPretty preprocessedBody
 
-  -- we add these variables to the scope as args, since they are allowed
-  -- to occur in mutated positions
-  -- let scope0 = foldr (\v s -> setValue v (Pure) s) scope modifyVars
+  -- add the iterator to the scope
   scope' <- safeSetValue scname iterVar (Pure UserValue) scope
+
+  -- backup iter memory location, and create a new one
+  oldIterMem <- getValueMaybe iterVar <$> use memCtx
+  setMemMaybe iterVar =<< SingleMem <$> allocateMem scname "iter"
 
   --
   -- [VAR FILTERING/Begin]
@@ -829,6 +831,14 @@ elaborateMut scname scope (Extra (MutLoop iters iterVar body)) = do
                               False -> deleteValue k ctx
   vaCtx %= (\ctx -> foldr (\k ctx -> deleteIfNotOld k ctx) ctx (getAllKeys ctx))
   --
+
+  --
+  -- restore old iter memory location,
+  -- if there was something
+  --
+  case (iterVar, oldIterMem) of
+    (Just v, Just a) -> memCtx %= (setValue v a)
+    _ -> pure ()
 
   -- we accept a full virtual mutated, or a globally pure value
   case newBodyType of
@@ -1626,7 +1636,7 @@ preprocessLoopBody scope iter (Extra (MutLet mtype t1 t2)) = do
 preprocessLoopBody scope iter (Extra (DefaultRet a)) = do
   captureVars <- get
   lift $ debug $ "[preprocessLoopBody]: default ret in loop, building loopret with captures: " <> show captureVars
-  return $ Extra $ LoopRet captureVars
+  return $ Extra $ MutRet
 
 -- for the rest we simply recurse
 preprocessLoopBody scope iter t = do
