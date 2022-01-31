@@ -13,6 +13,7 @@ testTypecheckingExamples pp = do
   testBlackBox pp
   testSLoop pp
   testSample pp
+  testAboveThresh pp
   testPrivFunc pp
 --   testDPGD pp
   
@@ -196,7 +197,16 @@ testSample pp = describe "Sample" $ do
         ty = "Fun([([NoFun(Matrix<n: L∞, c: τ_33>[s_11 × s_21](Num(Data))) @ (0.4⋅s_18⋅(1 / s_11),0.3⋅s_18⋅(1 / s_11)),NoFun(Num(Int[s_18])) @ (0,0),NoFun(Num(Int[--])) @ (∞,∞)] ->* NoFun(Grads<n: L∞, c: U>[s_16](Num(Real[--])))) @ Just [Any,Any,Integer]])"
         cs = ""
     parseEvalString_customCheck pp "" ex (ty, cs) (pure $ Right ())
-                                                                                   
+
+
+testAboveThresh pp = describe "Above threshold" $ do
+    let ex = "function test(qs, d) :: Priv() \n\
+              \  above_threshold(qs, 1, d, 100) \n\
+              \ end"
+        ty = "Fun([([NoFun(Vector<n: τ_0, c: τ_1>[s_1](Fun([([τ_3 @ 1] -> NoFun(Num(Real[--]))) @ Just [Any]]))) @ (∞,∞),τ_3 @ (1,∑∅)] ->* NoFun(Num(Int[--]))) @ Just [Any,Any]])"
+        cs = ""
+    parseEvalString_customCheck pp "" ex (ty, cs) (pure $ Right ())
+
 
 testPrivFunc pp = describe "PrivacyFunction annotations" $ do
     let ex_good = "function foo(f :: PrivacyFunction) :: Priv() \n\
