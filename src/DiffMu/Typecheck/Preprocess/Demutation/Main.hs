@@ -903,21 +903,21 @@ elaborateMut scname scope (Extra (MutLoop iters iterVar body)) = do
 
 -- the loop-body-preprocessing creates these modify! terms
 -- they get elaborated into tlet assignments again.
-elaborateMut scname scope (Extra (SModify (Nothing :- _) t1)) = throwError (DemutationError $ "Found a nameless variable in a modify term.")
-elaborateMut scname scope (Extra (SModify (Just v :- _) t1)) = do
-  (newT1, newT1Type, moveType) <- elaborateNonmut scname scope t1
-  return (newT1, VirtualMutated [(v)], SingleMove v)
+-- elaborateMut scname scope (Extra (SModify (Nothing :- _) t1)) = throwError (DemutationError $ "Found a nameless variable in a modify term.")
+-- elaborateMut scname scope (Extra (SModify (Just v :- _) t1)) = do
+--   (newT1, newT1Type, moveType) <- elaborateNonmut scname scope t1
+--   return (newT1, VirtualMutated [(v)], SingleMove v)
 
--- We also have tuple modify
-elaborateMut scname scope (Extra (TModify xs t1)) = do
-  let elabSingle (Just v :- _) = return (v)
-      elabSingle (Nothing :- _) = throwError (DemutationError $ "Found a nameless variable in a tuple modify term.")
+-- -- We also have tuple modify
+-- elaborateMut scname scope (Extra (TModify xs t1)) = do
+--   let elabSingle (Just v :- _) = return (v)
+--       elabSingle (Nothing :- _) = throwError (DemutationError $ "Found a nameless variable in a tuple modify term.")
 
-  allElab <- mapM elabSingle xs
+--   allElab <- mapM elabSingle xs
 
-  (newT1, newT1Type, moveType) <- elaborateNonmut scname scope t1
-  -- markMoved moveType
-  return (newT1 , VirtualMutated allElab, NoMove)
+--   (newT1, newT1Type, moveType) <- elaborateNonmut scname scope t1
+--   -- markMoved moveType
+--   return (newT1 , VirtualMutated allElab, NoMove)
 
 elaborateMut scname scope (Extra (MutRet)) = do
   ---------
@@ -1582,18 +1582,11 @@ preprocessLoopBody scope iter (SLetBase ltype (v :- jt) term body) = do
   -- let newVars = nub (termVars <> bodyVars)
 
   case v of
-    Just v -> case getValue v scope of
-                Just _  -> do
-                  state (\a -> ((), a <> [v])) 
-                  (body') <- preprocessLoopBody scope iter body -- this has to be done after the state change
-                  return (Extra (MutLet ltype (Extra (SModify (Just v :- jt) term')) (body')))
-                Nothing -> do
-                  (body') <- preprocessLoopBody scope iter body
-                  return (SLetBase ltype (Just v :- jt) term' body')
+    Just v -> state (\a -> ((), a <> [v])) 
+    Nothing -> pure ()
 
-    Nothing -> do
-      (body') <- preprocessLoopBody scope iter body
-      return (SLetBase ltype (v :- jt) term' body')
+  (body') <- preprocessLoopBody scope iter body
+  return (SLetBase ltype (v :- jt) term' body')
 
 
 preprocessLoopBody scope iter (TLet (vs) term body) = do
@@ -1615,14 +1608,11 @@ preprocessLoopBody scope iter (TLet (vs) term body) = do
   -- we collect those values of vs for which there is something in the scope
   let vs_in_scope = [v | (Just v :- _) <- vs, (Just _) <- [getValue v scope]]
 
-  case vs_in_scope of
-    [] -> do
-      body' <- preprocessLoopBody scope iter body
-      return (TLet vs term' body')
-    tv : tvs -> do
-      state (\a -> ((), a <> vs_in_scope))
-      body' <- preprocessLoopBody scope iter body -- this has to be done after the state change
-      return (Extra (MutLet PureLet (Extra (TModify (vs) term')) (body')))
+
+  state (\a -> ((), a <> vs_in_scope))
+
+  body' <- preprocessLoopBody scope iter body
+  return (TLet vs term' body')
 
 preprocessLoopBody scope iter (FLet f _ _) = throwOriginalError (DemutationError $ "Function definition is not allowed in for loops. (Encountered definition of " <> show f <> ".)")
 preprocessLoopBody scope iter (Ret t) = throwOriginalError (DemutationError $ "Return is not allowed in for loops. (Encountered " <> show (Ret t) <> ".)")
