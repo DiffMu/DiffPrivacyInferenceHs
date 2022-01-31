@@ -588,7 +588,7 @@ elaborateMut scname scope (Extra (MutLet ltype term1 term2)) = do
             [] -> demutationError $ "Found a mutating term which does not mutate anything. This does not make sense.\n"
                                   <> "In the first branch of a mutlet, the full term is:"
                                   <> "# ---------------------------\n"
-                                  <> "# type: " <> show (Pure pt) <> "\n"
+                                  <> "# type: " <> show (VirtualMutated newScope) <> "\n"
                                   <> showPretty term1 <> "\n"
                                   <> "# ------------\n"
                                   <> "# rest:\n"
