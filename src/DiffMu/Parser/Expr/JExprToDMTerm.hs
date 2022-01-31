@@ -52,7 +52,7 @@ pSingle e = case e of
                  JETup elems -> (Tup <$> (mapM pSingle elems))
                  JELam args body -> pJLam args body
                  JELamStar args body -> pJLamStar args body
-                 JEIfElse cond bs -> pIf cond bs (pure (Extra MutRet))
+                 JEIfElse cond bs -> pIf cond bs (pure (Extra DNothing))
                  JELoop ivar iter body -> pJLoop ivar iter body
                  JEAssignment aee amt -> pJLet SLet aee amt [aee] (Extra . DefaultRet)
                  JETupAssignment aee amt -> pJTLet aee amt [JETup aee] (Extra . DefaultRet)
@@ -106,7 +106,7 @@ pIf cond bs ptail = do
                    dcond <- pSingle cond
                    dbs <- mapM pSingle bs
                    dtail <- ptail
-                   return (Extra (MutLet PureLet (Extra (MutPhi dcond dbs)) dtail))
+                   return (Extra (MutPhi dcond dbs dtail))
 
 pSample args = case args of
                     [n, m1, m2] -> do
@@ -296,6 +296,8 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
   -- 4 arguments
   (t@"gaussian_mechanism!", [a1, a2, a3, a4]) -> MutGauss <$> pSingle a1 <*> pSingle a2 <*> pSingle a3 <*> pSingle a4
   (t@"gaussian_mechanism!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 4 arguments, but has been given " <> show (length args)
+  (t@"gaussian_mechanism", [a1, a2, a3, a4]) -> Gauss <$> pSingle a1 <*> pSingle a2 <*> pSingle a3 <*> pSingle a4
+  (t@"gaussian_mechanism", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 4 arguments, but has been given " <> show (length args)
 
   (t@"gaussian_mechanism", [a1, a2, a3, a4]) -> Gauss <$> pSingle a1 <*> pSingle a2 <*> pSingle a3 <*> pSingle a4
   (t@"gaussian_mechanism", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 4 arguments, but has been given " <> show (length args)
@@ -306,6 +308,8 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
 
   (t@"laplacian_mechanism!", [a1, a2, a3]) -> MutLaplace <$> pSingle a1 <*> pSingle a2 <*> pSingle a3
   (t@"laplacian_mechanism!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 3 arguments, but has been given " <> show (length args)
+  (t@"laplacian_mechanism", [a1, a2, a3]) -> Laplace <$> pSingle a1 <*> pSingle a2 <*> pSingle a3
+  (t@"laplacian_mechanism", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 3 arguments, but has been given " <> show (length args)
 
   (t@"laplacian_mechanism", [a1, a2, a3]) -> Laplace <$> pSingle a1 <*> pSingle a2 <*> pSingle a3
   (t@"laplacian_mechanism", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 3 arguments, but has been given " <> show (length args)

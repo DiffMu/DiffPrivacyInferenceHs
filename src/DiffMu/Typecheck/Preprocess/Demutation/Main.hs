@@ -253,19 +253,25 @@ rearrangePhi term = recDMTermM rearrangePhi rearrangePhiExt term
 
 -- make MutPhi into Phi by appending the tail to both branches.
 rearrangePhiExt :: MutabilityExtension MutDMTerm -> MTC (MutDMTerm)
-rearrangePhiExt ((MutLet PureLet (Extra (MutPhi condition branches)) tail)) =
+rearrangePhiExt (MutPhi condition branches tail) =
     case branches of
          [ifb] -> do
              rcond <- rearrangePhi condition
              rifb <- rearrangePhi ifb
-             rtail <- rearrangePhi tail
-             return (Phi condition (Extra (MutLet PureLet rifb rtail)) rtail)
+             case tail of
+                  (Extra DNothing) -> return (Phi condition rifb (Extra MutRet))
+                  _ -> do
+                         rtail <- rearrangePhi tail
+                         return (Phi condition (Extra (MutLet PureLet rifb rtail)) rtail)
          [ifb, elseb] -> do
              rcond <- rearrangePhi condition
              rifb <- rearrangePhi ifb
              relseb <- rearrangePhi elseb
-             rtail <- rearrangePhi tail
-             return (Phi condition (Extra (MutLet PureLet rifb rtail)) (Extra (MutLet PureLet relseb rtail)))
+             case tail of
+                  (Extra DNothing) -> return (Phi condition rifb relseb)
+                  _ -> do
+                         rtail <- rearrangePhi tail
+                         return (Phi condition (Extra (MutLet PureLet rifb rtail)) (Extra (MutLet PureLet relseb rtail)))
          _ -> internalError $ "MutPhi has too many branches"
 rearrangePhiExt term = do
   let x = (recDMTermM rearrangePhi rearrangePhiExt) <$> term
@@ -534,7 +540,7 @@ elaborateMut scname scope (FLet fname term body) = do
   return (FLet fname newTerm newBody, consumeDefaultValue newBodyType, newMoveType)
 
 elaborateMut scname scope (Extra DNothing) = undefined
-elaborateMut scname scope (Extra (MutPhi _ _)) = internalError $ "MutPhi should have been resolved by rearrangePhi"
+elaborateMut scname scope (Extra (MutPhi _ _ _)) = internalError $ "MutPhi should have been resolved by rearrangePhi"
 elaborateMut scname scope (Extra (MutLet ltype term1 term2)) = do
 
   --
