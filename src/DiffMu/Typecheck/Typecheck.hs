@@ -1098,7 +1098,7 @@ checkPri' scope (Gauss rp εp δp f) =
       τgauss <- newVar
       addConstraint (Solvable (IsAdditiveNoiseResult ((NoFun τgauss), τf))) -- we decide later if its gauss or mgauss according to return type
  
-      return (NoFun τgauss)
+      return (NoFun (τgauss))
 
 
 checkPri' scope (MutLaplace rp εp f) = checkPri' scope (Laplace rp εp f)
@@ -1150,7 +1150,7 @@ checkPri' scope (Laplace rp εp f) =
       τlap <- newVar
       addConstraint (Solvable (IsAdditiveNoiseResult ((NoFun τlap), τf))) -- we decide later if its lap or mlap according to return type
  
-      return (NoFun τlap)
+      return (NoFun (τlap))
 
 
 checkPri' scope (Loop niter cs' (xi, xc) body) =

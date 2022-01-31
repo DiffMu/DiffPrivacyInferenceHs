@@ -913,8 +913,13 @@ elaborateMut scname scope (Extra (MutRet)) = do
   let mutMemVars = [(v) | (v, (_, Mutated)) <- avars ]
   mutTeVars <- mapM (reverseMemLookup) mutMemVars
 
-  -- return all these vars
-  return (Tup [Var (Just v :- JTAny) | v <- mutTeVars ] , VirtualMutated mutTeVars, NoMove)
+  case mutTeVars of
+    [mutTeVar] -> 
+        -- a single var is returned as value, not as tuple
+        return (Var (Just mutTeVar :- JTAny) , VirtualMutated mutTeVars, NoMove)
+    mutTeVars -> 
+        -- return all these vars
+        return (Tup [Var (Just v :- JTAny) | v <- mutTeVars ] , VirtualMutated mutTeVars, NoMove)
 
 elaborateMut scname scope (Extra (LoopRet xs)) = do
   ---------
