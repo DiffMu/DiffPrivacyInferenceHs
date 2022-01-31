@@ -936,7 +936,7 @@ elaborateMut scname scope (ClipM c t) = do
     -- END NOTE
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
-elaborateMut scname scope (Gauss t1 t2 t3 t4) = do
+elaborateMut scname scope (MutGauss t1 t2 t3 t4) = do
   (argTerms, mutVars) <- elaborateMutList "gauss" scname scope [(NotMutated , t1), (NotMutated , t2), (NotMutated , t3), (Mutated , t4)]
   case argTerms of
     -- NOTE: Because of #95, we say that this function is pure
@@ -947,7 +947,7 @@ elaborateMut scname scope (Gauss t1 t2 t3 t4) = do
     -- END NOTE
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
-elaborateMut scname scope (Laplace t1 t2 t3) = do
+elaborateMut scname scope (MutLaplace t1 t2 t3) = do
   (argTerms, mutVars) <- elaborateMutList "laplace" scname scope [(NotMutated , t1), (NotMutated , t2), (Mutated , t3)]
   case argTerms of
     -- NOTE: Because of #95, we say that this function is pure
@@ -1016,6 +1016,17 @@ elaborateMut scname scope (InternalExpectConst t1) = do
 elaborateMut scname scope (DeepcopyValue t1) = do
   (newT1, newT1Type, _) <- elaborateMut scname scope t1
   return (DeepcopyValue newT1, Pure UserValue, NoMove)
+elaborateMut scname scope (Gauss t1 t2 t3 t4) = do
+  (newT1, newT1Type, _) <- elaborateNonmut scname scope t1
+  (newT2, newT2Type, _) <- elaborateNonmut scname scope t2
+  (newT3, newT3Type, _) <- elaborateNonmut scname scope t3
+  (newT4, newT4Type, _) <- elaborateNonmut scname scope t4
+  return (Gauss newT1 newT2 newT3 newT4 , Pure UserValue, NoMove)
+elaborateMut scname scope (Laplace t1 t2 t3) = do
+  (newT1, newT1Type, _) <- elaborateNonmut scname scope t1
+  (newT2, newT2Type, _) <- elaborateNonmut scname scope t2
+  (newT3, newT3Type, _) <- elaborateNonmut scname scope t3
+  return (Laplace newT1 newT2 newT3 , Pure UserValue, NoMove)
 
 -- the unsupported terms
 elaborateMut scname scope term@(Choice t1)        = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
