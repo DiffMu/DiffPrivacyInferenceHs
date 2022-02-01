@@ -102,6 +102,7 @@ data DMKind =
   | NormKind
   | FunKind
   | NoFunKind
+  | VecKindKind
   deriving (Typeable)
 
 -- Using the "TemplateHaskell" ghc-extension, and the following function from the singletons library,
@@ -118,9 +119,10 @@ instance Show DMKind where
   show NormKind = "Norm"
   show FunKind = "Fun"
   show NoFunKind = "NoFun"
+  show VecKindKind = "VecKindKind"
 
 -- so we don't get incomplete pattern warnings for them
-{-# COMPLETE DMInt, DMReal, Const, NonConst, DMData, Numeric, TVar, (:->:), (:->*:), DMTup, L1, L2, LInf, U, Clip,
+{-# COMPLETE DMInt, DMReal, Const, NonConst, DMData, Numeric, TVar, (:->:), (:->*:), DMTup, L1, L2, LInf, U, Clip, Vector, Gradient,
  DMVec, DMGrads, DMMat, DMModel, NoFun, Fun, (:∧:), BlackBox, Deepcopied #-}
 
 --------------------
@@ -135,6 +137,9 @@ type DMFun = DMTypeOf FunKind
 
 -- And we give a similar abbreviation for numeric dmtypes:
 type DMNum = DMTypeOf NumKind
+
+-- Abbreviation for veckinds
+type VecKind = DMTypeOf VecKindKind
 
 -- The actual, generic definition of `DMTypeOf` for types of any kind `k` (for `k` in `DMKind`) is given as follows.
 -- NOTE: We can write `(k :: DMKind)` here, because we use the `DataKinds` ghc-extension, which allows us to use
@@ -180,6 +185,10 @@ data DMTypeOf (k :: DMKind) where
   U :: DMTypeOf ClipKind
   Clip :: DMTypeOf NormKind -> DMTypeOf ClipKind
 
+  -- veckinds
+  Vector :: VecKind
+  Gradient :: VecKind
+
   -- matrices
   DMVec :: (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> DMMain -> DMType
   DMGrads :: (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> DMNum -> DMType
@@ -208,6 +217,8 @@ instance Hashable (DMTypeOf k) where
   hashWithSalt s (LInf) = s +! 6
   hashWithSalt s (U) = s +! 7
   hashWithSalt s (DMAny) = s +! 8
+  hashWithSalt s (Vector) = s +! 9
+  hashWithSalt s (Gradient) = s +! 10
   hashWithSalt s (Const n t) = s `hashWithSalt` n `hashWithSalt` t
   hashWithSalt s (NonConst t) = s `hashWithSalt` t
   hashWithSalt s (Numeric t) = s `hashWithSalt` t
@@ -257,6 +268,8 @@ instance Show (DMTypeOf k) where
   show L2 = "L2"
   show LInf = "L∞"
   show U = "U"
+  show Vector = "Vector"
+  show Gradient = "Gradient"
   show (Clip n) = "Clip(" <> show n <> ")"
   show (DMVec nrm clp n τ) = "Vector<n: "<> show nrm <> ", c: " <> show clp <> ">[" <> show n <> "](" <> show τ <> ")"
   show (DMMat nrm clp n m τ) = "Matrix<n: "<> show nrm <> ", c: " <> show clp <> ">[" <> show n <> " × " <> show m <> "](" <> show τ <> ")"
@@ -306,6 +319,8 @@ instance ShowPretty (DMTypeOf k) where
   showPretty L2 = "L2"
   showPretty LInf = "L∞"
   showPretty U = "U"
+  showPretty Vector = "Vector"
+  showPretty Gradient = "Gradient"
   showPretty (Clip n) = showPretty n
   showPretty (DMVec nrm clp n τ) = "Vector<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty n <> "](" <> showPretty τ <> ")"
   showPretty (DMMat nrm clp n m τ) = "Matrix<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty n <> " × " <> showPretty m <> "](" <> showPretty τ <> ")"
@@ -335,6 +350,11 @@ instance Eq (DMTypeOf k) where
   L1 == L1 = True
   L2 == L2 = True
   LInf == LInf = True
+
+
+  -- VecKind
+  Vector == Vector = True
+  Gradient == Gradient = True
 
   -- the base numeric constructors
   DMInt    == DMInt = True
@@ -434,6 +454,8 @@ recDMTypeM typemap sensmap L1 = pure L1
 recDMTypeM typemap sensmap L2 = pure L2
 recDMTypeM typemap sensmap LInf = pure LInf
 recDMTypeM typemap sensmap U = pure U
+recDMTypeM typemap sensmap Vector = pure Vector
+recDMTypeM typemap sensmap Gradient = pure Gradient
 recDMTypeM typemap sensmap (Clip n) = Clip <$> typemap n
 recDMTypeM typemap sensmap DMInt = pure DMInt
 recDMTypeM typemap sensmap DMReal = pure DMReal
