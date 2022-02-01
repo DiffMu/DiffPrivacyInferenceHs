@@ -32,6 +32,10 @@ fst3 (a,b,c) = a
 
 demutationError = throwError . DemutationError
 
+buildReturnValue :: [TeVar] -> DMTerm
+buildReturnValue [x] = Var (Just x :- JTAny)
+buildReturnValue xs = Tup [Var (Just x :- JTAny) | x <- xs]
+
 --------------------------------------------------------------------------------------
 -- Accessing the VA-Ctx in the MTC monad
 
@@ -929,13 +933,9 @@ elaborateMut scname scope (Extra (MutRet)) = do
   let mutMemVars = [(v) | (v, (_, Mutated)) <- avars ]
   mutTeVars <- mapM (reverseMemLookup) mutMemVars
 
-  case mutTeVars of
-    [mutTeVar] -> 
-        -- a single var is returned as value, not as tuple
-        return (Var (Just mutTeVar :- JTAny) , VirtualMutated mutTeVars, NoMove)
-    mutTeVars -> 
-        -- return all these vars
-        return (Tup [Var (Just v :- JTAny) | v <- mutTeVars ] , VirtualMutated mutTeVars, NoMove)
+  -- a single var is returned as value, not as tuple
+  return (buildReturnValue mutTeVars, VirtualMutated mutTeVars, NoMove)
+
 
 elaborateMut scname scope (Extra (LoopRet xs)) = do
   ---------
@@ -949,13 +949,8 @@ elaborateMut scname scope (Extra (LoopRet xs)) = do
 
   let extraMutTeVars = nub $ xs <> mutTeVars
 
-  case extraMutTeVars of
-    [extraMutTeVar] -> 
-        -- a single var is returned as value, not as tuple
-        return (Var (Just extraMutTeVar :- JTAny) , VirtualMutated extraMutTeVars, NoMove)
-    extraMutTeVars -> 
-        -- return all these vars
-        return (Tup [Var (Just v :- JTAny) | v <- extraMutTeVars ] , VirtualMutated extraMutTeVars, NoMove)
+  -- a single var is returned as value, not as tuple
+  return (buildReturnValue extraMutTeVars, VirtualMutated extraMutTeVars, NoMove)
 
 elaborateMut scname scope (LastTerm t) = do
   (newTerm, newType, moveType) <- elaborateMut scname scope t
@@ -1040,18 +1035,18 @@ elaborateMut scname scope term@(Phi cond t1 t2) = do
                          <> " which does not mutate any function arguments in the first branch of a mutating if expression.\n"
                          <> " => In the term:\n" <> parenIndent (showPretty term) <> "\n"
                          <> " => Conclusion: This computated value is not allowed to be used in the computation, \nand accordingly, it is ignored in the privacy analysis.")
-                   pure $ (Tup [Var (Just v :- JTAny) | (v) <- mutvars])
-          _ ->     pure $ TLet [(Just v :- JTAny) | (v) <- m1] newT1 (Tup [Var (Just v :- JTAny) | (v) <- mutvars])
+                   pure $ buildReturnValue mutvars
+          _ ->     pure $ TLet [(Just v :- JTAny) | (v) <- m1] newT1 (buildReturnValue mutvars)
 
         unifiedT2 <- case globalM2 of
           [] -> do warn ("Found the term " <> showPretty t2
                          <> " which does not mutate any function arguments in the second branch of a mutating if expression.\n"
                          <> " => In the term:\n" <> parenIndent (showPretty term) <> "\n"
                          <> " => Conclusion: This computated value is not allowed to be used in the computation, \nand accordingly, it is ignored in the privacy analysis.")
-                   pure $ (Tup [Var (Just v :- JTAny) | (v) <- mutvars])
-          _ ->     pure $ TLet [(Just v :- JTAny) | (v) <- m2] newT2 (Tup [Var (Just v :- JTAny) | (v) <- mutvars])
+                   pure $ buildReturnValue mutvars
+          _ ->     pure $ TLet [(Just v :- JTAny) | (v) <- m2] newT2 (buildReturnValue mutvars)
 
-        return (Phi newCond unifiedT1 unifiedT2 , VirtualMutated ([(v) | v <- mutvars]), moveType1)
+        return (Phi newCond unifiedT1 unifiedT2 , VirtualMutated ([v | v <- mutvars]), moveType1)
 
   -- mutated if case end
   ----
