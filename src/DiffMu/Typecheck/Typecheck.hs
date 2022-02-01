@@ -714,7 +714,7 @@ checkSen' scope term@(ScaleGrad scalar grad) = do
   (τres , types_sens) <- makeTypeOp (IsBinary DMOpMul) 2
 
   ((τ1,s1),(τ2,s2)) <- case types_sens of
-    [(τ1,s1),(τ2,s2)] -> pure ((τ1,s1),(τ2,s2))
+    [(Numeric τ1,s1),(Numeric τ2,s2)] -> pure ((τ1,s1),(τ2,s2))
     _ -> impossible $ "Wrong array return size of makeTypeOp in " <> showPretty term
 
   -- Create variables for the matrix type
@@ -730,11 +730,11 @@ checkSen' scope term@(ScaleGrad scalar grad) = do
   (tscalar, tgrad) <- msumTup ((dscalar <* mscale (svar s1)), (dgrad <* mscale (svar s2)))
 
   -- set τ1 to the actual type of the scalar
-  unify tscalar (NoFun τ1)
+  unify tscalar (NoFun (Numeric τ1))
 
   -- and τ2 to the actual content type of the dmgrads
   -- (we allow any kind of annotation on the dmgrads here)
-  unify tgrad (NoFun (DMGrads nrm clp m (NoFun τ2)))
+  unify tgrad (NoFun (DMGrads nrm clp m (NoFun (Numeric τ2))))
 
   -- the return type is the same matrix, but
   -- the clipping is now changed to unbounded

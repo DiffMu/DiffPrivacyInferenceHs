@@ -112,15 +112,15 @@ testPriv pp = describe "privacies" $ do
             c <- newVar
             n <- newVar
             nt <- newVar
-            let gradin = NoFun (DMGrads L2 c n (NonConst nt))
-            let gradout = NoFun (DMGrads LInf U n real)
+            let gradin = NoFun (DMGrads L2 c n (NoFun (Numeric nt)))
+            let gradout = NoFun (DMGrads LInf U n (NoFun (Numeric real)))
             return (Fun ([([gradin :@ (constCoeff (Fin 0.1), constCoeff (Fin 0.1))] :->*: gradout) :@ Just [JTGrads]]))
         ty_l :: TC DMMain = do
             c <- newVar
             n <- newVar
             nt <- newVar
-            let gradin = NoFun (DMGrads L2 c n (NonConst nt))
-            let gradout = NoFun (DMGrads LInf U n real)
+            let gradin = NoFun (DMGrads L2 c n (NoFun (Numeric (NonConst nt))))
+            let gradout = NoFun (DMGrads LInf U n (NoFun (Numeric real)))
             return (Fun ([([gradin :@ (constCoeff (Fin 0.1), constCoeff (Fin 0))] :->*: gradout) :@ Just [JTGrads]]))
     parseEval pp "return" ret (pure ty_r)
     parseEvalUnify pp "robust" inv (ty_i) -- this is issue #157
