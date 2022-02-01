@@ -123,7 +123,7 @@ instance Show DMKind where
 
 -- so we don't get incomplete pattern warnings for them
 {-# COMPLETE DMInt, DMReal, Const, NonConst, DMData, Numeric, TVar, (:->:), (:->*:), DMTup, L1, L2, LInf, U, Clip, Vector, Gradient,
- DMVec, DMGrads, DMMat, DMModel, NoFun, Fun, (:∧:), BlackBox, Deepcopied #-}
+ DMVecLike, DMMat, DMModel, NoFun, Fun, (:∧:), BlackBox, Deepcopied #-}
 
 --------------------
 -- 2. DMTypes
@@ -229,10 +229,9 @@ instance Hashable (DMTypeOf k) where
   hashWithSalt s (n :->*: t) = s `hashWithSalt` n `hashWithSalt` t
   hashWithSalt s (DMTup t) = s `hashWithSalt` t
   hashWithSalt s (Clip t) = s `hashWithSalt` t
-  hashWithSalt s (DMVec n t u v) = s `hashWithSalt` n `hashWithSalt` t `hashWithSalt` u `hashWithSalt` v
+  hashWithSalt s (DMVecLike k n t u v) = s `hashWithSalt` k `hashWithSalt` n `hashWithSalt` t `hashWithSalt` u `hashWithSalt` v
   hashWithSalt s (DMMat n t u v w) = s `hashWithSalt` n `hashWithSalt` t `hashWithSalt` u `hashWithSalt` v `hashWithSalt` w
   hashWithSalt s (DMModel u v) = s `hashWithSalt` u `hashWithSalt` v
-  hashWithSalt s (DMGrads n t v w) = s `hashWithSalt` n `hashWithSalt` t `hashWithSalt` v `hashWithSalt` w
   hashWithSalt s (Fun t) = s `hashWithSalt` t
   hashWithSalt s (NoFun t) = s `hashWithSalt` t
   hashWithSalt s (n :∧: t) = s `hashWithSalt` n `hashWithSalt` t
@@ -277,6 +276,7 @@ instance Show (DMTypeOf k) where
   show (DMMat nrm clp n m τ) = "Matrix<n: "<> show nrm <> ", c: " <> show clp <> ">[" <> show n <> " × " <> show m <> "](" <> show τ <> ")"
   show (DMModel m τ) = "Model[" <> show m <> "](" <> show τ <> ")"
   show (DMGrads nrm clp m τ) = "Grads<n: "<> show nrm <> ", c: " <> show clp <> ">[" <> show m <> "](" <> show τ <> ")"
+  show (DMVecLike k nrm clp n τ) = "VecLike{" <> show k <> "}<n: "<> show nrm <> ", c: " <> show clp <> ">[" <> show n <> "](" <> show τ <> ")"
   show (NoFun x) = "NoFun(" <> show x <> ")"
   show (Fun xs) = "Fun(" <> show xs <> ")"
   show (x :∧: y) = "(" <> show x <> "∧" <> show y <> ")"
@@ -328,6 +328,7 @@ instance ShowPretty (DMTypeOf k) where
   showPretty (DMMat nrm clp n m τ) = "Matrix<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty n <> " × " <> showPretty m <> "](" <> showPretty τ <> ")"
   showPretty (DMModel m τ) = "DMModel[" <> showPretty m <> "](" <> showPretty τ <> ")"
   showPretty (DMGrads nrm clp m τ) = "DMGrads<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty m <> "](" <> showPretty τ <> ")"
+  showPretty (DMVecLike k nrm clp n τ) = "VecLike{" <> show k <> "}<n: "<> show nrm <> ", c: " <> show clp <> ">[" <> show n <> "](" <> show τ <> ")"
   showPretty (NoFun x) = showPretty x
   showPretty (Fun xs) = showPrettyEnumVertical (fmap fstAnn xs)
   showPretty (x :∧: y) = "(" <> showPretty x <> "∧" <> showPretty y <> ")"
@@ -471,10 +472,9 @@ recDMTypeM typemap sensmap (τ1 :->*: τ2) = (:->*:) <$> mapM (\(a :@ (b0, b1)) 
   where
     f a b0 b1 = a :@ (b0, b1)
 recDMTypeM typemap sensmap (DMTup τs) = DMTup <$> mapM typemap τs
-recDMTypeM typemap sensmap (DMVec nrm clp n τ) = DMVec <$> typemap nrm <*> typemap clp <*> sensmap n <*> typemap τ
+recDMTypeM typemap sensmap (DMVecLike k nrm clp n τ) = DMVecLike <$> typemap k <*> typemap nrm <*> typemap clp <*> sensmap n <*> typemap τ
 recDMTypeM typemap sensmap (DMMat nrm clp n m τ) = DMMat <$> typemap nrm <*> typemap clp <*> sensmap n <*> sensmap m <*> typemap τ
 recDMTypeM typemap sensmap (DMModel m τ) = DMModel <$> sensmap m <*> typemap τ
-recDMTypeM typemap sensmap (DMGrads nrm clp m τ) = DMGrads <$> typemap nrm <*> typemap clp <*> sensmap m <*> typemap τ
 recDMTypeM typemap sensmap (NoFun x) = NoFun <$> typemap x
 recDMTypeM typemap sensmap (Fun xs) = Fun <$> mapM (\(a :@ b) -> (:@) <$> typemap a <*> pure b) xs
 recDMTypeM typemap sensmap (x :∧: y) = (:∧:) <$> typemap x <*> typemap y
