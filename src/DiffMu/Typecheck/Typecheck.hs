@@ -416,11 +416,7 @@ checkSen' scope (Loop niter cs' (xi, xc) body) = do
   let scope_vars = getAllKeys scope
 
   -- build the tup of variables
-  -- (except if there is only one, then we do not wrap it in a tuple)
-  let cs = case cs' of
-            [c] -> Var (Just c :- JTAny)
-            cs -> Tup ((\a -> Var (Just a :- JTAny)) <$> cs')
-
+  let cs = Tup ((\a -> Var (Just a :- JTAny)) <$> cs')
   -- check it
   let ccs = checkSens scope cs
 
@@ -542,6 +538,7 @@ checkSen' scope (Size m) = do
   return (NoFun (DMTup [Numeric (Const nv DMInt), Numeric (Const mv DMInt)]))
 
 
+checkSen' scope (MutClipM c m) = checkSens scope (ClipM c m)
 checkSen' scope (ClipM c m)  = do
   τb <- checkSens scope m -- check the matrix
 
@@ -1203,10 +1200,7 @@ checkPri' scope (Loop niter cs' (xi, xc) body) =
       let cniter = checkSens scope niter <* mtruncateP zeroId
 
       -- build the tup of variables
-      -- (except if there is only one, then we do not wrap it in a tuple)
-      let cs = case cs' of
-                [c] -> Var (Just c :- JTAny)
-                cs -> Tup ((\a -> Var (Just a :- JTAny)) <$> cs')
+      let cs = Tup ((\a -> Var (Just a :- JTAny)) <$> cs')
 
       -- check it
       let mcaps = checkSens scope cs <* mtruncateP inftyP

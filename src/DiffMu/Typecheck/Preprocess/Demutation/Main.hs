@@ -1134,7 +1134,7 @@ elaborateMut scname scope (ScaleGrad scalar grads) = do
     -- END NOTE
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
-elaborateMut scname scope (ClipM c t) = do
+elaborateMut scname scope (MutClipM c t) = do
   (argTerms, mutVars) <- elaborateMutList "clip" scname scope [(Mutated , t)]
   case argTerms of
     -- NOTE: Because of #95, we say that this function is pure
@@ -1225,6 +1225,9 @@ elaborateMut scname scope (InternalExpectConst t1) = do
 elaborateMut scname scope (DeepcopyValue t1) = do
   (newT1, newT1Type, _) <- elaborateMut scname scope t1
   return (DeepcopyValue newT1, Pure UserValue, NoMove)
+elaborateMut scname scope (ClipM c t1) = do
+  (newT1, newT1Type, _) <- elaborateMut scname scope t1
+  return (ClipM c newT1, Pure UserValue, NoMove)
 elaborateMut scname scope (Gauss t1 t2 t3 t4) = do
   (newT1, newT1Type, _) <- elaborateNonmut scname scope t1
   (newT2, newT2Type, _) <- elaborateNonmut scname scope t2
