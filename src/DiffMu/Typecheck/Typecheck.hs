@@ -548,10 +548,10 @@ checkSen' scope (ClipM c m)  = do
   n <- newVar
 
   -- set correct matrix type
-  unify τb (NoFun (DMGrads nrm clp n DMData))
+  unify τb (NoFun (DMGrads nrm clp n (NoFun (Numeric DMData))))
 
   -- change clip parameter to input
-  return (NoFun (DMGrads nrm c n DMData))
+  return (NoFun (DMGrads nrm c n (NoFun (Numeric DMData))))
 
 --------------------
 -- NOTE this is different from what is in the paper, as we scale the result context by 2 not by 1
@@ -566,7 +566,7 @@ checkSen' scope (ConvertM m) = do
   n <- newVar
 
   -- set correct matrix type
-  unify τb (NoFun (DMGrads nrm (Clip clp) n DMData))
+  unify τb (NoFun (DMGrads nrm (Clip clp) n (NoFun (Numeric DMData))))
 
   -- we have to scale by two unlike in the paper...see the matrixnorms pdf in julia docs
   mscale (oneId ⋆! oneId)
@@ -576,7 +576,7 @@ checkSen' scope (ConvertM m) = do
   -- technically the clipping parameter does not change, but we set it to U so it fits with the rest...
   -- see issue 
 --  return (NoFun (DMGrads clp (Clip clp) n (Numeric (NonConst DMReal))))
-  return (NoFun (DMGrads clp U n (NonConst DMReal)))
+  return (NoFun (DMGrads clp U n (NoFun (Numeric (NonConst DMReal)))))
 
 --------------------
 
@@ -698,7 +698,7 @@ checkSen' scope (SubGrad ps gs) = do
 
       -- set argument types
       unify ps (NoFun (DMModel m τps))
-      unify gs (NoFun (DMGrads nrm clp m τgs))
+      unify gs (NoFun (DMGrads nrm clp m (NoFun (Numeric τgs))))
 
       res <- TVar <$> newTVar "τr"
       addConstraint (Solvable (IsTypeOpResult (Binary DMOpSub ((Numeric τps):@s1, (Numeric τgs):@s2) (Numeric res))))
@@ -714,7 +714,7 @@ checkSen' scope term@(ScaleGrad scalar grad) = do
   (τres , types_sens) <- makeTypeOp (IsBinary DMOpMul) 2
 
   ((τ1,s1),(τ2,s2)) <- case types_sens of
-    [(τ1,s1),(Numeric τ2,s2)] -> pure ((τ1,s1),(τ2,s2))
+    [(τ1,s1),(τ2,s2)] -> pure ((τ1,s1),(τ2,s2))
     _ -> impossible $ "Wrong array return size of makeTypeOp in " <> showPretty term
 
   -- Create variables for the matrix type
@@ -734,14 +734,14 @@ checkSen' scope term@(ScaleGrad scalar grad) = do
 
   -- and τ2 to the actual content type of the dmgrads
   -- (we allow any kind of annotation on the dmgrads here)
-  unify tgrad (NoFun (DMGrads nrm clp m τ2))
+  unify tgrad (NoFun (DMGrads nrm clp m (NoFun τ2)))
 
   -- the return type is the same matrix, but
   -- the clipping is now changed to unbounded
   -- and the content type is the result of the multiplication
   τresnum <- newVar
-  unify (Numeric τresnum) τres                          
-  return (NoFun (DMGrads nrm U m τresnum))
+  unify (Numeric τresnum) τres
+  return (NoFun (DMGrads nrm U m (NoFun τres)))
 
 checkSen' scope (Reorder σ t) = do
   τ <- checkSens scope t
@@ -777,7 +777,7 @@ checkSen' scope (ZeroGrad m) = do
    -- model gets copied into the params so it's infinitely sensitive
    mscale inftyS
 
-   return (NoFun (DMGrads nrm clp n τps))
+   return (NoFun (DMGrads nrm clp n (NoFun (Numeric τps))))
 
 
 checkSen' scope term@(SumGrads g1 g2) = do
@@ -809,15 +809,14 @@ checkSen' scope term@(SumGrads g1 g2) = do
   τ2num <- newVar
   unify τ1 (Numeric τ1num)
   unify τ2 (Numeric τ2num)
-  unify tg1 (NoFun (DMGrads nrm clp1 m τ1num))
-  unify tg2 (NoFun (DMGrads nrm clp2 m τ2num))
+  unify tg1 (NoFun (DMGrads nrm clp1 m (NoFun τ1)))
+  unify tg2 (NoFun (DMGrads nrm clp2 m (NoFun τ2)))
 
   -- the return type is the same matrix, but
   -- the clipping is now changed to unbounded
   -- and the content type is the result type of the addition
   τresnum <- newVar
-  unify τres (Numeric τresnum)
-  return (NoFun (DMGrads nrm U m τresnum))
+  return (NoFun (DMGrads nrm U m (NoFun (Numeric τresnum))))
 
 
 checkSen' scope term@(SBind x a b) = do
