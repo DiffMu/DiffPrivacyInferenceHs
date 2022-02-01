@@ -141,6 +141,9 @@ type DMNum = DMTypeOf NumKind
 -- Abbreviation for veckinds
 type VecKind = DMTypeOf VecKindKind
 
+pattern DMVec n c d t = DMVecLike Vector n c d t
+pattern DMGrads n c d t = DMVecLike Gradient n c d t
+
 -- The actual, generic definition of `DMTypeOf` for types of any kind `k` (for `k` in `DMKind`) is given as follows.
 -- NOTE: We can write `(k :: DMKind)` here, because we use the `DataKinds` ghc-extension, which allows us to use
 -- the terms in `DMKind` in a place where normally haskell types would be expected.
@@ -190,8 +193,7 @@ data DMTypeOf (k :: DMKind) where
   Gradient :: VecKind
 
   -- matrices
-  DMVec :: (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> DMMain -> DMType
-  DMGrads :: (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> DMNum -> DMType
+  DMVecLike :: VecKind -> (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> DMMain -> DMType
   DMMat :: (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> Sensitivity -> DMMain -> DMType
   DMModel :: Sensitivity -> DMNum -> DMType -- number of parameters and element type
 
