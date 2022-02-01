@@ -947,7 +947,7 @@ elaborateMut scname scope (Extra (LoopRet xs)) = do
   let mutMemVars = [(v) | (v, (_, Mutated)) <- avars ]
   mutTeVars <- mapM (reverseMemLookup) mutMemVars
 
-  let extraMutTeVars = xs <> mutTeVars
+  let extraMutTeVars = nub $ xs <> mutTeVars
 
   case extraMutTeVars of
     [extraMutTeVar] -> 
@@ -1585,7 +1585,9 @@ preprocessLoopBody scope iter (SLetBase ltype (v :- jt) term body) = do
   -- let newVars = nub (termVars <> bodyVars)
 
   case v of
-    Just v -> state (\a -> ((), a <> [v])) 
+    Just v -> case getValue v scope of
+      Just _ -> state (\a -> ((), a <> [v])) 
+      Nothing -> pure ()
     Nothing -> pure ()
 
   (body') <- preprocessLoopBody scope iter body
@@ -1669,6 +1671,22 @@ replaceTLetIn αs replacement (TLet βs t1 (Tup t2s)) =
     -- if it does fit our pattern, replace by a single TLet
     -- and recursively call ourselves again
     True -> Just (TLet βs t1 replacement)
+
+    -- if this does not fit our pattern, recurse into term and body
+    False -> Nothing
+
+-- If we have found our final `in` term (which is also allowed to be an slet),
+-- check that the tuple is correct
+replaceTLetIn αs replacement (SLet β t1 (Tup t2s)) =
+
+  let isvar :: (Maybe TeVar, DMTerm) -> Bool
+      isvar (v, Var (w :- _)) | v == w = True
+      isvar _ = False
+
+  in case and (isvar <$> zip αs t2s) of
+    -- if it does fit our pattern, replace by a single TLet
+    -- and recursively call ourselves again
+    True -> Just (SLet β t1 replacement)
 
     -- if this does not fit our pattern, recurse into term and body
     False -> Nothing
