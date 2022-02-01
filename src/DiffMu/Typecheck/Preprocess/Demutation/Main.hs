@@ -947,7 +947,7 @@ elaborateMut scname scope (Extra (LoopRet xs)) = do
   let mutMemVars = [(v) | (v, (_, Mutated)) <- avars ]
   mutTeVars <- mapM (reverseMemLookup) mutMemVars
 
-  let extraMutTeVars = xs <> mutTeVars
+  let extraMutTeVars = nub $ xs <> mutTeVars
 
   case extraMutTeVars of
     [extraMutTeVar] -> 

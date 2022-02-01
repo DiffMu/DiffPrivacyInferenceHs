@@ -708,7 +708,7 @@ checkSen' scope (SubGrad ps gs) = do
 
       return (NoFun (DMModel m res))
 
-checkSen' scope (ScaleGrad scalar grad) = do
+checkSen' scope term@(ScaleGrad scalar grad) = do
 
   let dscalar = checkSens scope scalar
   let dgrad = checkSens scope grad
@@ -718,7 +718,7 @@ checkSen' scope (ScaleGrad scalar grad) = do
 
   ((τ1,s1),(τ2,s2)) <- case types_sens of
     [(τ1,s1),(Numeric τ2,s2)] -> pure ((τ1,s1),(τ2,s2))
-    _ -> impossible "Wrong array return size of makeTypeOp"
+    _ -> impossible $ "Wrong array return size of makeTypeOp in " <> showPretty term
 
   -- Create variables for the matrix type
   -- (norm and clip parameters and dimension)
@@ -783,14 +783,14 @@ checkSen' scope (ZeroGrad m) = do
    return (NoFun (DMGrads nrm clp n τps))
 
 
-checkSen' scope (SumGrads g1 g2) = do
+checkSen' scope term@(SumGrads g1 g2) = do
 
   -- Create sensitivity / type variables for the addition
   (τres , types_sens) <- makeTypeOp (IsBinary DMOpAdd) 2
 
   ((τ1,s1),(τ2,s2)) <- case types_sens of
     [(τ1,s1),(τ2,s2)] -> pure ((τ1,s1),(τ2,s2))
-    _ -> impossible "Wrong array return size of makeTypeOp"
+    _ -> impossible $ "Wrong array return size of makeTypeOp in " <> showPretty term
 
   -- Create variables for the gradient type
   -- (norm and clip parameters and dimension)
