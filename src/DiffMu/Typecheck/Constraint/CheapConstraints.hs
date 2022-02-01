@@ -212,7 +212,14 @@ instance Solve MonadDMTC IsReorderedTuple (([Int], DMTypeOf MainKind) :=: DMType
       f (TVar _) = pure ()
       f (NoFun (TVar _)) = pure ()
       f (NoFun (DMTup τs)) = do
-        unify ρ (NoFun (DMTup (permute σ τs)))
+        --
+        -- Since demutation expects single elements instead of unary tuples, we
+        -- have to special-case here.
+        --
+        let resultTuple = (permute σ τs)
+        case resultTuple of
+          [resultType] -> unify ρ (NoFun (resultType))
+          resultTuple -> unify ρ (NoFun (DMTup resultTuple))
         dischargeConstraint name
         pure ()
       f (τs) = throwError (TypeMismatchError $ "Expected the type " <> show τ <> " to be a tuple type.")

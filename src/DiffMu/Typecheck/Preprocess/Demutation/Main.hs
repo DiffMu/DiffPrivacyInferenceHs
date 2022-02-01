@@ -1670,6 +1670,22 @@ replaceTLetIn αs replacement (TLet βs t1 (Tup t2s)) =
     -- if this does not fit our pattern, recurse into term and body
     False -> Nothing
 
+-- If we have found our final `in` term (which is also allowed to be an slet),
+-- check that the tuple is correct
+replaceTLetIn αs replacement (SLet β t1 (Tup t2s)) =
+
+  let isvar :: (Maybe TeVar, DMTerm) -> Bool
+      isvar (v, Var (w :- _)) | v == w = True
+      isvar _ = False
+
+  in case and (isvar <$> zip αs t2s) of
+    -- if it does fit our pattern, replace by a single TLet
+    -- and recursively call ourselves again
+    True -> Just (SLet β t1 replacement)
+
+    -- if this does not fit our pattern, recurse into term and body
+    False -> Nothing
+
 -- if we have a next tlet, continue with it
 replaceTLetIn αs replacement (TLet βs t1 (TLet γs t2 t3)) = TLet βs t1 <$> rest
   where

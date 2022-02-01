@@ -864,6 +864,11 @@ class ShowPretty a where
 instance ShowPretty a => ShowPretty [a] where
   showPretty as = "[" <> intercalate ", " (fmap showPretty as) <> "]"
 
+newlineIndentIfLong :: String -> String
+newlineIndentIfLong xs = case '\n' `elem` xs of
+  False -> xs
+  True -> "\n" <> justIndent xs
+
 parenIndent :: String -> String
 parenIndent s = "\n(\n" <> unlines (fmap ("  " <>) (lines s)) <> ")"
 
@@ -893,6 +898,7 @@ instance (ShowPretty a, ShowPretty b) => ShowPretty (a,b) where
 instance ShowPretty Relevance where
   showPretty = show
 
+
 instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t) where
   showPretty (Extra e)          = showPretty e
   showPretty (Ret (r))          = "Ret (" <>  showPretty r <> ")"
@@ -904,15 +910,15 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (Phi a b c)        = "Phi (" <> showPretty a <> ")" <> parenIndent (showPretty b) <> parenIndent (showPretty c)
   showPretty (Lam     jts a)    = "Lam (" <> showPretty jts <> ")" <> parenIndent (showPretty a)
   showPretty (LamStar jts a)    = "LamStar (" <> showPretty jts <> ")" <> parenIndent (showPretty a)
-  showPretty (BBLet n jts b)    = "BBLet " <> showPretty n <> " = (" <> show jts <> " -> ?\n" <> showPretty b
+  showPretty (BBLet n jts b)    = "BBLet " <> showPretty n <> " = (" <> show jts <> " -> ?)\n" <> showPretty b
   showPretty (BBApply t as cs)  = "BBApply (" <> showPretty t <> ")[" <> showPretty cs <> "](" <> showPretty as <> ")"
   showPretty (Apply a bs)       = (showPretty a) <> (showPretty bs)
-  showPretty (FLet v a b)       = "FLet " <> showPretty v <> " = " <> (showPretty a) <> "\n" <> (showPretty b)
+  showPretty (FLet v a b)       = "FLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty a) <> "\n" <> (showPretty b)
   showPretty (Choice chs)       = "Choice <..>"
-  showPretty (SLet v a b)       = "SLet " <> showPretty v <> " = " <> (showPretty a) <> "\n" <> (showPretty b)
+  showPretty (SLet v a b)       = "SLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty a) <> "\n" <> (showPretty b)
   showPretty (Tup as)           = "Tup " <> (showPretty as)
-  showPretty (TLet v a b)       = "TLet " <> showPretty v <> " = " <> (showPretty a) <> "\n" <> (showPretty b)
-  showPretty (TBind v a b)      = "TBind " <> showPretty v <> " <- " <> (showPretty a) <> "\n" <> (showPretty b)
+  showPretty (TLet v a b)       = "TLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty a) <> "\n" <> (showPretty b)
+  showPretty (TBind v a b)      = "TBind " <> showPretty v <> " <- " <> newlineIndentIfLong (showPretty a) <> "\n" <> (showPretty b)
   showPretty (Gauss a b c d)    = "Gauss (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ", " <> (showPretty d) <> ")"
   showPretty (AboveThresh a b c d) = "AboveThresh (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ", " <> (showPretty d) <> ")"
   showPretty (MutLaplace a b c) = "MutLaplace (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ")"
@@ -932,7 +938,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (Reorder x a)      = "Reorder " <> show x <> parenIndent (showPretty a)
   showPretty (TProject x a)     = "Proj" <> show x <> " " <>  (showPretty a)
   showPretty (Loop a b x d )    = "Loop (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> show x <> ")" <> parenIndent (showPretty d)
-  showPretty (SBind x a b)      = "SBind " <> showPretty x <> " <- " <> (showPretty a) <> "\n" <> (showPretty b)
+  showPretty (SBind x a b)      = "SBind " <> showPretty x <> " <- " <> newlineIndentIfLong (showPretty a) <> "\n" <> (showPretty b)
   showPretty (LastTerm a)       = "LastTerm " <> (showPretty a)
   showPretty (ZeroGrad a)       = "ZeroGrad " <> (showPretty a)
   showPretty (SumGrads a b)     = "SumGrads (" <> (showPretty a) <> ", " <> (showPretty b) <> ")"
