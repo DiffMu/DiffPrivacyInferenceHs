@@ -1582,7 +1582,9 @@ preprocessLoopBody scope iter (SLetBase ltype (v :- jt) term body) = do
   -- let newVars = nub (termVars <> bodyVars)
 
   case v of
-    Just v -> state (\a -> ((), a <> [v])) 
+    Just v -> case getValue v scope of
+      Just _ -> state (\a -> ((), a <> [v])) 
+      Nothing -> pure ()
     Nothing -> pure ()
 
   (body') <- preprocessLoopBody scope iter body
