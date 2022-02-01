@@ -52,7 +52,7 @@ pSingle e = case e of
                  JETup elems -> (Tup <$> (mapM pSingle elems))
                  JELam args body -> pJLam args body
                  JELamStar args body -> pJLamStar args body
-                 JEIfElse cond bs -> pIf cond bs (pure (Extra MutRet))
+                 JEIfElse cond bs -> pIf cond bs (pure (Extra DNothing))
                  JELoop ivar iter body -> pJLoop ivar iter body
                  JEAssignment aee amt -> pJLet SLet aee amt [aee] (Extra . DefaultRet)
                  JETupAssignment aee amt -> pJTLet aee amt [JETup aee] (Extra . DefaultRet)
