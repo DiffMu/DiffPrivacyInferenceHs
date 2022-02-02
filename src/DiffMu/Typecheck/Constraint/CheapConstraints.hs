@@ -169,7 +169,7 @@ instance Solve MonadDMTC IsAdditiveNoiseResult (DMTypeOf MainKind, DMTypeOf Main
      case τin of
         TVar x -> pure () -- we don't know yet.
         NoFun (TVar x) -> pure () -- we don't know yet.
-        NoFun (DMVecLike k nrm clp n τ) -> do -- is mgauss
+        NoFun (DMContainer k nrm clp n τ) -> do -- is mgauss
 
            logForce $ ">>>>>>>>>>>>>>>>>>>>>>>>\nIn gauss, type is " <> show (DMGrads nrm clp n τ) <> "<<<<<<<<<<<<<<<<<<<<<"
 
@@ -179,8 +179,8 @@ instance Solve MonadDMTC IsAdditiveNoiseResult (DMTypeOf MainKind, DMTypeOf Main
            -- set in- and output types as given in the mgauss rule
            -- input type gets a LessEqual so convert can happen implicitly if necessary
            -- (convert is implemented as a special subtyping rule, see there)
-           addConstraint (Solvable(IsLessEqual(τin, (NoFun (DMVecLike k L2 iclp n (NoFun (Numeric τv)))))))
-           unify τgauss (NoFun (DMVecLike k LInf U n (NoFun (Numeric (NonConst DMReal)))))
+           addConstraint (Solvable(IsLessEqual(τin, (NoFun (DMContainer k L2 iclp n (NoFun (Numeric τv)))))))
+           unify τgauss (NoFun (DMContainer k LInf U n (NoFun (Numeric (NonConst DMReal)))))
 
            dischargeConstraint @MonadDMTC name
         _ -> do -- regular gauss or unification errpr later
@@ -301,11 +301,11 @@ instance Solve MonadDMTC IsBlackBoxReturn (DMMain, (DMMain, Sensitivity)) where
      in case ret of
           TVar _ -> pure ()
           
-          NoFun (DMVecLike kind nret cret dret (NoFun (Numeric tret))) -> do
-              unify ret (NoFun (DMVecLike kind LInf U dret (NoFun (Numeric DMData))))
+          NoFun (DMContainer kind nret cret dret (NoFun (Numeric tret))) -> do
+              unify ret (NoFun (DMContainer kind LInf U dret (NoFun (Numeric DMData))))
               case argt of
                    TVar _ -> pure ()
-                   NoFun (DMVecLike _ _ _ _ (NoFun (Numeric targ))) -> do
+                   NoFun (DMContainer _ _ _ _ (NoFun (Numeric targ))) -> do
                        unify targ DMData
                        discharge oneId
                    _ -> discharge inftyS
@@ -324,10 +324,10 @@ instance Solve MonadDMTC IsBlackBoxReturn (DMMain, (DMMain, Sensitivity)) where
                           dischargeConstraint @MonadDMTC name
      in case ret of
           TVar _ -> pure ()
-          NoFun (DMVecLike _ nret cret n tret) -> case cret of
+          NoFun (DMContainer _ nret cret n tret) -> case cret of
               U -> case argt of
                         TVar _ -> pure ()
-                        NoFun (DMVecLike _ narg carg _ targ) -> case (nret, tret) of
+                        NoFun (DMContainer _ narg carg _ targ) -> case (nret, tret) of
                            (TVar _, TVar _)         -> pure ()
                            (LInf, TVar _)           -> pure ()
                            (TVar _, Numeric DMData) -> pure ()
@@ -350,8 +350,8 @@ instance Solve MonadDMTC IsBlackBoxReturn (DMMain, (DMMain, Sensitivity)) where
 -- in the final typechecking stage it is likely that we won't manage to infer the vector norm, so we just set it to (L_inf, Data),
 -- risking unification errors but giving us sensitivity 1 on the black box...
     solve_ Dict SolveFinal name (IsBlackBoxReturn (ret, (argt, args))) = case (ret, argt) of
-          (NoFun (DMVecLike vret nret cret dret tret), (NoFun (DMVecLike varg narg carg darg targ))) -> do
-              unify ret (NoFun (DMVecLike vret LInf U dret (Numeric DMData)))
+          (NoFun (DMContainer vret nret cret dret tret), (NoFun (DMContainer varg narg carg darg targ))) -> do
+              unify ret (NoFun (DMContainer vret LInf U dret (Numeric DMData)))
               unify targ (Numeric DMData)
               return ()
           _ -> pure ()
@@ -409,8 +409,7 @@ instance Solve MonadDMTC IsRefCopy (DMMain, DMMain) where
      mapM (\(tt, nv) -> addConstraint (Solvable (IsRefCopy ((NoFun tt), (NoFun nv))))) (zip ts nvs)
      dischargeConstraint name
   solve_ Dict _ name (IsRefCopy (NoFun (DMModel _ _), _)) = failConstraint name
-  solve_ Dict _ name (IsRefCopy (NoFun (DMVecLike _ _ _ _ _), _)) = failConstraint name
-  solve_ Dict _ name (IsRefCopy (NoFun (DMMat _ _ _ _ _), _)) = failConstraint name
+  solve_ Dict _ name (IsRefCopy (NoFun (DMContainer _ _ _ _ _), _)) = failConstraint name
   solve_ Dict _ name (IsRefCopy (NoFun (Deepcopied v), t)) = unify (NoFun v) t >> dischargeConstraint name
   solve_ Dict _ name (IsRefCopy (ti, tv)) = unify ti tv >> dischargeConstraint name
 

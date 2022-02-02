@@ -115,12 +115,13 @@ instance MonadDMTC t => Unifyᵢ (INCResT DMException t) (DMTypeOf k) where
   unifyᵢ_ U U                           = pure U
   unifyᵢ_ Vector Vector                 = pure Vector
   unifyᵢ_ Gradient Gradient             = pure Gradient
+  unifyᵢ_ (Matrix r1) (Matrix r2)       = Matrix <$> unifyᵢ r1 r2
   unifyᵢ_ (Clip k) (Clip s)             = Clip <$> unifyᵢ k s
   unifyᵢ_ (Deepcopied k) (Deepcopied s) = Deepcopied <$> unifyᵢ k s
   unifyᵢ_ (DMMat nrm1 clp1 n1 m1 τ1) (DMMat nrm2 clp2 n2 m2 τ2) =
       DMMat <$> unifyᵢ nrm1 nrm2 <*> unifyᵢ clp1 clp2 <*> unifyᵢ n1 n2 <*> unifyᵢ m1 m2 <*> unifyᵢ τ1 τ2
-  unifyᵢ_ (DMVecLike k1 nrm1 clp1 n1 τ1) (DMVecLike k2 nrm2 clp2 n2 τ2) =
-      DMVecLike <$> unifyᵢ k1 k2 <*> unifyᵢ nrm1 nrm2 <*> unifyᵢ clp1 clp2 <*> unifyᵢ n1 n2 <*> unifyᵢ τ1 τ2
+  unifyᵢ_ (DMContainer k1 nrm1 clp1 n1 τ1) (DMContainer k2 nrm2 clp2 n2 τ2) =
+      DMContainer <$> unifyᵢ k1 k2 <*> unifyᵢ nrm1 nrm2 <*> unifyᵢ clp1 clp2 <*> unifyᵢ n1 n2 <*> unifyᵢ τ1 τ2
   unifyᵢ_ (DMModel m1 τ1) (DMModel m2 τ2) =
       DMModel <$> unifyᵢ m1 m2 <*> unifyᵢ τ1 τ2
   -- unifyᵢ_ (DMGrads nrm1 clp1 m1 τ1) (DMGrads nrm2 clp2 m2 τ2) =

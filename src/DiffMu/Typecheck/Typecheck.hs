@@ -572,10 +572,10 @@ checkSen' scope (ClipM c m)  = do
   k <- newVar
 
   -- set correct matrix type
-  unify τb (NoFun (DMVecLike k nrm clp n (NoFun (Numeric DMData))))
+  unify τb (NoFun (DMContainer k nrm clp n (NoFun (Numeric DMData))))
 
   -- change clip parameter to input
-  return (NoFun (DMVecLike k nrm c n (NoFun (Numeric DMData))))
+  return (NoFun (DMContainer k nrm c n (NoFun (Numeric DMData))))
 
 --------------------
 -- NOTE this is different from what is in the paper, as we scale the result context by 2 not by 1
@@ -593,7 +593,7 @@ checkSen' scope (ConvertM m) = do
   k <- newVar
 
   -- set correct matrix type
-  unify τb (NoFun (DMVecLike k nrm (Clip clp) n (NoFun (Numeric DMData))))
+  unify τb (NoFun (DMContainer k nrm (Clip clp) n (NoFun (Numeric DMData))))
 
   -- we have to scale by two unlike in the paper...see the matrixnorms pdf in julia docs
   mscale (oneId ⋆! oneId)
@@ -603,7 +603,7 @@ checkSen' scope (ConvertM m) = do
   -- technically the clipping parameter does not change, but we set it to U so it fits with the rest...
   -- see issue 
 --  return (NoFun (DMGrads clp (Clip clp) n (Numeric (NonConst DMReal))))
-  return (NoFun (DMVecLike k clp U n (NoFun (Numeric (NonConst DMReal)))))
+  return (NoFun (DMContainer k clp U n (NoFun (Numeric (NonConst DMReal)))))
 
 --------------------
 

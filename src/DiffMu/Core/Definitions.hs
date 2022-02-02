@@ -122,8 +122,8 @@ instance Show DMKind where
   show VecKindKind = "VecKindKind"
 
 -- so we don't get incomplete pattern warnings for them
-{-# COMPLETE DMInt, DMReal, Const, NonConst, DMData, Numeric, TVar, (:->:), (:->*:), DMTup, L1, L2, LInf, U, Clip, Vector, Gradient,
- DMVecLike, DMMat, DMModel, NoFun, Fun, (:∧:), BlackBox, Deepcopied #-}
+{-# COMPLETE DMInt, DMReal, Const, NonConst, DMData, Numeric, TVar, (:->:), (:->*:), DMTup, L1, L2, LInf, U, Clip, Vector, Gradient, Matrix,
+ DMContainer, DMVec, DMGrads, DMMat, DMModel, NoFun, Fun, (:∧:), BlackBox, Deepcopied #-}
 
 --------------------
 -- 2. DMTypes
@@ -141,8 +141,9 @@ type DMNum = DMTypeOf NumKind
 -- Abbreviation for veckinds
 type VecKind = DMTypeOf VecKindKind
 
-pattern DMVec n c d t = DMVecLike Vector n c d t
-pattern DMGrads n c d t = DMVecLike Gradient n c d t
+pattern DMVec n c d t = DMContainer Vector n c d t
+pattern DMMat n c r d t = DMContainer (Matrix r) n c d t
+pattern DMGrads n c d t = DMContainer Gradient n c d t
 
 -- The actual, generic definition of `DMTypeOf` for types of any kind `k` (for `k` in `DMKind`) is given as follows.
 -- NOTE: We can write `(k :: DMKind)` here, because we use the `DataKinds` ghc-extension, which allows us to use
@@ -191,10 +192,11 @@ data DMTypeOf (k :: DMKind) where
   -- veckinds
   Vector :: VecKind
   Gradient :: VecKind
+  Matrix :: Sensitivity -> VecKind
 
   -- matrices
-  DMVecLike :: VecKind -> (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> DMMain -> DMType
-  DMMat :: (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> Sensitivity -> DMMain -> DMType
+  DMContainer :: VecKind -> (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> DMMain -> DMType
+  --DMMat :: (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> Sensitivity -> DMMain -> DMType
   DMModel :: Sensitivity -> DMNum -> DMType -- number of parameters and element type
 
   -- annotations
@@ -228,9 +230,10 @@ instance Hashable (DMTypeOf k) where
   hashWithSalt s (n :->: t) = s `hashWithSalt` n `hashWithSalt` t
   hashWithSalt s (n :->*: t) = s `hashWithSalt` n `hashWithSalt` t
   hashWithSalt s (DMTup t) = s `hashWithSalt` t
+  hashWithSalt s (Matrix t) = s `hashWithSalt` t
   hashWithSalt s (Clip t) = s `hashWithSalt` t
-  hashWithSalt s (DMVecLike k n t u v) = s `hashWithSalt` k `hashWithSalt` n `hashWithSalt` t `hashWithSalt` u `hashWithSalt` v
-  hashWithSalt s (DMMat n t u v w) = s `hashWithSalt` n `hashWithSalt` t `hashWithSalt` u `hashWithSalt` v `hashWithSalt` w
+  hashWithSalt s (DMContainer k n t u v) = s `hashWithSalt` k `hashWithSalt` n `hashWithSalt` t `hashWithSalt` u `hashWithSalt` v
+--  hashWithSalt s (DMMat n t u v w) = s `hashWithSalt` n `hashWithSalt` t `hashWithSalt` u `hashWithSalt` v `hashWithSalt` w
   hashWithSalt s (DMModel u v) = s `hashWithSalt` u `hashWithSalt` v
   hashWithSalt s (Fun t) = s `hashWithSalt` t
   hashWithSalt s (NoFun t) = s `hashWithSalt` t
@@ -271,12 +274,13 @@ instance Show (DMTypeOf k) where
   show U = "U"
   show Vector = "Vector"
   show Gradient = "Gradient"
+  show (Matrix n) = show n <> "-row Matrix"
   show (Clip n) = "Clip(" <> show n <> ")"
   show (DMVec nrm clp n τ) = "Vector<n: "<> show nrm <> ", c: " <> show clp <> ">[" <> show n <> "](" <> show τ <> ")"
   show (DMMat nrm clp n m τ) = "Matrix<n: "<> show nrm <> ", c: " <> show clp <> ">[" <> show n <> " × " <> show m <> "](" <> show τ <> ")"
   show (DMModel m τ) = "Model[" <> show m <> "](" <> show τ <> ")"
   show (DMGrads nrm clp m τ) = "Grads<n: "<> show nrm <> ", c: " <> show clp <> ">[" <> show m <> "](" <> show τ <> ")"
-  show (DMVecLike k nrm clp n τ) = "VecLike{" <> show k <> "}<n: "<> show nrm <> ", c: " <> show clp <> ">[" <> show n <> "](" <> show τ <> ")"
+  show (DMContainer k nrm clp m τ) = "Container("<> show k <> ")<n: "<> show nrm <> ", c: " <> show clp <> ">[" <> show m <> "](" <> show τ <> ")"
   show (NoFun x) = "NoFun(" <> show x <> ")"
   show (Fun xs) = "Fun(" <> show xs <> ")"
   show (x :∧: y) = "(" <> show x <> "∧" <> show y <> ")"
@@ -323,12 +327,12 @@ instance ShowPretty (DMTypeOf k) where
   showPretty U = "U"
   showPretty Vector = "Vector"
   showPretty Gradient = "Gradient"
+  showPretty (Matrix n) = showPretty n <> "-row Matrix"
   showPretty (Clip n) = showPretty n
   showPretty (DMVec nrm clp n τ) = "Vector<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty n <> "](" <> showPretty τ <> ")"
   showPretty (DMMat nrm clp n m τ) = "Matrix<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty n <> " × " <> showPretty m <> "](" <> showPretty τ <> ")"
   showPretty (DMModel m τ) = "DMModel[" <> showPretty m <> "](" <> showPretty τ <> ")"
   showPretty (DMGrads nrm clp m τ) = "DMGrads<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty m <> "](" <> showPretty τ <> ")"
-  showPretty (DMVecLike k nrm clp n τ) = "VecLike{" <> show k <> "}<n: "<> show nrm <> ", c: " <> show clp <> ">[" <> show n <> "](" <> show τ <> ")"
   showPretty (NoFun x) = showPretty x
   showPretty (Fun xs) = showPrettyEnumVertical (fmap fstAnn xs)
   showPretty (x :∧: y) = "(" <> showPretty x <> "∧" <> showPretty y <> ")"
@@ -358,6 +362,7 @@ instance Eq (DMTypeOf k) where
   -- VecKind
   Vector == Vector = True
   Gradient == Gradient = True
+  Matrix r1 == Matrix r2 = r1 == r2
 
   -- the base numeric constructors
   DMInt    == DMInt = True
@@ -382,8 +387,10 @@ instance Eq (DMTypeOf k) where
   DMTup xs == DMTup ys = xs == ys
 
   -- matrices
-  DMVec a b c d == DMVec a2 b2 c2 d2 = and [a == a2, b == b2, c == c2, d == d2]
-  DMMat a b c d e == DMMat a2 b2 c2 d2 e2 = and [a == a2, b == b2, c == c2, d == d2, e == e2]
+  DMContainer k a b c d == DMContainer k2 a2 b2 c2 d2 = and [k == k2, a == a2, b == b2, c == c2, d == d2]
+--  DMVec a b c d == DMVec a2 b2 c2 d2 = and [a == a2, b == b2, c == c2, d == d2]
+--  DMVec a b c d == DMVec a2 b2 c2 d2 = and [a == a2, b == b2, c == c2, d == d2]
+--  DMMat a b c d e == DMMat a2 b2 c2 d2 e2 = and [a == a2, b == b2, c == c2, d == d2, e == e2]
 
   -- annotations
   NoFun t == NoFun s = t == s
@@ -459,6 +466,7 @@ recDMTypeM typemap sensmap LInf = pure LInf
 recDMTypeM typemap sensmap U = pure U
 recDMTypeM typemap sensmap Vector = pure Vector
 recDMTypeM typemap sensmap Gradient = pure Gradient
+recDMTypeM typemap sensmap (Matrix n) = Matrix <$> sensmap n
 recDMTypeM typemap sensmap (Clip n) = Clip <$> typemap n
 recDMTypeM typemap sensmap DMInt = pure DMInt
 recDMTypeM typemap sensmap DMReal = pure DMReal
@@ -472,8 +480,8 @@ recDMTypeM typemap sensmap (τ1 :->*: τ2) = (:->*:) <$> mapM (\(a :@ (b0, b1)) 
   where
     f a b0 b1 = a :@ (b0, b1)
 recDMTypeM typemap sensmap (DMTup τs) = DMTup <$> mapM typemap τs
-recDMTypeM typemap sensmap (DMVecLike k nrm clp n τ) = DMVecLike <$> typemap k <*> typemap nrm <*> typemap clp <*> sensmap n <*> typemap τ
-recDMTypeM typemap sensmap (DMMat nrm clp n m τ) = DMMat <$> typemap nrm <*> typemap clp <*> sensmap n <*> sensmap m <*> typemap τ
+recDMTypeM typemap sensmap (DMContainer k nrm clp n τ) = DMContainer <$> typemap k <*> typemap nrm <*> typemap clp <*> sensmap n <*> typemap τ
+--recDMTypeM typemap sensmap (DMMat nrm clp n m τ) = DMMat <$> typemap nrm <*> typemap clp <*> sensmap n <*> sensmap m <*> typemap τ
 recDMTypeM typemap sensmap (DMModel m τ) = DMModel <$> sensmap m <*> typemap τ
 recDMTypeM typemap sensmap (NoFun x) = NoFun <$> typemap x
 recDMTypeM typemap sensmap (Fun xs) = Fun <$> mapM (\(a :@ b) -> (:@) <$> typemap a <*> pure b) xs
