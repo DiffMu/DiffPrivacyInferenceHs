@@ -1097,6 +1097,10 @@ elaborateMut scname scope (VIndex t1 t2) = do
   (newT1, newT1Type, _) <- elaborateNonmut scname scope t1
   (newT2, newT2Type, _) <- elaborateNonmut scname scope t2
   return (VIndex newT1 newT2 , Pure UserValue, RefMove)
+elaborateMut scname scope (MMap t1 t2) = do
+  (newT1, newT1Type, _) <- elaborateNonmut scname scope t1
+  (newT2, newT2Type, _) <- elaborateNonmut scname scope t2
+  return (MMap newT1 newT2 , Pure UserValue, RefMove)
 elaborateMut scname scope (Row t1 t2) = do
   (newT1, newT1Type, _) <- elaborateNonmut scname scope t1
   (newT2, newT2Type, _) <- elaborateNonmut scname scope t2

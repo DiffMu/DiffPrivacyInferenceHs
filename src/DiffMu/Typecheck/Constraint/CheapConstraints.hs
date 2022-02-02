@@ -413,3 +413,33 @@ instance Solve MonadDMTC IsRefCopy (DMMain, DMMain) where
   solve_ Dict _ name (IsRefCopy (NoFun (DMMat _ _ _ _ _), _)) = failConstraint name
   solve_ Dict _ name (IsRefCopy (NoFun (Deepcopied v), t)) = unify (NoFun v) t >> dischargeConstraint name
   solve_ Dict _ name (IsRefCopy (ti, tv)) = unify ti tv >> dischargeConstraint name
+
+
+
+
+
+--------------------------------------------------
+-- matrix or vector
+
+newtype IsVecOrMat a = IsVecOrMat a deriving Show
+
+instance FixedVars TVarOf (IsVecOrMat (DMMain, (DMTypeOf NormKind, DMTypeOf ClipKind, Sensitivity, Sensitivity, DMMain))) where
+  fixedVars (IsVecOrMat _) = []
+
+instance TCConstraint IsVecOrMat where
+  constr = IsVecOrMat
+  runConstr (IsVecOrMat c) = c
+
+instance Solve MonadDMTC IsVecOrMat (DMMain, (DMTypeOf NormKind, DMTypeOf ClipKind, Sensitivity, Sensitivity, DMMain)) where
+    solve_ Dict _ name (IsVecOrMat (t, (nrm, clp, m, n, t_elem))) =
+     case t of
+        TVar x -> pure () -- we don't know yet.
+        NoFun (TVar x) -> pure () -- we don't know yet.
+        NoFun (DMMat _ _ _ _ _) -> do -- its a matrix
+           unify t (NoFun (DMMat nrm clp m n t_elem))
+           dischargeConstraint name
+        NoFun (DMVec _ _ _ _) -> do -- it's a vector
+           unify t (NoFun (DMVec nrm clp n t_elem))
+           unify m oneId
+           dischargeConstraint name
+        _ -> failConstraint name -- ("Expected a vector or matrix, but got " <> show t)

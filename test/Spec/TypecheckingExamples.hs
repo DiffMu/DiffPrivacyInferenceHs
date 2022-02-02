@@ -13,6 +13,7 @@ testTypecheckingExamples pp = do
   testBlackBox pp
   testSLoop pp
   testSample pp
+  testMMap pp
   testAboveThresh pp
   testPrivFunc pp
 --   testDPGD pp
@@ -230,6 +231,28 @@ testAboveThresh pp = describe "Above threshold" $ do
         cs = ""
     parseEvalString_customCheck pp "" ex (ty, cs) (pure $ Right ())
 
+
+testMMap pp = describe "Matrix map" $ do
+    let ex = "function foo(m::Vector{Integer}) \n\
+              \   f(x) = 2*x \n\
+              \   m = map(f,m) \n\
+              \   return_copy(m) \n\
+              \end"
+        ex_fail = "function foo(m) \n\
+              \   f(x::Integer) = 1 \n\
+              \   f(x::Real) = 2 \n\
+              \   m = map(f,m) \n\
+              \   return_copy(m) \n\
+              \end"
+        ty :: TC DMMain = do
+            c <- newVar
+            n <- newVar
+            nr <- newVar
+            let gradin = NoFun (DMVec nr c n (NoFun (Numeric (NonConst DMInt))))
+            let gradout = NoFun (DMVec nr U n (NoFun (Numeric (NonConst DMInt))))
+            return (Fun ([([gradin :@ (constCoeff (Fin 2))] :->: gradout) :@ Just [JTVector JTInt]]))
+    parseEval pp "good" ex ty
+    parseEvalFail pp "dispatch (bad)" ex_fail (UnificationError "" "")
 
 testPrivFunc pp = describe "PrivacyFunction annotations" $ do
     let ex_good = "function foo(f :: PrivacyFunction) :: Priv() \n\

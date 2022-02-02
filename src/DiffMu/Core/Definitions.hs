@@ -718,6 +718,7 @@ data PreDMTerm (t :: * -> *) =
   | MutGauss (PreDMTerm t) (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
   | MutLaplace (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
 -- matrix related things
+  | MMap (PreDMTerm t) (PreDMTerm t)
   | ConvertM (PreDMTerm t)
   | MCreate (PreDMTerm t) (PreDMTerm t) (TeVar, TeVar) (PreDMTerm t)
   | Transpose (PreDMTerm t)
@@ -754,7 +755,7 @@ pattern TBind a b c = TLetBase BindLet a b c
 pattern SmpLet a b c = TLetBase SampleLet a b c
 
 {-# COMPLETE Extra, Ret, Sng, Var, Arg, Op, Phi, Lam, LamStar, BBLet, BBApply,
- Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, Gauss, Laplace, MutGauss, MutLaplace, AboveThresh, ConvertM, MCreate, Transpose,
+ Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, Gauss, Laplace, MutGauss, MutLaplace, AboveThresh, MMap, ConvertM, MCreate, Transpose,
  Size, Length, Index, VIndex, Row, ClipM, MutClipM, Loop, SubGrad, ScaleGrad, Reorder, TProject, LastTerm,
  ZeroGrad, SumGrads, SmpLet, Sample, InternalExpectConst #-}
 
@@ -846,6 +847,7 @@ recDMTermM f h (AboveThresh a b c d)    = AboveThresh <$> (f a) <*> (f b) <*> (f
 recDMTermM f h (Laplace a b c)    = Laplace <$> (f a) <*> (f b) <*> (f c)
 recDMTermM f h (MutGauss a b c d) = MutGauss <$> (f a) <*> (f b) <*> (f c) <*> (f d)
 recDMTermM f h (MutLaplace a b c) = MutLaplace <$> (f a) <*> (f b) <*> (f c)
+recDMTermM f h (MMap a b)         = MMap <$> (f a) <*> (f b)
 recDMTermM f h (ConvertM a)       = ConvertM <$> (f a)
 recDMTermM f h (MCreate a b x c ) = MCreate <$> (f a) <*> (f b) <*> pure x <*> (f c)
 recDMTermM f h (Transpose a)      = Transpose <$> (f a)
@@ -950,6 +952,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (MutLaplace a b c) = "MutLaplace (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ")"
   showPretty (MutGauss a b c d) = "MutGauss (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ", " <> (showPretty d) <> ")"
   showPretty (Laplace a b c)    = "Laplace (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ")"
+  showPretty (MMap a b)         = "MMap (" <> (showPretty a) <> " to " <> (showPretty b)  <> ")"
   showPretty (ConvertM a)       = "ConvertM (" <> (showPretty a) <> ")"
   showPretty (MCreate a b x c ) = "MCreate (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> show x <> ", " <> (showPretty c) <> ")"
   showPretty (Transpose a)      = "Transpose (" <> (showPretty a) <> ")"

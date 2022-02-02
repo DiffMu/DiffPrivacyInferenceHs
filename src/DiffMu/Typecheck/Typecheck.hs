@@ -284,18 +284,35 @@ checkSen' scope (Apply f args) =
       mscale s
       return (τ' :@ s)
 
-    sbranch_check mf margs = do
-        (τ_sum :: DMMain, argτs) <- msumTup (mf , msumS margs) -- sum args and f's context
-        τ_ret <- newVar -- a type var for the function return type
-        addConstraint (Solvable (IsFunctionArgument (τ_sum, Fun [(argτs :->: τ_ret) :@ Nothing])))
-        return τ_ret
-
     margs = checkArg scope <$> args
     mf = checkSens scope f
 
   in do
     logForce ("[Apply-Sens]Scope is:\n" <> show (getAllKeys scope))
-    sbranch_check mf margs
+    (τ_sum :: DMMain, argτs) <- msumTup (mf , msumS margs) -- sum args and f's context
+    τ_ret <- newVar -- a type var for the function return type
+    addConstraint (Solvable (IsFunctionArgument (τ_sum, Fun [(argτs :->: τ_ret) :@ Nothing])))
+    return τ_ret
+
+
+checkSen' scope (MMap f m) = do
+    s <- newVar
+    mv <- newVar
+    let mm = checkSens scope m <* mscale s
+    let mf = checkSens scope f <* mscale mv
+    (τf :: DMMain, τm) <- msumTup (mf, mm) -- sum args and f's context
+
+    τ_in <- newVar -- a type var for the function input / matrix element type
+    τ_out <- newVar -- a type var for the function output type
+    nrm <- newVar -- variable for norm
+    clp <- newVar -- variable for clip
+    unify τm (NoFun (DMVec nrm clp mv τ_in))
+
+    -- dispatch is not allowed for map, hence unification with a one-choice ->
+    unify τf (Fun [([τ_in :@ s] :->: τ_out) :@ Just [JTAny]])
+
+    return (NoFun (DMVec nrm U mv τ_out))
+
 
 checkSen' scope (FLet fname term body) = do
 
