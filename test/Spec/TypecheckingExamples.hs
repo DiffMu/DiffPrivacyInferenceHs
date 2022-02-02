@@ -67,11 +67,17 @@ testOps pp = describe "Ops" $ do
                  \     w1 + x \n\
                  \  end \n\
                  \ end"
-        ex_mat = "function foo(x::Matrix{Integer}, y::Matrix{Integer}, z::Matrix{Integer}) \n\
+        ex_mat_no = "function foo(x::Matrix{Integer}, y::Matrix{Integer}, z::Matrix{Integer}) \n\
                  \ 2.0*x + y - z \n\
                  \ end"
-        ex_vec = "function foo(x::Vector{Integer}, y::Vector{Integer}, z::Vector{Integer}) \n\
+        ex_vec_no = "function foo(x::Vector{Integer}, y::Vector{Integer}, z::Vector{Integer}) \n\
                  \ 2.0*x + y - z \n\
+                 \ end"
+        ex_mat = "function foo(x::Matrix{Integer}, y::Matrix{Integer}, z::Matrix{Integer}) \n\
+                 \ return_copy(2.0*x + y - z) \n\
+                 \ end"
+        ex_vec = "function foo(x::Vector{Integer}, y::Vector{Integer}, z::Vector{Integer}) \n\
+                 \ return_copy(2.0*x + y - z) \n\
                  \ end"
         int = NoFun(Numeric (NonConst DMInt))
         real = NoFun(Numeric (NonConst DMReal))
@@ -90,20 +96,29 @@ testOps pp = describe "Ops" $ do
     parseEval pp "numeric ops sensitivity" ex_num (pure ty_num)
     parseEvalUnify pp "matrix ops sensitivity" ex_mat (ty_mat)
     parseEvalUnify pp "vector ops sensitivity" ex_vec (ty_vec)
+    parseEvalFail pp "matrix ops no copy" ex_mat_no (UnsatisfiableConstraint "")
+    parseEvalFail pp "vec ops no copy" ex_vec_no (UnsatisfiableConstraint "")
 
 testPriv pp = describe "privacies" $ do
     let ret = "function f(x :: Integer) :: Priv() \n\
                \ x + x                 \n\
                \ end"
         inv = "function g(x :: DMGrads) :: Priv() \n\
-               \ x = 0.1*x \n\
+               \ scale_gradient!(0.1, x) \n\
                \ gaussian_mechanism!(0.1, 0.1, 0.1, x)  \n\
-               \ return_copy(200*x) \n\
+               \ scale_gradient!(100, x) \n\
+               \ return_copy(x) \n\
+               \ end"
+        invv = "function g(x :: Vector) :: Priv() \n\
+               \ x = 0.1 * x \n\
+               \ gaussian_mechanism!(0.1, 0.1, 0.1, x)  \n\
+               \ return_copy(200 * x) \n\
                \ end"
         lap = "function g(x :: DMGrads) :: Priv() \n\
-               \    x = 0.1*x \n\
+               \    scale_gradient!(0.1, x) \n\
                \    laplacian_mechanism!(0.1, 0.1, x)  \n\
-               \    return_copy(200*x) \n\
+               \    scale_gradient!(100, x) \n\
+               \    return_copy(x) \n\
                \ end"
         int = NoFun(Numeric (NonConst DMInt))
         real = NonConst DMReal
@@ -115,6 +130,13 @@ testPriv pp = describe "privacies" $ do
             let gradin = NoFun (DMGrads L2 c n (NoFun (Numeric nt)))
             let gradout = NoFun (DMGrads LInf U n (NoFun (Numeric real)))
             return (Fun ([([gradin :@ (constCoeff (Fin 0.1), constCoeff (Fin 0.1))] :->*: gradout) :@ Just [JTGrads]]))
+        ty_iv :: TC DMMain = do
+            c <- newVar
+            n <- newVar
+            nt <- newVar
+            let gradin = NoFun (DMVec L2 c n (NoFun (Numeric nt)))
+            let gradout = NoFun (DMVec LInf U n (NoFun (Numeric real)))
+            return (Fun ([([gradin :@ (constCoeff (Fin 0.1), constCoeff (Fin 0.1))] :->*: gradout) :@ Just [JTVector JTAny]]))
         ty_l :: TC DMMain = do
             c <- newVar
             n <- newVar
@@ -124,6 +146,7 @@ testPriv pp = describe "privacies" $ do
             return (Fun ([([gradin :@ (constCoeff (Fin 0.1), constCoeff (Fin 0))] :->*: gradout) :@ Just [JTGrads]]))
     parseEval pp "return" ret (pure ty_r)
     parseEvalUnify pp "robust" inv (ty_i) -- this is issue #157
+    parseEvalUnify pp "robust" invv (ty_iv)
     parseEvalUnify pp "laplace" lap (ty_l)
 
 
