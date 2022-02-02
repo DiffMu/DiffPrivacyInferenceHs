@@ -551,11 +551,14 @@ checkSen' scope (ClipM c m)  = do
   clp <- newVar
   n <- newVar
 
+  -- variable for vector kind (i.e. vector or grads)
+  k <- newVar
+
   -- set correct matrix type
-  unify τb (NoFun (DMGrads nrm clp n (NoFun (Numeric DMData))))
+  unify τb (NoFun (DMVecLike k nrm clp n (NoFun (Numeric DMData))))
 
   -- change clip parameter to input
-  return (NoFun (DMGrads nrm c n (NoFun (Numeric DMData))))
+  return (NoFun (DMVecLike k nrm c n (NoFun (Numeric DMData))))
 
 --------------------
 -- NOTE this is different from what is in the paper, as we scale the result context by 2 not by 1
@@ -568,9 +571,12 @@ checkSen' scope (ConvertM m) = do
   clp <- newVar -- this is a norm, because we do not accept
                 -- the unbounded clip value
   n <- newVar
+  
+  -- variable for vector kind (i.e. vector or grads)
+  k <- newVar
 
   -- set correct matrix type
-  unify τb (NoFun (DMGrads nrm (Clip clp) n (NoFun (Numeric DMData))))
+  unify τb (NoFun (DMVecLike k nrm (Clip clp) n (NoFun (Numeric DMData))))
 
   -- we have to scale by two unlike in the paper...see the matrixnorms pdf in julia docs
   mscale (oneId ⋆! oneId)
@@ -580,7 +586,7 @@ checkSen' scope (ConvertM m) = do
   -- technically the clipping parameter does not change, but we set it to U so it fits with the rest...
   -- see issue 
 --  return (NoFun (DMGrads clp (Clip clp) n (Numeric (NonConst DMReal))))
-  return (NoFun (DMGrads clp U n (NoFun (Numeric (NonConst DMReal)))))
+  return (NoFun (DMVecLike k clp U n (NoFun (Numeric (NonConst DMReal)))))
 
 --------------------
 
@@ -711,6 +717,10 @@ checkSen' scope (SubGrad ps gs) = do
 
 checkSen' scope term@(ScaleGrad scalar grad) = do
 
+  let makeNumeric t = do
+          tn <- newVar
+          unify t (Numeric tn)
+
   let dscalar = checkSens scope scalar
   let dgrad = checkSens scope grad
 
@@ -718,7 +728,7 @@ checkSen' scope term@(ScaleGrad scalar grad) = do
   (τres , types_sens) <- makeTypeOp (IsBinary DMOpMul) 2
 
   ((τ1,s1),(τ2,s2)) <- case types_sens of
-    [(Numeric τ1,s1),(Numeric τ2,s2)] -> pure ((τ1,s1),(τ2,s2))
+    [(τ1,s1),(τ2,s2)] -> pure ((τ1,s1),(τ2,s2))
     _ -> impossible $ "Wrong array return size of makeTypeOp in " <> showPretty term
 
   -- Create variables for the matrix type
@@ -734,11 +744,13 @@ checkSen' scope term@(ScaleGrad scalar grad) = do
   (tscalar, tgrad) <- msumTup ((dscalar <* mscale (svar s1)), (dgrad <* mscale (svar s2)))
 
   -- set τ1 to the actual type of the scalar
-  unify tscalar (NoFun (Numeric τ1))
+  makeNumeric τ1
+  unify tscalar (NoFun τ1)
 
   -- and τ2 to the actual content type of the dmgrads
   -- (we allow any kind of annotation on the dmgrads here)
-  unify tgrad (NoFun (DMGrads nrm clp m (NoFun (Numeric τ2))))
+  makeNumeric τ2
+  unify tgrad (NoFun (DMGrads nrm clp m (NoFun τ2)))
 
   -- the return type is the same matrix, but
   -- the clipping is now changed to unbounded
@@ -1203,9 +1215,10 @@ checkPri' scope (Loop niter cs' (xi, xc) body) =
       let cniter = checkSens scope niter <* mtruncateP zeroId
 
       -- build the tup of variables
+      -- (except if there is only one, then we do not wrap it in a tuple)
       let cs = case cs' of
-            [c] -> Var (Just c :- JTAny)
-            cs -> Tup ((\a -> Var (Just a :- JTAny)) <$> cs')
+                [c] -> Var (Just c :- JTAny)
+                cs -> Tup ((\a -> Var (Just a :- JTAny)) <$> cs')
 
       -- check it
       let mcaps = checkSens scope cs <* mtruncateP inftyP

@@ -169,7 +169,7 @@ instance Solve MonadDMTC IsAdditiveNoiseResult (DMTypeOf MainKind, DMTypeOf Main
      case τin of
         TVar x -> pure () -- we don't know yet.
         NoFun (TVar x) -> pure () -- we don't know yet.
-        NoFun (DMGrads nrm clp n τ) -> do -- is mgauss
+        NoFun (DMVecLike k nrm clp n τ) -> do -- is mgauss
 
            logForce $ ">>>>>>>>>>>>>>>>>>>>>>>>\nIn gauss, type is " <> show (DMGrads nrm clp n τ) <> "<<<<<<<<<<<<<<<<<<<<<"
 
@@ -179,8 +179,8 @@ instance Solve MonadDMTC IsAdditiveNoiseResult (DMTypeOf MainKind, DMTypeOf Main
            -- set in- and output types as given in the mgauss rule
            -- input type gets a LessEqual so convert can happen implicitly if necessary
            -- (convert is implemented as a special subtyping rule, see there)
-           addConstraint (Solvable(IsLessEqual(τin, (NoFun (DMGrads L2 iclp n (NoFun (Numeric τv)))))))
-           unify τgauss (NoFun (DMGrads LInf U n (NoFun (Numeric (NonConst DMReal)))))
+           addConstraint (Solvable(IsLessEqual(τin, (NoFun (DMVecLike k L2 iclp n (NoFun (Numeric τv)))))))
+           unify τgauss (NoFun (DMVecLike k LInf U n (NoFun (Numeric (NonConst DMReal)))))
 
            dischargeConstraint @MonadDMTC name
         _ -> do -- regular gauss or unification errpr later
