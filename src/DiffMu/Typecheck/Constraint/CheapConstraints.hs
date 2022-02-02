@@ -422,23 +422,17 @@ instance Solve MonadDMTC IsRefCopy (DMMain, DMMain) where
 
 newtype IsVecOrMat a = IsVecOrMat a deriving Show
 
-instance FixedVars TVarOf (IsVecOrMat (DMMain, (DMTypeOf NormKind, DMTypeOf ClipKind, Sensitivity, Sensitivity, DMMain))) where
+instance FixedVars TVarOf (IsVecOrMat (VecKind, Sensitivity)) where
   fixedVars (IsVecOrMat _) = []
 
 instance TCConstraint IsVecOrMat where
   constr = IsVecOrMat
   runConstr (IsVecOrMat c) = c
 
-instance Solve MonadDMTC IsVecOrMat (DMMain, (DMTypeOf NormKind, DMTypeOf ClipKind, Sensitivity, Sensitivity, DMMain)) where
-    solve_ Dict _ name (IsVecOrMat (t, (nrm, clp, m, n, t_elem))) =
-     case t of
-        TVar x -> pure () -- we don't know yet.
-        NoFun (TVar x) -> pure () -- we don't know yet.
-        NoFun (DMMat _ _ _ _ _) -> do -- its a matrix
-           unify t (NoFun (DMMat nrm clp m n t_elem))
-           dischargeConstraint name
-        NoFun (DMVec _ _ _ _) -> do -- it's a vector
-           unify t (NoFun (DMVec nrm clp n t_elem))
-           unify m oneId
-           dischargeConstraint name
-        _ -> failConstraint name -- ("Expected a vector or matrix, but got " <> show t)
+instance Solve MonadDMTC IsVecOrMat (VecKind, Sensitivity) where
+    solve_ Dict _ name (IsVecOrMat (k, s)) =
+     case k of
+        TVar _ -> pure ()
+        Vector -> unify oneId s >> dischargeConstraint name
+        Matrix r -> unify r s >> dischargeConstraint name
+        _ -> failConstraint name

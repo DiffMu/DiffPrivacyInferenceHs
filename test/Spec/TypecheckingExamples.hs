@@ -233,8 +233,8 @@ testAboveThresh pp = describe "Above threshold" $ do
 
 
 testMMap pp = describe "Matrix map" $ do
-    let ex = "function foo(m::Vector{Integer}) \n\
-              \   f(x) = 2*x \n\
+    let ex = "function foo(m::Vector{Integer}, y::Integer) \n\
+              \   f(x) = 2*x + y\n\
               \   m = map(f,m) \n\
               \   return_copy(m) \n\
               \end"
@@ -250,7 +250,7 @@ testMMap pp = describe "Matrix map" $ do
             nr <- newVar
             let gradin = NoFun (DMVec nr c n (NoFun (Numeric (NonConst DMInt))))
             let gradout = NoFun (DMVec nr U n (NoFun (Numeric (NonConst DMInt))))
-            return (Fun ([([gradin :@ (constCoeff (Fin 2))] :->: gradout) :@ Just [JTVector JTInt]]))
+            return (Fun ([([gradin :@ (constCoeff (Fin 2)), NoFun (Numeric (NonConst DMInt)) :@ n] :->: gradout) :@ Just [JTVector JTInt, JTInt]]))
     parseEval pp "good" ex ty
     parseEvalFail pp "dispatch (bad)" ex_fail (UnificationError "" "")
 

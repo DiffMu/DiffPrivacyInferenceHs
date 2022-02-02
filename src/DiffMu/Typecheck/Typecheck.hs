@@ -298,20 +298,25 @@ checkSen' scope (Apply f args) =
 checkSen' scope (MMap f m) = do
     s <- newVar
     mv <- newVar
+    mr <- newVar
     let mm = checkSens scope m <* mscale s
-    let mf = checkSens scope f <* mscale mv
+    let mf = checkSens scope f <* mscale mv <* mscale mr
     (τf :: DMMain, τm) <- msumTup (mf, mm) -- sum args and f's context
 
     τ_in <- newVar -- a type var for the function input / matrix element type
     τ_out <- newVar -- a type var for the function output type
     nrm <- newVar -- variable for norm
     clp <- newVar -- variable for clip
-    unify τm (NoFun (DMVec nrm clp mv τ_in))
+    k <- newVar -- variable for container kind
+    unify τm (NoFun (DMContainer k nrm clp mv τ_in))
+
+    -- only matrices or vectors (not gradients) are allowed.
+    addConstraint (Solvable (IsVecOrMat (k, mr)))
 
     -- dispatch is not allowed for map, hence unification with a one-choice ->
     unify τf (Fun [([τ_in :@ s] :->: τ_out) :@ Just [JTAny]])
 
-    return (NoFun (DMVec nrm U mv τ_out))
+    return (NoFun (DMContainer k nrm U mv τ_out))
 
 
 checkSen' scope (FLet fname term body) = do
