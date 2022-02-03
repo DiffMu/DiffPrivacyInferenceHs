@@ -169,7 +169,7 @@ instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
   substitute σs (τ1 :->: τ2) = (:->:) <$> substitute σs τ1 <*> substitute σs τ2
   substitute σs (τ1 :->*: τ2) = (:->*:) <$> substitute σs τ1 <*> substitute σs τ2
   substitute σs (DMTup τs) = DMTup <$> substitute σs τs
-  substitute σs (DMContainer k nrm clp n τ) = DMContainer k nrm clp <$> substitute σs n <*> substitute σs τ
+  substitute σs (DMContainer k nrm clp n τ) = DMContainer <$> substitute σs k <*> substitute σs nrm <*> substitute σs clp <*> substitute σs n <*> substitute σs τ
   substitute σs (DMMat nrm clp n m τ) = DMMat nrm clp <$> substitute σs n <*> substitute σs m <*> substitute σs τ
   substitute σs (DMModel m τ) = DMModel <$> substitute σs m <*> substitute σs τ
   substitute σs (NoFun x) = NoFun <$> substitute σs x

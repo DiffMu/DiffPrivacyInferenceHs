@@ -333,6 +333,7 @@ instance ShowPretty (DMTypeOf k) where
   showPretty (DMMat nrm clp n m τ) = "Matrix<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty n <> " × " <> showPretty m <> "](" <> showPretty τ <> ")"
   showPretty (DMModel m τ) = "DMModel[" <> showPretty m <> "](" <> showPretty τ <> ")"
   showPretty (DMGrads nrm clp m τ) = "DMGrads<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty m <> "](" <> showPretty τ <> ")"
+  showPretty (DMContainer k nrm clp m τ) = "DMContainer{" <> show k <> "}<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty m <> "](" <> showPretty τ <> ")"
   showPretty (NoFun x) = showPretty x
   showPretty (Fun xs) = showPrettyEnumVertical (fmap fstAnn xs)
   showPretty (x :∧: y) = "(" <> showPretty x <> "∧" <> showPretty y <> ")"
@@ -939,7 +940,9 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (Extra e)          = showPretty e
   showPretty (Ret (r))          = "Ret (" <>  showPretty r <> ")"
   showPretty (Sng g jt)         = show g
-  showPretty (Var (v :- jt))    = show v
+  showPretty (Var (v :- jt))    = case v of
+                                    Nothing -> "_"
+                                    Just tv -> show tv
 --  showPretty (Rnd jt)           = "Rnd"
   showPretty (Arg v jt r)       = show v
   showPretty (Op op ts)         = showPretty op <> " " <> showPretty ts
