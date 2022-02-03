@@ -36,6 +36,10 @@ buildReturnValue :: [TeVar] -> DMTerm
 buildReturnValue [x] = Var (Just x :- JTAny)
 buildReturnValue xs = Tup [Var (Just x :- JTAny) | x <- xs]
 
+buildCopyReturnValue :: [TeVar] -> DMTerm
+buildCopyReturnValue [x] = DeepcopyValue $ Var (Just x :- JTAny)
+buildCopyReturnValue xs = Tup [DeepcopyValue $ Var (Just x :- JTAny) | x <- xs]
+
 --------------------------------------------------------------------------------------
 -- Accessing the VA-Ctx in the MTC monad
 
@@ -934,7 +938,7 @@ elaborateMut scname scope (Extra (MutRet)) = do
   mutTeVars <- mapM (reverseMemLookup) mutMemVars
 
   -- a single var is returned as value, not as tuple
-  return (buildReturnValue mutTeVars, VirtualMutated mutTeVars, NoMove)
+  return (buildCopyReturnValue mutTeVars, VirtualMutated mutTeVars, NoMove)
 
 
 elaborateMut scname scope (Extra (LoopRet xs)) = do
