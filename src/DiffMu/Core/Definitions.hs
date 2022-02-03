@@ -790,6 +790,19 @@ instance Eq (EmptyExtension a) where
 type DMTerm = PreDMTerm EmptyExtension
 
 
+
+type ProcDMTerm = PreDMTerm ProceduralExtension
+
+data ProceduralExtension a =
+  ProcTLetBase LetKind [(Asgmt JuliaType)] a
+  | ProcSLetBase LetKind (Asgmt JuliaType) a
+  | ProcFLet TeVar a
+  | ProcBBLet TeVar [JuliaType] -- name, arguments
+  | ProcPhi a a a
+  | ProcPreloop a (Maybe TeVar) a
+  | ProcLoop a [TeVar] (Maybe TeVar, TeVar) a
+
+
 ----
 -- mutability extension
 data MutabilityExtension a =
