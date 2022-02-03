@@ -801,6 +801,7 @@ data ProceduralExtension a =
   | ProcPhi a a a
   | ProcPreloop a (Maybe TeVar) a
   | ProcLoop a [TeVar] (Maybe TeVar, TeVar) a
+  | Block [a]
 
 
 ----
