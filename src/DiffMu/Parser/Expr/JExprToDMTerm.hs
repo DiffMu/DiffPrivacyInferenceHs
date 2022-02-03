@@ -42,78 +42,52 @@ exit_assignment = do
           (file, line, a, _) <- get
           put (file, line, a, False)
 
-pSingle :: JExpr -> ParseState MutDMTerm
+pSingle :: JExpr -> ParseState ProcDMTerm
 pSingle e = case e of
-                 JEBlock stmts -> pList stmts
                  JEInteger n -> pure $ Sng n JTInt
                  JEReal r -> pure $ Sng r JTReal
-                 JENothing -> pure (Extra MutRet)
                  JESymbol s -> return (Var (Just (UserTeVar s) :- JTAny))
                  JETup elems -> (Tup <$> (mapM pSingle elems))
                  JELam args body -> pJLam args body
                  JELamStar args body -> pJLamStar args body
-                 JEIfElse cond bs -> pIf cond bs (pure (Extra DNothing))
-                 JELoop ivar iter body -> pJLoop ivar iter body
-                 JEAssignment aee amt -> pJLet SLet aee amt [aee] (Extra . DefaultRet)
-                 JETupAssignment aee amt -> pJTLet aee amt [JETup aee] (Extra . DefaultRet)
-                 JEFunction name term -> pJFLet name term [name] (Extra . DefaultRet)
-                 JEBlackBox name args -> pJBlackBox name args [name] (Extra . DefaultRet)
                  JERef name refs -> pJRef name refs
                  JECall name args -> pJCall name args
+                 
+                 JEBlock stmts -> Extra <$> (Block <$> pList stmts)
+                 JEIfElse cond bs -> Extra <$> (ProcPhi <$> (pSingle cond) <*> (mapM pSingle bs))
+                 JELoop ivar iter body -> pJLoop ivar iter body
+                 JEAssignment aee amt -> pJLet aee amt
+                 JETupAssignment aee amt -> pJTLet aee amt
+                 JEFunction name term -> pJFLet name term
+                 JEBlackBox name args -> pJBlackBox name args
+
                  JEHole -> parseError "Holes (_) are only allowed in assignments."
                  JEUnsupported s -> parseError ("Unsupported expression " <> show s)
                  JEIter _ _ _ -> parseError ("Iterators can only be used in for-loop statements directly.")
                  JEColon -> parseError "Colon (:) can only be used to access matrix rows like in M[1,:]."
                  JETypeAnnotation _ _ -> parseError "Type annotations are only supported on function arguments."
                  JENotRelevant _ _ -> parseError "Type annotations are only supported on function arguments."
+                 JENothing -> parseError "nothing is not valid here."
                  JELineNumber _ _ -> throwOriginalError (InternalError "What now?") -- TODO
 
 
-pList :: [JExpr] -> ParseState MutDMTerm
-pList [] = error "bla" -- TODO
-pList (JEBlock stmts : []) = pList stmts -- handle nested blocks
-pList (s : []) = pSingle s
-pList (s : tail) = case s of
-                        JELineNumber file line -> do
-                                                    (_,_,d,a) <- get
-                                                    put (file, line, d, a)
-                                                    s <- (pList tail)
-                                                    return s
-                        JEAssignment aee amt -> pJLet SLet aee amt tail (\x -> x)
-                        JETupAssignment aee amt -> pJTLet aee amt tail (\x -> x)
-                        JEFunction name term -> pJFLet name term tail (\x -> x)
-                        JEBlackBox name args -> pJBlackBox name args tail (\x -> x)
-                        JELoop ivar iter body -> pLoopRes (pJLoop ivar iter body) (pList tail)
-                        JECall name args -> pMut (pJCall name args) (pList tail)
-                        JEIfElse cond bs -> pIf cond bs (pList tail)
-                        JEBlock stmts -> pList (stmts ++ tail) -- handle nested blocks
-                        JEUnsupported s -> parseError ("Unsupported expression " <> show s)
-                        _ -> parseError ("Expression " <> show s <> " does not have any effect.")
+pList :: [JExpr] -> ParseState [ProcDMTerm]
+pList [] = pure []
+pList (JEBlock stmts : tail) = pList (stmts ++ tail) -- handle nested blocks
+pList (s : tail) = do
+    ps <- case s of
+               JELineNumber file line -> do
+                                           (_,_,d,a) <- get
+                                           put (file, line, d, a)
+                                           return Nothing
+               JENothing -> return Nothing
+               _ -> Just <$> pSingle s
+               
+    ptail <- pList tail
+    case ps of
+        Nothing -> return ptail
+        Just pps -> return (pps : ptail)
 
-
-pLoopRes m ptail = do
-                   assignee <- m
-                   dtail <- ptail
-                   return (Extra (MutLet PureLet assignee dtail))
-
-pMut m ptail = do
-                   assignee <- m
-                   dtail <- ptail
-                   return (Extra (MutLet PureLet assignee dtail))
-
-pIf cond bs ptail = do
-                   dcond <- pSingle cond
-                   dbs <- mapM pSingle bs
-                   dtail <- ptail
-                   return (Extra (MutPhi dcond dbs dtail))
-
-pSample args = case args of
-                    [n, m1, m2] -> do
-                                     tn <- pSingle n
-                                     tm1 <- pSingle m1
-                                     tm2 <- pSingle m2
-                                     return (Sample tn tm1 tm2)
-                    _ -> parseError ("Invalid number of arguments for sample, namely " <> (show (length args)) <> " instead of 2.")
 
 pJRef name refs = case refs of
                        [i1,JEColon] -> do
@@ -157,35 +131,6 @@ pJLamStar args body = do
                        dbody <- pSingle body
                        return (LamStar dargs dbody)
 
-pJBlackBox name args tail wrapper =
-  case name of
-    JESymbol pname -> do
-                    (_,_,insideFunction,_) <- get
-                    case insideFunction of
-                         [] -> do
-                                    pargs <- mapM pArg args
-                                    ptail <- pList tail
-                                    return (BBLet (UserTeVar pname) (sndA <$> pargs) ptail)
-                         _  -> parseError ("Black boxes can only be defined on top-level scope.")
-    _ -> parseError $ "Invalid function name expression " <> show name <> ", must be a symbol."
-
-
-pJLet ctor assignee assignment tail wrapper = do
-   (_,_,_,insideAssignment) <- get
-   case insideAssignment of
-        True -> parseError ("Assignments within assignments are forbidden, but variable " <> show assignee <> " is assigned to.")
-        False -> do
-                   enter_assignment
-                   dasgmt <- pSingle assignment
-                   exit_assignment
-
-                   dtail <- pList tail
-                   case assignee of
-                        JEHole     -> return (ctor (Nothing :- JTAny) dasgmt (wrapper dtail))
-                        JESymbol s -> return (ctor (Just (UserTeVar s) :- JTAny) dasgmt (wrapper dtail))
-                        JETypeAnnotation _ _ -> parseError "Type annotations on variables are not supported."
-                        JENotRelevant _ _    -> parseError "Type annotations on variables are not supported."
-                        _                    -> parseError ("Invalid assignee " <> (show assignee) <> ", must be a variable.")
 
 
 pJLoop ivar iter body =
@@ -199,51 +144,88 @@ pJLoop ivar iter body =
        return (ceil [div [sub [dend, sub [dstart, (Sng 1 JTInt)]], dstep]]) -- compute number of steps
   in case iter of
        JEIter start step end -> do
-                                 dbody <- pList [body, JENothing] -- make last loop statement be MutRet
+                                 dbody <- pSingle body
                                  nit <- pIter start step end
                                  i <- case ivar of
                                               JEHole -> pure Nothing
                                               JESymbol s -> pure $ Just (UserTeVar $ s)
                                               i -> parseError ("Invalid iteration variable " <> (show i) <> ".")
-                                 return (Extra (MutLoop nit i dbody))
+                                 return (Extra (ProcPreLoop nit i dbody))
        it -> parseError ("Invalid iterator " <> show it <> ", must be a range.")
 
 
-pJTLet assignees assignment tail wrapper = do
+pJLet assignee assignment = do
    (_,_,_,insideAssignment) <- get
    case insideAssignment of
-        True -> parseError ("Assignments within assignments are forbidden, but variables " <> show assignees <> " are assigned to.")
+        True -> parseError ("Assignments within assignments are forbidden, but variable " <> show assignee <> " is assigned to.")
         False -> do
-                   -- make sure that all assignees are simply symbols
-                   let ensureSymbol (JESymbol s) = return (Just (UserTeVar s) :- JTAny)
-                       ensureSymbol JEHole = return (Nothing :- JTAny)
-                       ensureSymbol (JETypeAnnotation _ _) = parseError "Type annotations on variables are not supported."
-                       ensureSymbol (JENotRelevant _ _) = parseError "Type annotations on variables are not supported."
-                       ensureSymbol x = parseError ("Invalid assignee " <> (show x) <> ", must be a variable.")
+                   enter_assignment
+                   dasgmt <- pSingle assignment
+                   exit_assignment
+                   case assignee of
+                        JEHole     -> return (Extra (ProcSLetBase PureLet (Nothing :- JTAny) dasgmt))
+                        JESymbol s -> return (Extra (ProcSLetBase PureLet (Just (UserTeVar s) :- JTAny) dasgmt))
+                        JETypeAnnotation _ _ -> parseError "Type annotations on variables are not supported."
+                        JENotRelevant _ _    -> parseError "Type annotations on variables are not supported."
+                        _                    -> parseError ("Invalid assignee " <> (show assignee) <> ", must be a variable.")
 
-                   assignee_vars <- mapM ensureSymbol assignees
 
-                   case assignment of
-                                     JECall (JESymbol (Symbol "sample")) args -> do
-                                            smp <- pSample args
-                                            dtail <- pList tail
-                                            return (SmpLet assignee_vars smp (wrapper dtail))
-                                     _ -> do  -- parse assignment, tail; and build term
-                                            enter_assignment
-                                            dasgmt <- pSingle assignment
-                                            exit_assignment
-                                            dtail <- pList tail
-                                            return (TLet assignee_vars dasgmt (wrapper dtail))
+pJTLet :: [JExpr] -> JExpr -> ParseState ProcDMTerm
+pJTLet assignees assignment = let
+   pSample args = case args of
+                    [n, m1, m2] -> do
+                                     tn <- pSingle n
+                                     tm1 <- pSingle m1
+                                     tm2 <- pSingle m2
+                                     return (Sample tn tm1 tm2)
+                    _ -> parseError ("Invalid number of arguments for sample, namely " <> (show (length args)) <> " instead of 2.")
+                    
+   -- make sure that all assignees are simply symbols
+   ensureSymbol (JESymbol s) = return (Just (UserTeVar s) :- JTAny)
+   ensureSymbol JEHole = return (Nothing :- JTAny)
+   ensureSymbol (JETypeAnnotation _ _) = parseError "Type annotations on variables are not supported."
+   ensureSymbol (JENotRelevant _ _) = parseError "Type annotations on variables are not supported."
+   ensureSymbol x = parseError ("Invalid assignee " <> (show x) <> ", must be a variable.")
 
-pJFLet name assignment tail wrapper =
+   in do
+      (_,_,_,insideAssignment) <- get
+      case insideAssignment of
+           True -> parseError ("Assignments within assignments are forbidden, but variables " <> show assignees <> " are assigned to.")
+           False -> do
+                      assignee_vars <- mapM ensureSymbol assignees
+
+                      case assignment of
+                                        JECall (JESymbol (Symbol "sample")) args -> do
+                                               smp <- pSample args
+                                               return (Extra (ProcTLetBase SampleLet assignee_vars smp))
+                                        _ -> do  -- parse assignment, tail; and build term
+                                               enter_assignment
+                                               dasgmt <- pSingle assignment
+                                               exit_assignment
+                                               return (Extra (ProcTLetBase PureLet assignee_vars dasgmt))
+
+
+pJFLet name assignment =
   case name of
     JESymbol n -> do
                        enter_function n
                        dasgmt <- pSingle assignment
                        exit_function
-                       dtail <- pList tail
-                       return (FLet (UserTeVar n) dasgmt (wrapper dtail))
+                       return (Extra (ProcFLet (UserTeVar n) dasgmt))
     _ -> parseError $ "Invalid function name expression " <> show name <> ", must be a symbol."
+
+
+pJBlackBox name args =
+  case name of
+    JESymbol pname -> do
+                    (_,_,insideFunction,_) <- get
+                    case insideFunction of
+                         [] -> do
+                                    pargs <- mapM pArg args
+                                    return (Extra (ProcBBLet (UserTeVar pname) (sndA <$> pargs)))
+                         _  -> parseError ("Black boxes can only be defined on top-level scope.")
+    _ -> parseError $ "Invalid function name expression " <> show name <> ", must be a symbol."
+
 
 pClip :: JExpr -> ParseState (DMTypeOf ClipKind)
 pClip (JESymbol (Symbol "L1"))   = pure (Clip L1)
@@ -251,7 +233,8 @@ pClip (JESymbol (Symbol "L2"))   = pure (Clip L2)
 pClip (JESymbol (Symbol "LInf")) = pure (Clip LInf)
 pClip term = parseError $ "The term " <> show term <> "is not a valid clip value."
 
-pJCall :: JExpr -> [JExpr] -> ParseState MutDMTerm
+
+pJCall :: JExpr -> [JExpr] -> ParseState ProcDMTerm
 -- if the term is a symbol, we check if it
 -- is a builtin/op, if so, we construct the appropriate DMTerm
 pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
@@ -395,8 +378,7 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
 -- all other terms turn into calls
 pJCall term args = Apply <$> pSingle term <*> mapM pSingle args
 
-
-parseDMTermFromJExpr :: JExpr -> Either DMException MutDMTerm
+parseDMTermFromJExpr :: JExpr -> Either DMException ProcDMTerm
 parseDMTermFromJExpr expr =
   let x = runStateT (pSingle expr) ("unknown",0,[],False)
       y = case runExcept x of
