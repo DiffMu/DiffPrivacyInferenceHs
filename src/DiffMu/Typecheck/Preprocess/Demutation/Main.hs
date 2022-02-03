@@ -1040,7 +1040,9 @@ elaborateMut scname scope term@(Phi cond t1 t2) = do
                          <> " => In the term:\n" <> parenIndent (showPretty term) <> "\n"
                          <> " => Conclusion: This computated value is not allowed to be used in the computation, \nand accordingly, it is ignored in the privacy analysis.")
                    pure $ buildReturnValue mutvars
-          _ ->     pure $ TLet [(Just v :- JTAny) | (v) <- m1] newT1 (buildReturnValue mutvars)
+          _ ->     pure $ case m1 of
+                            [m1] -> SLet (Just m1 :- JTAny)            newT1 (buildReturnValue mutvars)
+                            m1   -> TLet [(Just v :- JTAny) | v <- m1] newT1 (buildReturnValue mutvars)
 
         unifiedT2 <- case globalM2 of
           [] -> do warn ("Found the term " <> showPretty t2
@@ -1048,7 +1050,9 @@ elaborateMut scname scope term@(Phi cond t1 t2) = do
                          <> " => In the term:\n" <> parenIndent (showPretty term) <> "\n"
                          <> " => Conclusion: This computated value is not allowed to be used in the computation, \nand accordingly, it is ignored in the privacy analysis.")
                    pure $ buildReturnValue mutvars
-          _ ->     pure $ TLet [(Just v :- JTAny) | (v) <- m2] newT2 (buildReturnValue mutvars)
+          _ ->     pure $ case m2 of
+                            [m2] -> SLet (Just m2 :- JTAny)            newT2 (buildReturnValue mutvars)
+                            m2   -> TLet [(Just v :- JTAny) | v <- m2] newT2 (buildReturnValue mutvars)
 
         return (Phi newCond unifiedT1 unifiedT2 , VirtualMutated ([v | v <- mutvars]), moveType1)
 

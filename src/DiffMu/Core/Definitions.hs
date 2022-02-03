@@ -940,7 +940,9 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (Extra e)          = showPretty e
   showPretty (Ret (r))          = "Ret (" <>  showPretty r <> ")"
   showPretty (Sng g jt)         = show g
-  showPretty (Var (v :- jt))    = show v
+  showPretty (Var (v :- jt))    = case v of
+                                    Nothing -> "_"
+                                    Just tv -> show tv
 --  showPretty (Rnd jt)           = "Rnd"
   showPretty (Arg v jt r)       = show v
   showPretty (Op op ts)         = showPretty op <> " " <> showPretty ts
