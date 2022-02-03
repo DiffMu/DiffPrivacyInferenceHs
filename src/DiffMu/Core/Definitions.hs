@@ -698,7 +698,7 @@ sndA (x :- τ) = τ
 -- data Lam_ = Lam_ [Asgmt JuliaType] DMTerm
 --   deriving (Generic, Show)
 
-data LetKind = PureLet | BindLet | LoopLet | SampleLet
+data LetKind = PureLet | BindLet | SampleLet
   deriving (Eq, Show)
 
 
@@ -795,6 +795,7 @@ data ProcAsgmt a = (::-) (Maybe ProcVar) a
 
 type ProcDMTerm = PreDMTerm ProceduralExtension
 
+
 data ProceduralExtension a =
   ProcTLetBase LetKind [(ProcAsgmt JuliaType)] a
   | ProcSLetBase LetKind (ProcAsgmt JuliaType) a
@@ -803,6 +804,7 @@ data ProceduralExtension a =
   | ProcPhi a [a]
   | ProcPreLoop a (Maybe ProcVar) a
   | ProcReturn
+  | ProcVar (ProcAsgmt JuliaType)
   | Block [a]
 
 
@@ -814,9 +816,9 @@ data DemutatedExtension a =
   | DemutFLet TeVar a
   | DemutBBLet TeVar [JuliaType] -- name, arguments
   | DemutPhi a [a]
-  | DemutPreLoop a (Maybe TeVar) a
   | DemutLoop a [TeVar] (Maybe TeVar, TeVar) a
   | DemutBlock [a]
+  deriving (Show, Eq, Functor, Foldable, Traversable)
 
 
 ----

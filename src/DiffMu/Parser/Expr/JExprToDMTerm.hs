@@ -46,7 +46,7 @@ pSingle :: JExpr -> ParseState ProcDMTerm
 pSingle e = case e of
                  JEInteger n -> pure $ Sng n JTInt
                  JEReal r -> pure $ Sng r JTReal
-                 JESymbol s -> return (Var (Just (UserTeVar s) :- JTAny))
+                 JESymbol s -> return  (Extra (ProcVar (Just (UserProcVar s) ::- JTAny)))
                  JETup elems -> (Tup <$> (mapM pSingle elems))
                  JELam args body -> pJLam args body
                  JELamStar args body -> pJLamStar args body
@@ -148,7 +148,7 @@ pJLoop ivar iter body =
                                  nit <- pIter start step end
                                  i <- case ivar of
                                               JEHole -> pure Nothing
-                                              JESymbol s -> pure $ Just (UserTeVar $ s)
+                                              JESymbol s -> pure $ Just (UserProcVar $ s)
                                               i -> parseError ("Invalid iteration variable " <> (show i) <> ".")
                                  return (Extra (ProcPreLoop nit i dbody))
        it -> parseError ("Invalid iterator " <> show it <> ", must be a range.")
@@ -163,8 +163,8 @@ pJLet assignee assignment = do
                    dasgmt <- pSingle assignment
                    exit_assignment
                    case assignee of
-                        JEHole     -> return (Extra (ProcSLetBase PureLet (Nothing :- JTAny) dasgmt))
-                        JESymbol s -> return (Extra (ProcSLetBase PureLet (Just (UserTeVar s) :- JTAny) dasgmt))
+                        JEHole     -> return (Extra (ProcSLetBase PureLet (Nothing ::- JTAny) dasgmt))
+                        JESymbol s -> return (Extra (ProcSLetBase PureLet (Just (UserProcVar s) ::- JTAny) dasgmt))
                         JETypeAnnotation _ _ -> parseError "Type annotations on variables are not supported."
                         JENotRelevant _ _    -> parseError "Type annotations on variables are not supported."
                         _                    -> parseError ("Invalid assignee " <> (show assignee) <> ", must be a variable.")
@@ -181,8 +181,8 @@ pJTLet assignees assignment = let
                     _ -> parseError ("Invalid number of arguments for sample, namely " <> (show (length args)) <> " instead of 2.")
                     
    -- make sure that all assignees are simply symbols
-   ensureSymbol (JESymbol s) = return (Just (UserTeVar s) :- JTAny)
-   ensureSymbol JEHole = return (Nothing :- JTAny)
+   ensureSymbol (JESymbol s) = return (Just (UserProcVar s) ::- JTAny)
+   ensureSymbol JEHole = return (Nothing ::- JTAny)
    ensureSymbol (JETypeAnnotation _ _) = parseError "Type annotations on variables are not supported."
    ensureSymbol (JENotRelevant _ _) = parseError "Type annotations on variables are not supported."
    ensureSymbol x = parseError ("Invalid assignee " <> (show x) <> ", must be a variable.")
@@ -211,7 +211,7 @@ pJFLet name assignment =
                        enter_function n
                        dasgmt <- pSingle assignment
                        exit_function
-                       return (Extra (ProcFLet (UserTeVar n) dasgmt))
+                       return (Extra (ProcFLet (UserProcVar n) dasgmt))
     _ -> parseError $ "Invalid function name expression " <> show name <> ", must be a symbol."
 
 
@@ -222,7 +222,7 @@ pJBlackBox name args =
                     case insideFunction of
                          [] -> do
                                     pargs <- mapM pArg args
-                                    return (Extra (ProcBBLet (UserTeVar pname) (sndA <$> pargs)))
+                                    return (Extra (ProcBBLet (UserProcVar pname) (sndA <$> pargs)))
                          _  -> parseError ("Black boxes can only be defined on top-level scope.")
     _ -> parseError $ "Invalid function name expression " <> show name <> ", must be a symbol."
 
@@ -372,7 +372,7 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
   (sym, args) -> do
       (_,_,insideFunction,_) <- get
       case ((Symbol sym) `elem` insideFunction) of
-         False -> (Apply (Var (Just (UserTeVar (Symbol sym)) :- JTAny)) <$> mapM pSingle args)
+         False -> (Apply (Extra (ProcVar (Just (UserProcVar (Symbol sym)) ::- JTAny))) <$> mapM pSingle args)
          True -> parseError $ "Recursive call of " <> show sym <> " is not permitted."
 
 -- all other terms turn into calls
