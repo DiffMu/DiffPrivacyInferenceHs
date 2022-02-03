@@ -3,7 +3,7 @@
 
 module DiffMu.Typecheck.Preprocess.Demutation.Definitions where
 
-import DiffMu.Prelude
+import DiffMu.Prelude hiding (TeVar)
 import DiffMu.Abstract
 import DiffMu.Core
 import DiffMu.Core.TC
@@ -51,38 +51,37 @@ le_ilm LocalMutation _ = True
 le_ilm NotLocalMutation LocalMutation = False
 le_ilm NotLocalMutation NotLocalMutation = True
 
-onlyLocallyMutatedVariables :: [(TeVar,IsLocalMutation)] -> Bool
+onlyLocallyMutatedVariables :: [(ProcVar,IsLocalMutation)] -> Bool
 onlyLocallyMutatedVariables xs = [v | (v, NotLocalMutation) <- xs] == []
 
 data PureType =
   UserValue
-  | DefaultValue
-  | SingleArg TeVar 
-  | SingleArgPart TeVar 
+  -- | DefaultValue
+  | SingleArg ProcVar 
+  | SingleArgPart ProcVar 
   -- | SingleRef
   | PureTuple [PureType] 
   deriving (Show)
 
-data ImmutType = Pure PureType | Mutating [IsMutated] | VirtualMutated [TeVar] | PureBlackBox
+data ImmutType = Pure PureType | Mutating [IsMutated] | VirtualMutated [ProcVar] | PureBlackBox
   deriving (Show)
 
-consumeDefaultValue :: ImmutType -> ImmutType
-consumeDefaultValue (Pure DefaultValue) = Pure UserValue
-consumeDefaultValue a = a
-
+-- consumeDefaultValue :: ImmutType -> ImmutType
+-- consumeDefaultValue (Pure DefaultValue) = Pure UserValue
+-- consumeDefaultValue a = a
 
 -- the scope
-type Scope = Ctx TeVar ImmutType
+type Scope = Ctx ProcVar ImmutType
 
 
 ---------------------------------------------------
 -- These types describe which variable names
 -- are in the RHS and must be moved on tlet/slet assignment
 -- See #171 #172
-data MoveType = TupleMove [MoveType] | SingleMove TeVar | RefMove | NoMove
+data MoveType = TupleMove [MoveType] | SingleMove ProcVar | RefMove | NoMove
   deriving (Eq, Show)
 
-singleMoveMaybe :: Maybe TeVar -> MoveType
+singleMoveMaybe :: Maybe ProcVar -> MoveType
 singleMoveMaybe (Just a) = SingleMove a
 singleMoveMaybe Nothing  = NoMove
 
@@ -95,7 +94,7 @@ singleMoveMaybe Nothing  = NoMove
 --
 -- Tracking memory locations for demutation.
 -- This mirrors the `MoveType` above, but with `MemVar`
--- instead of `TeVar`.
+-- instead of `ProcVar`.
 --
 -- See #185.
 --
@@ -106,7 +105,7 @@ data MemType = TupleMem [MemType] | SingleMem MemVar | RefMem
 data MemState = MemExists MemType | MemMoved
   deriving (Show)
 
-type MemCtx = Ctx TeVar MemState
+type MemCtx = Ctx ProcVar MemState
 
 type MutCtx = Ctx MemVar (ScopeVar, IsMutated)
 
@@ -135,11 +134,11 @@ data IsFLetDefined = FLetDefined | NotFLetDefined
 pattern WriteSingle = WriteSingleBase NotFLetDefined
 pattern WriteSingleFunction = WriteSingleBase FLetDefined
 
--- type ImVarAccessCtx = Ctx TeVar ()
-type VarAccessCtx = Ctx TeVar (ScopeVar, VarAccessType)
+-- type ImVarAccessCtx = Ctx ProcVar ()
+type VarAccessCtx = Ctx ProcVar (ScopeVar, VarAccessType)
 
 
-computeVarAccessType :: TeVar -> (ScopeVar,VarAccessType) -> (ScopeVar,VarAccessType) -> MTC VarAccessType
+computeVarAccessType :: ProcVar -> (ScopeVar,VarAccessType) -> (ScopeVar,VarAccessType) -> MTC VarAccessType
 computeVarAccessType var (x,xvat) (y,yvat) = do
   let f cur =
          case cur of
@@ -198,6 +197,7 @@ data MFull = MFull
     _vaCtx :: VarAccessCtx
   , _memCtx :: MemCtx
   , _mutCtx :: MutCtx
+  , _lastValue :: MutDMTerm
   , _termVarsOfMut :: NameCtx
   , _scopeNames :: NameCtx
   , _memNames :: NameCtx
@@ -211,8 +211,8 @@ $(makeLenses ''MFull)
 
 
 -- new variables
-newTeVarOfMut :: (MonadState MFull m) => Text -> m (TeVar)
-newTeVarOfMut hint = termVarsOfMut %%= (first GenTeVar . (newName hint))
+-- newTeVarOfMut :: (MonadState MFull m) => Text -> m (TeVar)
+-- newTeVarOfMut hint = termVarsOfMut %%= (first GenTeVar . (newName hint))
 
 newScopeVar :: (MonadState MFull m) => Text -> m (ScopeVar)
 newScopeVar hint = scopeNames %%= (first ScopeVar . (newName hint))
@@ -231,3 +231,242 @@ cleanupMem :: ScopeVar -> MTC ()
 cleanupMem scname = mutCtx %= (\ctx -> f ctx)
   where
     f = fromKeyElemPairs . filter (\(_,(scname2,_)) -> scname2 /= scname) . getAllKeyElemPairs
+
+
+---------
+-- Last Value
+
+data LastValue = PureValue | DefaultValue DMTerm | MutatingCall | MutatingFunctionEnd
+
+setLastValue :: DemutDMTerm -> MTC ()
+setLastValue = undefined
+
+
+
+-----------------------------------------------------------------------------------------------------
+-- Memory and VA actions
+-----------------------------------------------------------------------------------------------------
+
+
+fst3 (a,b,c) = a
+
+demutationError = throwError . DemutationError
+
+-- buildReturnValue :: [ProcVar] -> DMTerm
+-- buildReturnValue [x] = Var (Just x :- JTAny)
+-- buildReturnValue xs = Tup [Var (Just x :- JTAny) | x <- xs]
+
+-- buildCopyReturnValue :: [ProcVar] -> DMTerm
+-- buildCopyReturnValue [x] = DeepcopyValue $ Var (Just x :- JTAny)
+-- buildCopyReturnValue xs = Tup [DeepcopyValue $ Var (Just x :- JTAny) | x <- xs]
+
+--------------------------------------------------------------------------------------
+-- Accessing the VA-Ctx in the MTC monad
+
+markReassignedBase :: IsFLetDefined -> ScopeVar -> ProcVar -> MTC ()
+markReassignedBase fletdef scname tevar = do
+  debug $ "[markReassignedBase]: called for " <> show tevar <> " in " <> show scname 
+
+  -- make sure that we are still allowed to access this var
+  -- memvar <- expectSingleMem =<< expectNotMoved tevar
+
+  vaCtx %=~ (markReassignedInScope scname tevar)
+
+  newvatype <- getValue tevar <$> use vaCtx
+
+  -- extracting the new locality
+  -- newloc <- case newvatype of
+  --               Just (WriteSingleBase _ _ newloc) -> return newloc
+  --               _ -> impossible "Expected the resulting locality after `markReassignedBase` to be a `WriteSingleBase`."
+
+  return ()
+
+    -- The actual updating function
+    where 
+      markReassignedInScope :: ScopeVar -> ProcVar -> VarAccessCtx -> MTC VarAccessCtx 
+      markReassignedInScope scname tevar ctx =
+        case getValue tevar ctx of
+          Nothing                      -> impossible $ "When demutating (MarkMutated), the variable "
+                                                       <> show tevar <> " was not in the VA-Ctx."
+          Just oldvatype -> do
+            newvatype <- computeVarAccessType tevar oldvatype (scname, WriteSingleBase fletdef)
+            debug $ "[markReassignedBase]: VA type for '" <> show tevar <> "' changes from " <> show oldvatype <> " to " <> show newvatype
+            return (setValue tevar (scname, newvatype) ctx)
+
+markReassignedFLet :: ScopeVar -> ProcVar -> MTC ()
+markReassignedFLet scname var = do
+  log $ "Marking flet mutated for " <> show var
+  markReassignedBase FLetDefined scname var
+
+--
+-- Apply a mutation of `loc` locality to the `var`.
+-- This might or might not change `loc`, depending on whether this variable
+-- is already local or not-local.
+-- The resulting locality is returned.
+--
+markReassigned :: ScopeVar -> ProcVar -> MTC ()
+markReassigned scname var = do
+  log $ "Marking simple mutated for " <> show var
+  markReassignedBase NotFLetDefined scname var
+
+
+markRead :: ScopeVar -> ProcVar -> MTC ()
+markRead scname tevar = do
+   debug $ "[markRead]: called for tevar" <> show tevar <> " in " <> show scname 
+  --  mvars <- getAllMemVars <$> expectNotMoved var -- we make sure that we are still allowed to use this variable
+   let f v = vaCtx %=~ (markReadInScope scname v) 
+        where 
+          markReadInScope :: ScopeVar -> ProcVar -> VarAccessCtx -> MTC VarAccessCtx 
+          markReadInScope scname tevar ctx =
+            case getValue tevar ctx of
+              Nothing                      -> pure (setValue tevar (scname, ReadSingle) ctx)
+              Just oldvatype -> do
+                newvatype <- computeVarAccessType tevar oldvatype (scname, ReadSingle)
+                return (setValue tevar (scname,newvatype) ctx)
+
+   f tevar
+   return ()
+
+markReadMaybe :: ScopeVar -> Maybe ProcVar -> MTC ()
+markReadMaybe scname (Just x) = markRead scname x
+markReadMaybe scname Nothing = pure ()
+
+markReadOverwritePrevious :: ScopeVar -> ProcVar -> MTC ()
+markReadOverwritePrevious scname var = vaCtx %%= (\scope -> ((), setValue var (scname, ReadSingle) scope))
+
+--------------------------------------------------------------------------------------
+
+markMutated :: MemVar -> MTC ()
+markMutated mv = do
+  let f ctx = do
+        case getValue mv ctx of
+          Nothing -> impossible ""
+          Just (scvar,_) -> return $ setValue mv (scvar, Mutated) ctx
+
+  mutCtx %=~ f
+  return ()
+
+
+--------------------------------------------------------------------------------------
+
+
+wrapReorder :: (Eq a, Show a) => [a] -> [a] -> PreDMTerm t -> PreDMTerm t
+wrapReorder have want term | have == want = term
+wrapReorder have want term | otherwise    =
+  let σ = getPermutationWithDrop have want
+  in Reorder σ (term)
+
+immutTypeEq :: ImmutType -> ImmutType -> Bool
+immutTypeEq (Pure _) (Pure _) = True
+immutTypeEq (Mutating a) (Mutating b) = a == b
+immutTypeEq (VirtualMutated a) (VirtualMutated b) = a == b
+immutTypeEq (PureBlackBox) (PureBlackBox) = True
+immutTypeEq _ _ = False
+
+-- set the type of the variable in scope,
+-- but do not allow to change that value afterwards.
+safeSetValueBase :: IsFLetDefined -> ScopeVar -> Maybe ProcVar -> ImmutType -> Scope -> MTC Scope
+safeSetValueBase fletdef scname(Nothing) newType scope = pure scope
+safeSetValueBase fletdef scname(Just var) newType scope =
+  case getValue var scope of
+    Nothing -> do
+      debug $ "[safeSetValue]: Var " <> show var <> " not in scope " <> show scname <> ". Marking read."
+      markRead scname var
+      return (setValue var newType scope)
+    (Just oldType) -> do
+      debug $ "[safeSetValue]: Var " <> show var <> " is already in scope " <> show scname <> ". Marking as mutated."
+      markReassignedBase fletdef scname var -- We say that we are changing this variable. This can throw an error.
+      if immutTypeEq oldType newType
+                      then pure scope
+                      else throwError (DemutationError $ "Found a redefinition of the variable '" <> show var <> "', where the old type (" <> show oldType <> ") and the new type (" <> show newType <> ") differ. This is not allowed.")
+
+safeSetValue = safeSetValueBase NotFLetDefined
+safeSetValueAllowFLet = safeSetValueBase FLetDefined
+
+{-
+safeSetValueAllowFLet :: Maybe ProcVar -> ImmutType -> Scope -> MTC Scope
+safeSetValueAllowFLet (Nothing) newType scope = pure scope
+safeSetValueAllowFLet (Just var) newType scope =
+  case getValue var scope of
+    Nothing -> pure $ setValue var newType scope
+    (Just oldType) -> if immutTypeEq oldType newType
+                      then pure scope
+                      else throwError (DemutationError $ "Found a redefinition of the variable '" <> show var <> "', where the old type (" <> show oldType <> ") and the new type (" <> show newType <> ") differ. This is not allowed.")
+-}
+
+--
+-- This function marks variables as moved in the scope
+-- For #172
+--
+moveGetMem :: ScopeVar -> MoveType -> MTC MemType
+moveGetMem scname NoMove = SingleMem <$> allocateMem scname ""
+moveGetMem scname (SingleMove a) = do
+  memvar <- expectNotMoved a
+  memCtx %= (setValue a (MemMoved))
+  return memvar
+moveGetMem scname (TupleMove as) = TupleMem <$> mapM (moveGetMem scname) as
+moveGetMem scname (RefMove) = pure RefMem
+
+setMemMaybe :: Maybe ProcVar -> MemType -> MTC () 
+setMemMaybe (Just x) mt = memCtx %= (setValue x (MemExists mt))
+setMemMaybe (Nothing) _ = pure ()
+
+setMemTuple :: ScopeVar -> [Maybe ProcVar] -> MemType -> MTC ()
+setMemTuple scname xs (SingleMem a) = do
+  -- We are deconstructing a tuple value,
+  -- need to create memory locations for all parts
+  let f (Just x) = do
+        mx <- allocateMem scname (T.pack $ show x)
+        memCtx %= (setValue x (MemExists (SingleMem mx)))
+      f Nothing = pure ()
+  mapM_ f xs
+setMemTuple scname xs (RefMem) = do
+  mapM_ (\(x) -> setMemMaybe x (RefMem)) xs
+
+setMemTuple scname xs (TupleMem as) | length xs == length as = do
+  let xas = zip xs as
+  mapM_ (\(x, a) -> setMemMaybe x a) xas
+
+setMemTuple scname xs (TupleMem as) | otherwise = demutationError $ "Trying to assign a tuple where lengths do not match:\n"
+                                                                    <> show xs <> " = " <> show as
+
+
+expectNotMoved :: ProcVar -> MTC MemType
+expectNotMoved tevar = do
+  mc <- use memCtx
+  case getValue tevar mc of
+    Nothing          -> demutationError $ "The variable " <> show tevar <> " is not assigned to anything.\n"
+                                        <> "The memctx is:\n"
+                                        <> show mc
+    Just (MemMoved) -> throwError $ DemutationMovedVariableAccessError tevar
+    Just (MemExists a) -> pure a
+
+ensureNotMovedMaybe :: Maybe ProcVar -> MTC () 
+ensureNotMovedMaybe (Just a) = expectNotMoved a >> return ()
+ensureNotMovedMaybe Nothing = return ()
+
+getAllMemVars :: MemType -> [MemVar]
+getAllMemVars (SingleMem a) = [a]
+getAllMemVars (TupleMem a) = a >>= getAllMemVars
+getAllMemVars (RefMem) = []
+
+expectSingleMem :: MemType -> MTC MemVar
+expectSingleMem mt = do
+  case mt of
+    (SingleMem a) -> pure a
+    (mem) -> demutationError $ "The memory type " <> show mem <> " was expected to contain a single memory location."
+
+reverseMemLookup :: MemVar -> MTC ProcVar
+reverseMemLookup wantedMem = do
+  alltemems <- getAllKeyElemPairs <$> use memCtx
+  let relevantTemems = [(t,m) | (t,MemExists m) <- alltemems, wantedMem `elem` getAllMemVars m]
+
+  case relevantTemems of
+    [] -> demutationError $ "When doing a reverse memory lookup for memory variable " <> show wantedMem <> ", no tevar was found."
+    [(t,a)] -> case a of
+                SingleMem a -> return t
+                a  -> demutationError $ "When doing a reverse memory lookup for memory variable " <> show wantedMem <> ", expected it to have an individual name.\n"
+                                      <> "but it was part of a compound type: " <> show a
+    xs -> demutationError $ "When doing a reverse memory lookup for memory variable " <> show wantedMem <> ", multiple tevars were found: " <> show xs
+
+

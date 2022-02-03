@@ -802,6 +802,7 @@ data ProceduralExtension a =
   | ProcBBLet ProcVar [JuliaType] -- name, arguments
   | ProcPhi a [a]
   | ProcPreLoop a (Maybe ProcVar) a
+  | ProcReturn
   | Block [a]
 
 
