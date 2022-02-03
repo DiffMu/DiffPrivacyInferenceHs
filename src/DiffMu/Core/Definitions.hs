@@ -798,8 +798,8 @@ data ProceduralExtension a =
   | ProcSLetBase LetKind (Asgmt JuliaType) a
   | ProcFLet TeVar a
   | ProcBBLet TeVar [JuliaType] -- name, arguments
-  | ProcPhi a a a
-  | ProcPreloop a (Maybe TeVar) a
+  | ProcPhi a [a]
+  | ProcPreLoop a (Maybe TeVar) a
   | ProcLoop a [TeVar] (Maybe TeVar, TeVar) a
   | Block [a]
 
