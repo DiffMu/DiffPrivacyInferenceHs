@@ -15,6 +15,7 @@ module DiffMu.Prelude
   , composeFunM
   , MonadImpossible (..)
   , MonadInternalError (..)
+  , ProcVar (..)
   , TeVar (..)
   , ScopeVar (..)
   , MemVar (..)
@@ -71,6 +72,18 @@ instance Show Symbol where
   show (Symbol t) = T.unpack t
 
 instance DictKey Symbol
+
+
+-- proc variables
+
+data ProcVar = UserProcVar Symbol
+  deriving (Eq,Generic, Ord)
+
+instance Hashable ProcVar
+instance Show ProcVar where
+  show (UserProcVar x) = show x
+
+instance DictKey ProcVar
 
 -- term variables
 

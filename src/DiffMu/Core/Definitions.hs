@@ -790,18 +790,32 @@ instance Eq (EmptyExtension a) where
 type DMTerm = PreDMTerm EmptyExtension
 
 
+data ProcAsgmt a = (::-) (Maybe ProcVar) a
+  deriving (Generic, Show, Eq, Ord)
 
 type ProcDMTerm = PreDMTerm ProceduralExtension
 
 data ProceduralExtension a =
-  ProcTLetBase LetKind [(Asgmt JuliaType)] a
-  | ProcSLetBase LetKind (Asgmt JuliaType) a
-  | ProcFLet TeVar a
-  | ProcBBLet TeVar [JuliaType] -- name, arguments
+  ProcTLetBase LetKind [(ProcAsgmt JuliaType)] a
+  | ProcSLetBase LetKind (ProcAsgmt JuliaType) a
+  | ProcFLet ProcVar a
+  | ProcBBLet ProcVar [JuliaType] -- name, arguments
   | ProcPhi a [a]
-  | ProcPreLoop a (Maybe TeVar) a
-  | ProcLoop a [TeVar] (Maybe TeVar, TeVar) a
+  | ProcPreLoop a (Maybe ProcVar) a
   | Block [a]
+
+
+type DemutDMTerm = PreDMTerm DemutatedExtension
+ 
+data DemutatedExtension a =
+  DemutTLetBase LetKind [(Asgmt JuliaType)] a
+  | DemutSLetBase LetKind (Asgmt JuliaType) a
+  | DemutFLet TeVar a
+  | DemutBBLet TeVar [JuliaType] -- name, arguments
+  | DemutPhi a [a]
+  | DemutPreLoop a (Maybe TeVar) a
+  | DemutLoop a [TeVar] (Maybe TeVar, TeVar) a
+  | DemutBlock [a]
 
 
 ----
