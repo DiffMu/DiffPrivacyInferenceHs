@@ -333,6 +333,7 @@ instance ShowPretty (DMTypeOf k) where
   showPretty (DMMat nrm clp n m τ) = "Matrix<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty n <> " × " <> showPretty m <> "](" <> showPretty τ <> ")"
   showPretty (DMModel m τ) = "DMModel[" <> showPretty m <> "](" <> showPretty τ <> ")"
   showPretty (DMGrads nrm clp m τ) = "DMGrads<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty m <> "](" <> showPretty τ <> ")"
+  showPretty (DMContainer k nrm clp m τ) = "DMContainer{" <> show k <> "}<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty m <> "](" <> showPretty τ <> ")"
   showPretty (NoFun x) = showPretty x
   showPretty (Fun xs) = showPrettyEnumVertical (fmap fstAnn xs)
   showPretty (x :∧: y) = "(" <> showPretty x <> "∧" <> showPretty y <> ")"
