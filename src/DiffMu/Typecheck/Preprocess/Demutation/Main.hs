@@ -260,11 +260,13 @@ reverseMemLookup wantedMem = do
 
 
 
-rearrangePhi :: MutDMTerm -> MTC MutDMTerm
+rearrangePhi :: ProcDMTerm -> MTC ProcDMTerm
 rearrangePhi term = recDMTermM rearrangePhi rearrangePhiExt term
 
+
+{-
 -- make MutPhi into Phi by appending the tail to both branches.
-rearrangePhiExt :: MutabilityExtension MutDMTerm -> MTC (MutDMTerm)
+rearrangePhiExt :: MutabilityExtension ProcDMTerm -> MTC (ProcDMTerm)
 rearrangePhiExt (MutPhi condition branches tail) =
     case branches of
          [ifb] -> do
@@ -289,7 +291,7 @@ rearrangePhiExt term = do
   let x = (recDMTermM rearrangePhi rearrangePhiExt) <$> term
   x' <- sequence x
   return $ Extra x'
-
+-}
 
 ---
 -- elaborating loops
@@ -298,8 +300,10 @@ rearrangePhiExt term = do
 -- - JuliaReturn
 -- - modify iteration variable
 
-demutate :: MutDMTerm -> MTC (DMTerm)
-demutate term = do
+demutate :: ProcDMTerm -> MTC (ProcDMTerm)
+demutate term = undefined
+{-
+do
   logForce $ "Term before phi rearranging:\n" <> showPretty term
 
   term' <- rearrangePhi term
@@ -313,14 +317,16 @@ demutate term = do
   logForce $ "-----------------------------------"
   logForce $ "Mutation elaborated term is:\n" <> showPretty res
 
-  let optimized = optimizeTLet res
-  logForce $ "-----------------------------------"
-  logForce $ "TLet optimized term is:\n" <> showPretty optimized
+  -- let optimized = optimizeTLet res
+  -- logForce $ "-----------------------------------"
+  -- logForce $ "TLet optimized term is:\n" <> showPretty optimized
 
   return optimized
+-}
 
 
-elaborateNonmut :: ScopeVar -> Scope -> MutDMTerm -> MTC (DMTerm , ImmutType, MoveType)
+
+elaborateNonmut :: ScopeVar -> Scope -> ProcDMTerm -> MTC (ProcDMTerm , ImmutType, MoveType)
 elaborateNonmut scname scope term = do
   (resTerm , resType, mType) <- elaborateMut scname scope term
 
@@ -343,7 +349,7 @@ elaborateNonmut scname scope term = do
 
   return (resTerm , resType, mType)
 
-elaborateMut :: ScopeVar -> Scope -> MutDMTerm -> MTC (DMTerm , ImmutType, MoveType)
+elaborateMut :: ScopeVar -> Scope -> ProcDMTerm -> MTC (DMTerm , ImmutType, MoveType)
 
 elaborateMut scname scope (Op op args) = do
   args' <- mapM (elaborateNonmut scname scope) args
@@ -1274,7 +1280,7 @@ elaborateMut scname scope term@(BBApply x a b)    = throwError (UnsupportedError
 -- elaborating a lambda term
 --
 
-elaborateLambda :: ScopeVar -> Scope -> [Asgmt JuliaType] -> MutDMTerm -> MTC (DMTerm , ImmutType)
+elaborateLambda :: ScopeVar -> Scope -> [Asgmt JuliaType] -> ProcDMTerm -> MTC (DMTerm , ImmutType)
 elaborateLambda scname scope args body = do
   --
   -- Regarding Movetypes: We do not need to do anything here
@@ -1431,7 +1437,7 @@ elaborateLambda scname scope args body = do
 -- elaborating a list of terms which are used in individually either mutating, or not mutating places
 --
 
-elaborateMutList :: String -> ScopeVar -> Scope -> [(IsMutated , MutDMTerm)] -> MTC ([DMTerm] , [TeVar])
+elaborateMutList :: String -> ScopeVar -> Scope -> [(IsMutated , ProcDMTerm)] -> MTC ([DMTerm] , [TeVar])
 elaborateMutList f scname scope mutargs = do
   ---------------------------------------
   -- Regarding MoveTypes (#171)
@@ -1446,7 +1452,7 @@ elaborateMutList f scname scope mutargs = do
 
 
   -- function for typechecking a single argument
-  let checkArg :: (IsMutated , MutDMTerm) -> MTC (DMTerm , ImmutType, Maybe (TeVar))
+  let checkArg :: (IsMutated , ProcDMTerm) -> MTC (DMTerm , ImmutType, Maybe (TeVar))
       checkArg (Mutated , arg) = do
         -- if the argument is given in a mutable position,
         -- it _must_ be a var
@@ -1562,7 +1568,7 @@ elaborateMutList f scname scope mutargs = do
 ------------------------------------------------------------
 -- preprocessing a for loop body
 
-runPreprocessLoopBody :: Scope -> Maybe TeVar -> MutDMTerm -> MTC (MutDMTerm, [TeVar])
+runPreprocessLoopBody :: Scope -> Maybe TeVar -> ProcDMTerm -> MTC (ProcDMTerm, [TeVar])
 runPreprocessLoopBody scope iter t = do
   (a,x) <- runStateT (preprocessLoopBody scope iter t) def
   return (a, nub x)
@@ -1572,7 +1578,7 @@ runPreprocessLoopBody scope iter t = do
 --   Also makes sure that the iteration variable `iter` is not assigned,
 --   and that no `FLet`s are found.
 --   Returns the variables which were changed to `modify!`.
-preprocessLoopBody :: Scope -> Maybe TeVar -> MutDMTerm -> StateT [TeVar] MTC MutDMTerm
+preprocessLoopBody :: Scope -> Maybe TeVar -> ProcDMTerm -> StateT [TeVar] MTC ProcDMTerm
 
 preprocessLoopBody scope iter (SLetBase ltype (v :- jt) term body) = do
   -- it is not allowed to change the iteration variable
