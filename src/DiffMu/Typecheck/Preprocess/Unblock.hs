@@ -7,22 +7,16 @@ import DiffMu.Abstract
 import DiffMu.Core
 import DiffMu.Core.Logging
 import DiffMu.Typecheck.Preprocess.Common
-{-
-import qualified Data.Text as T
-import Data.Foldable
 
-import qualified Data.HashSet as H
- -}
 import Debug.Trace
-
-type BlockTC = LightTC Location_PrePro_Demutation ()
-
 
 -----------------------------------------------------------------------------------
 -- preprocessing step to make procedural "blocks" of statements into nice nested DMTerms.
 -- 
 
-------------------------------------------------
+type BlockTC = LightTC Location_PrePro_Demutation ()
+
+
 unblock :: DemutDMTerm -> BlockTC DMTerm
 unblock pt = case pt of
     Extra (DemutBlock []) -> internalError $ "empty block"
@@ -31,8 +25,6 @@ unblock pt = case pt of
     Extra _ -> internalError $ "found a DemutDMTerm (that's not a block) where a DMTerm or block was expected: " <> show pt
     _ -> recDMTermM unblock (\x -> unblock (Extra x)) pt
     
-
---bind2 :: (a -> b -> m c) -> m a -> m b -> m c
 
 unlistM :: BlockTC DMTerm -> [DemutDMTerm] -> BlockTC DMTerm
 unlistM mlast mxs = let
