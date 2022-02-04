@@ -64,9 +64,9 @@ do
 
 
 
-elaborateNonmut :: ScopeVar -> Scope -> ProcDMTerm -> MTC (DemutDMTerm , MoveType)
-elaborateNonmut scname scope term = undefined -- do
-  -- (resTerm , resType, mType) <- elaborateMut scname scope term
+elaborateNonmut :: ScopeVar -> ProcDMTerm -> MTC (DemutDMTerm , ImmutType , MoveType)
+elaborateNonmut scname term = undefined -- do
+  -- (resTerm , resType, mType) <- elaborateMut scname term
 
 
   -- case resType of
@@ -77,30 +77,39 @@ elaborateNonmut scname scope term = undefined -- do
 
   -- return (resTerm , resType, mType)
 
-elaborateMut :: ScopeVar -> Scope -> ProcDMTerm -> MTC (DemutDMTerm , MoveType)
+elaborateMut :: ScopeVar -> ProcDMTerm -> MTC (DemutDMTerm , ImmutType , MoveType)
 
-elaborateMut scname scope (Op op args) = do
-  args' <- mapM (elaborateMut scname scope) args
-  pure (Op op (fst <$> args') , NoMove)
+elaborateMut scname (Op op args) = do
+  args' <- mapM (elaborateMut scname) args
+  setLastValue PureValue 
+  pure (Op op (fst3 <$> args') , Pure , NoMove)
 
-elaborateMut scname scope (Sng η τ) = pure (Sng η τ , NoMove)
---elaborateMut scname scope (Rnd jt) = pure (Rnd jt , Pure UserValue)
+elaborateMut scname (Sng η τ) = do
+  setLastValue PureValue
+  return (Sng η τ , Pure , NoMove)
 
-elaborateMut scname scope _ = undefined
+elaborateMut scname term@(Var _) = demutationError $ "Unsupported term: " <> showPretty term
+
+elaborateMut scname (Extra (ProcVar (x ::- j))) = do
+  markReadMaybe scname x
+  mx <- expectNotMovedMaybe x
+  return (Var (mx :- j), τ, singleMoveMaybe x)
+
+  -- let τ = getValueMaybe x scope
+  -- case τ of
+  --   Nothing -> logForce ("checking Var term, scope: " <> show scope) >> throwError (DemutationDefinitionOrderError x)
+  --   Just τ  -> do
+  --     markReadMaybe scname x
+  --     mx <- expectNotMovedMaybe x
+  --     return (Var (mx :- j), τ, singleMoveMaybe x)
+
+
+
+elaborateMut scname _ = undefined
+
 {-
 
-elaborateMut scname scope (Var (x :- j)) = do
-  let τ = getValueMaybe x scope
-  case τ of
-    Nothing -> logForce ("checking Var term, scope: " <> show scope) >> throwError (DemutationDefinitionOrderError x)
-    Just τ  -> do
-      markReadMaybe scname x
-      ensureNotMovedMaybe x
-      return (Var (x :- j), τ, singleMoveMaybe x)
-
-
-
-elaborateMut scname scope (BBLet name args tail) = do
+elaborateMut scname (BBLet name args tail) = do
 
   -- write the black box into the scope with its type
   scope'  <- safeSetValue scname (Just name) PureBlackBox scope
@@ -109,13 +118,13 @@ elaborateMut scname scope (BBLet name args tail) = do
   setMemMaybe (Just name) =<< SingleMem <$> allocateMem scname (T.pack $ show name)
 
   -- typecheck the body in this new scope
-  (newBody , newBodyType, _) <- elaborateMut scname scope' tail
+  (newBody , newBodyType, _) <- elaborateMut scname' tail
 
   return (BBLet name args newBody , consumeDefaultValue newBodyType, NoMove)
 
-elaborateMut scname scope (SLetBase ltype (x :- τ) term body) = do
+elaborateMut scname (SLetBase ltype (x :- τ) term body) = do
 
-  (newTerm , newTermType, moveType) <- elaborateMut scname scope term
+  (newTerm , newTermType, moveType) <- elaborateMut scname term
 
   case newTermType of
     Pure _ -> pure ()
@@ -139,12 +148,12 @@ elaborateMut scname scope (SLetBase ltype (x :- τ) term body) = do
   debug $ "The memctx is now:\n"
   debug $ show logmem
 
-  (newBody , newBodyType, moveType) <- elaborateMut scname scope' body
+  (newBody , newBodyType, moveType) <- elaborateMut scname' body
   return (SLetBase ltype (x :- τ) newTerm newBody , consumeDefaultValue newBodyType, moveType)
 
-elaborateMut scname scope fullterm@(TLetBase ltype vars term body) = do
+elaborateMut scname fullterm@(TLetBase ltype vars term body) = do
 
-  (newTerm , newTermType, moveType) <- elaborateMut scname scope term
+  (newTerm , newTermType, moveType) <- elaborateMut scname term
 
   newElementTypes <- case newTermType of
     Pure (PureTuple as)    -> case length as == length vars of
@@ -167,21 +176,21 @@ elaborateMut scname scope fullterm@(TLetBase ltype vars term body) = do
   
   -- add all values as pure to the scope
   scope' <- foldrM (\((v :- _),newElType) s -> safeSetValue scname v (Pure newElType) s) scope (zip vars newElementTypes)
-  (newBody , newBodyType, newMoveType) <- elaborateMut scname scope' body
+  (newBody , newBodyType, newMoveType) <- elaborateMut scname' body
 
   return (TLetBase ltype vars newTerm newBody , consumeDefaultValue newBodyType, newMoveType)
 
-elaborateMut scname scope (LamStar args body) = do
+elaborateMut scname (LamStar args body) = do
   bodyscname <- newScopeVar "lamstar"
   (newBody, newBodyType) <- elaborateLambda bodyscname scope [(v :- x) | (v :- (x , _)) <- args] body
   return (LamStar args newBody, newBodyType, NoMove)
 
-elaborateMut scname scope (Lam args body) = do
+elaborateMut scname (Lam args body) = do
   bodyscname <- newScopeVar "lam"
   (newBody, newBodyType) <- elaborateLambda bodyscname scope args body
   return (Lam args newBody, newBodyType, NoMove)
 
-elaborateMut scname scope (Apply f args) = do
+elaborateMut scname (Apply f args) = do
   --
   -- The MoveType of function applications is always `NoMove`,
   -- because we make sure in typechecking that functions can
@@ -195,7 +204,7 @@ elaborateMut scname scope (Apply f args) = do
   --
 
   -- typecheck the function f
-  (newF , τ, _) <- elaborateNonmut scname scope f
+  (newF , τ, _) <- elaborateNonmut scname f
 
   --------
   -- 2 cases
@@ -248,7 +257,7 @@ elaborateMut scname scope (Apply f args) = do
 
 
 
-elaborateMut scname scope (FLet fname term body) = do
+elaborateMut scname (FLet fname term body) = do
   --
   -- Regarding MoveType: it is not possible to have terms
   -- where an flet is followed by something movable, i.e.
@@ -258,7 +267,7 @@ elaborateMut scname scope (FLet fname term body) = do
   --
 
   -- check the term
-  (newTerm, newTermType, moveType) <- elaborateNonmut scname scope term
+  (newTerm, newTermType, moveType) <- elaborateNonmut scname term
 
   -- set the value in the memctx
   setMemMaybe (Just fname) =<< SingleMem <$> allocateMem scname (T.pack $ show fname)
@@ -287,13 +296,13 @@ elaborateMut scname scope (FLet fname term body) = do
 
 
   -- check the body with this new scope
-  (newBody, newBodyType, newMoveType) <- elaborateMut scname scope' body
+  (newBody, newBodyType, newMoveType) <- elaborateMut scname' body
 
   return (FLet fname newTerm newBody, consumeDefaultValue newBodyType, newMoveType)
 
-elaborateMut scname scope (Extra DNothing) = undefined
-elaborateMut scname scope (Extra (MutPhi _ _ _)) = internalError $ "MutPhi should have been resolved by rearrangePhi"
-elaborateMut scname scope (Extra (MutLet ltype term1 term2)) = do
+elaborateMut scname (Extra DNothing) = undefined
+elaborateMut scname (Extra (MutPhi _ _ _)) = internalError $ "MutPhi should have been resolved by rearrangePhi"
+elaborateMut scname (Extra (MutLet ltype term1 term2)) = do
 
   --
   -- Regarding MoveType:
@@ -304,7 +313,7 @@ elaborateMut scname scope (Extra (MutLet ltype term1 term2)) = do
   --
 
   -- elaborate the first term and get its mutated variables
-  (newTerm1, newTerm1Type, newTerm1MoveType) <- elaborateMut scname scope term1
+  (newTerm1, newTerm1Type, newTerm1MoveType) <- elaborateMut scname term1
 
   --
   -- Change the scope if the first term was virtually mutating,
@@ -322,7 +331,7 @@ elaborateMut scname scope (Extra (MutLet ltype term1 term2)) = do
                      <> "\n"
                      <> "This implies a misunderstanding of semantics, and is thus not allowed."
                     --  "It (the first, pure part) is thus ignored in the privacy analysis."
-          -- elaborateMut scname scope term2
+          -- elaborateMut scname term2
         VirtualMutated newScope -> do
           debug $ "[elaborateMut/MutLet]: After first term, have mutctx:"
           logmutctx <- use mutCtx
@@ -330,7 +339,7 @@ elaborateMut scname scope (Extra (MutLet ltype term1 term2)) = do
 
 
           let scope' = fromKeyElemPairs (getAllKeyElemPairs scope <> [(s, Pure UserValue) | s <- newScope])
-          (newTerm2, newTerm2Type, newTerm2MoveType) <- elaborateMut scname scope' term2
+          (newTerm2, newTerm2Type, newTerm2MoveType) <- elaborateMut scname' term2
 
           debug $ "[elaborateMut/MutLet]: After second term, have mutctx:"
           logmutctx <- use mutCtx
@@ -365,7 +374,7 @@ elaborateMut scname scope (Extra (MutLet ltype term1 term2)) = do
 
 
   -- elaborate the second term and get its mutated variables
-  (newTerm2, newTerm2Type, _) <- elaborateMut scname scope' term2
+  (newTerm2, newTerm2Type, _) <- elaborateMut scname' term2
 
   case (newTerm1Type , newTerm2Type) of
 
@@ -537,9 +546,9 @@ elaborateMut scname scope (Extra (MutLet ltype term1 term2)) = do
 
                                                 -}
 
-elaborateMut scname scope (Extra (MutLoop iters iterVar body)) = do
+elaborateMut scname (Extra (MutLoop iters iterVar body)) = do
   -- first, elaborate the iters
-  (newIters , newItersType, _) <- elaborateNonmut scname scope iters
+  (newIters , newItersType, _) <- elaborateNonmut scname iters
 
   -- now, preprocess the body,
   -- i.e., find out which variables are getting mutated
@@ -564,7 +573,7 @@ elaborateMut scname scope (Extra (MutLoop iters iterVar body)) = do
 
   -- we can now elaborate the body, and thus get the actual list
   -- of modified variables
-  (newBody, newBodyType, _) <- elaborateMut scname scope' preprocessedBody
+  (newBody, newBodyType, _) <- elaborateMut scname' preprocessedBody
 
   --
   -- [VAR FILTERING/End]
@@ -651,23 +660,23 @@ elaborateMut scname scope (Extra (MutLoop iters iterVar body)) = do
 
 -- the loop-body-preprocessing creates these modify! terms
 -- they get elaborated into tlet assignments again.
--- elaborateMut scname scope (Extra (SModify (Nothing :- _) t1)) = throwError (DemutationError $ "Found a nameless variable in a modify term.")
--- elaborateMut scname scope (Extra (SModify (Just v :- _) t1)) = do
---   (newT1, newT1Type, moveType) <- elaborateNonmut scname scope t1
+-- elaborateMut scname (Extra (SModify (Nothing :- _) t1)) = throwError (DemutationError $ "Found a nameless variable in a modify term.")
+-- elaborateMut scname (Extra (SModify (Just v :- _) t1)) = do
+--   (newT1, newT1Type, moveType) <- elaborateNonmut scname t1
 --   return (newT1, VirtualMutated [(v)], SingleMove v)
 
 -- -- We also have tuple modify
--- elaborateMut scname scope (Extra (TModify xs t1)) = do
+-- elaborateMut scname (Extra (TModify xs t1)) = do
 --   let elabSingle (Just v :- _) = return (v)
 --       elabSingle (Nothing :- _) = throwError (DemutationError $ "Found a nameless variable in a tuple modify term.")
 
 --   allElab <- mapM elabSingle xs
 
---   (newT1, newT1Type, moveType) <- elaborateNonmut scname scope t1
+--   (newT1, newT1Type, moveType) <- elaborateNonmut scname t1
 --   -- markMoved moveType
 --   return (newT1 , VirtualMutated allElab, NoMove)
 
-elaborateMut scname scope (Extra (MutRet)) = do
+elaborateMut scname (Extra (MutRet)) = do
   ---------
   -- get mutated variables from the (VA)context
 
@@ -681,7 +690,7 @@ elaborateMut scname scope (Extra (MutRet)) = do
   return (buildCopyReturnValue mutTeVars, VirtualMutated mutTeVars, NoMove)
 
 
-elaborateMut scname scope (Extra (LoopRet xs)) = do
+elaborateMut scname (Extra (LoopRet xs)) = do
   ---------
   -- get mutated variables from the (VA)context
 
@@ -696,12 +705,12 @@ elaborateMut scname scope (Extra (LoopRet xs)) = do
   -- a single var is returned as value, not as tuple
   return (buildReturnValue extraMutTeVars, VirtualMutated extraMutTeVars, NoMove)
 
-elaborateMut scname scope (LastTerm t) = do
-  (newTerm, newType, moveType) <- elaborateMut scname scope t
+elaborateMut scname (LastTerm t) = do
+  (newTerm, newType, moveType) <- elaborateMut scname t
   return (LastTerm (newTerm), newType, moveType)
 
-elaborateMut scname scope (Extra (DefaultRet x)) = do
-  (newX,newXType,moveType) <- elaborateNonmut scname scope x
+elaborateMut scname (Extra (DefaultRet x)) = do
+  (newX,newXType,moveType) <- elaborateNonmut scname x
   case newXType of
     -- if the term is pure, then we annotate
     -- it to say that it is default
@@ -711,7 +720,7 @@ elaborateMut scname scope (Extra (DefaultRet x)) = do
     -- to say that it is default: we keep the actual type
     t -> return (newX , t, moveType)
 
-elaborateMut scname scope term@(Phi cond t1 t2) = do
+elaborateMut scname term@(Phi cond t1 t2) = do
   --
   -- Concerning moves: We need to backup the MoveCtx,
   -- and run the elaboration on both branches with the same input, 
@@ -725,18 +734,18 @@ elaborateMut scname scope term@(Phi cond t1 t2) = do
 
   -- 1st elaborate the condition
   -- (we do not expect any move here)
-  (newCond , newCondType, _) <- elaborateNonmut scname scope cond
+  (newCond , newCondType, _) <- elaborateNonmut scname cond
 
   -- backup
   originalMoves <- use memCtx
 
   -- 2nd a) elaborate branch 1
-  (newT1 , newT1Type, moveType1) <- elaborateMut scname scope t1
+  (newT1 , newT1Type, moveType1) <- elaborateMut scname t1
   moves1 <- use memCtx
 
   -- 2nd b) elaborate branch 2
   memCtx %= (\_ -> originalMoves)
-  (newT2 , newT2Type, moveType2) <- elaborateMut scname scope t2
+  (newT2 , newT2Type, moveType2) <- elaborateMut scname t2
   moves2 <- use memCtx
 
   -- 
@@ -836,22 +845,22 @@ elaborateMut scname scope term@(Phi cond t1 t2) = do
 -- See #183.
 --
 
-elaborateMut scname scope (Index t1 t2 t3) = do
-  (newT1, newT1Type, _) <- elaborateNonmut scname scope t1
-  (newT2, newT2Type, _) <- elaborateNonmut scname scope t2
-  (newT3, newT3Type, _) <- elaborateNonmut scname scope t3
+elaborateMut scname (Index t1 t2 t3) = do
+  (newT1, newT1Type, _) <- elaborateNonmut scname t1
+  (newT2, newT2Type, _) <- elaborateNonmut scname t2
+  (newT3, newT3Type, _) <- elaborateNonmut scname t3
   return (Index newT1 newT2 newT3 , Pure UserValue, RefMove)
-elaborateMut scname scope (VIndex t1 t2) = do
-  (newT1, newT1Type, _) <- elaborateNonmut scname scope t1
-  (newT2, newT2Type, _) <- elaborateNonmut scname scope t2
+elaborateMut scname (VIndex t1 t2) = do
+  (newT1, newT1Type, _) <- elaborateNonmut scname t1
+  (newT2, newT2Type, _) <- elaborateNonmut scname t2
   return (VIndex newT1 newT2 , Pure UserValue, RefMove)
-elaborateMut scname scope (MMap t1 t2) = do
-  (newT1, newT1Type, _) <- elaborateNonmut scname scope t1
-  (newT2, newT2Type, _) <- elaborateNonmut scname scope t2
+elaborateMut scname (MMap t1 t2) = do
+  (newT1, newT1Type, _) <- elaborateNonmut scname t1
+  (newT2, newT2Type, _) <- elaborateNonmut scname t2
   return (MMap newT1 newT2 , Pure UserValue, RefMove)
-elaborateMut scname scope (Row t1 t2) = do
-  (newT1, newT1Type, _) <- elaborateNonmut scname scope t1
-  (newT2, newT2Type, _) <- elaborateNonmut scname scope t2
+elaborateMut scname (Row t1 t2) = do
+  (newT1, newT1Type, _) <- elaborateNonmut scname t1
+  (newT2, newT2Type, _) <- elaborateNonmut scname t2
   return (Row newT1 newT2, Pure UserValue, RefMove)
 
 
@@ -859,7 +868,7 @@ elaborateMut scname scope (Row t1 t2) = do
 ----
 -- the mutating builtin cases
 
-elaborateMut scname scope (SubGrad t1 t2) = do
+elaborateMut scname (SubGrad t1 t2) = do
   (argTerms, mutVars) <- elaborateMutList "subgrad" scname scope [(Mutated , t1), (NotMutated , t2)]
   case argTerms of
     -- NOTE: Because of #95, we say that this function is pure
@@ -870,7 +879,7 @@ elaborateMut scname scope (SubGrad t1 t2) = do
     -- END NOTE
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
-elaborateMut scname scope (ScaleGrad scalar grads) = do
+elaborateMut scname (ScaleGrad scalar grads) = do
   (argTerms, mutVars) <- elaborateMutList "scalegrad" scname scope [(NotMutated , scalar), (Mutated , grads)]
   case argTerms of
     -- NOTE: Because of #95, we say that this function is pure
@@ -881,7 +890,7 @@ elaborateMut scname scope (ScaleGrad scalar grads) = do
     -- END NOTE
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
-elaborateMut scname scope (MutClipM c t) = do
+elaborateMut scname (MutClipM c t) = do
   (argTerms, mutVars) <- elaborateMutList "clip" scname scope [(Mutated , t)]
   case argTerms of
     -- NOTE: Because of #95, we say that this function is pure
@@ -892,7 +901,7 @@ elaborateMut scname scope (MutClipM c t) = do
     -- END NOTE
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
-elaborateMut scname scope (MutGauss t1 t2 t3 t4) = do
+elaborateMut scname (MutGauss t1 t2 t3 t4) = do
   (argTerms, mutVars) <- elaborateMutList "gauss" scname scope [(NotMutated , t1), (NotMutated , t2), (NotMutated , t3), (Mutated , t4)]
   case argTerms of
     -- NOTE: Because of #95, we say that this function is pure
@@ -903,7 +912,7 @@ elaborateMut scname scope (MutGauss t1 t2 t3 t4) = do
     -- END NOTE
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
-elaborateMut scname scope (MutLaplace t1 t2 t3) = do
+elaborateMut scname (MutLaplace t1 t2 t3) = do
   (argTerms, mutVars) <- elaborateMutList "laplace" scname scope [(NotMutated , t1), (NotMutated , t2), (Mutated , t3)]
   case argTerms of
     -- NOTE: Because of #95, we say that this function is pure
@@ -914,7 +923,7 @@ elaborateMut scname scope (MutLaplace t1 t2 t3) = do
     -- END NOTE
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
-elaborateMut scname scope (ConvertM t1) = do
+elaborateMut scname (ConvertM t1) = do
   (argTerms, mutVars) <- elaborateMutList "convert" scname scope [(Mutated , t1)]
   case argTerms of
     -- NOTE: Because of #95, we say that this function is pure
@@ -925,16 +934,16 @@ elaborateMut scname scope (ConvertM t1) = do
     -- END NOTE
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
-elaborateMut scname scope (Transpose t1) = do
-  (newT1, newT1Type, _) <- elaborateNonmut scname scope t1
+elaborateMut scname (Transpose t1) = do
+  (newT1, newT1Type, _) <- elaborateNonmut scname t1
   return (Transpose newT1 , Pure UserValue, NoMove)
 
 -- the non mutating builtin cases
-elaborateMut scname scope (Ret t1) = do
-  (newT1, newT1Type, _) <- elaborateNonmut scname scope t1
+elaborateMut scname (Ret t1) = do
+  (newT1, newT1Type, _) <- elaborateNonmut scname t1
   return (Ret newT1 , Pure UserValue, NoMove)
-elaborateMut scname scope (Tup t1s) = do
-  results <- mapM (elaborateNonmut scname scope) t1s
+elaborateMut scname (Tup t1s) = do
+  results <- mapM (elaborateNonmut scname) t1s
   let makeSureIsPure (_,Pure b,_) = pure b
       makeSureIsPure (_,b,c)      = demutationError $ "Expected to have a pure term, but got the type " <> show b <> "instead"
 
@@ -943,63 +952,63 @@ elaborateMut scname scope (Tup t1s) = do
   itypes <- mapM makeSureIsPure results 
   return (Tup terms , Pure (PureTuple itypes), TupleMove moves)
 
-elaborateMut scname scope (MCreate t1 t2 t3 t4) = do
-  (newT1, newT1Type, _) <- elaborateNonmut scname scope t1
-  (newT2, newT2Type, _) <- elaborateNonmut scname scope t2
-  (newT4, newT4Type, _) <- elaborateNonmut scname scope t4
+elaborateMut scname (MCreate t1 t2 t3 t4) = do
+  (newT1, newT1Type, _) <- elaborateNonmut scname t1
+  (newT2, newT2Type, _) <- elaborateNonmut scname t2
+  (newT4, newT4Type, _) <- elaborateNonmut scname t4
   return (MCreate newT1 newT2 t3 newT4 , Pure UserValue, NoMove)
-elaborateMut scname scope (Size t1) = do
-  (newT1, newT1Type, _) <- elaborateMut scname scope t1
+elaborateMut scname (Size t1) = do
+  (newT1, newT1Type, _) <- elaborateMut scname t1
   return (Size newT1, Pure UserValue, NoMove)
-elaborateMut scname scope (Length t1) = do
-  (newT1, newT1Type, _) <- elaborateMut scname scope t1
+elaborateMut scname (Length t1) = do
+  (newT1, newT1Type, _) <- elaborateMut scname t1
   return (Length newT1, Pure UserValue, NoMove)
-elaborateMut scname scope (ZeroGrad t1) = do
-  (newT1, newT1Type, _) <- elaborateMut scname scope t1
+elaborateMut scname (ZeroGrad t1) = do
+  (newT1, newT1Type, _) <- elaborateMut scname t1
   return (ZeroGrad newT1, Pure UserValue, NoMove)
-elaborateMut scname scope (SumGrads t1 t2) = do
-  (newT1, newT1Type, _) <- elaborateNonmut scname scope t1
-  (newT2, newT2Type, _) <- elaborateNonmut scname scope t2
+elaborateMut scname (SumGrads t1 t2) = do
+  (newT1, newT1Type, _) <- elaborateNonmut scname t1
+  (newT2, newT2Type, _) <- elaborateNonmut scname t2
   return (SumGrads newT1 newT2, Pure UserValue, NoMove)
-elaborateMut scname scope (Sample t1 t2 t3) = do
-  (newT1, newT1Type, _) <- elaborateNonmut scname scope t1
-  (newT2, newT2Type, _) <- elaborateNonmut scname scope t2
-  (newT3, newT3Type, _) <- elaborateNonmut scname scope t3
+elaborateMut scname (Sample t1 t2 t3) = do
+  (newT1, newT1Type, _) <- elaborateNonmut scname t1
+  (newT2, newT2Type, _) <- elaborateNonmut scname t2
+  (newT3, newT3Type, _) <- elaborateNonmut scname t3
   return (Sample newT1 newT2 newT3 , Pure UserValue, NoMove)
-elaborateMut scname scope (InternalExpectConst t1) = do
-  (newT1, newT1Type, _) <- elaborateMut scname scope t1
+elaborateMut scname (InternalExpectConst t1) = do
+  (newT1, newT1Type, _) <- elaborateMut scname t1
   return (InternalExpectConst newT1, Pure UserValue, NoMove)
-elaborateMut scname scope (DeepcopyValue t1) = do
-  (newT1, newT1Type, _) <- elaborateMut scname scope t1
+elaborateMut scname (DeepcopyValue t1) = do
+  (newT1, newT1Type, _) <- elaborateMut scname t1
   return (DeepcopyValue newT1, Pure UserValue, NoMove)
-elaborateMut scname scope (ClipM c t1) = do
-  (newT1, newT1Type, _) <- elaborateMut scname scope t1
+elaborateMut scname (ClipM c t1) = do
+  (newT1, newT1Type, _) <- elaborateMut scname t1
   return (ClipM c newT1, Pure UserValue, NoMove)
-elaborateMut scname scope (Gauss t1 t2 t3 t4) = do
-  (newT1, newT1Type, _) <- elaborateNonmut scname scope t1
-  (newT2, newT2Type, _) <- elaborateNonmut scname scope t2
-  (newT3, newT3Type, _) <- elaborateNonmut scname scope t3
-  (newT4, newT4Type, _) <- elaborateNonmut scname scope t4
+elaborateMut scname (Gauss t1 t2 t3 t4) = do
+  (newT1, newT1Type, _) <- elaborateNonmut scname t1
+  (newT2, newT2Type, _) <- elaborateNonmut scname t2
+  (newT3, newT3Type, _) <- elaborateNonmut scname t3
+  (newT4, newT4Type, _) <- elaborateNonmut scname t4
   return (Gauss newT1 newT2 newT3 newT4 , Pure UserValue, NoMove)
-elaborateMut scname scope (Laplace t1 t2 t3) = do
-  (newT1, newT1Type, _) <- elaborateNonmut scname scope t1
-  (newT2, newT2Type, _) <- elaborateNonmut scname scope t2
-  (newT3, newT3Type, _) <- elaborateNonmut scname scope t3
+elaborateMut scname (Laplace t1 t2 t3) = do
+  (newT1, newT1Type, _) <- elaborateNonmut scname t1
+  (newT2, newT2Type, _) <- elaborateNonmut scname t2
+  (newT3, newT3Type, _) <- elaborateNonmut scname t3
   return (Laplace newT1 newT2 newT3 , Pure UserValue, NoMove)
-elaborateMut scname scope (AboveThresh t1 t2 t3 t4) = do
-  (newT1, newT1Type, _) <- elaborateNonmut scname scope t1
-  (newT2, newT2Type, _) <- elaborateNonmut scname scope t2
-  (newT3, newT3Type, _) <- elaborateNonmut scname scope t3
-  (newT4, newT4Type, _) <- elaborateNonmut scname scope t4
+elaborateMut scname (AboveThresh t1 t2 t3 t4) = do
+  (newT1, newT1Type, _) <- elaborateNonmut scname t1
+  (newT2, newT2Type, _) <- elaborateNonmut scname t2
+  (newT3, newT3Type, _) <- elaborateNonmut scname t3
+  (newT4, newT4Type, _) <- elaborateNonmut scname t4
   return (AboveThresh newT1 newT2 newT3 newT4 , Pure UserValue, NoMove)
 
 -- the unsupported terms
-elaborateMut scname scope term@(Choice t1)        = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
-elaborateMut scname scope term@(Loop t1 t2 t3 t4) = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
-elaborateMut scname scope term@(Reorder t1 t2)    = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
-elaborateMut scname scope term@(TProject t1 t2)   = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
-elaborateMut scname scope term@(Arg x a b)        = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
-elaborateMut scname scope term@(BBApply x a b)    = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
+elaborateMut scname term@(Choice t1)        = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
+elaborateMut scname term@(Loop t1 t2 t3 t4) = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
+elaborateMut scname term@(Reorder t1 t2)    = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
+elaborateMut scname term@(TProject t1 t2)   = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
+elaborateMut scname term@(Arg x a b)        = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
+elaborateMut scname term@(BBApply x a b)    = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
 
 
 
@@ -1065,7 +1074,7 @@ elaborateLambda scname scope args body = do
                      args
 
   -- check the body
-  (newBody,τ,moveType) <- elaborateMut scname scope' body
+  (newBody,τ,moveType) <- elaborateMut scname' body
 
   -- get the context and check if some variables are now mutated
   ctx <- use vaCtx
@@ -1232,7 +1241,7 @@ elaborateMutList f scname scope mutargs = do
       checkArg (NotMutated , arg) = do
         -- if the argument is given in an immutable position,
         -- we allow to use the full immut checking
-        (arg' , τ, _) <- elaborateMut scname scope arg
+        (arg' , τ, _) <- elaborateMut scname arg
 
         -- we require the argument to be of pure type
         case τ of
