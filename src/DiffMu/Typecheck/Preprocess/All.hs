@@ -10,6 +10,7 @@ import DiffMu.Typecheck.Preprocess.TopLevel
 import DiffMu.Typecheck.Preprocess.Demutation
 import DiffMu.Typecheck.Preprocess.FLetReorder
 import DiffMu.Typecheck.Preprocess.LexicalScoping
+import DiffMu.Typecheck.Preprocess.Unblock
 import DiffMu.Typecheck.Preprocess.Colors
 
 import qualified Data.HashMap.Strict as H
@@ -34,23 +35,33 @@ preprocessAll term = do
   term'' <- liftLightTC (MFull def def def def def def tlinfo) (\_ -> ()) (demutate term')
   -- term'' <- liftLightTC () (\_ -> ()) (nondemutate term')
 
+  info $ "-----------------------------------"
+  info $ "demutated term:\n" <> showPretty term''
+
+  -- de-proceduralizing processing
+  term''' <- liftLightTC () (\_ -> ()) (unblock term'')
+
+  info $ "-----------------------------------"
+  info $ "deproceduralized term:\n" <> showPretty term'''
+  
   -- flet processing
-  term''' <- liftLightTC def def (collectAllFLets term'')
+  term'''' <- liftLightTC def def (collectAllFLets term''')
 
   info $ "-----------------------------------"
-  info $ "FLet processed term:\n" <> showPretty term'''
+  info $ "FLet processed term:\n" <> showPretty term''''
 
   -- lexical scoping processing
-  term'''' <- liftLightTC (LSFull def) (\_ -> ()) (processLS term''')
+  term''''' <- liftLightTC (LSFull def) (\_ -> ()) (processLS term'''')
 
   info $ "-----------------------------------"
-  info $ "Lexical scoping processed term:\n" <> showPretty term''''
+  info $ "Lexical scoping processed term:\n" <> showPretty term'''''
 
-  -- lexical scoping processing
-  term''''' <- liftLightTC (ColorFull def SensitivityK) (\_ -> ()) (processColors term'''')
+
+  -- color processing
+  term'''''' <- liftLightTC (ColorFull def SensitivityK) (\_ -> ()) (processColors term''''')
 
   info $ "-----------------------------------"
-  info $ "Color processed term:\n" <> showPretty term'''''
+  info $ "Color processed term:\n" <> showPretty term''''''
 
   -- done
   return term'''''
