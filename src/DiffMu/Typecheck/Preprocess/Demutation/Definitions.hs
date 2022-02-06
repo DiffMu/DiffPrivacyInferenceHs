@@ -92,14 +92,18 @@ data MoveType = TupleMove [MoveType] | SingleMove ProcVar | RefMove DemutDMTerm 
 -- singleMoveMaybe (Just a) = SingleMove a
 -- singleMoveMaybe Nothing  = NoMove
 
-
 data TermType =
   Value ImmutType MoveType
   | Statements [DemutDMTerm] DemutDMTerm
   | MutatingFunctionEnd
 
+data LastValue =
+   PureValue MoveType
+   | DefaultValue DemutDMTerm
+   | MutatingFunctionEndValue
 
-
+setLastValue :: LastValue -> MTC ()
+setLastValue = undefined
 
 --------------------------------------------------
 -- memory state
@@ -249,19 +253,6 @@ cleanupMem :: ScopeVar -> MTC ()
 cleanupMem scname = mutCtx %= (\ctx -> f ctx)
   where
     f = fromKeyElemPairs . filter (\(_,(scname2,_)) -> scname2 /= scname) . getAllKeyElemPairs
-
-
----------
--- Last Value
-
-data LastValue =
-   PureValue MoveType
-   | DefaultValue DMTerm
-   | MutatingFunctionEndValue
-
--- setLastValue :: LastValue -> MTC ()
--- setLastValue = undefined
-
 
 
 -----------------------------------------------------------------------------------------------------

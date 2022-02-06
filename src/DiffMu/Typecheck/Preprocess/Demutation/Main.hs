@@ -85,6 +85,30 @@ elaboratePureValue scname te = do
 
 
 
+-- make sure there are no Value or MutatingFunctionEnd inside the blocks
+-- reverse the block statements
+-- concatenate Statements blocks
+-- determine the correct LastTerm for the concatenation result
+makeTermList :: [TermType] -> MTC (LastValue, [DemutDMTerm])
+makeTermList termstt = let
+    inside :: TermType -> MTC [DemutDMTerm]
+    inside t = case t of
+                    Value it mt -> demutationError $ "Found a value term " <> show mt <> " inside a list of statements."
+                    MutatingFunctionEnd -> demutationError $ "Found a MutatingFunctionEnd inside a list of statements."
+                    Statements terms last -> return (last : (reverse terms))
+    in case (reverse termstt) of
+            (Value it mt : insideTerms) -> do
+                insides <- mapM inside insideTerms
+                case it of
+                     Pure -> return ((PureValue mt), concat insides)
+                     _ -> demutationError $ "Found an impure value "<> show mt <>" as last term in a list of statements."
+            ((Statements terms last) : insideTerms) -> do
+                insides <- mapM inside insideTerms
+                return ((DefaultValue last), (reverse terms) ++ (concat insides))
+            (MutatingFunctionEnd : insideTerms) -> do
+                insides <- mapM inside insideTerms
+                return (MutatingFunctionEndValue, concat insides)
+
 -- elaborateNonmut :: ScopeVar -> ProcDMTerm -> MTC (DemutDMTerm , ImmutType , MoveType)
 -- elaborateNonmut scname term = undefined -- do
   -- (resTerm , resType, mType) <- elaborateMut scname term
@@ -98,7 +122,7 @@ elaboratePureValue scname te = do
   -- return (resTerm , resType, mType)
 
 elaborateMut :: ScopeVar -> ProcDMTerm -> MTC (TermType)
-
+    
 elaborateMut scname (Op op args) = do
   args' <- mapM (elaboratePureValue scname >=> moveTypeAsTerm) args
   pure (Value Pure (NoMove (Op op args')))
