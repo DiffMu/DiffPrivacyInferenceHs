@@ -97,6 +97,7 @@ makeTermList termstt = let
                     MutatingFunctionEnd -> demutationError $ "Found a MutatingFunctionEnd inside a list of statements."
                     Statements terms last -> return (last : (reverse terms))
     in case (reverse termstt) of
+            [] -> demutationError $ "Found an empty block"
             (Value it mt : insideTerms) -> do
                 insides <- mapM inside insideTerms
                 case it of
