@@ -1200,6 +1200,11 @@ elaborateMut scname term@(BBApply x a b)    = throwError (UnsupportedError ("Whe
 -}
 
 
+
+
+elaborateAsList :: ScopeVar -> ProcDMTerm -> MTC (LastValue, [DemutDMTerm])
+elaborateAsList scname t = undefined
+
 ---------------------------------------------------
 -- recurring utilities
 
@@ -1238,11 +1243,10 @@ elaborateLambda scname args body = do
   -- Allocate new memory for the arguments.
   let arghint (Just x ::- _) = Left x
       arghint (_ ::- _)      = Right "anon-arg"
-  argMemVars <- mapM (allocateMem scname) (arghint <$> args)
-  -- combine with var names
-  let argsWithMemVars = zip args argMemVars
+  argmvs <- mapM (allocateMem scname) (arghint <$> args)
+
   -- assign memory to variables
-  mapM (\(x ::- _,a) -> setMemMaybe x (SingleMem a)) argsWithMemVars
+  mapM (\(x ::- _,a) -> setMemMaybe x (SingleMem a)) (zip args argmvs)
 
 
   -- SINCE #190:
@@ -1265,17 +1269,27 @@ elaborateLambda scname args body = do
   -- SINCE #190 END.
 
 
-  -- Check the body
-  --   For this we need a list of terms in this function
+
+  --------------------
+  --
+  -- check the body
+  --
+  (lastValue, new_body_terms) <- elaborateAsList scname body
+  --
+  -- find out which mem vars have been mutated
+  --
+  let annotateIsMutated :: MemVar -> MTC (MemVar, IsMutated)
+      annotateIsMutated mvar = undefined
+
+  mutated_argmvs <- do amvs <- mapM annotateIsMutated argmvs
+                       return [mv | (mv, Mutated) <- amvs]
+
+  --
+  --------------------
 
 
-  -- (newBody,τ,moveType) <- elaborateMut scname' body
 
-
-  undefined
   {-
-
-
   -- get the context and check if some variables are now mutated
   ctx <- use vaCtx
   let ctxElems = getAllElems ctx
@@ -1297,6 +1311,12 @@ elaborateLambda scname args body = do
   vars_mutationState <- mapM getVar argsWithMemVars
   let mutVars = [v | Just (v , Mutated) <- vars_mutationState]
   let mutationsStates = [m | Just (_ , m) <- vars_mutationState]
+  -}
+
+
+  ------------------------------
+  -- Begin restoration of state
+  --
 
   --  
   -- delete all memory variables for this scope
@@ -1308,13 +1328,21 @@ elaborateLambda scname args body = do
   -- (https://github.com/DiffMu/DiffPrivacyInferenceHs/issues/148#issuecomment-1004950955)
   --
   vactxBeforeRestoration <- use vaCtx
-  let restoreArg tevar = do
-        case getValue tevar oldVaCtx of
-          Nothing -> vaCtx %%= (\ctx -> ((), deleteValue tevar ctx))
-          Just (oldva, oldscname) -> vaCtx %%= (\ctx -> ((), setValue tevar (oldva, oldscname) ctx))
-  mapM restoreArg [a | (Just a :- _) <- args]
+  let restoreArg procvar = do
+        case getValue procvar oldVaCtx of
+          Nothing -> vaCtx %%= (\ctx -> ((), deleteValue procvar ctx))
+          Just (oldvalue) -> vaCtx %%= (\ctx -> ((), setValue procvar (oldvalue) ctx))
+  mapM restoreArg [a | (Just a ::- _) <- args]
   --
   -----------
+
+
+
+
+
+  undefined
+  {-
+
 
 
   -- now, depending on whether we have a mutating lambda,
