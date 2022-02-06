@@ -127,7 +127,7 @@ type MemCtx = Ctx ProcVar MemState
 
 type MutCtx = Ctx MemVar (ScopeVar, IsMutated)
 
-type MemRedirectionCtx = Ctx MemVar MemType
+type MemRedirectionCtx = Ctx MemVar [MemVar]
 
 --------------------------------------------------------
 -- monoid instance for isMutated
@@ -140,6 +140,12 @@ instance Monad m => MonoidM m IsMutated where
 instance Monad m => CheckNeutral m IsMutated where
   checkNeutral (NotMutated) = pure True
   checkNeutral (Mutated) = pure False
+
+instance Semigroup IsMutated where
+  (<>) = (⋆!)
+
+instance Monoid IsMutated where
+  mempty = neutralId
 
 --------------------------------------------------------------------------------------
 -- Variable Access Type
@@ -556,6 +562,27 @@ reverseMemLookup wantedMem = do
                                       <> "but it was part of a compound type: " <> show a
     xs -> demutationError $ "When doing a reverse memory lookup for memory variable " <> show wantedMem <> ", multiple tevars were found: " <> show xs
 
+
+getMemVarMutationStatus :: MemVar -> MTC IsMutated
+getMemVarMutationStatus mv = do
+  mctx <- use mutCtx
+  case getValue mv mctx of
+    Nothing -> internalError $ "Expected memory location to have a mutation status, but it didn't. MemVar: " <> show mv
+
+    -- If the variable is marked as mutated,
+    -- we know that it is.
+    Just (_, Mutated) -> return Mutated
+
+    -- If it is not marked as mutated,
+    -- it might still be that it redirects
+    -- to something which is. Thus we
+    -- do a further lookup in the redirection
+    -- context.
+    Just (_, NotMutated) -> do
+      rctx <- use memRedirectionCtx
+      case getValue mv rctx of
+        Nothing -> return NotMutated
+        Just mt -> mconcat <$> mapM getMemVarMutationStatus mt
 
 --------------------------------------------------------------------------
 -- Creating TeVars from MemVars

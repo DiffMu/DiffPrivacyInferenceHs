@@ -1278,15 +1278,12 @@ elaborateLambda scname args body = do
   --
   -- find out which mem vars have been mutated
   --
-  let annotateIsMutated :: MemVar -> MTC (MemVar, IsMutated)
-      annotateIsMutated mvar = undefined
-
-  mutated_argmvs <- do amvs <- mapM annotateIsMutated argmvs
+  mutated_argmvs <- do mut <- mapM getMemVarMutationStatus argmvs
+                       let amvs = zip argmvs mut
                        return [mv | (mv, Mutated) <- amvs]
 
   --
   --------------------
-
 
 
   {-
@@ -1315,7 +1312,7 @@ elaborateLambda scname args body = do
 
 
   ------------------------------
-  -- Begin restoration of state
+  -- Restoration of state
   --
 
   --  
@@ -1323,7 +1320,7 @@ elaborateLambda scname args body = do
   --
   cleanupMem scname
 
-  -----------
+  --
   -- Restore old VA state for all args
   -- (https://github.com/DiffMu/DiffPrivacyInferenceHs/issues/148#issuecomment-1004950955)
   --
@@ -1337,10 +1334,32 @@ elaborateLambda scname args body = do
   -----------
 
 
-
-
+  ------------------------------
+  -- Compute the elaborated function body
+  --
+  --   For this we look at the mutated memvars and the last value of the body,
+  --   and if required append a statement which either returns the default value,
+  --   or returns the tuple of mutated args.
+  --
+  --   See #190.
+  --
+  --   The `b_needs_ref_check` result tracks whether the return value of this
+  --   function definition might contain references which 
+  --
+  (term_to_append, b_needs_ref_check) <- case (lastValue, mutated_argmvs) of
+    (PureValue a, []) -> undefined
+    (PureValue a, xs) -> demutationError $ "Found a function which is mutating, but does not have a 'return'. This is not allowed."
+                                        <> "\nThe function body is:\n" <> showPretty body
+    (DefaultValue a, []) -> return (a, _)
+    (DefaultValue a, xs) -> demutationError $ "Found a function which is mutating, but does not have a 'return'. This is not allowed."
+                                          <> "\nThe function body is:\n" <> showPretty body
+    (MutatingFunctionEndValue, []) -> demutationError $ "Found a function which is not mutating, but has a 'return'. This is not allowed."
+                                                    <> "\nThe function body is:\n" <> showPretty body
+    (MutatingFunctionEndValue, mvs) -> return $ ((Tup [Var (Just (memVarAsTeVar mv) :- JTAny) | mv <- mvs]), False)
 
   undefined
+
+
   {-
 
 
