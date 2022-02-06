@@ -339,6 +339,37 @@ elaborateMut scname (Lam args body) = do
   -- return (Lam args newBody, newBodyType, NoMove)
 
 
+
+elaborateMut scname (Extra (ProcFLet name term)) = do
+
+  (newTermType, moveType) <- elaborateValue scname term
+
+  case newTermType of
+    Pure -> pure ()
+    Mutating _ -> pure ()
+    PureBlackBox     -> internalError $ "Found a BlackBox term inside a BlackBox term, this should not be possible."
+
+  term' <- case moveType of
+                NoMove t -> return t
+                _ -> internalError $ "got a move from the FLet body, this should not happen"
+
+  -- create memory location for function name
+  mem <- allocateMem scname (Right "val")
+  setMem name (SingleMem mem)
+
+  -- write the immut type into the scope
+  setImmutType scname name newTermType
+
+  -- log what happened
+  debug $ "[elaborateMut/FLetBase]: The function " <> show name <> " is being defined."
+  logmem <- use memCtx
+  debug $ "The memctx is now:\n"
+  debug $ show logmem
+
+  return (Statements [Extra (DemutFLet (memVarAsTeVar mem) term')] (Var (Just (memVarAsTeVar mem) :- JTAny)))
+
+  
+  
 elaborateMut scname _ = undefined
 
 {-

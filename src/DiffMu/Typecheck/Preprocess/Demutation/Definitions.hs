@@ -436,6 +436,9 @@ expectImmutType a = undefined
 setImmutType :: ScopeVar -> ProcVar -> ImmutType -> MTC ()
 setImmutType a = undefined
 
+setImmutTypeFLetDefined :: ScopeVar -> ProcVar -> ImmutType -> MTC ()
+setImmutTypeFLetDefined a = undefined
+
 setImmutTypeMaybe :: ScopeVar -> Maybe ProcVar -> ImmutType -> MTC ()
 setImmutTypeMaybe = undefined
 
