@@ -25,6 +25,7 @@ import Test.QuickCheck.Property (Result(expect))
 
 import Control.Monad.Trans.Class
 import qualified GHC.RTS.Flags as LHS
+import DiffMu.Typecheck.Preprocess.Demutation.Definitions (setImmutTypeOverwritePrevious)
 
 
 
@@ -67,14 +68,16 @@ elaborateValue :: ScopeVar -> ProcDMTerm -> MTC (ImmutType , MoveType)
 elaborateValue scname te = do
   (te1type) <- elaborateMut scname te
   case te1type of
-    Statements _ -> demutationError $ "Expected term to be a value, but it was a statement:\n" <> showPretty te
+    Statements _ _ -> demutationError $ "Expected term to be a value, but it was a statement:\n" <> showPretty te
     Value it mt -> return (it , mt)
+    MutatingFunctionEnd -> demutationError $ "Expected term to be a value, but it was a return."
 
 elaboratePureValue :: ScopeVar -> ProcDMTerm -> MTC (MoveType)
 elaboratePureValue scname te = do
   (te1type) <- elaborateMut scname te
   case te1type of
-    Statements _   -> demutationError $ "Expected term to be a value, but it was a statement:\n" <> showPretty te
+    Statements _ _   -> demutationError $ "Expected term to be a value, but it was a statement:\n" <> showPretty te
+    MutatingFunctionEnd -> demutationError $ "Expected term to be a value, but it was a return."
     Value Pure mt -> return (mt)
     Value _ mt    -> demutationError $ "Expected term to be a pure value, but it has type: " <> show mt
                                     <> "The term is:\n"
@@ -98,11 +101,9 @@ elaborateMut :: ScopeVar -> ProcDMTerm -> MTC (TermType)
 
 elaborateMut scname (Op op args) = do
   args' <- mapM (elaboratePureValue scname >=> moveTypeAsTerm) args
-  setLastValue PureValue 
   pure (Value Pure (NoMove (Op op args')))
 
 elaborateMut scname (Sng η τ) = do
-  setLastValue PureValue
   return (Value Pure (NoMove $ Sng η τ))
 
 elaborateMut scname term@(Var _) = demutationError $ "Unsupported term: " <> showPretty term
@@ -113,7 +114,6 @@ elaborateMut scname (Extra (ProcVar (x ::- j))) = do
     Just x -> do
       mx <- expectNotMoved x
       itype <- expectImmutType scname x
-      setLastValue PureValue
 
       return (Value itype (SingleMove x))
 
@@ -130,10 +130,7 @@ elaborateMut scname (Extra (ProcBBLet procx args)) = do
 
   let tevarx = memVarAsTeVar memx
 
-  -- say that our name is also our last value
-  setLastValue (DefaultValue (Var (Just tevarx :- JTAny)))
-
-  return (Statements $ [Extra (DemutBBLet tevarx args)])
+  return (Statements [Extra (DemutBBLet tevarx args)] (Var (Just tevarx :- JTAny)))
 
 
 elaborateMut scname (Extra (ProcSLetBase ltype (x ::- τ) term)) = do
@@ -168,7 +165,7 @@ elaborateMut scname (Extra (ProcSLetBase ltype (x ::- τ) term)) = do
   -- the result is a list of statements,
   -- containing the required memory allocations
   -- done in this "slet"
-  return (Statements (statement <$> allocs))
+  return (Statements (statement <$> allocs) (memTypeAsTerm mem))
 
 
 elaborateMut scname fullterm@(Extra (ProcTLetBase ltype vars term)) = do
@@ -211,11 +208,11 @@ elaborateMut scname fullterm@(Extra (ProcTLetBase ltype vars term)) = do
         let handleElement (x ::- _ ,mt) = do
               (mem,allocs) <- moveGetMemAndAllocs scname mt
               setMemMaybe x mem
-              return (statement <$> allocs)
+              return (statement <$> allocs, mem)
 
-        allocStatements <- mapM handleElement (zip vars mts)
+        (allocStatements, mts) <- unzip <$> mapM handleElement (zip vars mts)
 
-        return (Statements (join allocStatements))
+        return (Statements (join allocStatements) (memTypeAsTerm (TupleMem mts)))
 
     --
     -- case 2: RHS is a single procvar
@@ -247,7 +244,7 @@ elaborateMut scname fullterm@(Extra (ProcTLetBase ltype vars term)) = do
             True -> do
               let handleElement (x ::- _, mt) = setMemMaybe x mt
               mapM handleElement (zip vars mts)
-              return (Statements [])
+              return (Statements [] (memTypeAsTerm (TupleMem $ mts)))
 
         -- (case 2.2)
         SingleMem rhs_mv -> do
@@ -269,7 +266,7 @@ elaborateMut scname fullterm@(Extra (ProcTLetBase ltype vars term)) = do
           let statement = Extra (DemutTLetBase ltype ([Just (memVarAsTeVar lhs_mv) :- JTAny | lhs_mv <- lhs_mvs])
                                                      (Var (Just (memVarAsTeVar rhs_mv) :- JTAny)))
 
-          return (Statements [statement])
+          return (Statements [statement] (memTypeAsTerm (TupleMem $ SingleMem <$> lhs_mvs)))
 
         -- (case 2.3)
         RefMem mv -> demutationError $ "We currently do not support tlet assignments where RHS is a reference."
@@ -294,7 +291,7 @@ elaborateMut scname fullterm@(Extra (ProcTLetBase ltype vars term)) = do
       -- statement for destructuring the rhs term to the lhs vars
       let statement = Extra (DemutTLetBase ltype ([Just (memVarAsTeVar lhs_mv) :- JTAny | lhs_mv <- lhs_mvs]) pdt)
 
-      return (Statements [statement])
+      return (Statements [statement] (memTypeAsTerm (TupleMem $ SingleMem <$> lhs_mvs)))
 
     --
     -- case 4: RHS is a reference move
@@ -303,21 +300,24 @@ elaborateMut scname fullterm@(Extra (ProcTLetBase ltype vars term)) = do
 
 
 
+
+elaborateMut scname (LamStar args body) = do
+  bodyscname <- newScopeVar "lamstar"
+  undefined
+  -- (newBody, newBodyType) <- elaborateLambda bodyscname scope [(v :- x) | (v :- (x , _)) <- args] body
+  -- return (LamStar args newBody, newBodyType, NoMove)
+
+elaborateMut scname (Lam args body) = do
+  bodyscname <- newScopeVar "lam"
+  undefined
+  -- (newBody, newBodyType) <- elaborateLambda bodyscname scope args body
+  -- return (Lam args newBody, newBodyType, NoMove)
+
+
 elaborateMut scname _ = undefined
 
 {-
 
-
-
-elaborateMut scname (LamStar args body) = do
-  bodyscname <- newScopeVar "lamstar"
-  (newBody, newBodyType) <- elaborateLambda bodyscname scope [(v :- x) | (v :- (x , _)) <- args] body
-  return (LamStar args newBody, newBodyType, NoMove)
-
-elaborateMut scname (Lam args body) = do
-  bodyscname <- newScopeVar "lam"
-  (newBody, newBodyType) <- elaborateLambda bodyscname scope args body
-  return (Lam args newBody, newBodyType, NoMove)
 
 elaborateMut scname (Apply f args) = do
   --
@@ -1141,19 +1141,19 @@ elaborateMut scname term@(BBApply x a b)    = throwError (UnsupportedError ("Whe
 
 
 
+-}
 
 
 ---------------------------------------------------
 -- recurring utilities
 
 
-
 -------------
 -- elaborating a lambda term
 --
 
-elaborateLambda :: ScopeVar -> Scope -> [Asgmt JuliaType] -> ProcDMTerm -> MTC (DMTerm , ImmutType)
-elaborateLambda scname scope args body = do
+elaborateLambda :: ScopeVar -> [ProcAsgmt JuliaType] -> ProcDMTerm -> MTC (DMTerm , ImmutType)
+elaborateLambda scname args body = do
   --
   -- Regarding Movetypes: We do not need to do anything here
   -- about them, because we make sure in typechecking that
@@ -1172,23 +1172,26 @@ elaborateLambda scname scope args body = do
   -- ##
   -- ## See https://github.com/DiffMu/DiffPrivacyInferenceHs/issues/148#issuecomment-1004950955
   -- ##
-  -- ## Then, mark all function arguments as "SingleRead"
+  -- ## Then, mark all function arguments as "SingleRead" and "Pure"
   -- ## for the current scope.
   oldVaCtx <- use vaCtx
-  mapM (markReadOverwritePrevious scname) [a | (Just a :- _) <- args]
+  mapM (\x -> setImmutTypeOverwritePrevious scname x Pure) [a | (a ::- _) <- args]
   -- ##
   -- END NO.
   --
   -- Allocate new memory for the arguments.
-  let arghint (Just x :- _) = T.pack $ "arg_" <> show x
-      arghint (_ :- _)      = T.pack $ "anon-arg"
+  let arghint (Just x ::- _) = Left x
+      arghint (_ ::- _)      = Right "anon-arg"
   argMemVars <- mapM (allocateMem scname) (arghint <$> args)
   -- combine with var names
   let argsWithMemVars = zip args argMemVars
   -- assign memory to variables
-  mapM (\(x :- _,a) -> setMemMaybe x (SingleMem a)) argsWithMemVars
+  mapM (\(x ::- _,a) -> setMemMaybe x (SingleMem a)) argsWithMemVars
 
 
+  -- SINCE #190:
+  --   we do not have a scope anymore, so we do not have to do this.
+  {-
   -- Add args as vars to the scope
   --
   -- NOTE: we do not use `safeSetValue` here, because function
@@ -1202,8 +1205,20 @@ elaborateLambda scname scope args body = do
                      scope
                      args
 
-  -- check the body
-  (newBody,τ,moveType) <- elaborateMut scname' body
+  -}
+  -- SINCE #190 END.
+
+
+  -- Check the body
+  --   For this we need a list of terms in this function
+
+
+  -- (newBody,τ,moveType) <- elaborateMut scname' body
+
+
+  undefined
+  {-
+
 
   -- get the context and check if some variables are now mutated
   ctx <- use vaCtx
@@ -1303,8 +1318,9 @@ elaborateLambda scname scope args body = do
 
     wrongτ -> throwError (DemutationError $ "Expected the result of the body of a mutating lambda to be a virtual mutated value. But it was "
                           <> show wrongτ <> "\n where body is:\n" <> showPretty body)
+-}
 
-
+{-
 -------------
 -- elaborating a list of terms which are used in individually either mutating, or not mutating places
 --

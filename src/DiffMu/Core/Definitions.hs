@@ -805,6 +805,8 @@ data ProceduralExtension a =
   | ProcPreLoop a (Maybe ProcVar) a
   | ProcReturn
   | ProcVar (ProcAsgmt JuliaType)
+  | ProcLam     [ProcAsgmt JuliaType] a
+  | ProcLamStar [(ProcAsgmt (JuliaType, Relevance))] a
   | Block [a]
 
 

@@ -93,7 +93,11 @@ data MoveType = TupleMove [MoveType] | SingleMove ProcVar | RefMove DemutDMTerm 
 -- singleMoveMaybe Nothing  = NoMove
 
 
-data TermType = Value ImmutType MoveType | Statements [DemutDMTerm]
+data TermType =
+  Value ImmutType MoveType
+  | Statements [DemutDMTerm] DemutDMTerm
+  | MutatingFunctionEnd
+
 
 
 
@@ -250,10 +254,13 @@ cleanupMem scname = mutCtx %= (\ctx -> f ctx)
 ---------
 -- Last Value
 
-data LastValue = PureValue | DefaultValue DMTerm | MutatingCall | MutatingFunctionEnd
+data LastValue =
+   PureValue MoveType
+   | DefaultValue DMTerm
+   | MutatingFunctionEndValue
 
-setLastValue :: LastValue -> MTC ()
-setLastValue = undefined
+-- setLastValue :: LastValue -> MTC ()
+-- setLastValue = undefined
 
 
 
@@ -435,12 +442,14 @@ safeSetValueAllowFLet (Just var) newType scope =
 expectImmutType :: ScopeVar -> ProcVar -> MTC ImmutType
 expectImmutType a = undefined
 
-
 setImmutType :: ScopeVar -> ProcVar -> ImmutType -> MTC ()
 setImmutType a = undefined
 
 setImmutTypeMaybe :: ScopeVar -> Maybe ProcVar -> ImmutType -> MTC ()
 setImmutTypeMaybe = undefined
+
+setImmutTypeOverwritePrevious :: ScopeVar -> Maybe ProcVar -> ImmutType -> MTC ()
+setImmutTypeOverwritePrevious = undefined
 
 --------------------------------------------------------------------------------
 -- memory access
@@ -557,8 +566,8 @@ reverseMemLookup wantedMem = do
 --------------------------------------------------------------------------
 -- Creating TeVars from MemVars
 --
-memTypeAsTeVar :: ProcVar -> MemType -> DemutDMTerm
-memTypeAsTeVar pv mt = case mt of
+memTypeAsTerm :: MemType -> DemutDMTerm
+memTypeAsTerm mt = case mt of
   TupleMem mts -> undefined
   SingleMem mv -> undefined
   RefMem mv -> undefined
@@ -573,7 +582,7 @@ moveTypeAsTerm = \case
     return $ Tup $ terms
   SingleMove pv -> do
     mtype <- expectNotMoved pv
-    return $ memTypeAsTeVar pv mtype
+    return $ memTypeAsTerm mtype
   RefMove pdt -> pure pdt
   NoMove pdt -> pure pdt
 
