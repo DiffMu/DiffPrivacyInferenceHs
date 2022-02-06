@@ -22,9 +22,9 @@ import Debug.Trace
 
 import qualified Prelude as P
 import Test.QuickCheck.Property (Result(expect))
-import DiffMu.Typecheck.Preprocess.Demutation.Definitions (cleanupMem)
 
 import Control.Monad.Trans.Class
+import qualified GHC.RTS.Flags as LHS
 
 
 
@@ -63,11 +63,28 @@ do
 -}
 
 
+elaborateValue :: ScopeVar -> ProcDMTerm -> MTC (ImmutType , MoveType)
+elaborateValue scname te = do
+  (te1type) <- elaborateMut scname te
+  case te1type of
+    Statements _ -> demutationError $ "Expected term to be a value, but it was a statement:\n" <> showPretty te
+    Value it mt -> return (it , mt)
 
-elaborateNonmut :: ScopeVar -> ProcDMTerm -> MTC (DemutDMTerm , ImmutType , MoveType)
-elaborateNonmut scname term = undefined -- do
+elaboratePureValue :: ScopeVar -> ProcDMTerm -> MTC (MoveType)
+elaboratePureValue scname te = do
+  (te1type) <- elaborateMut scname te
+  case te1type of
+    Statements _   -> demutationError $ "Expected term to be a value, but it was a statement:\n" <> showPretty te
+    Value Pure mt -> return (mt)
+    Value _ mt    -> demutationError $ "Expected term to be a pure value, but it has type: " <> show mt
+                                    <> "The term is:\n"
+                                    <> showPretty te
+
+
+
+-- elaborateNonmut :: ScopeVar -> ProcDMTerm -> MTC (DemutDMTerm , ImmutType , MoveType)
+-- elaborateNonmut scname term = undefined -- do
   -- (resTerm , resType, mType) <- elaborateMut scname term
-
 
   -- case resType of
   --   Pure _ -> pure ()
@@ -77,31 +94,212 @@ elaborateNonmut scname term = undefined -- do
 
   -- return (resTerm , resType, mType)
 
-elaborateMut :: ScopeVar -> ProcDMTerm -> MTC (DemutDMTerm , ImmutType , MoveType)
+elaborateMut :: ScopeVar -> ProcDMTerm -> MTC (TermType)
 
 elaborateMut scname (Op op args) = do
-  args' <- mapM (elaborateMut scname) args
+  args' <- mapM (elaboratePureValue scname >=> moveTypeAsTerm) args
   setLastValue PureValue 
-  pure (Op op (fst3 <$> args') , Pure , NoMove)
+  pure (Value Pure (NoMove (Op op args')))
 
 elaborateMut scname (Sng η τ) = do
   setLastValue PureValue
-  return (Sng η τ , Pure , NoMove)
+  return (Value Pure (NoMove $ Sng η τ))
 
 elaborateMut scname term@(Var _) = demutationError $ "Unsupported term: " <> showPretty term
 
 elaborateMut scname (Extra (ProcVar (x ::- j))) = do
-  markReadMaybe scname x
-  mx <- expectNotMovedMaybe x
-  return (Var (mx :- j), τ, singleMoveMaybe x)
+  case x of
+    Nothing -> demutationError $ "Anonymous variable encountered."
+    Just x -> do
+      mx <- expectNotMoved x
+      itype <- expectImmutType scname x
+      setLastValue PureValue
 
-  -- let τ = getValueMaybe x scope
-  -- case τ of
-  --   Nothing -> logForce ("checking Var term, scope: " <> show scope) >> throwError (DemutationDefinitionOrderError x)
-  --   Just τ  -> do
-  --     markReadMaybe scname x
-  --     mx <- expectNotMovedMaybe x
-  --     return (Var (mx :- j), τ, singleMoveMaybe x)
+      return (Value itype (SingleMove x))
+
+elaborateMut scname (Extra (ProcBBLet procx args)) = do
+
+  -- write the black box into the scope with its type
+  scope'  <- setImmutType scname procx PureBlackBox
+
+  -- allocate a memory location
+  memx <- allocateMem scname (Left procx)
+
+  -- write it into the memctx
+  setMem procx (SingleMem memx)
+
+  let tevarx = memVarAsTeVar memx
+
+  -- say that our name is also our last value
+  setLastValue (DefaultValue (Var (Just tevarx :- JTAny)))
+
+  return (Statements $ [Extra (DemutBBLet tevarx args)])
+
+
+elaborateMut scname (Extra (ProcSLetBase ltype (x ::- τ) term)) = do
+
+  (newTermType, moveType) <- elaborateValue scname term
+
+  case newTermType of
+    Pure -> pure ()
+    Mutating _ -> pure ()
+    PureBlackBox     -> throwError (DemutationError $ "Found an assignment " <> show x <> " = " <> showPretty term <> " where RHS is a black box. This is not allowed.")
+
+  --
+  -- move out of variables on the RHS, getting the memory
+  -- locations, and the new allocations, then:
+  --
+  -- 1. set memory locations for variables on the LHS
+  -- 2. generate terms for the memory allocations
+  -- 
+  (mem,allocs) <- moveGetMemAndAllocs scname moveType
+  setMemMaybe x mem
+  let statement (mvar,term) = Extra (DemutSLetBase ltype (Just (memVarAsTeVar mvar) :- JTAny) term)
+
+  -- write the immut type into the scope
+  setImmutTypeMaybe scname x newTermType
+
+  -- log what happened
+  debug $ "[elaborateMut/SLetBase]: The variable " <> show x <> " is being assigned." 
+  logmem <- use memCtx
+  debug $ "The memctx is now:\n"
+  debug $ show logmem
+
+  -- the result is a list of statements,
+  -- containing the required memory allocations
+  -- done in this "slet"
+  return (Statements (statement <$> allocs))
+
+
+elaborateMut scname fullterm@(Extra (ProcTLetBase ltype vars term)) = do
+
+  (newTermType, moveType) <- elaborateValue scname term
+
+  --
+  -- deal with itype
+  --
+  -- What we additionally assume is that elements of tuples
+  -- are always pure. (TODO: We have to check this in tuple creation terms)
+  --
+  case newTermType of
+    Pure -> pure ()
+    Mutating ims -> throwError (DemutationError $ "Found a tuple assignment " <> show vars <> " = " <> showPretty term <> " where RHS is a mutating function. This is not allowed.")
+    PureBlackBox -> throwError (DemutationError $ "Found an assignment " <> show vars <> " = " <> showPretty term <> " where RHS is a black box. This is not allowed.")
+  --
+  -- we set the immuttype of every element on the LHS to Pure
+  --
+  mapM (\(x ::- _) -> setImmutTypeMaybe scname x Pure) vars
+
+
+
+  -- deal with move type
+  case moveType of
+    -- case 1: RHS is a tuple
+    -- 
+    -- We do not need to forward this tlet,
+    -- as we can transparently see which move
+    -- type is used for every entry of the LHS.
+    -- 
+    -- We do practically an slet on every element. 
+    --
+    TupleMove mts -> case length mts == length vars of
+      False -> demutationError $ "Found a tuple assignment where the RHS has a different number of entries than the LHS.\n"
+                              <> "In the term:\n"
+                              <> showPretty fullterm
+      True -> do
+        let statement (mvar,term) = Extra (DemutSLetBase ltype (Just (memVarAsTeVar mvar) :- JTAny) term)
+        let handleElement (x ::- _ ,mt) = do
+              (mem,allocs) <- moveGetMemAndAllocs scname mt
+              setMemMaybe x mem
+              return (statement <$> allocs)
+
+        allocStatements <- mapM handleElement (zip vars mts)
+
+        return (Statements (join allocStatements))
+
+    --
+    -- case 2: RHS is a single procvar
+    --   We necessarily mark the procvar as moved.
+    --   Next:
+    --
+    --   We have three subcases:
+    --     case 2.1: The memory of RHS is a tuple.
+    --               We assign the memory locs of the RHS to the vars on the LHS.
+    --               We do not need this tlet statement in the output.
+    --     case 2.2: The memory of RHS is a single.
+    --               This means that this tlet "refines" the
+    --               memory type of the RHS. The variables on the
+    --               LHS are necessarily allocated new memory locations. 
+    --               And the memvar of the RHS is updated to point to this new tuple of memlocs.
+    --               We do need this tlet statement in the output.
+    --     case 2.3: The memory of RHS is a ref.
+    --               Currently we do not allow this case.
+    --
+    SingleMove pv -> do
+      mt <- expectNotMoved pv
+      case mt of
+        -- (case 2.1)
+        TupleMem mts ->
+          case length mts == length vars of
+            False -> demutationError $ "Found a tuple assignment where the RHS has a different number of entries than the LHS.\n"
+                              <> "In the term:\n"
+                              <> showPretty fullterm
+            True -> do
+              let handleElement (x ::- _, mt) = setMemMaybe x mt
+              mapM handleElement (zip vars mts)
+              return (Statements [])
+
+        -- (case 2.2)
+        SingleMem rhs_mv -> do
+          -- new memory locations for every lhs var
+          let handleElement (x ::- _) = do
+                let hint = case x of
+                      Nothing  -> Right (T.pack $ show rhs_mv)
+                      Just pv' -> Left pv'
+                lhs_mv <- allocateMem scname hint
+                setMemMaybe x (SingleMem lhs_mv)
+                return lhs_mv
+
+          lhs_mvs <- mapM handleElement vars
+
+          -- Redirect the rhs var to point to the new tuple of lhs vars
+          setMemRedirection rhs_mv (TupleMem (SingleMem <$> lhs_mvs))
+
+          -- statement for destructuring the rhs var to the lhs vars
+          let statement = Extra (DemutTLetBase ltype ([Just (memVarAsTeVar lhs_mv) :- JTAny | lhs_mv <- lhs_mvs])
+                                                     (Var (Just (memVarAsTeVar rhs_mv) :- JTAny)))
+
+          return (Statements [statement])
+
+        -- (case 2.3)
+        RefMem mv -> demutationError $ "We currently do not support tlet assignments where RHS is a reference."
+
+    --
+    -- case 3: RHS is a term without move-value
+    --   For every var on the lhs we allocate a new memory location.
+    --   The tlet statement has the proper term on the rhs.
+    --
+    NoMove pdt -> do
+      -- new memory locations for every lhs var
+      let handleElement (x ::- _) = do
+            let hint = case x of
+                  Nothing  -> Right ("")
+                  Just pv' -> Left pv'
+            lhs_mv <- allocateMem scname hint
+            setMemMaybe x (SingleMem lhs_mv)
+            return lhs_mv
+
+      lhs_mvs <- mapM handleElement vars
+
+      -- statement for destructuring the rhs term to the lhs vars
+      let statement = Extra (DemutTLetBase ltype ([Just (memVarAsTeVar lhs_mv) :- JTAny | lhs_mv <- lhs_mvs]) pdt)
+
+      return (Statements [statement])
+
+    --
+    -- case 4: RHS is a reference move
+    --
+    RefMove pdt -> demutationError $ "We currently do not support tlet assignments where RHS is a reference."
 
 
 
@@ -109,76 +307,7 @@ elaborateMut scname _ = undefined
 
 {-
 
-elaborateMut scname (BBLet name args tail) = do
 
-  -- write the black box into the scope with its type
-  scope'  <- safeSetValue scname (Just name) PureBlackBox scope
-
-  -- also write it into the memctx
-  setMemMaybe (Just name) =<< SingleMem <$> allocateMem scname (T.pack $ show name)
-
-  -- typecheck the body in this new scope
-  (newBody , newBodyType, _) <- elaborateMut scname' tail
-
-  return (BBLet name args newBody , consumeDefaultValue newBodyType, NoMove)
-
-elaborateMut scname (SLetBase ltype (x :- τ) term body) = do
-
-  (newTerm , newTermType, moveType) <- elaborateMut scname term
-
-  case newTermType of
-    Pure _ -> pure ()
-    Mutating _ -> pure ()
-    VirtualMutated _ -> throwError (DemutationError $ "Found an assignment " <> show x <> " = " <> showPretty term <> " where RHS is a mutating call. This is not allowed.")
-    PureBlackBox     -> throwError (DemutationError $ "Found an assignment " <> show x <> " = " <> showPretty term <> " where RHS is a black box. This is not allowed.")
-
-
-
-  -- move out of variables on the RHS
-  -- and set memory locations for variables on the LHS
-  mem <- moveGetMem scname moveType
-  setMemMaybe x mem
-
-  -- this has to happen after `setMemMaybe`
-  -- because the variable has to exist in the `memCtx`
-  scope'  <- safeSetValue scname x newTermType scope
-
-  debug $ "[elaborateMut/SLetBase]: The variable " <> show x <> " is being assigned." 
-  logmem <- use memCtx
-  debug $ "The memctx is now:\n"
-  debug $ show logmem
-
-  (newBody , newBodyType, moveType) <- elaborateMut scname' body
-  return (SLetBase ltype (x :- τ) newTerm newBody , consumeDefaultValue newBodyType, moveType)
-
-elaborateMut scname fullterm@(TLetBase ltype vars term body) = do
-
-  (newTerm , newTermType, moveType) <- elaborateMut scname term
-
-  newElementTypes <- case newTermType of
-    Pure (PureTuple as)    -> case length as == length vars of
-                                True  -> pure as
-                                False -> demutationError $ "Encountered tuple assignment where the number of entries does not match the number of variables\n"
-                                                          <> "In the expression\n"
-                                                          <> showPretty fullterm
-    Pure (UserValue)       -> pure (repeat UserValue)
-    Pure (SingleArg a)     -> pure (repeat $ SingleArgPart a)
-    Pure (SingleArgPart a) -> pure (repeat $ SingleArgPart a)
-    -- Pure (SingleRef)       -> pure (repeat $ SingleRef)
-    Pure (DefaultValue)    -> pure (repeat $ UserValue)
-    Mutating _             -> pure (repeat $ UserValue)
-    VirtualMutated _ -> throwError (DemutationError $ "Found an assignment " <> show vars <> " = " <> showPretty term <> " where RHS is a mutating call. This is not allowed.")
-    PureBlackBox     -> throwError (DemutationError $ "Found an assignment " <> show vars <> " = " <> showPretty term <> " where RHS is a black box. This is not allowed.")
-
-  -- move out of variables and get memory locations
-  mem <- moveGetMem scname moveType
-  setMemTuple scname (fstA <$> vars) mem
-  
-  -- add all values as pure to the scope
-  scope' <- foldrM (\((v :- _),newElType) s -> safeSetValue scname v (Pure newElType) s) scope (zip vars newElementTypes)
-  (newBody , newBodyType, newMoveType) <- elaborateMut scname' body
-
-  return (TLetBase ltype vars newTerm newBody , consumeDefaultValue newBodyType, newMoveType)
 
 elaborateMut scname (LamStar args body) = do
   bodyscname <- newScopeVar "lamstar"

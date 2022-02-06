@@ -1028,6 +1028,8 @@ instance ShowPretty a => ShowPretty (MutabilityExtension a) where
   showPretty (LoopRet as)    = "LoopRet " <> showPretty as
   showPretty (DefaultRet x)  = "DefaultRet (" <> showPretty x <> ")"
 
+instance ShowPretty a => ShowPretty (ProceduralExtension a) where
+
 instance ShowPretty (EmptyExtension a) where
   showPretty a = undefined
 

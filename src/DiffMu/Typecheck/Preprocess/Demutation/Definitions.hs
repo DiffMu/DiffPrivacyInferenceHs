@@ -85,14 +85,15 @@ data ImmutType = Pure | Mutating [IsMutated] | PureBlackBox
 -- These types describe which variable names
 -- are in the RHS and must be moved on tlet/slet assignment
 -- See #171 #172
-data MoveType = TupleMove [MoveType] | SingleMove ProcVar | RefMove | NoMove
+data MoveType = TupleMove [MoveType] | SingleMove ProcVar | RefMove DemutDMTerm | NoMove DemutDMTerm
   deriving (Eq, Show)
 
-singleMoveMaybe :: Maybe ProcVar -> MoveType
-singleMoveMaybe (Just a) = SingleMove a
-singleMoveMaybe Nothing  = NoMove
+-- singleMoveMaybe :: Maybe ProcVar -> MoveType
+-- singleMoveMaybe (Just a) = SingleMove a
+-- singleMoveMaybe Nothing  = NoMove
 
 
+data TermType = Value ImmutType MoveType | Statements [DemutDMTerm]
 
 
 
@@ -112,9 +113,13 @@ data MemType = TupleMem [MemType] | SingleMem MemVar | RefMem MemVar
 data MemState = MemExists MemType | MemMoved
   deriving (Show)
 
+data MemAssignmentType = AllocNecessary | PreexistingMem
+
 type MemCtx = Ctx ProcVar MemState
 
 type MutCtx = Ctx MemVar (ScopeVar, IsMutated)
+
+type MemRedirectionCtx = Ctx MemVar MemType
 
 --------------------------------------------------------
 -- monoid instance for isMutated
@@ -203,6 +208,7 @@ data MFull = MFull
   {
     _vaCtx :: VarAccessCtx
   , _memCtx :: MemCtx
+  , _memRedirectionCtx :: MemRedirectionCtx
   , _mutCtx :: MutCtx
   , _lastValue :: MutDMTerm
   , _termVarsOfMut :: NameCtx
@@ -224,12 +230,13 @@ $(makeLenses ''MFull)
 newScopeVar :: (MonadState MFull m) => Text -> m (ScopeVar)
 newScopeVar hint = scopeNames %%= (first ScopeVar . (newName hint))
 
-newMemVar :: (MonadState MFull m) => Text -> m (MemVar)
-newMemVar hint = scopeNames %%= (first MemVar . (newName hint))
+newMemVar :: (MonadState MFull m) => Either ProcVar Text -> m (MemVar)
+newMemVar (Left hint) = scopeNames %%= (first (MemVarForProcVar hint) . (newName ""))
+newMemVar (Right hint) = scopeNames %%= (first StandaloneMemVar . (newName hint))
 
-allocateMem :: ScopeVar -> Text -> MTC (MemVar)
+allocateMem :: ScopeVar -> Either ProcVar Text -> MTC (MemVar)
 allocateMem scopename hint = do
-  mv <- newMemVar (T.pack (show scopename) <> hint)
+  mv <- newMemVar (hint)
   mutCtx %= (setValue mv (scopename, NotMutated))
   return mv
 
@@ -270,6 +277,7 @@ demutationError = throwError . DemutationError
 --------------------------------------------------------------------------------------
 -- Accessing the VA-Ctx in the MTC monad
 
+{-
 markReassignedBase :: IsFLetDefined -> ScopeVar -> ProcVar -> ImmutType -> MTC ()
 markReassignedBase fletdef scname tevar itype = do
   debug $ "[markReassignedBase]: called for " <> show tevar <> " in " <> show scname 
@@ -346,6 +354,8 @@ markReadMaybe scname Nothing = pure ()
 markReadOverwritePrevious :: ScopeVar -> ProcVar -> ImmutType -> MTC ()
 markReadOverwritePrevious scname var itype = vaCtx %%= (\scope -> ((), setValue var (scname, ReadSingle, itype) scope))
 
+-}
+
 --------------------------------------------------------------------------------------
 
 markMutated :: MemVar -> MTC ()
@@ -380,12 +390,13 @@ immutTypeEq _ _ = False
 -- set the type of the variable in scope,
 -- but do not allow to change that value afterwards.
 -- This has to happen after the memory location is set
+{-
 safeSetValueBase :: IsFLetDefined -> ScopeVar -> Maybe ProcVar -> ImmutType -> MTC ()
 safeSetValueBase fletdef scname (Nothing) itype = pure ()
 safeSetValueBase fletdef scname (Just var) itype = do
 
   markReassignedBase fletdef scname var itype
-
+-}
 {-
   scope <- use vaCtx
 
@@ -402,9 +413,10 @@ safeSetValueBase fletdef scname (Just var) itype = do
                       else throwError (DemutationError $ "Found a redefinition of the variable '" <> show var <> "', where the old type (" <> show oldType <> ") and the new type (" <> show newType <> ") differ. This is not allowed.")
 -}
 
+{-
 safeSetValue = safeSetValueBase NotFLetDefined
 safeSetValueAllowFLet = safeSetValueBase FLetDefined
-
+-}
 {-
 safeSetValueAllowFLet :: Maybe ProcVar -> ImmutType -> Scope -> MTC Scope
 safeSetValueAllowFLet (Nothing) newType scope = pure scope
@@ -416,21 +428,62 @@ safeSetValueAllowFLet (Just var) newType scope =
                       else throwError (DemutationError $ "Found a redefinition of the variable '" <> show var <> "', where the old type (" <> show oldType <> ") and the new type (" <> show newType <> ") differ. This is not allowed.")
 -}
 
+--------------------------------------------------------------------------------
+-- immuttype access
+--------------------------------------------------------------------------------
+
+expectImmutType :: ScopeVar -> ProcVar -> MTC ImmutType
+expectImmutType a = undefined
+
+
+setImmutType :: ScopeVar -> ProcVar -> ImmutType -> MTC ()
+setImmutType a = undefined
+
+setImmutTypeMaybe :: ScopeVar -> Maybe ProcVar -> ImmutType -> MTC ()
+setImmutTypeMaybe = undefined
+
+--------------------------------------------------------------------------------
+-- memory access
+--------------------------------------------------------------------------------
+
+
+
 --
 -- This function marks variables as moved in the scope
 -- For #172
 --
-moveGetMem :: ScopeVar -> MoveType -> MTC MemType
-moveGetMem scname NoMove = SingleMem <$> allocateMem scname ""
-moveGetMem scname (SingleMove a) = do
-  memvar <- expectNotMoved a
+moveGetMemAndAllocs :: ScopeVar -> MoveType -> MTC (MemType, [(MemVar,DemutDMTerm)])
+moveGetMemAndAllocs scname mt = runWriterT (moveGetMemAndAllocs_impl scname mt)
+
+moveGetMemAndAllocs_impl :: ScopeVar -> MoveType -> WriterT [(MemVar,DemutDMTerm)] MTC MemType
+moveGetMemAndAllocs_impl scname (NoMove te) = do
+  mem <- lift $ allocateMem scname (Right "val")
+  tell [(mem,te)]
+  return (SingleMem mem)
+moveGetMemAndAllocs_impl scname (SingleMove a) = do
+  memvar <- lift $ expectNotMoved a
   memCtx %= (setValue a (MemMoved))
-  return memvar
-moveGetMem scname (TupleMove as) = TupleMem <$> mapM (moveGetMem scname) as
-moveGetMem scname (RefMove) = pure RefMem
+  return (memvar)
+moveGetMemAndAllocs_impl scname (TupleMove as) = do
+  mems <- mapM (moveGetMemAndAllocs_impl scname) as
+  return (TupleMem mems)
+moveGetMemAndAllocs_impl scname (RefMove te) = do
+  -- if we had a reference,
+  -- allocate new memory for it
+  memvar <- lift $ allocateMem scname (Right "ref")
+  tell [(memvar,te)]
+  pure $ RefMem memvar
+
+
+moveGetMemAndAllocsTuple :: ScopeVar -> MoveType -> MTC (MemType, [(MemVar,DemutDMTerm)])
+moveGetMemAndAllocsTuple = undefined
+
+
+setMem :: ProcVar -> MemType -> MTC () 
+setMem x mt = memCtx %= (setValue x (MemExists mt))
 
 setMemMaybe :: Maybe ProcVar -> MemType -> MTC () 
-setMemMaybe (Just x) mt = memCtx %= (setValue x (MemExists mt))
+setMemMaybe (Just x) mt = setMem x mt
 setMemMaybe (Nothing) _ = pure ()
 
 setMemTuple :: ScopeVar -> [Maybe ProcVar] -> MemType -> MTC ()
@@ -438,7 +491,7 @@ setMemTuple scname xs (SingleMem a) = do
   -- We are deconstructing a tuple value,
   -- need to create memory locations for all parts
   let f (Just x) = do
-        mx <- allocateMem scname (T.pack $ show x)
+        mx <- allocateMem scname (Left x)
         memCtx %= (setValue x (MemExists (SingleMem mx)))
       f Nothing = pure ()
   mapM_ f xs
@@ -466,6 +519,15 @@ expectNotMoved tevar = do
 expectNotMovedMaybe :: Maybe ProcVar -> MTC (Maybe MemType) 
 expectNotMovedMaybe (Just a) = Just <$> expectNotMoved a
 expectNotMovedMaybe Nothing = undefined -- return ()
+
+
+-------------------------------------
+-- memory redirection
+setMemRedirection :: MemVar -> MemType -> MTC ()
+setMemRedirection = undefined
+
+-------------------------------------
+-- accessing memories
 
 getAllMemVars :: MemType -> [MemVar]
 getAllMemVars (SingleMem a) = [a]
@@ -497,9 +559,21 @@ reverseMemLookup wantedMem = do
 --
 memTypeAsTeVar :: ProcVar -> MemType -> DemutDMTerm
 memTypeAsTeVar pv mt = case mt of
-  TupleMem mts -> _
-  SingleMem mv -> _
-  RefMem mv -> _
+  TupleMem mts -> undefined
+  SingleMem mv -> undefined
+  RefMem mv -> undefined
 
-memVarAsTeVar :: ProcVar -> MemVar -> TeVar
-memVarAsTeVar pv mv = undefined
+memVarAsTeVar :: MemVar -> TeVar
+memVarAsTeVar mv = undefined
+
+moveTypeAsTerm :: MoveType -> MTC DemutDMTerm 
+moveTypeAsTerm = \case
+  TupleMove mts -> do
+    terms <- mapM moveTypeAsTerm mts
+    return $ Tup $ terms
+  SingleMove pv -> do
+    mtype <- expectNotMoved pv
+    return $ memTypeAsTeVar pv mtype
+  RefMove pdt -> pure pdt
+  NoMove pdt -> pure pdt
+

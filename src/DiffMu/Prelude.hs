@@ -111,12 +111,13 @@ instance DictKey ScopeVar
 
 -- memory variables
 
-data MemVar = MemVar Symbol
+data MemVar = MemVarForProcVar ProcVar Symbol | StandaloneMemVar Symbol
   deriving (Eq,Generic, Ord)
 
 instance Hashable MemVar
 instance Show MemVar where
-  show (MemVar x) = show x
+  show (MemVarForProcVar p x) = show p <> "#" <> show x
+  show (StandaloneMemVar x) = show x
 
 instance DictKey MemVar
 
