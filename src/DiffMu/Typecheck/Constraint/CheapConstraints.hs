@@ -436,3 +436,25 @@ instance Solve MonadDMTC IsVecOrMat (VecKind, Sensitivity) where
         Vector -> unify oneId s >> dischargeConstraint name
         Matrix r -> unify r s >> dischargeConstraint name
         _ -> failConstraint name
+
+--------------------------------------------------
+-- gradient or vector or 1d-matrix
+--
+
+newtype IsVecLike a = IsVecLike a deriving Show
+
+instance FixedVars TVarOf (IsVecLike VecKind) where
+  fixedVars (IsVecLike _) = []
+
+instance TCConstraint IsVecLike where
+  constr = IsVecLike
+  runConstr (IsVecLike c) = c
+
+instance Solve MonadDMTC IsVecLike VecKind) where
+    solve_ Dict _ name (IsVecLike k)) =
+     case k of
+        TVar _ -> pure ()
+        Vector -> dischargeConstraint name
+        Gradient -> dischargeConstraint name
+        Matrix r -> unify r oneId >> dischargeConstraint name
+        _ -> failConstraint name

@@ -737,6 +737,7 @@ data PreDMTerm (t :: * -> *) =
   | VIndex (PreDMTerm t) (PreDMTerm t) -- vector index
   | Row (PreDMTerm t) (PreDMTerm t) -- matrix row
   | ClipM Clip (PreDMTerm t)
+  | ClipN (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
   | MutClipM Clip (PreDMTerm t)
   -- Loop (DMTerm : "Number of iterations") ([TeVar] : "Captured variables") (TeVar : "name of iteration var", TeVar : "name of capture variable") (DMTerm : "body")
   | Loop (PreDMTerm t) [TeVar] (Maybe TeVar, TeVar) (PreDMTerm t)
@@ -765,7 +766,7 @@ pattern SmpLet a b c = TLetBase SampleLet a b c
 
 {-# COMPLETE Extra, Ret, Sng, Var, Arg, Op, Phi, Lam, LamStar, BBLet, BBApply,
  Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, Gauss, Laplace, MutGauss, MutLaplace, AboveThresh, MMap, ConvertM, MCreate, Transpose,
- Size, Length, Index, VIndex, Row, ClipM, MutClipM, Loop, SubGrad, ScaleGrad, Reorder, TProject, LastTerm,
+ Size, Length, Index, VIndex, Row, ClipN, ClipM, MutClipM, Loop, SubGrad, ScaleGrad, Reorder, TProject, LastTerm,
  ZeroGrad, SumGrads, SmpLet, Sample, InternalExpectConst #-}
 
 
@@ -898,6 +899,7 @@ recDMTermM f h (Length a)         = Length <$> (f a)
 recDMTermM f h (Index a b c)      = Index <$> (f a) <*> (f b) <*> (f c)
 recDMTermM f h (VIndex a b)       = VIndex <$> (f a) <*> (f b)
 recDMTermM f h (Row a b)          = Row <$> (f a) <*> (f b)
+recDMTermM f h (ClipN a b c)      = ClipN <$> (f a) <*> (f b) <*> (f c)
 recDMTermM f h (ClipM c a)        = ClipM c <$> (f a)
 recDMTermM f h (MutClipM c a)     = MutClipM c <$> (f a)
 recDMTermM f h (Loop a b x d )    = Loop <$> (f a) <*> pure b <*> pure x <*> (f d)
@@ -1005,6 +1007,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (Index a b c)      = "Index (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> (showPretty c) <> ")"
   showPretty (VIndex a b)       = "VIndex (" <> (showPretty a) <> ", " <> (showPretty b)  <> ")"
   showPretty (Row a b)          = "Row (" <> (showPretty a) <> ", " <> (showPretty b) <> ")"
+  showPretty (ClipN a b c)      = "ClipN (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ")"
   showPretty (ClipM c a)        = "ClipM (" <> show c <> ", " <> (showPretty a) <> ")"
   showPretty (MutClipM c a)     = "MutClipM (" <> show c <> ", " <> (showPretty a) <> ")"
   showPretty (SubGrad a b)      = "SubGrad (" <> (showPretty a) <> ", " <> (showPretty b) <>  ")"

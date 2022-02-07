@@ -565,22 +565,44 @@ checkSen' scope (Size m) = do
 
 
 checkSen' scope (MutClipM c m) = checkSens scope (ClipM c m)
-checkSen' scope (ClipM c m)  = do
+checkSen' scope (ClipM c m) = do
   τb <- checkSens scope m -- check the matrix
 
   -- variables for norm and clip parameters and dimension
-  nrm <- newVar
   clp <- newVar
   n <- newVar
 
-  -- variable for vector kind (i.e. vector or grads)
+  -- variable for vector kind
   k <- newVar
 
+  -- only 1-d things are allowed here (vec, grad or 1-d matrix)
+  addConstraint (Solvable (IsVecLike k))
+
   -- set correct matrix type
-  unify τb (NoFun (DMContainer k nrm clp n (NoFun (Numeric DMData))))
+  unify τb (NoFun (DMContainer k LInf clp n (NoFun (Numeric DMData))))
 
   -- change clip parameter to input
-  return (NoFun (DMContainer k nrm c n (NoFun (Numeric DMData))))
+  return (NoFun (DMContainer k LInf c n (NoFun (Numeric DMData))))
+checkSen' scope (ClipN value upper lower) = do
+  τv <- checkSens scope value
+  τu <- checkSens scope upper
+  τl <- checkSens scope lower
+
+  tv <- newVar
+  tu <- newVar
+  tl <- newVar
+  tr <- newVar
+
+  addConstraint IsLessEqual τv (NoFun (Numeric (NonConst tv)))
+  unify τu (NoFun (Numeric (Const tu tv)))
+  unify τl (NoFun (Numeric (Const tl tv)))
+
+  addConstraint (Solvable (IsLessEqual (tr, tu)))
+  addConstraint (Solvable (IsLessEqual (tl, tr)))
+
+  mscale (minus tu tl)
+
+  return (NoFun (Numeric (Const tr tv)))
 
 --------------------
 -- NOTE this is different from what is in the paper, as we scale the result context by 2 not by 1
