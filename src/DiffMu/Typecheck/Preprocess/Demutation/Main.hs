@@ -27,6 +27,7 @@ import Test.QuickCheck.Property (Result(expect))
 import Control.Monad.Trans.Class
 import qualified GHC.RTS.Flags as LHS
 import DiffMu.Typecheck.Preprocess.Demutation.Definitions (setImmutTypeOverwritePrevious, procVarAsTeVar)
+import Control.Exception (throw)
 
 
 
@@ -189,7 +190,6 @@ elaborateMut scname (Extra (ProcSLetBase ltype (x ::- τ) term)) = do
 
   return (Statement (Extra (DemutSLetBase ltype ((Just $ procVarAsTeVar x) :- τ) (moveTypeAsTerm moveType)))
           (SingleMove x))
-
 
 
 
@@ -1111,7 +1111,7 @@ elaborateAsList scname t = undefined
 -- elaborating a lambda term
 --
 
-elaborateLambda :: ScopeVar -> [ProcAsgmt JuliaType] -> ProcDMTerm -> MTC (DMTerm , ImmutType)
+elaborateLambda :: ScopeVar -> [ProcAsgmt JuliaType] -> ProcDMTerm -> MTC (DemutDMTerm , ImmutType)
 elaborateLambda scname args body = do
   --
   -- Regarding Movetypes: We do not need to do anything here
@@ -1146,26 +1146,6 @@ elaborateLambda scname args body = do
   mapM (\(x ::- _,a) -> setMem x [SingleMem a]) (zip args argmvs)
 
 
-  -- SINCE #190:
-  --   we do not have a scope anymore, so we do not have to do this.
-  {-
-  -- Add args as vars to the scope
-  --
-  -- NOTE: we do not use `safeSetValue` here, because function
-  --       arguments are allowed to have different types than
-  --       their eventually preexisting same named variables
-  --       outside of the function.
-  --       Also, we do not trigger a variable access type error.
-  let f (Just a :- _) = setValue a (Pure (SingleArg a))
-      f (Nothing :- _) = \x -> x
-  let scope' = foldr f -- (\(Just a :- _) -> setValue a (Pure (SingleArg a)))
-                     scope
-                     args
-
-  -}
-  -- SINCE #190 END.
-
-
 
   --------------------
   --
@@ -1175,37 +1155,64 @@ elaborateLambda scname args body = do
   --
   -- find out which mem vars have been mutated
   --
-  mutated_argmvs <- do mut <- mapM getMemVarMutationStatus argmvs
-                       let amvs = zip argmvs mut
-                       return [mv | (mv, Mutated) <- amvs]
+  (mutated_argmvs, mut_states) <- do
+    muts <- mapM getMemVarMutationStatus argmvs
+    let amvs = zip args muts
+    return ([mv | (mv ::- _, Mutated) <- amvs], muts)
 
   --
   --------------------
 
 
-  {-
-  -- get the context and check if some variables are now mutated
-  ctx <- use vaCtx
-  let ctxElems = getAllElems ctx
-  -- let isMutatingFunction = or [True | WriteSingle _ <- ctxElems]
 
-  -- restore the VA-Types of the arguments to this lambda from the backup'ed `oldVaCtx`
-  -- and also get their new values
-  let getVar :: (Asgmt JuliaType,MemVar) -> MTC (Maybe (TeVar, IsMutated))
-      getVar (Just a :- t,memvar) = do
-        mstate <- use mutCtx
-        case getValue memvar mstate of
-          Nothing              -> pure (Just (a , NotMutated))
-          Just (_, Mutated) -> pure (Just (a , Mutated))
-          Just _               -> pure (Just (a , NotMutated))
-      getVar (Nothing :- t,_) = pure Nothing
+  ------------------------------
+  -- Compute the elaborated function body
+  --
+  --   For this we look at the mutated memvars and the last value of the body,
+  --   and if required append a statement which either returns the default value,
+  --   or returns the tuple of mutated args.
+  --
+  --   See #190.
+  --
+  --
+  (term_to_append, movetype_to_check_for_transparency) <- case (lastValue, mutated_argmvs) of
+    (PureValue a, []) -> return $ (Nothing, Just a)
+    (PureValue a, xs) -> demutationError $ "Found a function which is mutating, but does not have a 'return'. This is not allowed."
+                                        <> "\nThe function body is:\n" <> showPretty body
+    (DefaultValue a, []) -> return (Just a, Just a)
+    (DefaultValue a, xs) -> demutationError $ "Found a function which is mutating, but does not have a 'return'. This is not allowed."
+                                          <> "\nThe function body is:\n" <> showPretty body
+    (MutatingFunctionEndValue, []) -> demutationError $ "Found a function which is not mutating, but has a 'return'. This is not allowed."
+                                                    <> "\nThe function body is:\n" <> showPretty body
+    (MutatingFunctionEndValue, mvs) -> return $ (Just (TupleMove [SingleMove v | v <- mvs]), Nothing)
 
-  -- call this function on all args given in the signature
-  -- and extract those vars that are mutated
-  vars_mutationState <- mapM getVar argsWithMemVars
-  let mutVars = [v | Just (v , Mutated) <- vars_mutationState]
-  let mutationsStates = [m | Just (_ , m) <- vars_mutationState]
-  -}
+
+  --
+  -- We lookup the proc vars of the move,
+  -- and check that they do not contain memory
+  -- locations which are function inputs.
+  --
+  case movetype_to_check_for_transparency of
+    Nothing -> pure ()
+    Just mt -> case freeVarsOfMoveType mt `intersect` mutated_argmvs of
+                  [] -> pure ()
+                  pv : pvs -> demutationError $ "Found a function which passes through a reference given as input. This is not allowed.\n"
+                                                <> "The function body is:\n" <> showPretty body
+
+
+  -- We append the last statement if that is required
+  let full_body = case term_to_append of
+        Just mt -> Extra $ DemutBlock (moveTypeAsTerm mt : new_body_terms)
+        Nothing -> Extra $ DemutBlock new_body_terms
+
+
+  -- The type of the function depends on whether we are mutating or not.
+  -- That this fits with everything else was already checked above,
+  -- here we merely decide on the immuttype based on the number of mutated args.
+
+  let itype = case mutated_argmvs of
+        [] -> Pure
+        _ -> Mutating mut_states
 
 
   ------------------------------
@@ -1231,95 +1238,9 @@ elaborateLambda scname args body = do
   -----------
 
 
-  ------------------------------
-  -- Compute the elaborated function body
-  --
-  --   For this we look at the mutated memvars and the last value of the body,
-  --   and if required append a statement which either returns the default value,
-  --   or returns the tuple of mutated args.
-  --
-  --   See #190.
-  --
-  --   The `b_needs_ref_check` result tracks whether the return value of this
-  --   function definition might contain references which 
-  --
-  (term_to_append, b_needs_ref_check) <- case (lastValue, mutated_argmvs) of
-    (PureValue a, []) -> undefined
-    (PureValue a, xs) -> demutationError $ "Found a function which is mutating, but does not have a 'return'. This is not allowed."
-                                        <> "\nThe function body is:\n" <> showPretty body
-    (DefaultValue a, []) -> return (a, undefined)
-    (DefaultValue a, xs) -> demutationError $ "Found a function which is mutating, but does not have a 'return'. This is not allowed."
-                                          <> "\nThe function body is:\n" <> showPretty body
-    (MutatingFunctionEndValue, []) -> demutationError $ "Found a function which is not mutating, but has a 'return'. This is not allowed."
-                                                    <> "\nThe function body is:\n" <> showPretty body
-    (MutatingFunctionEndValue, mvs) -> return $ undefined
-     -- ((Tup [Var (Just (procVarAsTeVar mv) :- JTAny) | mv <- mvs]), False)
+  return (full_body, itype)
 
-  undefined
-
-
-  {-
-
-
-
-  -- now, depending on whether we have a mutating lambda,
-  -- do the following
-
-  -- case isMutatingFunction of
-    --
-    -- case I : Mutating
-    --
-    -- True -> do
-      -- assert that now the context is empty
-      -- (i.e., no captures were used)
-      -- vaCtx <- use vaCtx
-      -- case isEmptyDict vaCtx of
-      --   False -> throwError (DemutationDefinitionOrderError $ "The variables " <> show vaCtx <> " are not in scope.")
-      --   True ->
-          -- check that the body is a mutation result
-          -- and reorder the resulting tuple
-          --
-  case (τ,mutVars) of
-    (VirtualMutated returnedMutVars, expectedMutVars) | expectedMutVars /= [] -> do 
-      -- [v | (v,NotLocalMutation) <- vars] /= [] -> do
-
-      -- get the permutation which tells us how to go
-      -- from the order in which the vars are returned by the body
-      -- to the order in which the lambda arguments are given
-      --
-
-      -- NOTE: WIP/test -v-
-      -- we also check that there is not a mixture of local/nonlocal mutated variable
-      -- let bothVars = [(v) | (v, NotLocalMutation) <- vars , (w,LocalMutation) <- vars, v == w]
-      -- case bothVars of
-      --   [] -> pure ()
-      --   xs -> throwError (DemutationError $ "The variable names " <> show xs <> " are used for both locally mutated and not locally mutated things. This is not allowed. ")
-
-      -- NOTE: WIP/test -v-
-      -- let vars' = [v | (v , NotLocalMutation) <- vars]
-      let mutVars' = [(v , NotLocalMutation) | v <- mutVars]
-
-      -- logForce $ "Found permutation " <> show vars <> " ↦ " <> show mutVars <>". It is: " <> show σ
-      pure ((wrapReorder expectedMutVars returnedMutVars newBody) , Mutating mutationsStates)
-
-    --
-    -- case II : Not Mutating
-    --
-    -- simply say that this function is not mutating
-    (Pure _,[]) -> pure (newBody , Pure UserValue)
-
-    --
-    -- case III : locally mutating without return value
-    --
-    -- this is not allowed
-    -- (VirtualMutated vars, [])
-    --   -> throwError (DemutationError $ "Found a function which is neither mutating, nor has a return value. This is not allowed."
-    --                                    <> "\nThe function type is: " <> show (VirtualMutated vars)
-    --                                    <> "\nThe function is:\n" <> showPretty body)
-
-    wrongτ -> throwError (DemutationError $ "Expected the result of the body of a mutating lambda to be a virtual mutated value. But it was "
-                          <> show wrongτ <> "\n where body is:\n" <> showPretty body)
--}
+  
 
 {-
 -------------
