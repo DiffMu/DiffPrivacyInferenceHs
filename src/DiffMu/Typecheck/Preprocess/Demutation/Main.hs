@@ -240,6 +240,13 @@ elaborateMut scname (Extra (ProcLam args body)) = do
 
 
 elaborateMut scname (Extra (ProcFLet name term)) = do
+  --
+  -- Regarding MoveType: it is not possible to have terms
+  -- where an flet is followed by something movable, i.e.
+  -- a variable. Because FLets are only generated when they
+  -- are actually followed by an (anonymous) function definition.
+  -- Which means that we do not have to mark anything as moved here.
+  --
 
   (newTermType, moveType) <- elaborateValue scname term
 
@@ -334,55 +341,14 @@ elaborateMut scname (Apply f args) = do
 
 
 
+
+
 elaborateMut scname _ = undefined
 
 {-
 
 
 
-
-elaborateMut scname (FLet fname term body) = do
-  --
-  -- Regarding MoveType: it is not possible to have terms
-  -- where an flet is followed by something movable, i.e.
-  -- a variable. Because FLets are only generated when they
-  -- are actually followed by an (anonymous) function definition.
-  -- Which means that we do not have to mark anything as moved here.
-  --
-
-  -- check the term
-  (newTerm, newTermType, moveType) <- elaborateNonmut scname term
-
-  -- set the value in the memctx
-  setMemMaybe (Just fname) =<< SingleMem <$> allocateMem scname (T.pack $ show fname)
-
-  logmem <- use memCtx
-  debug $ "[elaborateMut/FLet] For flet for " <> show fname <> " memctx is\n"
-  debug $ show logmem
-  debug $ ""
-
-  -- get the current type for fname from the scope
-  let ftype = getValue fname scope
-
-  -- set the new scope with fname if not already existing
-  -- (but only allow pure uservalue-functions, or single-definition mutating functions)
-  scope' <- case ftype of
-        Nothing -> safeSetValueAllowFLet scname (Just fname) newTermType scope
-        Just (Pure UserValue) -> safeSetValueAllowFLet scname (Just fname) newTermType scope
-        Just (Mutating _) -> throwError (DemutationError $ "We do not allow mutating functions to have multiple definitions")
-        Just (Pure DefaultValue) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
-        Just (Pure (PureTuple _)) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
-        -- Just (Pure (SingleRef)) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
-        Just (Pure (SingleArg _)) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
-        Just (Pure (SingleArgPart _)) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
-        Just (VirtualMutated _) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
-        Just (PureBlackBox) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
-
-
-  -- check the body with this new scope
-  (newBody, newBodyType, newMoveType) <- elaborateMut scname' body
-
-  return (FLet fname newTerm newBody, consumeDefaultValue newBodyType, newMoveType)
 
 elaborateMut scname (Extra DNothing) = undefined
 elaborateMut scname (Extra (MutPhi _ _ _)) = internalError $ "MutPhi should have been resolved by rearrangePhi"
@@ -1248,11 +1214,7 @@ elaborateLambda scname args body = do
 --
 
 elaborateMutList :: String -> ScopeVar -> [(IsMutated , ProcDMTerm)] -> MTC ([DemutDMTerm] , [ProcVar])
-elaborateMutList = undefined
-
-{-
-elaborateMutList :: String -> ScopeVar -> Scope -> [(IsMutated , ProcDMTerm)] -> MTC ([DMTerm] , [TeVar])
-elaborateMutList f scname scope mutargs = do
+elaborateMutList f scname mutargs = do
   ---------------------------------------
   -- Regarding MoveTypes (#171)
   --
@@ -1264,16 +1226,15 @@ elaborateMutList f scname scope mutargs = do
   -- to look into the official `MoveType`.
   --
 
-
   -- function for typechecking a single argument
-  let checkArg :: (IsMutated , ProcDMTerm) -> MTC (DMTerm , ImmutType, Maybe (TeVar))
+  let checkArg :: (IsMutated , ProcDMTerm) -> MTC (DemutDMTerm , MoveType, Maybe (ProcVar))
       checkArg (Mutated , arg) = do
         -- if the argument is given in a mutable position,
         -- it _must_ be a var
         case arg of
-          (Var (Just x :- a)) -> do 
+          Extra (ProcVar (x ::- a)) -> do 
             -- say that this variable is being reassigned (VAT)
-            markReassigned scname x
+            setImmutType scname (x) Pure
 
             -- get the memvar of this tevar from the memctx
             -- and say that the memory location is
@@ -1281,30 +1242,7 @@ elaborateMutList f scname scope mutargs = do
             mt <- expectSingleMem =<< expectNotMoved x
             markMutated mt
 
-            return (Var (Just x :- a), Pure (SingleArg x), Just x)
-            -- this one needs to be a single arg
-            {-
-            -- get the type of this var from the scope
-            -- this one needs to be a single arg
-            case getValue x scope of
-              Nothing -> logForce ("The scope is" <> show scope) >> throwError (DemutationDefinitionOrderError x)
-              Just (Pure (SingleArg y)) | x == y -> do
-                debug $ "[elaborateMutList]: The non-local variable " <> show y <> " is being mutated."
-                loc <- markReassigned scname NotLocalMutation y
-                return (Var (Just x :- a) , Pure (SingleArg x), Just (x, loc))
-              Just (Pure (SingleArg y)) -> throwError (DemutationError $ "When calling the mutating function " <> f <> " found the variable " <> show x <> " as argument in a mutable-argument-position. It is bound to the function argument " <> show y <> ", but it is not allowed to use renamed function arguments in such a position.")
-              Just (Pure (SingleArgPart y)) -> demutationError $ "When calling the mutating function " <> f <> " found the variable " <> show x <> " as argument in a mutable-argument-position. It is a (tuple-)part of the function argument "
-                                                          <> show y <> ", and it is not allowed to mutate parts of arguments.\n"
-                                                          <> "If you want to mutate " <> show x <> " you need to pass it in as a seperate argument to the function."
-              Just (Pure (SingleRef)) -> demutationError $ "When calling the mutating function " <> f <> " found the variable " <> show x <> " as argument in a mutable-argument-position. It is a reference to a part of a vector or matrix."
-                                                          <> "It is not allowed to mutate matrices or vectors.\n"
-              Just (Pure _) -> do
-                loc <- markReassigned scname LocalMutation x
-                return (Var (Just x :- a) , Pure (SingleArg x), Just (x, loc))
-              Just res -> throwError (DemutationError $ "When calling the mutating function " <> f <> " found the variable " <> show x <> " as argument in a mutable-argument-position. It has the type " <> show res <> ", which is not allowed here.")
-
-          (Var (Nothing :- a)) -> throwError (DemutationError $ "When calling the mutating function " <> f <> " found the term " <> showPretty arg <> " as argument in a mutable-argument-position. Only named variables are allowed here.")
-          -}
+            return (Var (Just (procVarAsTeVar x) :- a), SingleMove x, Just x)
 
           -- if argument is not a var, throw error
           _ -> throwError (DemutationError $ "When calling the mutating function " <> f <> " found the term " <> showPretty arg <> " as argument in a mutable-argument-position. Only variables are allowed here.")
@@ -1312,16 +1250,18 @@ elaborateMutList f scname scope mutargs = do
       checkArg (NotMutated , arg) = do
         -- if the argument is given in an immutable position,
         -- we allow to use the full immut checking
-        (arg' , τ, _) <- elaborateMut scname arg
+        (itype , movetype) <- elaborateValue scname arg
 
         -- we require the argument to be of pure type
-        case τ of
-          Pure _ -> pure ()
-          Mutating _ -> throwError (DemutationError $ "It is not allowed to pass mutating functions as arguments. " <> "\nWhen checking " <> f <> "(" <> show (fmap snd mutargs) <> ")")
-          VirtualMutated _ -> throwError (DemutationError $ "It is not allowed to use the result of mutating functions as arguments in other mutating functions. " <> "\nWhen checking " <> f <> "(" <> show (fmap snd mutargs) <> ")")
-          PureBlackBox -> throwError (DemutationError $ "It is not allowed to pass black boxes as arguments. " <> "\nWhen checking " <> f <> "(" <> show (fmap snd mutargs) <> ")")
+        case itype of
+          Pure -> pure ()
+          Mutating _ -> demutationError $ "It is not allowed to pass mutating functions as arguments. "
+                        <> "\nWhen checking " <> f <> "(" <> showPretty (fmap snd mutargs) <> ")"
+          PureBlackBox -> demutationError $ "It is not allowed to pass black boxes as arguments. "
+                        <> "\nWhen checking " <> f <> "(" <> showPretty (fmap snd mutargs) <> ")"
 
-        return (arg' , τ, Nothing)
+        return (moveTypeAsTerm movetype , movetype , Nothing)
+      
 
   -- check them
   newArgsWithMutTeVars <- mapM checkArg mutargs
@@ -1330,9 +1270,9 @@ elaborateMutList f scname scope mutargs = do
   -- extract for return
   --
   -- these types of the arguments carry the contained "possibly aliased variable names"
-  let newArgs = [te | (te , _, _) <- newArgsWithMutTeVars]
-  let argTypes = [ty | (_ , Pure ty, _) <- newArgsWithMutTeVars]
-  let mutVars = [m | (_ , _, Just m) <- newArgsWithMutTeVars]
+  let newArgs = [te | (te , _ , _) <- newArgsWithMutTeVars]
+  let argTypes = [ty | (_ , ty, _) <- newArgsWithMutTeVars]
+  let mutVars = [m | (_ , _ , Just m) <- newArgsWithMutTeVars]
 
 
   --
@@ -1341,18 +1281,11 @@ elaborateMutList f scname scope mutargs = do
   --
   -- See #95
   --
-  let getPossiblyAliasedVars (SingleArg a) = [a]
-      getPossiblyAliasedVars (SingleArgPart a) = [a]
-      -- getPossiblyAliasedVars (SingleRef) = []
-      getPossiblyAliasedVars (PureTuple as) = getPossiblyAliasedVars =<< as
-      getPossiblyAliasedVars DefaultValue = []
-      getPossiblyAliasedVars UserValue = []
+  let getPossiblyAliasedVars a = freeVarsOfMoveType a
 
-  -- let allVars = [t | (t, _) <- newArgsWithMutTeVars] >>= freeVarsDMTerm
-  let allVars = [t | (t) <- mutVars]
 
   -- Counting how many vars with a given name there are
-  let addCount :: (TeVar) -> Ctx TeVar Int -> Ctx TeVar Int
+  let addCount :: (ProcVar) -> Ctx ProcVar Int -> Ctx ProcVar Int
       addCount var counts = case getValue var counts of
                               Just a -> setValue var (a P.+ 1) counts
                               Nothing -> setValue var 1 counts
@@ -1376,7 +1309,6 @@ elaborateMutList f scname scope mutargs = do
                               showvarcounts [] = ""
 
   return (newArgs, mutVars)
--}
 
 
 {-

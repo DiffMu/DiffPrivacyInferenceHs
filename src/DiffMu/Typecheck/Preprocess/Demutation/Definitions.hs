@@ -549,11 +549,14 @@ getAllMemVars (SingleMem a) = [a]
 getAllMemVars (TupleMem a) = a >>= getAllMemVars
 getAllMemVars (RefMem a) = undefined -- [a]
 
-expectSingleMem :: MemType -> MTC MemVar
-expectSingleMem mt = do
-  case mt of
-    (SingleMem a) -> pure a
-    (mem) -> demutationError $ "The memory type " <> show mem <> " was expected to contain a single memory location."
+expectSingleMem :: [MemType] -> MTC MemVar
+expectSingleMem mts = do
+  case mts of
+    [mt] -> case mt of
+              (SingleMem a) -> pure a
+              (mem) -> demutationError $ "The memory type " <> show mem <> " was expected to contain a single memory location."
+    mts -> demutationError $ "The memory type " <> show mts <> " was expected to only have one alternative."
+
 
 -- reverseMemLookup :: MemVar -> MTC ProcVar
 -- reverseMemLookup wantedMem = do
