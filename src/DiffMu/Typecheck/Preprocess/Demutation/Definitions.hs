@@ -94,7 +94,7 @@ data MoveType = TupleMove [MoveType] | SingleMove ProcVar | RefMove DemutDMTerm 
 
 data TermType =
   Value ImmutType MoveType
-  | Statements [DemutDMTerm] DemutDMTerm
+  | Statement DemutDMTerm MoveType
   | MutatingFunctionEnd
 
 data LastValue =
@@ -448,7 +448,7 @@ setImmutTypeFLetDefined a = undefined
 setImmutTypeMaybe :: ScopeVar -> Maybe ProcVar -> ImmutType -> MTC ()
 setImmutTypeMaybe = undefined
 
-setImmutTypeOverwritePrevious :: ScopeVar -> Maybe ProcVar -> ImmutType -> MTC ()
+setImmutTypeOverwritePrevious :: ScopeVar -> ProcVar -> ImmutType -> MTC ()
 setImmutTypeOverwritePrevious = undefined
 
 --------------------------------------------------------------------------------
@@ -493,34 +493,33 @@ moveGetMemAndAllocsTuple :: ScopeVar -> MoveType -> MTC (MemType, [(MemVar,Demut
 moveGetMemAndAllocsTuple = undefined
 
 
-setMem :: ProcVar -> MemType -> MTC () 
-setMem x mt = memCtx %= (setValue x (MemExists [mt]))
+setMem :: ProcVar -> [MemType] -> MTC () 
+setMem x mt = memCtx %= (setValue x (MemExists mt))
 
-setMemMaybe :: Maybe ProcVar -> MemType -> MTC () 
+setMemMaybe :: Maybe ProcVar -> [MemType] -> MTC () 
 setMemMaybe (Just x) mt = setMem x mt
 setMemMaybe (Nothing) _ = pure ()
 
 
-{-
-setMemTuple :: ScopeVar -> [Maybe ProcVar] -> MemType -> MTC ()
-setMemTuple scname xs (SingleMem a) = do
-  -- We are deconstructing a tuple value,
-  -- need to create memory locations for all parts
-  let f (Just x) = do
-        mx <- allocateMem scname (Left x)
-        memCtx %= (setValue x (MemExists (SingleMem mx)))
-      f Nothing = pure ()
-  mapM_ f xs
-setMemTuple scname xs (RefMem a) = undefined -- do
-  -- mapM_ (\(x) -> setMemMaybe x (RefMem)) xs
+setMemTuple :: ScopeVar -> [ProcVar] -> [MemType] -> MTC ()
+setMemTuple = undefined
+-- setMemTuple scname xs (SingleMem a) = undefined --  do
+--   -- We are deconstructing a tuple value,
+--   -- need to create memory locations for all parts
+--   let f (Just x) = do
+--         mx <- allocateMem scname (Left x)
+--         memCtx %= (setValue x (MemExists (SingleMem mx)))
+--       f Nothing = pure ()
+--   mapM_ f xs
+-- setMemTuple scname xs (RefMem a) = undefined -- do
+--   -- mapM_ (\(x) -> setMemMaybe x (RefMem)) xs
 
-setMemTuple scname xs (TupleMem as) | length xs == length as = do
-  let xas = zip xs as
-  mapM_ (\(x, a) -> setMemMaybe x a) xas
+-- setMemTuple scname xs (TupleMem as) | length xs == length as = do
+--   let xas = zip xs as
+--   mapM_ (\(x, a) -> setMemMaybe x a) xas
 
-setMemTuple scname xs (TupleMem as) | otherwise = demutationError $ "Trying to assign a tuple where lengths do not match:\n"
-                                                                    <> show xs <> " = " <> show as
--}
+-- setMemTuple scname xs (TupleMem as) | otherwise = demutationError $ "Trying to assign a tuple where lengths do not match:\n"
+--                                                                     <> show xs <> " = " <> show as
 
 expectNotMoved :: ProcVar -> MTC [MemType]
 expectNotMoved tevar = do
@@ -604,13 +603,12 @@ procVarAsTeVar :: ProcVar -> TeVar
 procVarAsTeVar mv = UserTeVar mv
 
 
-moveTypeAsTerm :: MoveType -> MTC DemutDMTerm 
+moveTypeAsTerm :: MoveType -> DemutDMTerm 
 moveTypeAsTerm = \case
-  TupleMove mts -> do
-    terms <- mapM moveTypeAsTerm mts
-    return $ Tup $ terms
-  SingleMove pv -> do
-    return $ Var $ (Just (procVarAsTeVar pv) :- JTAny)
-  RefMove pdt -> pure pdt
-  NoMove pdt -> pure pdt
+  TupleMove mts ->
+    let terms = moveTypeAsTerm <$> mts
+    in Tup $ terms
+  SingleMove pv -> Var $ (Just (procVarAsTeVar pv) :- JTAny)
+  RefMove pdt -> pdt
+  NoMove pdt -> pdt
 

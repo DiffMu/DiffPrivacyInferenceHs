@@ -790,7 +790,7 @@ instance Eq (EmptyExtension a) where
 type DMTerm = PreDMTerm EmptyExtension
 
 
-data ProcAsgmt a = (::-) (Maybe ProcVar) a
+data ProcAsgmt a = (::-) (ProcVar) a
   deriving (Generic, Show, Eq, Ord)
 
 type ProcDMTerm = PreDMTerm ProceduralExtension
@@ -802,7 +802,7 @@ data ProceduralExtension a =
   | ProcFLet ProcVar a
   | ProcBBLet ProcVar [JuliaType] -- name, arguments
   | ProcPhi a [a]
-  | ProcPreLoop a (Maybe ProcVar) a
+  | ProcPreLoop a (ProcVar) a
   | ProcReturn
   | ProcVar (ProcAsgmt JuliaType)
   | ProcLam     [ProcAsgmt JuliaType] a
