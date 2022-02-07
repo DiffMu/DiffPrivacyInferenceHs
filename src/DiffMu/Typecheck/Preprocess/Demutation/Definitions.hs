@@ -485,6 +485,9 @@ moveGetMemAndAllocs_impl scname (RefMove te) = do
   -- tell [(memvar,te)]
   -- pure $ RefMem memvar
 
+moveGetMem :: ScopeVar -> MoveType -> MTC [MemType]
+moveGetMem = undefined
+
 
 moveGetMemAndAllocsTuple :: ScopeVar -> MoveType -> MTC (MemType, [(MemVar,DemutDMTerm)])
 moveGetMemAndAllocsTuple = undefined
@@ -598,17 +601,16 @@ getMemVarMutationStatus mv = do
 --   RefMem mv -> undefined
 
 procVarAsTeVar :: ProcVar -> TeVar
-procVarAsTeVar mv = undefined
+procVarAsTeVar mv = UserTeVar mv
 
 
 moveTypeAsTerm :: MoveType -> MTC DemutDMTerm 
-moveTypeAsTerm = undefined -- \case
-  -- TupleMove mts -> do
-  --   terms <- mapM moveTypeAsTerm mts
-  --   return $ Tup $ terms
-  -- SingleMove pv -> do
-  --   mtype <- expectNotMoved pv
-  --   return $ memTypeAsTerm mtype
-  -- RefMove pdt -> pure pdt
-  -- NoMove pdt -> pure pdt
+moveTypeAsTerm = \case
+  TupleMove mts -> do
+    terms <- mapM moveTypeAsTerm mts
+    return $ Tup $ terms
+  SingleMove pv -> do
+    return $ Var $ (Just (procVarAsTeVar pv) :- JTAny)
+  RefMove pdt -> pure pdt
+  NoMove pdt -> pure pdt
 

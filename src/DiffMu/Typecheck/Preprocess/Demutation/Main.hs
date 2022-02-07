@@ -26,7 +26,7 @@ import Test.QuickCheck.Property (Result(expect))
 
 import Control.Monad.Trans.Class
 import qualified GHC.RTS.Flags as LHS
-import DiffMu.Typecheck.Preprocess.Demutation.Definitions (setImmutTypeOverwritePrevious)
+import DiffMu.Typecheck.Preprocess.Demutation.Definitions (setImmutTypeOverwritePrevious, procVarAsTeVar)
 
 
 
@@ -237,7 +237,7 @@ elaborateMut scname fullterm@(Extra (ProcTLetBase ltype vars term)) = do
 
         (allocStatements, mts) <- unzip <$> mapM handleElement (zip vars mts)
 
-        return (Statements (join allocStatements) (memTypeAsTerm (TupleMem mts)))
+        return (Statements (join allocStatements) (Tup $ [Var ((procVarAsTeVar <$> v) :- JTAny) | v <- vars]))
 
     --
     -- case 2: RHS is a single procvar
