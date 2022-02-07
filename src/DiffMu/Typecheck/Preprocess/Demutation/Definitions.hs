@@ -99,7 +99,6 @@ data TermType =
 
 data LastValue =
    PureValue MoveType
-   | DefaultValue MoveType
    | MutatingFunctionEndValue
 
 setLastValue :: LastValue -> MTC ()
@@ -618,3 +617,11 @@ moveTypeAsTerm = \case
 
 freeVarsOfMoveType :: MoveType -> [ProcVar]
 freeVarsOfMoveType = undefined
+
+termTypeAsTerm :: TermType -> DemutDMTerm
+termTypeAsTerm = \case
+  Value it mt -> moveTypeAsTerm mt
+  Statement pdt mt -> Extra $ DemutBlock [pdt, moveTypeAsTerm mt]
+  MutatingFunctionEnd -> Extra $ DemutBlock []
+
+

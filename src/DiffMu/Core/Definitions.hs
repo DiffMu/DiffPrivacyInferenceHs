@@ -1032,6 +1032,8 @@ instance ShowPretty a => ShowPretty (MutabilityExtension a) where
 
 instance ShowPretty a => ShowPretty (ProceduralExtension a) where
 
+instance ShowPretty a => ShowPretty (DemutatedExtension a) where
+
 instance ShowPretty (EmptyExtension a) where
   showPretty a = undefined
 

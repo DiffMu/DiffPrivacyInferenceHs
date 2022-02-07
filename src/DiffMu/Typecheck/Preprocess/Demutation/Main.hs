@@ -45,29 +45,27 @@ demutTLetStatement ltype vars term =
 -- - JuliaReturn
 -- - modify iteration variable
 
-demutate :: ProcDMTerm -> MTC (ProcDMTerm)
-demutate term = undefined
-{-
-do
-  logForce $ "Term before phi rearranging:\n" <> showPretty term
+demutate :: ProcDMTerm -> MTC (DemutDMTerm)
+demutate term = do
+  -- logForce $ "Term before phi rearranging:\n" <> showPretty term
 
-  term' <- rearrangePhi term
+  -- term' <- rearrangePhi term
 
-  logForce $ "-----------------------------------"
-  logForce $ "Term before mutation elaboration:\n" <> showPretty term'
+  -- logForce $ "-----------------------------------"
+  logForce $ "Term before mutation elaboration:\n" <> showPretty term
 
   topscname <- newScopeVar "toplevel"
 
-  (res , _, _) <- elaborateMut topscname def term'
+  res <- elaborateMut topscname term
+  let resterm = termTypeAsTerm res
   logForce $ "-----------------------------------"
-  logForce $ "Mutation elaborated term is:\n" <> showPretty res
+  logForce $ "Mutation elaborated term is:\n" <> showPretty resterm
 
   -- let optimized = optimizeTLet res
   -- logForce $ "-----------------------------------"
   -- logForce $ "TLet optimized term is:\n" <> showPretty optimized
 
-  return optimized
--}
+  return resterm
 
 
 elaborateValue :: ScopeVar -> ProcDMTerm -> MTC (ImmutType , MoveType)
@@ -96,39 +94,23 @@ elaboratePureValue scname te = do
 -- concatenate Statements blocks
 -- determine the correct LastTerm for the concatenation result
 makeTermList :: [TermType] -> MTC (LastValue, [DemutDMTerm])
-makeTermList termstt = undefined -- let
-  {-
-    inside :: TermType -> MTC [DemutDMTerm]
-    inside t = case t of
-                    Value it mt -> demutationError $ "Found a value term " <> show mt <> " inside a list of statements."
-                    MutatingFunctionEnd -> demutationError $ "Found a MutatingFunctionEnd inside a list of statements."
-                    Statement terms last -> return (last : terms)
-    in case (reverse termstt) of
-            [] -> demutationError $ "Found an empty block"
-            (Value it mt : insideTerms) -> do
-                insides <- mapM inside insideTerms
-                case it of
-                     Pure -> return ((PureValue mt), concat insides)
-                     _ -> demutationError $ "Found an impure value "<> show mt <>" as last term in a list of statements."
-            ((Statement terms last) : insideTerms) -> do
-                insides <- mapM inside insideTerms
-                return ((DefaultValue last), (reverse terms) ++ (concat insides))
-            (MutatingFunctionEnd : insideTerms) -> do
-                insides <- mapM inside insideTerms
-                return (MutatingFunctionEndValue, concat insides)
-                -}
 
--- elaborateNonmut :: ScopeVar -> ProcDMTerm -> MTC (DemutDMTerm , ImmutType , MoveType)
--- elaborateNonmut scname term = undefined -- do
-  -- (resTerm , resType, mType) <- elaborateMut scname term
+-- empty list
+makeTermList [] = demutationError $ "Found an empty list of statements."
 
-  -- case resType of
-  --   Pure _ -> pure ()
-  --   VirtualMutated mutvars -> throwError (DemutationError $ "expected that the term " <> showPretty term <> " does not mutate anything, but it mutates the following variables: " <> show mutvars)
-  --   Mutating _ -> pure ()
-  --   PureBlackBox -> pure ()
+-- single element left
+makeTermList (Value it mt : [])         = return (PureValue mt, [])
+makeTermList (Statement term last : []) = return (PureValue last, [moveTypeAsTerm last, term])
+makeTermList (MutatingFunctionEnd : []) = return (MutatingFunctionEndValue , [])
 
-  -- return (resTerm , resType, mType)
+-- more than one element left
+makeTermList (Value _ mt : ts)          = demutationError $ "Found a value term " <> show mt <> " inside a list of statements."
+makeTermList (Statement term _ : ts)    = do (last, ts') <- makeTermList ts
+                                             return (last, ts' <> [term])
+makeTermList (MutatingFunctionEnd : ts) = demutationError $ "Found a MutatingFunctionEnd inside a list of statements."
+
+  
+
 
 elaborateMut :: ScopeVar -> ProcDMTerm -> MTC (TermType)
     
@@ -342,8 +324,7 @@ elaborateMut scname (Apply f args) = do
 
 
 
-
-elaborateMut scname _ = undefined
+elaborateMut scname term = demutationError $ "demutation not implemented of the term: \n" <> showPretty term
 
 {-
 
@@ -1068,7 +1049,12 @@ elaborateMut scname term@(BBApply x a b)    = throwError (UnsupportedError ("Whe
 
 
 elaborateAsList :: ScopeVar -> ProcDMTerm -> MTC (LastValue, [DemutDMTerm])
-elaborateAsList scname t = undefined
+elaborateAsList scname (Extra (Block ts)) = do
+  ts' <- mapM (elaborateMut scname) ts
+  makeTermList ts'
+elaborateAsList scname t = do
+  t' <- elaborateMut scname t
+  makeTermList [t']
 
 ---------------------------------------------------
 -- recurring utilities
@@ -1142,44 +1128,42 @@ elaborateLambda scname args body = do
   --   See #190.
   --
   --
-  (term_to_append, movetype_to_check_for_transparency) <- case (lastValue, mutated_argmvs) of
-    (PureValue a, []) -> return $ (Nothing, Just a)
+  (itype, full_body) <- case (lastValue, mutated_argmvs) of
+    --
+    -- case I: a pure function
+    --
+    (PureValue a, []) -> do
+      --
+      -- We lookup the proc vars of the move,
+      -- and check that they do not contain memory
+      -- locations which are function inputs.
+      --
+      case freeVarsOfMoveType a `intersect` mutated_argmvs of
+        [] -> pure ()
+        pv : pvs -> demutationError $ "Found a function which passes through a reference given as input. This is not allowed.\n"
+                                      <> "The function body is:\n" <> showPretty body
+
+      return $ (Pure, Extra $ DemutBlock new_body_terms)
+
+
+    --
+    -- case II: not allowed
+    --
     (PureValue a, xs) -> demutationError $ "Found a function which is mutating, but does not have a 'return'. This is not allowed."
                                         <> "\nThe function body is:\n" <> showPretty body
-    (DefaultValue a, []) -> return (Just a, Just a)
-    (DefaultValue a, xs) -> demutationError $ "Found a function which is mutating, but does not have a 'return'. This is not allowed."
-                                          <> "\nThe function body is:\n" <> showPretty body
+    --
+    -- case III: not allowed
+    --
     (MutatingFunctionEndValue, []) -> demutationError $ "Found a function which is not mutating, but has a 'return'. This is not allowed."
                                                     <> "\nThe function body is:\n" <> showPretty body
-    (MutatingFunctionEndValue, mvs) -> return $ (Just (TupleMove [SingleMove v | v <- mvs]), Nothing)
 
+    --
+    -- case IV: mutating function
+    --
+    (MutatingFunctionEndValue, mvs) -> do
+      let last_tuple = TupleMove [SingleMove v | v <- mvs]
+      return (Mutating mut_states, Extra (DemutBlock (moveTypeAsTerm last_tuple : new_body_terms)))
 
-  --
-  -- We lookup the proc vars of the move,
-  -- and check that they do not contain memory
-  -- locations which are function inputs.
-  --
-  case movetype_to_check_for_transparency of
-    Nothing -> pure ()
-    Just mt -> case freeVarsOfMoveType mt `intersect` mutated_argmvs of
-                  [] -> pure ()
-                  pv : pvs -> demutationError $ "Found a function which passes through a reference given as input. This is not allowed.\n"
-                                                <> "The function body is:\n" <> showPretty body
-
-
-  -- We append the last statement if that is required
-  let full_body = case term_to_append of
-        Just mt -> Extra $ DemutBlock (moveTypeAsTerm mt : new_body_terms)
-        Nothing -> Extra $ DemutBlock new_body_terms
-
-
-  -- The type of the function depends on whether we are mutating or not.
-  -- That this fits with everything else was already checked above,
-  -- here we merely decide on the immuttype based on the number of mutated args.
-
-  let itype = case mutated_argmvs of
-        [] -> Pure
-        _ -> Mutating mut_states
 
 
   ------------------------------
