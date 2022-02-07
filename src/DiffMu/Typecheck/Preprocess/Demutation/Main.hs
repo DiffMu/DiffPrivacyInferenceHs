@@ -1350,7 +1350,7 @@ elaborateLambda scname args body = do
     (PureValue a, []) -> undefined
     (PureValue a, xs) -> demutationError $ "Found a function which is mutating, but does not have a 'return'. This is not allowed."
                                         <> "\nThe function body is:\n" <> showPretty body
-    (DefaultValue a, []) -> return (a, _)
+    (DefaultValue a, []) -> return (a, undefined)
     (DefaultValue a, xs) -> demutationError $ "Found a function which is mutating, but does not have a 'return'. This is not allowed."
                                           <> "\nThe function body is:\n" <> showPretty body
     (MutatingFunctionEndValue, []) -> demutationError $ "Found a function which is not mutating, but has a 'return'. This is not allowed."

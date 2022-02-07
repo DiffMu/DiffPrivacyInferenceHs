@@ -118,7 +118,7 @@ setLastValue = undefined
 data MemType = TupleMem [MemType] | SingleMem MemVar | RefMem MemVar
   deriving (Eq, Show)
 
-data MemState = MemExists MemType | MemMoved
+data MemState = MemExists [MemType] | MemMoved
   deriving (Show)
 
 data MemAssignmentType = AllocNecessary | PreexistingMem
@@ -461,27 +461,29 @@ setImmutTypeOverwritePrevious = undefined
 -- This function marks variables as moved in the scope
 -- For #172
 --
-moveGetMemAndAllocs :: ScopeVar -> MoveType -> MTC (MemType, [(MemVar,DemutDMTerm)])
+moveGetMemAndAllocs :: ScopeVar -> MoveType -> MTC ([MemType], [(MemVar,DemutDMTerm)])
 moveGetMemAndAllocs scname mt = runWriterT (moveGetMemAndAllocs_impl scname mt)
 
-moveGetMemAndAllocs_impl :: ScopeVar -> MoveType -> WriterT [(MemVar,DemutDMTerm)] MTC MemType
+moveGetMemAndAllocs_impl :: ScopeVar -> MoveType -> WriterT [(MemVar,DemutDMTerm)] MTC [MemType]
 moveGetMemAndAllocs_impl scname (NoMove te) = do
   mem <- lift $ allocateMem scname (Right "val")
   tell [(mem,te)]
-  return (SingleMem mem)
+  return [(SingleMem mem)]
 moveGetMemAndAllocs_impl scname (SingleMove a) = do
-  memvar <- lift $ expectNotMoved a
-  memCtx %= (setValue a (MemMoved))
-  return (memvar)
+  memstate <- lift $ expectNotMoved a
+  memCtx %= (setValue a MemMoved)
+  return (memstate)
 moveGetMemAndAllocs_impl scname (TupleMove as) = do
-  mems <- mapM (moveGetMemAndAllocs_impl scname) as
-  return (TupleMem mems)
+  undefined
+  -- mems <- mapM (moveGetMemAndAllocs_impl scname) as
+  -- return (TupleMem mems)
 moveGetMemAndAllocs_impl scname (RefMove te) = do
+  undefined
   -- if we had a reference,
   -- allocate new memory for it
-  memvar <- lift $ allocateMem scname (Right "ref")
-  tell [(memvar,te)]
-  pure $ RefMem memvar
+  -- memvar <- lift $ allocateMem scname (Right "ref")
+  -- tell [(memvar,te)]
+  -- pure $ RefMem memvar
 
 
 moveGetMemAndAllocsTuple :: ScopeVar -> MoveType -> MTC (MemType, [(MemVar,DemutDMTerm)])
@@ -489,12 +491,14 @@ moveGetMemAndAllocsTuple = undefined
 
 
 setMem :: ProcVar -> MemType -> MTC () 
-setMem x mt = memCtx %= (setValue x (MemExists mt))
+setMem x mt = memCtx %= (setValue x (MemExists [mt]))
 
 setMemMaybe :: Maybe ProcVar -> MemType -> MTC () 
 setMemMaybe (Just x) mt = setMem x mt
 setMemMaybe (Nothing) _ = pure ()
 
+
+{-
 setMemTuple :: ScopeVar -> [Maybe ProcVar] -> MemType -> MTC ()
 setMemTuple scname xs (SingleMem a) = do
   -- We are deconstructing a tuple value,
@@ -513,9 +517,9 @@ setMemTuple scname xs (TupleMem as) | length xs == length as = do
 
 setMemTuple scname xs (TupleMem as) | otherwise = demutationError $ "Trying to assign a tuple where lengths do not match:\n"
                                                                     <> show xs <> " = " <> show as
+-}
 
-
-expectNotMoved :: ProcVar -> MTC MemType
+expectNotMoved :: ProcVar -> MTC [MemType]
 expectNotMoved tevar = do
   mc <- use memCtx
   case getValue tevar mc of
@@ -525,7 +529,7 @@ expectNotMoved tevar = do
     Just (MemMoved) -> throwError $ DemutationMovedVariableAccessError tevar
     Just (MemExists a) -> pure a
 
-expectNotMovedMaybe :: Maybe ProcVar -> MTC (Maybe MemType) 
+expectNotMovedMaybe :: Maybe ProcVar -> MTC (Maybe [MemType]) 
 expectNotMovedMaybe (Just a) = Just <$> expectNotMoved a
 expectNotMovedMaybe Nothing = undefined -- return ()
 
@@ -549,18 +553,18 @@ expectSingleMem mt = do
     (SingleMem a) -> pure a
     (mem) -> demutationError $ "The memory type " <> show mem <> " was expected to contain a single memory location."
 
-reverseMemLookup :: MemVar -> MTC ProcVar
-reverseMemLookup wantedMem = do
-  alltemems <- getAllKeyElemPairs <$> use memCtx
-  let relevantTemems = [(t,m) | (t,MemExists m) <- alltemems, wantedMem `elem` getAllMemVars m]
+-- reverseMemLookup :: MemVar -> MTC ProcVar
+-- reverseMemLookup wantedMem = do
+--   alltemems <- getAllKeyElemPairs <$> use memCtx
+--   let relevantTemems = [(t,m) | (t,MemExists m) <- alltemems, wantedMem `elem` getAllMemVars m]
 
-  case relevantTemems of
-    [] -> demutationError $ "When doing a reverse memory lookup for memory variable " <> show wantedMem <> ", no tevar was found."
-    [(t,a)] -> case a of
-                SingleMem a -> return t
-                a  -> demutationError $ "When doing a reverse memory lookup for memory variable " <> show wantedMem <> ", expected it to have an individual name.\n"
-                                      <> "but it was part of a compound type: " <> show a
-    xs -> demutationError $ "When doing a reverse memory lookup for memory variable " <> show wantedMem <> ", multiple tevars were found: " <> show xs
+--   case relevantTemems of
+--     [] -> demutationError $ "When doing a reverse memory lookup for memory variable " <> show wantedMem <> ", no tevar was found."
+--     [(t,a)] -> case a of
+--                 SingleMem a -> return t
+--                 a  -> demutationError $ "When doing a reverse memory lookup for memory variable " <> show wantedMem <> ", expected it to have an individual name.\n"
+--                                       <> "but it was part of a compound type: " <> show a
+--     xs -> demutationError $ "When doing a reverse memory lookup for memory variable " <> show wantedMem <> ", multiple tevars were found: " <> show xs
 
 
 getMemVarMutationStatus :: MemVar -> MTC IsMutated
@@ -587,23 +591,24 @@ getMemVarMutationStatus mv = do
 --------------------------------------------------------------------------
 -- Creating TeVars from MemVars
 --
-memTypeAsTerm :: MemType -> DemutDMTerm
-memTypeAsTerm mt = case mt of
-  TupleMem mts -> undefined
-  SingleMem mv -> undefined
-  RefMem mv -> undefined
+-- memTypeAsTerm :: MemType -> DemutDMTerm
+-- memTypeAsTerm mt = case mt of
+--   TupleMem mts -> undefined
+--   SingleMem mv -> undefined
+--   RefMem mv -> undefined
 
-memVarAsTeVar :: MemVar -> TeVar
-memVarAsTeVar mv = undefined
+procVarAsTeVar :: ProcVar -> TeVar
+procVarAsTeVar mv = undefined
+
 
 moveTypeAsTerm :: MoveType -> MTC DemutDMTerm 
-moveTypeAsTerm = \case
-  TupleMove mts -> do
-    terms <- mapM moveTypeAsTerm mts
-    return $ Tup $ terms
-  SingleMove pv -> do
-    mtype <- expectNotMoved pv
-    return $ memTypeAsTerm mtype
-  RefMove pdt -> pure pdt
-  NoMove pdt -> pure pdt
+moveTypeAsTerm = undefined -- \case
+  -- TupleMove mts -> do
+  --   terms <- mapM moveTypeAsTerm mts
+  --   return $ Tup $ terms
+  -- SingleMove pv -> do
+  --   mtype <- expectNotMoved pv
+  --   return $ memTypeAsTerm mtype
+  -- RefMove pdt -> pure pdt
+  -- NoMove pdt -> pure pdt
 
