@@ -33,6 +33,10 @@ import Control.Exception (throw)
 
 
   
+demutTLetStatement :: LetKind -> [ProcVar] -> DemutDMTerm -> TermType
+demutTLetStatement ltype vars term =
+  (Statement (Extra (DemutTLetBase ltype ([(Just $ procVarAsTeVar v) :- JTAny | v <- vars ]) term))
+          (TupleMove [SingleMove v | v <- vars]))
 
 ---
 -- elaborating loops
@@ -219,22 +223,19 @@ elaborateMut scname fullterm@(Extra (ProcTLetBase ltype vars term)) = do
   -- variables of the lhs
   setMemTuple scname ([v | (v ::- _) <- vars]) mem
 
-  return $ (Statement (Extra (DemutTLetBase ltype ([(Just $ procVarAsTeVar v) :- τ | (v ::- τ) <- vars ]) (moveTypeAsTerm moveType)))
-          (TupleMove [SingleMove v | (v ::- _) <- vars]))
+  return $ demutTLetStatement ltype [v | (v ::- _) <- vars] (moveTypeAsTerm moveType)
 
 
 
-elaborateMut scname (LamStar args body) = do
+elaborateMut scname (Extra (ProcLamStar args body)) = do
   bodyscname <- newScopeVar "lamstar"
-  undefined
-  -- (newBody, newBodyType) <- elaborateLambda bodyscname scope [(v :- x) | (v :- (x , _)) <- args] body
-  -- return (LamStar args newBody, newBodyType, NoMove)
+  (newBody, newBodyType) <- elaborateLambda bodyscname [(v ::- x) | (v ::- (x , _)) <- args] body
+  return (Value newBodyType (NoMove (LamStar [Just (procVarAsTeVar v) :- x | (v ::- x) <- args] newBody)))
 
-elaborateMut scname (Lam args body) = do
+elaborateMut scname (Extra (ProcLam args body)) = do
   bodyscname <- newScopeVar "lam"
-  undefined
-  -- (newBody, newBodyType) <- elaborateLambda bodyscname scope args body
-  -- return (Lam args newBody, newBodyType, NoMove)
+  (newBody, newBodyType) <- elaborateLambda bodyscname [(v ::- x) | (v ::- x) <- args] body
+  return (Value newBodyType (NoMove (Lam [Just (procVarAsTeVar v) :- x | (v ::- x) <- args] newBody)))
 
 
 
@@ -267,11 +268,6 @@ elaborateMut scname (Extra (ProcFLet name term)) = do
   return (Statement (Extra (DemutFLet (procVarAsTeVar name) term')) (SingleMove name))
 
   
-  
-elaborateMut scname _ = undefined
-
-{-
-
 
 elaborateMut scname (Apply f args) = do
   --
@@ -287,55 +283,60 @@ elaborateMut scname (Apply f args) = do
   --
 
   -- typecheck the function f
-  (newF , τ, _) <- elaborateNonmut scname f
+  (itype , movetype) <- elaborateValue scname f
 
   --------
   -- 2 cases
   --
-  -- case I : A (possibly mutating) function call
-  --
-  let applyMutating muts retType = do
+  case itype of
+    --
+    -- case I : A mutating function call
+    --
+    Mutating muts -> do
         -- make sure that there are as many arguments as the function requires
         case length muts == length args of
           True -> pure ()
           False -> throwError (DemutationError $ "Trying to call the function '" <> showPretty f <> "' with a wrong number of arguments.")
 
         let mutargs = zip muts args
-        (newArgs , muts) <- elaborateMutList (showPretty f) scname scope mutargs
+        (newArgs , muts) <- elaborateMutList (showPretty f) scname mutargs
+
+        let funcallterm = (Apply (moveTypeAsTerm movetype) newArgs)
 
         -- the new term
-        return (Apply newF newArgs , retType muts, NoMove)
-  --
-  -- case II: A call to a pure black box
-  --
-  let applyPureBlackBox = do
+        return $ demutTLetStatement PureLet muts funcallterm
+
+    --
+    -- case II : A pure function call
+    --
+    Pure -> do
+        let mutargs = zip (repeat NotMutated) args
+        (newArgs , muts) <- elaborateMutList (showPretty f) scname mutargs
+
+        let funcallterm = (Apply (moveTypeAsTerm movetype) newArgs)
+
+        -- the new term
+        return $ Value Pure (NoMove funcallterm)
+
+    --
+    -- case III: A call to a pure black box
+    --
+    PureBlackBox -> do
         -- the global variables which are implicitly applied
         -- and need to be added to the `BBApply`
         glvars <- globalNames <$> (use topLevelInfo)
 
         -- since the box is pure, we say so to `elaborateMutList`
-        let mutargs = [(NotMutated,a) | a <- args]
-        (newArgs , muts) <- elaborateMutList (showPretty f) scname scope mutargs
+        let mutargs = zip (repeat NotMutated) args
+        (newArgs , muts) <- elaborateMutList (showPretty f) scname mutargs
 
-        return (BBApply newF newArgs glvars , Pure UserValue, NoMove)
-  --
-  -- END cases
-  --------
+        return $ Value Pure (NoMove (BBApply (moveTypeAsTerm movetype) newArgs glvars))
 
-  --------
-  -- Dispatching which type of function call we have
-  --
-  -- get the type of `f`. if it is not a mutating function,
-  -- we give it a type where all arguments are not mutated,
-  -- also set the return type.
-  --
-  -- Alternatively it can be a pure black box call
-  case τ of
-        Pure _           -> applyMutating (take (length args) (repeat NotMutated)) (\_ -> Pure UserValue)
-        Mutating muts    -> applyMutating muts VirtualMutated
-        PureBlackBox     -> applyPureBlackBox
-        VirtualMutated _ -> throwError (DemutationError $ "Trying to call the result of a mutating call " <> showPretty f <> ". This is not allowed.")
 
+
+elaborateMut scname _ = undefined
+
+{-
 
 
 
@@ -1242,11 +1243,14 @@ elaborateLambda scname args body = do
 
   
 
-{-
 -------------
 -- elaborating a list of terms which are used in individually either mutating, or not mutating places
 --
 
+elaborateMutList :: String -> ScopeVar -> [(IsMutated , ProcDMTerm)] -> MTC ([DemutDMTerm] , [ProcVar])
+elaborateMutList = undefined
+
+{-
 elaborateMutList :: String -> ScopeVar -> Scope -> [(IsMutated , ProcDMTerm)] -> MTC ([DMTerm] , [TeVar])
 elaborateMutList f scname scope mutargs = do
   ---------------------------------------
@@ -1372,9 +1376,10 @@ elaborateMutList f scname scope mutargs = do
                               showvarcounts [] = ""
 
   return (newArgs, mutVars)
+-}
 
 
-
+{-
 ------------------------------------------------------------
 -- preprocessing a for loop body
 
