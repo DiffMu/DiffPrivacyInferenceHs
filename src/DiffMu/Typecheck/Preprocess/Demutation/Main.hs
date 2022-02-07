@@ -7,6 +7,7 @@ import DiffMu.Prelude
 import DiffMu.Abstract
 import DiffMu.Core
 import DiffMu.Core.TC
+
 import DiffMu.Core.Logging
 import DiffMu.Abstract.Data.Permutation
 import DiffMu.Typecheck.Preprocess.Common
@@ -153,7 +154,7 @@ elaborateMut scname (Extra (ProcBBLet procx args)) = do
   -- write it into the memctx
   setMem procx (SingleMem memx)
 
-  let tevarx = memVarAsTeVar memx
+  let tevarx = procVarAsTeVar memx
 
   return (Statements [Extra (DemutBBLet tevarx args)] (Var (Just tevarx :- JTAny)))
 
@@ -174,9 +175,8 @@ elaborateMut scname (Extra (ProcSLetBase ltype (x ::- τ) term)) = do
   -- 1. set memory locations for variables on the LHS
   -- 2. generate terms for the memory allocations
   -- 
-  (mem,allocs) <- moveGetMemAndAllocs scname moveType
+  (mem,_) <- moveGetMemAndAllocs scname moveType
   setMemMaybe x mem
-  let statement (mvar,term) = Extra (DemutSLetBase ltype (Just (memVarAsTeVar mvar) :- JTAny) term)
 
   -- write the immut type into the scope
   setImmutTypeMaybe scname x newTermType
@@ -190,7 +190,7 @@ elaborateMut scname (Extra (ProcSLetBase ltype (x ::- τ) term)) = do
   -- the result is a list of statements,
   -- containing the required memory allocations
   -- done in this "slet"
-  return (Statements (statement <$> allocs) (memTypeAsTerm mem))
+  return (Var (x :- τ))
 
 
 elaborateMut scname fullterm@(Extra (ProcTLetBase ltype vars term)) = do
@@ -229,7 +229,7 @@ elaborateMut scname fullterm@(Extra (ProcTLetBase ltype vars term)) = do
                               <> "In the term:\n"
                               <> showPretty fullterm
       True -> do
-        let statement (mvar,term) = Extra (DemutSLetBase ltype (Just (memVarAsTeVar mvar) :- JTAny) term)
+        let statement (mvar,term) = Extra (DemutSLetBase ltype (Just (procVarAsTeVar mvar) :- JTAny) term)
         let handleElement (x ::- _ ,mt) = do
               (mem,allocs) <- moveGetMemAndAllocs scname mt
               setMemMaybe x mem
@@ -288,8 +288,8 @@ elaborateMut scname fullterm@(Extra (ProcTLetBase ltype vars term)) = do
           setMemRedirection rhs_mv (TupleMem (SingleMem <$> lhs_mvs))
 
           -- statement for destructuring the rhs var to the lhs vars
-          let statement = Extra (DemutTLetBase ltype ([Just (memVarAsTeVar lhs_mv) :- JTAny | lhs_mv <- lhs_mvs])
-                                                     (Var (Just (memVarAsTeVar rhs_mv) :- JTAny)))
+          let statement = Extra (DemutTLetBase ltype ([Just (procVarAsTeVar lhs_mv) :- JTAny | lhs_mv <- lhs_mvs])
+                                                     (Var (Just (procVarAsTeVar rhs_mv) :- JTAny)))
 
           return (Statements [statement] (memTypeAsTerm (TupleMem $ SingleMem <$> lhs_mvs)))
 
@@ -314,7 +314,7 @@ elaborateMut scname fullterm@(Extra (ProcTLetBase ltype vars term)) = do
       lhs_mvs <- mapM handleElement vars
 
       -- statement for destructuring the rhs term to the lhs vars
-      let statement = Extra (DemutTLetBase ltype ([Just (memVarAsTeVar lhs_mv) :- JTAny | lhs_mv <- lhs_mvs]) pdt)
+      let statement = Extra (DemutTLetBase ltype ([Just (procVarAsTeVar lhs_mv) :- JTAny | lhs_mv <- lhs_mvs]) pdt)
 
       return (Statements [statement] (memTypeAsTerm (TupleMem $ SingleMem <$> lhs_mvs)))
 
@@ -366,7 +366,7 @@ elaborateMut scname (Extra (ProcFLet name term)) = do
   debug $ "The memctx is now:\n"
   debug $ show logmem
 
-  return (Statements [Extra (DemutFLet (memVarAsTeVar mem) term')] (Var (Just (memVarAsTeVar mem) :- JTAny)))
+  return (Statements [Extra (DemutFLet (procVarAsTeVar mem) term')] (Var (Just (procVarAsTeVar mem) :- JTAny)))
 
   
   
@@ -1355,7 +1355,7 @@ elaborateLambda scname args body = do
                                           <> "\nThe function body is:\n" <> showPretty body
     (MutatingFunctionEndValue, []) -> demutationError $ "Found a function which is not mutating, but has a 'return'. This is not allowed."
                                                     <> "\nThe function body is:\n" <> showPretty body
-    (MutatingFunctionEndValue, mvs) -> return $ ((Tup [Var (Just (memVarAsTeVar mv) :- JTAny) | mv <- mvs]), False)
+    (MutatingFunctionEndValue, mvs) -> return $ ((Tup [Var (Just (procVarAsTeVar mv) :- JTAny) | mv <- mvs]), False)
 
   undefined
 
