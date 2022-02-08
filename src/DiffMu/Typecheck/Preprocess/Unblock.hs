@@ -29,7 +29,7 @@ unblock pt = case pt of
 unlistM :: BlockTC DMTerm -> [DemutDMTerm] -> BlockTC DMTerm
 unlistM mlast mxs = let
       unlist :: DMTerm -> [DemutDMTerm] -> BlockTC DMTerm
-      unlist last [] = logForce ("Found empty block, last is: " <> show last) >> (internalError $ "empty block")
+      unlist last [] = return last
       unlist last ((Extra (DemutBlock bs)) : xs) = unlistM (unlist last bs) xs
       unlist last ((Extra (DemutPhi c [t,f])) : xs) = unlistM (Phi <$> (unblock c) <*> (unlist last [t]) <*> (unlist last [f])) xs
       unlist last ((Extra (DemutPhi c [t])) : xs) = unlistM (Phi <$> (unblock c) <*> (unlist last [t]) <*> pure last) xs
