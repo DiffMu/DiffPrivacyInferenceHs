@@ -763,44 +763,17 @@ elaborateMut scname (Tup t1s) = do
   -- what we return is pure, and is a tuple move of the entries
   return $ Value Pure (TupleMove results)
 
-elaborateMut scname (MCreate t1 t2 t3 t4) = do
-  (newT1) <- moveTypeAsTerm <$> elaboratePureValue scname t1
-  (newT2) <- moveTypeAsTerm <$> elaboratePureValue scname t2
-  (newT4) <- moveTypeAsTerm <$> elaboratePureValue scname t4
-  return (Value Pure (NoMove (MCreate newT1 newT2 t3 newT4)))
-
-elaborateMut scname (Size t1) = elaborateNonMut1 scname Size t1
-elaborateMut scname (Length t1) = elaborateNonMut1 scname Length t1
-
-
+elaborateMut scname (MCreate t1 t2 t3 t4) = undefined
+elaborateMut scname (Size t1)        = elaborateNonMut1 scname Size t1
+elaborateMut scname (Length t1)      = elaborateNonMut1 scname Length t1
+elaborateMut scname (ZeroGrad t1)    = elaborateNonMut1 scname ZeroGrad t1
+elaborateMut scname (SumGrads t1 t2) = elaborateNonMut2 scname SumGrads t1 t2
+elaborateMut scname (Sample t1 t2 t3) = elaborateNonMut3 scname Sample t1 t2 t3
+elaborateMut scname (InternalExpectConst t1) = elaborateNonMut1 scname InternalExpectConst t1
+elaborateMut scname (DeepcopyValue t1) = elaborateNonMut1 scname DeepcopyValue t1
+elaborateMut scname (ClipM c t1) = elaborateNonMut1 scname (ClipM c) t1
+elaborateMut scname (Gauss t1 t2 t3 t4) = undefined
 {-
-elaborateMut scname (ZeroGrad t1) = do
-  (newT1, newT1Type, _) <- elaborateMut scname t1
-  return (ZeroGrad newT1, Pure UserValue, NoMove)
-elaborateMut scname (SumGrads t1 t2) = do
-  (newT1, newT1Type, _) <- elaborateNonmut scname t1
-  (newT2, newT2Type, _) <- elaborateNonmut scname t2
-  return (SumGrads newT1 newT2, Pure UserValue, NoMove)
-elaborateMut scname (Sample t1 t2 t3) = do
-  (newT1, newT1Type, _) <- elaborateNonmut scname t1
-  (newT2, newT2Type, _) <- elaborateNonmut scname t2
-  (newT3, newT3Type, _) <- elaborateNonmut scname t3
-  return (Sample newT1 newT2 newT3 , Pure UserValue, NoMove)
-elaborateMut scname (InternalExpectConst t1) = do
-  (newT1, newT1Type, _) <- elaborateMut scname t1
-  return (InternalExpectConst newT1, Pure UserValue, NoMove)
-elaborateMut scname (DeepcopyValue t1) = do
-  (newT1, newT1Type, _) <- elaborateMut scname t1
-  return (DeepcopyValue newT1, Pure UserValue, NoMove)
-elaborateMut scname (ClipM c t1) = do
-  (newT1, newT1Type, _) <- elaborateMut scname t1
-  return (ClipM c newT1, Pure UserValue, NoMove)
-elaborateMut scname (Gauss t1 t2 t3 t4) = do
-  (newT1, newT1Type, _) <- elaborateNonmut scname t1
-  (newT2, newT2Type, _) <- elaborateNonmut scname t2
-  (newT3, newT3Type, _) <- elaborateNonmut scname t3
-  (newT4, newT4Type, _) <- elaborateNonmut scname t4
-  return (Gauss newT1 newT2 newT3 newT4 , Pure UserValue, NoMove)
 elaborateMut scname (Laplace t1 t2 t3) = do
   (newT1, newT1Type, _) <- elaborateNonmut scname t1
   (newT2, newT2Type, _) <- elaborateNonmut scname t2
