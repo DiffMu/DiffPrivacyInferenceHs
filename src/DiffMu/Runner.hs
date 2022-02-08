@@ -34,17 +34,17 @@ run = putStrLn "Hello?"
 
 typecheckFromString_DMTerm_Detailed :: String -> IO ()
 typecheckFromString_DMTerm_Detailed term = do
- let res = parseJTreeFromString term >>= parseJExprFromJTree >>= parseDMTermFromJExpr
+ let res = parseJTreeFromString term >>= parseJExprFromJTree 
  case res of
    Left err -> putStrLn $ "Error while parsing DMTerm from string: " <> show err
-   Right term -> typecheckFromDMTerm_Detailed term
+   Right term -> typecheckFromJExpr_Detailed term
 
 typecheckFromString_DMTerm_Simple :: String -> IO ()
 typecheckFromString_DMTerm_Simple term = do
- let res = parseJTreeFromString term >>= parseJExprFromJTree >>= parseDMTermFromJExpr
+ let res = parseJTreeFromString term >>= parseJExprFromJTree
  case res of
    Left err -> putStrLn $ "Error while parsing DMTerm from string: " <> show err
-   Right term -> typecheckFromDMTerm_Simple term
+   Right term -> typecheckFromJExpr_Simple term
 
 data DoShowLog = DoShowLog DMLogSeverity [DMLogLocation] | DontShowLog
 
@@ -68,13 +68,13 @@ executeTC l r = do
 
   return x
 
-typecheckFromDMTermWithPrinter :: _ -> DoShowLog -> MutDMTerm -> IO ()
-typecheckFromDMTermWithPrinter printer logoptions term = do
+typecheckFromJExprWithPrinter :: ((DMMain,Full) -> String) -> DoShowLog -> JExpr -> IO ()
+typecheckFromJExprWithPrinter printer logoptions term = do
   let r = do
 
         log $ "Checking term   : " <> show term
 
-        term' <- liftNewLightTC (preprocessAll term)
+        term' <- parseDMTermFromJExpr term >>= (liftNewLightTC . preprocessAll)
 
 
         -- let tres = checkSens (term') def
@@ -113,17 +113,17 @@ typecheckFromDMTermWithPrinter printer logoptions term = do
 
 -- (DoShowLog Warning logging_locations)
 
-typecheckFromDMTerm_Simple :: MutDMTerm -> IO ()
-typecheckFromDMTerm_Simple term = do
+typecheckFromJExpr_Simple :: JExpr -> IO ()
+typecheckFromJExpr_Simple term = do
   let printer (ty, full) =
         "\n---------------------------------------------------------------------------\n"
         <> "Type:\n" <> showPretty ty
         <> "\n---------------------------------------------------------------------------\n"
         <> "Constraints:\n" <> show (_constraints (_meta full))
-  typecheckFromDMTermWithPrinter printer (DontShowLog) term
+  typecheckFromJExprWithPrinter printer (DontShowLog) term
 
-typecheckFromDMTerm_Detailed :: MutDMTerm -> IO ()
-typecheckFromDMTerm_Detailed term = do
+typecheckFromJExpr_Detailed :: JExpr -> IO ()
+typecheckFromJExpr_Detailed term = do
 
   let logging_locations = [
         -- Location_Check,
@@ -140,6 +140,6 @@ typecheckFromDMTerm_Detailed term = do
         <> "\n---------------------------------------------------------------------------\n"
         <> "Monad state:\n" <> show full
 
-  typecheckFromDMTermWithPrinter printer (DoShowLog Warning logging_locations) term
+  typecheckFromJExprWithPrinter printer (DoShowLog Warning logging_locations) term
 
 

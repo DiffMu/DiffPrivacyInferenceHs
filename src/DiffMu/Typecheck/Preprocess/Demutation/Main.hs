@@ -122,7 +122,7 @@ elaborateMut scname (Sng η τ) = do
 
 elaborateMut scname term@(Var _) = demutationError $ "Unsupported term: " <> showPretty term
 
-elaborateMut scname (Extra (ProcVar (x ::- j))) = do
+elaborateMut scname (Extra (ProcVarTerm (x ::- j))) = do
   mx <- expectNotMoved x
   itype <- expectImmutType scname x
 
@@ -956,7 +956,7 @@ elaborateMutList f scname mutargs = do
         -- if the argument is given in a mutable position,
         -- it _must_ be a var
         case arg of
-          Extra (ProcVar (x ::- a)) -> do 
+          Extra (ProcVarTerm (x ::- a)) -> do 
             -- say that this variable is being reassigned (VAT)
             setImmutType scname (x) Pure
 

@@ -1057,7 +1057,7 @@ instance ShowPretty a => ShowPretty (ProceduralExtension a) where
     ProcPhi a as        -> "PPhi " <> showPretty a <> "\n" <> braceIndent (intercalate "\n," $ showPretty <$> as)
     ProcPreLoop a x d   -> "PLoop (" <> (showPretty a) <> ", " <> show x <> ")" <> parenIndent (showPretty d)
     ProcReturn          -> "PReturn"
-    ProcVar (pa ::- _)  -> showPretty pa
+    ProcVarTerm (pa ::- _)  -> showPretty pa
     ProcLam jts a       -> "PLam (" <> showPretty jts <> ")" <> parenIndent (showPretty a)
     ProcLamStar jts a   -> "PLamStar (" <> showPretty jts <> ")" <> parenIndent (showPretty a)
     Block as -> braceIndent $ intercalate "\n" $ showPretty <$> as
