@@ -745,8 +745,11 @@ elaborateMut scname (Transpose t1) = do
   return (Transpose newT1 , Pure UserValue, NoMove)
   -}
 
--- the non mutating builtin cases
-
+--
+--
+-- The non mutating builtin cases
+-- ------------------------------
+--
 elaborateMut scname (Tup t1s) = do
 
   -- 
@@ -759,16 +762,18 @@ elaborateMut scname (Tup t1s) = do
   -- what we return is pure, and is a tuple move of the entries
   return $ Value Pure (TupleMove results)
 
+elaborateMut scname (MCreate t1 t2 t3 t4) = do
+  (newT1) <- moveTypeAsTerm <$> elaboratePureValue scname t1
+  (newT2) <- moveTypeAsTerm <$> elaboratePureValue scname t2
+  (newT4) <- moveTypeAsTerm <$> elaboratePureValue scname t4
+  return (Value Pure (NoMove (MCreate newT1 newT2 t3 newT4)))
+
+elaborateMut scname (Size t1) = do
+  (newT1) <- moveTypeAsTerm <$> elaboratePureValue scname t1
+  return (Value Pure (NoMove (Size newT1)))
+
 {-
 -- TODO: Reimplement for #190.
-elaborateMut scname (MCreate t1 t2 t3 t4) = do
-  (newT1, newT1Type, _) <- elaborateNonmut scname t1
-  (newT2, newT2Type, _) <- elaborateNonmut scname t2
-  (newT4, newT4Type, _) <- elaborateNonmut scname t4
-  return (MCreate newT1 newT2 t3 newT4 , Pure UserValue, NoMove)
-elaborateMut scname (Size t1) = do
-  (newT1, newT1Type, _) <- elaborateMut scname t1
-  return (Size newT1, Pure UserValue, NoMove)
 elaborateMut scname (Length t1) = do
   (newT1, newT1Type, _) <- elaborateMut scname t1
   return (Length newT1, Pure UserValue, NoMove)
