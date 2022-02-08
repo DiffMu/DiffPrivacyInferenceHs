@@ -219,11 +219,27 @@ elaborateMut scname (Extra (ProcSLetBase ltype (x ::- τ) term)) = do
           (SingleMove x))
 
 
+--
+--
+-- Tuple terms
+--
+elaborateMut scname (Tup t1s) = do
+  -- 
+  -- We need to make sure that everything put into
+  -- the tuple is pure, as this is expected when we
+  -- take those things out of the tuple again.
+  --
+  results <- mapM (elaboratePureValue scname) t1s
+  --
+  -- what we return is pure, and is a tuple move of the entries
+  return $ Value Pure (TupleMove results)
 
+--
+-- TLets
+--
 elaborateMut scname fullterm@(Extra (ProcTLetBase ltype vars term)) = do
-
+  --
   (newTermType, moveType) <- elaborateValue scname term
-
   --
   -- deal with itype
   --
@@ -636,6 +652,8 @@ elaborateMut scname term@(Extra (ProcPhi cond ts)) = demutationError "not implem
 
 -}
 
+
+
 ----
 -- Demutation of vector / matrix likes
 --
@@ -672,79 +690,44 @@ elaborateMut scname (Row t1 t2) = do
 ----
 -- the mutating builtin cases
 
-{-
 -- TODO: Reimplement for #190
 --
 elaborateMut scname (SubGrad t1 t2) = do
-  (argTerms, mutVars) <- elaborateMutList "subgrad" scname scope [(Mutated , t1), (NotMutated , t2)]
+  (argTerms, mutVars) <- elaborateMutList "subgrad" scname [(Mutated , t1), (NotMutated , t2)]
   case argTerms of
-    -- NOTE: Because of #95, we say that this function is pure
-    -- NOTE: Reenabled for #142
-    -- [newT1, newT2] -> pure (SubGrad newT1 newT2, Pure UserValue)
-    [newT1, newT2] -> pure (SubGrad newT1 newT2, VirtualMutated mutVars, NoMove)
-    --
-    -- END NOTE
+    [newT1, newT2] -> return $ demutTLetStatement PureLet mutVars (SubGrad newT1 newT2)
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 elaborateMut scname (ScaleGrad scalar grads) = do
-  (argTerms, mutVars) <- elaborateMutList "scalegrad" scname scope [(NotMutated , scalar), (Mutated , grads)]
+  (argTerms, mutVars) <- elaborateMutList "scalegrad" scname [(NotMutated , scalar), (Mutated , grads)]
   case argTerms of
-    -- NOTE: Because of #95, we say that this function is pure
-    -- NOTE: Reenabled for #142
-    -- [newT1, newT2] -> pure (ScaleGrad newT1 newT2, Pure UserValue)
-    [newT1, newT2] -> pure (ScaleGrad newT1 newT2, VirtualMutated mutVars, NoMove)
-    --
-    -- END NOTE
+    [newT1, newT2] -> return $ demutTLetStatement PureLet mutVars (ScaleGrad newT1 newT2)
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 elaborateMut scname (MutClipM c t) = do
-  (argTerms, mutVars) <- elaborateMutList "clip" scname scope [(Mutated , t)]
+  (argTerms, mutVars) <- elaborateMutList "clip" scname [(Mutated , t)]
   case argTerms of
-    -- NOTE: Because of #95, we say that this function is pure
-    -- NOTE: Reenabled for #142
-    -- [newT] -> pure (ClipM c newT, Pure UserValue)
-    [newT] -> pure (ClipM c newT, VirtualMutated mutVars, NoMove)
-    --
-    -- END NOTE
+    [newT] -> return $ demutTLetStatement PureLet mutVars (MutClipM c newT)
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 elaborateMut scname (MutGauss t1 t2 t3 t4) = do
-  (argTerms, mutVars) <- elaborateMutList "gauss" scname scope [(NotMutated , t1), (NotMutated , t2), (NotMutated , t3), (Mutated , t4)]
+  (argTerms, mutVars) <- elaborateMutList "gauss" scname [(NotMutated , t1), (NotMutated , t2), (NotMutated , t3), (Mutated , t4)]
   case argTerms of
-    -- NOTE: Because of #95, we say that this function is pure
-    -- NOTE: Reenabled for #142
-    -- [newT1, newT2, newT3, newT4] -> pure (Gauss newT1 newT2 newT3 newT4, Pure UserValue)
-    [newT1, newT2, newT3, newT4] -> pure (Gauss newT1 newT2 newT3 newT4, VirtualMutated mutVars, NoMove)
-    --
-    -- END NOTE
+    [newT1, newT2, newT3, newT4] -> return $ demutTLetStatement PureLet mutVars (Gauss newT1 newT2 newT3 newT4)
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 elaborateMut scname (MutLaplace t1 t2 t3) = do
-  (argTerms, mutVars) <- elaborateMutList "laplace" scname scope [(NotMutated , t1), (NotMutated , t2), (Mutated , t3)]
+  (argTerms, mutVars) <- elaborateMutList "laplace" scname [(NotMutated , t1), (NotMutated , t2), (Mutated , t3)]
   case argTerms of
-    -- NOTE: Because of #95, we say that this function is pure
-    -- NOTE: Reenabled for #142
-    -- [newT1, newT2, newT3] -> pure (Gauss newT1 newT2 newT3, Pure UserValue)
-    [newT1, newT2, newT3] -> pure (Laplace newT1 newT2 newT3, VirtualMutated mutVars, NoMove)
-    --
-    -- END NOTE
+    [newT1, newT2, newT3] -> return $ demutTLetStatement PureLet mutVars (Laplace newT1 newT2 newT3)
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 elaborateMut scname (ConvertM t1) = do
-  (argTerms, mutVars) <- elaborateMutList "convert" scname scope [(Mutated , t1)]
+  (argTerms, mutVars) <- elaborateMutList "convert" scname [(Mutated , t1)]
   case argTerms of
-    -- NOTE: Because of #95, we say that this function is pure
-    -- NOTE: Reenabled for #142
-    -- [newT1] -> pure (ConvertM newT1, Pure UserValue)
-    [newT1] -> pure (ConvertM newT1, VirtualMutated mutVars, NoMove)
-    --
-    -- END NOTE
+    [newT1] -> return $ demutTLetStatement PureLet mutVars (ConvertM newT1)
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
-elaborateMut scname (Transpose t1) = do
-  (newT1, newT1Type, _) <- elaborateNonmut scname t1
-  return (Transpose newT1 , Pure UserValue, NoMove)
-  -}
 
 --
 --
@@ -764,6 +747,7 @@ elaborateMut scname (Tup t1s) = do
   return $ Value Pure (TupleMove results)
 
 elaborateMut scname (MCreate t1 t2 t3 t4) = elaborateNonMut3 scname (\tt1 tt2 tt4 -> MCreate tt1 tt2 t3 tt4) t1 t2 t4
+elaborateMut scname (Transpose t1)   = elaborateNonMut1 scname Transpose t1
 elaborateMut scname (Size t1)        = elaborateNonMut1 scname Size t1
 elaborateMut scname (Length t1)      = elaborateNonMut1 scname Length t1
 elaborateMut scname (ZeroGrad t1)    = elaborateNonMut1 scname ZeroGrad t1
