@@ -763,7 +763,7 @@ elaborateMut scname (Tup t1s) = do
   -- what we return is pure, and is a tuple move of the entries
   return $ Value Pure (TupleMove results)
 
-elaborateMut scname (MCreate t1 t2 t3 t4) = undefined
+elaborateMut scname (MCreate t1 t2 t3 t4) = elaborateNonMut3 scname (\tt1 tt2 tt4 -> MCreate tt1 tt2 t3 tt4) t1 t2 t4
 elaborateMut scname (Size t1)        = elaborateNonMut1 scname Size t1
 elaborateMut scname (Length t1)      = elaborateNonMut1 scname Length t1
 elaborateMut scname (ZeroGrad t1)    = elaborateNonMut1 scname ZeroGrad t1
@@ -772,21 +772,11 @@ elaborateMut scname (Sample t1 t2 t3) = elaborateNonMut3 scname Sample t1 t2 t3
 elaborateMut scname (InternalExpectConst t1) = elaborateNonMut1 scname InternalExpectConst t1
 elaborateMut scname (DeepcopyValue t1) = elaborateNonMut1 scname DeepcopyValue t1
 elaborateMut scname (ClipM c t1) = elaborateNonMut1 scname (ClipM c) t1
-elaborateMut scname (Gauss t1 t2 t3 t4) = undefined
-{-
-elaborateMut scname (Laplace t1 t2 t3) = do
-  (newT1, newT1Type, _) <- elaborateNonmut scname t1
-  (newT2, newT2Type, _) <- elaborateNonmut scname t2
-  (newT3, newT3Type, _) <- elaborateNonmut scname t3
-  return (Laplace newT1 newT2 newT3 , Pure UserValue, NoMove)
-elaborateMut scname (AboveThresh t1 t2 t3 t4) = do
-  (newT1, newT1Type, _) <- elaborateNonmut scname t1
-  (newT2, newT2Type, _) <- elaborateNonmut scname t2
-  (newT3, newT3Type, _) <- elaborateNonmut scname t3
-  (newT4, newT4Type, _) <- elaborateNonmut scname t4
-  return (AboveThresh newT1 newT2 newT3 newT4 , Pure UserValue, NoMove)
+elaborateMut scname (Gauss t1 t2 t3 t4) = elaborateNonMut4 scname Gauss t1 t2 t3 t4
+elaborateMut scname (Laplace t1 t2 t3) = elaborateNonMut3 scname Laplace t1 t2 t3
+elaborateMut scname (AboveThresh t1 t2 t3 t4) = elaborateNonMut4 scname AboveThresh t1 t2 t3 t4
+elaborateMut scname (ClipN t1 t2 t3) = elaborateNonMut3 scname ClipN t1 t2 t3
 
-  -}
 
 -- the unsupported terms
 elaborateMut scname term@(Choice t1)        = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
