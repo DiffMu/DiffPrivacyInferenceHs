@@ -40,17 +40,17 @@ data ColorFull = ColorFull
     _inferredColor :: Color
   }
 
-type ColorTC = LightTC Location_PrePro_Demutation ColorFull
+type ColorTC = LightTC Location_PrePro_Color ColorFull
 
 $(makeLenses ''ColorFull)
 
 -- set current inferred color
 setColor :: (MonadState ColorFull m) => Color -> m ()
-setColor color = inferredColor %%= (\c -> ((), color))
+setColor color = inferredColor .= color
 
 -- get current inferred color
 getColor :: (MonadState ColorFull m) => m (Color)
-getColor = inferredColor %%= (\c -> (c, c))
+getColor = use inferredColor
 
 -- push a function name to the privacy function scope
 pushFunction :: (MonadState ColorFull m) => TeVar -> m ()

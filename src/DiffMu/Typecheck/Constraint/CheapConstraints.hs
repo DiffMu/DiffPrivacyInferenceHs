@@ -450,11 +450,10 @@ instance TCConstraint IsVecLike where
   constr = IsVecLike
   runConstr (IsVecLike c) = c
 
-instance Solve MonadDMTC IsVecLike VecKind) where
-    solve_ Dict _ name (IsVecLike k)) =
+instance Solve MonadDMTC IsVecLike VecKind where
+    solve_ Dict _ name (IsVecLike k) =
      case k of
         TVar _ -> pure ()
         Vector -> dischargeConstraint name
         Gradient -> dischargeConstraint name
         Matrix r -> unify r oneId >> dischargeConstraint name
-        _ -> failConstraint name

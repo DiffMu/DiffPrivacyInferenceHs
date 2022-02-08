@@ -76,12 +76,13 @@ instance DictKey Symbol
 
 -- proc variables
 
-data ProcVar = UserProcVar Symbol
+data ProcVar = UserProcVar Symbol | GenProcVar Symbol
   deriving (Eq,Generic, Ord)
 
 instance Hashable ProcVar
 instance Show ProcVar where
   show (UserProcVar x) = show x
+  show (GenProcVar x) =  show x
 
 instance DictKey ProcVar
 

@@ -593,7 +593,7 @@ checkSen' scope (ClipN value upper lower) = do
   tl <- newVar
   tr <- newVar
 
-  addConstraint IsLessEqual τv (NoFun (Numeric (NonConst tv)))
+  addConstraint (Solvable (IsLessEqual (τv, (NoFun (Numeric (NonConst tv))))))
   unify τu (NoFun (Numeric (Const tu tv)))
   unify τl (NoFun (Numeric (Const tl tv)))
 
