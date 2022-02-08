@@ -919,10 +919,17 @@ elaborateLambda scname args body = do
       -- and check that they do not contain memory
       -- locations which are function inputs.
       --
-      case movedVarsOfMoveType a `intersect` mutated_argmvs of
+      debug $ "[elaborateLambda] pure function. move type: " <> show a
+      debug $ "   movedVars: " <> show (movedVarsOfMoveType a) <> ", mutated_argmvs: " <> show mutated_argmvs
+      --
+      memTypesOfMove <- mapM expectNotMoved (movedVarsOfMoveType a)
+      let memVarsOfMove = join memTypesOfMove >>= getAllMemVars
+      -- 
+      case memVarsOfMove `intersect` argmvs of
         [] -> pure ()
-        pv : pvs -> demutationError $ "Found a function which passes through a reference given as input. This is not allowed.\n"
-                                      <> "The function body is:\n" <> showPretty body
+        pvs ->   demutationError $ "Found a function which passes through a reference given as input. This is not allowed.\n"
+                                      <> "The function body is:\n" <> showPretty body <> "\n"
+                                      <> "The passed through memory references are: " <> show pvs
 
       return $ (Pure, Extra $ DemutBlock new_body_terms)
 
