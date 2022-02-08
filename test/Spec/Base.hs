@@ -160,14 +160,14 @@ parseEval_b_customCheck dolog parse desc term (testBy :: TestBy) customTCCheck =
   it desc $ do
     term' <- parse term
 
-    let res = parseJTreeFromString term' >>= parseJExprFromJTree >>= parseDMTermFromJExpr
+    let res = parseJTreeFromString term' >>= parseJExprFromJTree
 
     let term'' :: TC DMMain
         term'' = case res of
                    Left err -> error $ "Error while parsing DMTerm from string: " <> show err
                    Right res''  ->
                      do
-                            (res) <- liftNewLightTC (preprocessAll res'' )
+                            (res) <- parseDMTermFromJExpr res'' >>= (liftNewLightTC . preprocessAll)
                             -- res <- preprocessDMTerm res'
                             -- let tres = checkSens res def
                             checkSens def res
