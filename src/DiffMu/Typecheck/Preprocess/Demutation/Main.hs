@@ -31,6 +31,7 @@ import Control.Exception (throw)
 
 
 
+
   
 demutTLetStatement :: LetKind -> [ProcVar] -> DemutDMTerm -> TermType
 demutTLetStatement ltype vars term =
@@ -768,15 +769,11 @@ elaborateMut scname (MCreate t1 t2 t3 t4) = do
   (newT4) <- moveTypeAsTerm <$> elaboratePureValue scname t4
   return (Value Pure (NoMove (MCreate newT1 newT2 t3 newT4)))
 
-elaborateMut scname (Size t1) = do
-  (newT1) <- moveTypeAsTerm <$> elaboratePureValue scname t1
-  return (Value Pure (NoMove (Size newT1)))
+elaborateMut scname (Size t1) = elaborateNonMut1 scname Size t1
+elaborateMut scname (Length t1) = elaborateNonMut1 scname Length t1
+
 
 {-
--- TODO: Reimplement for #190.
-elaborateMut scname (Length t1) = do
-  (newT1, newT1Type, _) <- elaborateMut scname t1
-  return (Length newT1, Pure UserValue, NoMove)
 elaborateMut scname (ZeroGrad t1) = do
   (newT1, newT1Type, _) <- elaborateMut scname t1
   return (ZeroGrad newT1, Pure UserValue, NoMove)
@@ -830,8 +827,29 @@ elaborateMut scname term@(Ret t1)           = throwError (UnsupportedError ("Whe
 elaborateMut scname term@_    = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
 
 
+------------------------------------------------------
+-- Non mutating elaboration helpers
+--
+
+elaborateNonMut1 :: ScopeVar -> (DemutDMTerm -> DemutDMTerm) -> ProcDMTerm -> MTC TermType
+elaborateNonMut1 scname ctr t1 = do
+  (newT1) <- moveTypeAsTerm <$> elaboratePureValue scname t1
+  return (Value Pure (NoMove (ctr newT1)))
+
+elaborateNonMut4 :: ScopeVar
+                    -> (DemutDMTerm -> DemutDMTerm -> DemutDMTerm -> DemutDMTerm -> DemutDMTerm)
+                    -> ProcDMTerm -> ProcDMTerm -> ProcDMTerm -> ProcDMTerm
+                    -> MTC TermType
+elaborateNonMut4 scname ctr t1 t2 t3 t4 = do
+  (newT1) <- moveTypeAsTerm <$> elaboratePureValue scname t1
+  (newT2) <- moveTypeAsTerm <$> elaboratePureValue scname t2
+  (newT3) <- moveTypeAsTerm <$> elaboratePureValue scname t3
+  (newT4) <- moveTypeAsTerm <$> elaboratePureValue scname t4
+  return (Value Pure (NoMove (ctr newT1 newT2 newT4 newT4)))
 
 
+---------------------------------------------------
+-- list elaboration
 
 
 elaborateAsList :: ScopeVar -> ProcDMTerm -> MTC (LastValue, [DemutDMTerm])
