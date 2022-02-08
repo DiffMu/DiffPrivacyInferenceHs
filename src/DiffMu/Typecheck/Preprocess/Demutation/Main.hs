@@ -26,7 +26,6 @@ import Test.QuickCheck.Property (Result(expect))
 
 import Control.Monad.Trans.Class
 import qualified GHC.RTS.Flags as LHS
-import DiffMu.Typecheck.Preprocess.Demutation.Definitions (setImmutTypeOverwritePrevious, procVarAsTeVar)
 import Control.Exception (throw)
 
 
@@ -203,7 +202,7 @@ elaborateMut scname fullterm@(Extra (ProcTLetBase ltype vars term)) = do
 
   -- write the list of possible memory types into the
   -- variables of the lhs
-  setMemTuple scname ([v | (v ::- _) <- vars]) mem
+  setMemTupleInManyMems scname ([v | (v ::- _) <- vars]) mem
 
   return $ demutTLetStatement ltype [v | (v ::- _) <- vars] (moveTypeAsTerm moveType)
 
@@ -246,7 +245,7 @@ elaborateMut scname (Extra (ProcFLet name term)) = do
   setMem name [(SingleMem mem)]
 
   -- write the immut type into the scope
-  setImmutType scname name newTermType
+  setImmutTypeFLetDefined scname name newTermType
 
   -- log what happened
   debug $ "[elaborateMut/FLetBase]: The function " <> show name <> " is being defined."
@@ -1138,7 +1137,7 @@ elaborateLambda scname args body = do
       -- and check that they do not contain memory
       -- locations which are function inputs.
       --
-      case freeVarsOfMoveType a `intersect` mutated_argmvs of
+      case movedVarsOfMoveType a `intersect` mutated_argmvs of
         [] -> pure ()
         pv : pvs -> demutationError $ "Found a function which passes through a reference given as input. This is not allowed.\n"
                                       <> "The function body is:\n" <> showPretty body
@@ -1265,7 +1264,7 @@ elaborateMutList f scname mutargs = do
   --
   -- See #95
   --
-  let getPossiblyAliasedVars a = freeVarsOfMoveType a
+  let getPossiblyAliasedVars a = freeVarsOfProcDMTerm a
 
 
   -- Counting how many vars with a given name there are
@@ -1275,7 +1274,7 @@ elaborateMutList f scname mutargs = do
                               Nothing -> setValue var 1 counts
 
   -- number of occurences of all variables
-  let varcounts = getAllKeyElemPairs $ foldr addCount def (getPossiblyAliasedVars =<< argTypes)
+  let varcounts = getAllKeyElemPairs $ foldr addCount def (getPossiblyAliasedVars =<< (snd <$> mutargs))
   -- number of occurences of all variables, but only for variables which are mutated
   let mutvarcounts = filter (\(k,n) -> k `elem` (mutVars)) varcounts
   -- number of occurences of all variables, but only for variables which are mutated, with occurence > 1

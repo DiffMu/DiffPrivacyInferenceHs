@@ -915,15 +915,18 @@ recDMTermM f h (InternalExpectConst a) = InternalExpectConst <$> (f a)
 --------------------------------------------------------------------------
 -- Free variables for terms
 
-freeVarsDMTerm :: DMTerm -> [TeVar]
-freeVarsDMTerm (Var (Just v  :- jt)) = [v]
-freeVarsDMTerm (Var (Nothing :- jt)) = []
-freeVarsDMTerm (Lam jts body) = freeVarsDMTerm body \\ [v | (Just v :- _) <- jts]
-freeVarsDMTerm (LamStar jts body) = freeVarsDMTerm body \\ [v | (Just v :- _) <- jts]
-freeVarsDMTerm t = fst $ recDMTermMSameExtension f t
+freeVarsOfDMTerm :: DMTerm -> [TeVar]
+freeVarsOfDMTerm (Var (Just v  :- jt)) = [v]
+freeVarsOfDMTerm (Var (Nothing :- jt)) = []
+freeVarsOfDMTerm (Lam jts body) = freeVarsOfDMTerm body \\ [v | (Just v :- _) <- jts]
+freeVarsOfDMTerm (LamStar jts body) = freeVarsOfDMTerm body \\ [v | (Just v :- _) <- jts]
+freeVarsOfDMTerm t = fst $ recDMTermMSameExtension f t
   where
     f :: DMTerm -> ([TeVar] , DMTerm)
-    f = (\a -> (freeVarsDMTerm a, a))
+    f = (\a -> (freeVarsOfDMTerm a, a))
+
+freeVarsOfProcDMTerm :: ProcDMTerm -> [ProcVar]
+freeVarsOfProcDMTerm = undefined
 
 --------------------------------------------------------------------------
 -- pretty printing
