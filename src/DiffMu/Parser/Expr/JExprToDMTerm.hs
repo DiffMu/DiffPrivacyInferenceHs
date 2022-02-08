@@ -4,6 +4,7 @@
 module DiffMu.Parser.Expr.JExprToDMTerm where
     
 import DiffMu.Prelude
+import DiffMu.Abstract
 import DiffMu.Core
 import DiffMu.Core.Logging
 import DiffMu.Core.TC
@@ -19,15 +20,19 @@ data ParseFull = ParseFull
   {
     _location :: (String, Int), -- filename and line number
     _outerFuncNames :: [Symbol], -- to error upon non-toplevel back box definitions and simple recursion
-    _insideAssignment :: Bool -- to error upon assignemnts within assignments (like x = y = 100).
+    _insideAssignment :: Bool, -- to error upon assignemnts within assignments (like x = y = 100).
+    _holeNames :: NameCtx -- generate new names for holes
   }
 
 instance Default ParseFull where
-    def = ParseFull ("unknown",0) [] False
+    def = ParseFull ("unknown",0) [] False def
 
 type ParseTC = LightTC Location_Parse ParseFull
 
 $(makeLenses ''ParseFull)
+
+newProcVar :: (MonadState ParseFull m) => Text -> m (ProcVar)
+newProcVar hint = holeNames %%= (first GenProcVar . (newName hint))
 
 parseError :: String -> ParseTC a
 parseError message = do
@@ -55,7 +60,7 @@ pSingle :: JExpr -> ParseTC ProcDMTerm
 pSingle e = case e of
                  JEInteger n -> pure $ Sng n JTInt
                  JEReal r -> pure $ Sng r JTReal
-                 JESymbol s -> return  (Extra (ProcVar (Just (UserProcVar s) ::- JTAny)))
+                 JESymbol s -> return  (Extra (ProcVarTerm ((UserProcVar s) ::- JTAny)))
                  JETup elems -> (Tup <$> (mapM pSingle elems))
                  JELam args body -> pJLam args body
                  JELamStar args body -> pJLamStar args body
@@ -113,29 +118,29 @@ pJRef name refs = case refs of
                        _ -> parseError ("Only double indexing to matrix elements and single indexing to vector entries supported, but you gave " <> show refs)
 
 pArg arg = case arg of
-                     JEHole -> return (Nothing :- JTAny)
-                     JESymbol s -> return (Just (UserTeVar s) :- JTAny)
-                     JETypeAnnotation (JESymbol s) τ -> return (Just (UserTeVar s) :- τ)
+                     JEHole -> (::- JTAny) <$> newProcVar "hole"
+                     JESymbol s -> return ((UserProcVar s) ::- JTAny)
+                     JETypeAnnotation (JESymbol s) τ -> return ((UserProcVar s) ::- τ)
                      JENotRelevant _ _ -> parseError ("Relevance annotation on a sensitivity function is not permitted.")
                      a -> parseError ("Invalid function argument " <> show a)
 
 pArgRel arg = case arg of
-                       JEHole -> return (Nothing :- (JTAny, IsRelevant))
-                       JESymbol s -> return (Just (UserTeVar s) :- (JTAny, IsRelevant))
-                       JETypeAnnotation (JESymbol s) τ -> return (Just (UserTeVar s) :- (τ, IsRelevant))
-                       JENotRelevant (JESymbol s) τ -> return (Just (UserTeVar s) :- (τ, NotRelevant))
+                       JEHole -> (::- (JTAny, IsRelevant)) <$> newProcVar "hole"
+                       JESymbol s -> return ((UserProcVar s) ::- (JTAny, IsRelevant))
+                       JETypeAnnotation (JESymbol s) τ -> return ((UserProcVar s) ::- (τ, IsRelevant))
+                       JENotRelevant (JESymbol s) τ -> return ((UserProcVar s) ::- (τ, NotRelevant))
                        a -> parseError ("Invalid function argument " <> show a)
 
 
 pJLam args body = do
                    dargs <- mapM pArg args
                    dbody <- pSingle body
-                   return (Lam dargs dbody)
+                   return (ProcLam dargs dbody)
 
 pJLamStar args body = do
                        dargs <- mapM pArgRel args
                        dbody <- pSingle body
-                       return (LamStar dargs dbody)
+                       return (ProcLamStar dargs dbody)
 
 
 
@@ -153,8 +158,8 @@ pJLoop ivar iter body =
                                  dbody <- pSingle body
                                  nit <- pIter start step end
                                  i <- case ivar of
-                                              JEHole -> pure Nothing
-                                              JESymbol s -> pure $ Just (UserProcVar $ s)
+                                              JEHole -> newProcVar "hole"
+                                              JESymbol s -> pure $ (UserProcVar $ s)
                                               i -> parseError ("Invalid iteration variable " <> (show i) <> ".")
                                  return (Extra (ProcPreLoop nit i dbody))
        it -> parseError ("Invalid iterator " <> show it <> ", must be a range.")
@@ -169,8 +174,8 @@ pJLet assignee assignment = do
                    dasgmt <- pSingle assignment
                    exitAssignment
                    case assignee of
-                        JEHole     -> return (Extra (ProcSLetBase PureLet (Nothing ::- JTAny) dasgmt))
-                        JESymbol s -> return (Extra (ProcSLetBase PureLet (Just (UserProcVar s) ::- JTAny) dasgmt))
+                        JEHole     -> (\p -> return (Extra (ProcSLetBase PureLet (p ::- JTAny) dasgmt))) <$> newProcVar "hole"
+                        JESymbol s -> return (Extra (ProcSLetBase PureLet ((UserProcVar s) ::- JTAny) dasgmt))
                         JETypeAnnotation _ _ -> parseError "Type annotations on variables are not supported."
                         JENotRelevant _ _    -> parseError "Type annotations on variables are not supported."
                         _                    -> parseError ("Invalid assignee " <> (show assignee) <> ", must be a variable.")
@@ -187,8 +192,8 @@ pJTLet assignees assignment = let
                     _ -> parseError ("Invalid number of arguments for sample, namely " <> (show (length args)) <> " instead of 2.")
                     
    -- make sure that all assignees are simply symbols
-   ensureSymbol (JESymbol s) = return (return (Just (UserProcVar s) ::- JTAny))
-   ensureSymbol JEHole = return (Nothing ::- JTAny)
+   ensureSymbol (JESymbol s) = return ((UserProcVar s) ::- JTAny)
+   ensureSymbol JEHole = (::- JTAny) <$> newProcVar "hole"
    ensureSymbol (JETypeAnnotation _ _) = parseError "Type annotations on variables are not supported."
    ensureSymbol (JENotRelevant _ _) = parseError "Type annotations on variables are not supported."
    ensureSymbol x = parseError ("Invalid assignee " <> (show x) <> ", must be a variable.")
@@ -260,7 +265,7 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
           -- symbols? yes
           (JESymbol v1, JESymbol v2) -> do
             body' <- pSingle body
-            pure ((UserTeVar v1, UserTeVar v2) , body')
+            pure ((UserProcVar v1, UserProcVar v2) , body')
 
           -- symbols? no => error
           (v1,v2) -> parseError $ "In the 3rd argument of " <> T.unpack t
@@ -380,7 +385,7 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
   (sym, args) -> do
       inside <- use outerFuncNames
       case ((Symbol sym) `elem` inside) of
-         False -> (Apply (Extra (ProcVar (Just (UserProcVar (Symbol sym)) ::- JTAny))) <$> mapM pSingle args)
+         False -> (Apply (Extra (ProcVarTerm ((UserProcVar (Symbol sym)) ::- JTAny))) <$> mapM pSingle args)
          True -> parseError $ "Recursive call of " <> show sym <> " is not permitted."
 
 -- all other terms turn into calls
