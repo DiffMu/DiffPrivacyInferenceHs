@@ -212,6 +212,7 @@ pFLet call body = case call of
 
 pAss :: JTree -> JTree -> JEParseState JExpr
 pAss asg asm = case asg of
+    JHole -> (JEAssignment JEHole <$> pTreeToJExpr asm)
     JSym _ -> (JEAssignment <$> pTreeToJExpr asg <*> pTreeToJExpr asm)
     JCall _ -> pFLet asg asm
     JTup ts -> (JETupAssignment <$> mapM pTreeToJExpr ts <*> pTreeToJExpr asm)
