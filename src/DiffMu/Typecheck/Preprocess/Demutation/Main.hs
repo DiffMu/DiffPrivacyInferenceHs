@@ -836,6 +836,28 @@ elaborateNonMut1 scname ctr t1 = do
   (newT1) <- moveTypeAsTerm <$> elaboratePureValue scname t1
   return (Value Pure (NoMove (ctr newT1)))
 
+
+elaborateNonMut2 :: ScopeVar
+                    -> (DemutDMTerm -> DemutDMTerm -> DemutDMTerm)
+                    -> ProcDMTerm -> ProcDMTerm
+                    -> MTC TermType
+elaborateNonMut2 scname ctr t1 t2 = do
+  (newT1) <- moveTypeAsTerm <$> elaboratePureValue scname t1
+  (newT2) <- moveTypeAsTerm <$> elaboratePureValue scname t2
+  return (Value Pure (NoMove (ctr newT1 newT2)))
+
+
+elaborateNonMut3 :: ScopeVar
+                    -> (DemutDMTerm -> DemutDMTerm -> DemutDMTerm -> DemutDMTerm)
+                    -> ProcDMTerm -> ProcDMTerm -> ProcDMTerm
+                    -> MTC TermType
+elaborateNonMut3 scname ctr t1 t2 t3 = do
+  (newT1) <- moveTypeAsTerm <$> elaboratePureValue scname t1
+  (newT2) <- moveTypeAsTerm <$> elaboratePureValue scname t2
+  (newT3) <- moveTypeAsTerm <$> elaboratePureValue scname t3
+  return (Value Pure (NoMove (ctr newT1 newT2 newT3)))
+
+
 elaborateNonMut4 :: ScopeVar
                     -> (DemutDMTerm -> DemutDMTerm -> DemutDMTerm -> DemutDMTerm -> DemutDMTerm)
                     -> ProcDMTerm -> ProcDMTerm -> ProcDMTerm -> ProcDMTerm
@@ -845,7 +867,7 @@ elaborateNonMut4 scname ctr t1 t2 t3 t4 = do
   (newT2) <- moveTypeAsTerm <$> elaboratePureValue scname t2
   (newT3) <- moveTypeAsTerm <$> elaboratePureValue scname t3
   (newT4) <- moveTypeAsTerm <$> elaboratePureValue scname t4
-  return (Value Pure (NoMove (ctr newT1 newT2 newT4 newT4)))
+  return (Value Pure (NoMove (ctr newT1 newT2 newT3 newT4)))
 
 
 ---------------------------------------------------
