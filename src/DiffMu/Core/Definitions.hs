@@ -1070,7 +1070,7 @@ instance ShowPretty a => ShowPretty (DemutatedExtension a) where
     DemutBBLet v jts     -> "DBBLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty jts)
     DemutPhi a as        -> "DPhi " <> showPretty a <> "\n" <> braceIndent (intercalate "\n," $ showPretty <$> as)
     DemutLoop a b x d    -> "Loop (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> show x <> ")" <> parenIndent (showPretty d)
-    DemutBlock as        -> braceIndent $ intercalate "\n" $ showPretty <$> as
+    DemutBlock as        -> braceIndent $ intercalate "\n" $ showPretty <$> reverse as
 
 instance ShowPretty (EmptyExtension a) where
   showPretty a = undefined

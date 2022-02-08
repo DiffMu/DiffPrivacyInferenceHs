@@ -55,7 +55,7 @@ demutate term = do
 
   topscname <- newScopeVar "toplevel"
 
-  res <- elaborateMut topscname term
+  res <- elaborateTopLevel topscname term
   let resterm = termTypeAsTerm res
   logForce $ "-----------------------------------"
   logForce $ "Mutation elaborated term is:\n" <> showPretty resterm
@@ -109,9 +109,45 @@ makeTermList (Statement term _ : ts)    = do (last, ts') <- makeTermList ts
 makeTermList (MutatingFunctionEnd : ts) = demutationError $ "Found a MutatingFunctionEnd inside a list of statements."
 
   
+-- 
+-- Here we allow moving return types
+--
+elaborateTopLevel :: ScopeVar -> ProcDMTerm -> MTC (TermType)
+elaborateTopLevel scname (Extra (Block ts)) = do
+  ts' <- mapM (elaborateMut scname) ts
+  (last_val, ts'') <- makeTermList ts'
+
+  mt <- case last_val of
+    PureValue mt -> return mt
+    MutatingFunctionEndValue -> demutationError $ "Encountered a 'return' which is not the last statement of a function."
+
+  -- case mt of
+  --   NoMove pdt -> pure ()
+  --   _ -> demutationError $ "Encountered a block which is not top level and not in a function, but has a move as return type. This is currently not allowed."
+
+  return (Value Pure (NoMove (Extra (DemutBlock ts''))))
+
+elaborateTopLevel scname t = elaborateMut scname t
 
 
+-- 
+-- The main elaboration function
+--
 elaborateMut :: ScopeVar -> ProcDMTerm -> MTC (TermType)
+
+elaborateMut scname (Extra (Block ts)) = do
+  ts' <- mapM (elaborateMut scname) ts
+  (last_val, ts'') <- makeTermList ts'
+
+  mt <- case last_val of
+    PureValue mt -> return mt
+    MutatingFunctionEndValue -> demutationError $ "Encountered a 'return' which is not the last statement of a function."
+
+  case mt of
+    NoMove pdt -> pure ()
+    _ -> demutationError $ "Encountered a block which is not top level and not in a function, but has a move as return type. This is currently not allowed."
+
+  return (Value Pure (NoMove (Extra (DemutBlock ts''))))
     
 elaborateMut scname (Op op args) = do
   args' <- mapM (elaboratePureValue scname) args
