@@ -135,12 +135,12 @@ pArgRel arg = case arg of
 pJLam args body = do
                    dargs <- mapM pArg args
                    dbody <- pSingle body
-                   return (ProcLam dargs dbody)
+                   return (Extra (ProcLam dargs dbody))
 
 pJLamStar args body = do
                        dargs <- mapM pArgRel args
                        dbody <- pSingle body
-                       return (ProcLamStar dargs dbody)
+                       return (Extra (ProcLamStar dargs dbody))
 
 
 
@@ -174,7 +174,7 @@ pJLet assignee assignment = do
                    dasgmt <- pSingle assignment
                    exitAssignment
                    case assignee of
-                        JEHole     -> (\p -> return (Extra (ProcSLetBase PureLet (p ::- JTAny) dasgmt))) <$> newProcVar "hole"
+                        JEHole     -> (\p -> Extra (ProcSLetBase PureLet (p ::- JTAny) dasgmt)) <$> newProcVar "hole"
                         JESymbol s -> return (Extra (ProcSLetBase PureLet ((UserProcVar s) ::- JTAny) dasgmt))
                         JETypeAnnotation _ _ -> parseError "Type annotations on variables are not supported."
                         JENotRelevant _ _    -> parseError "Type annotations on variables are not supported."
@@ -233,7 +233,7 @@ pJBlackBox name args =
                     case inside of
                          [] -> do
                                     pargs <- mapM pArg args
-                                    return (Extra (ProcBBLet (UserProcVar pname) (sndA <$> pargs)))
+                                    return (Extra (ProcBBLet (UserProcVar pname) [t | (_ ::- t) <- pargs]))
                          _  -> parseError ("Black boxes can only be defined on top-level scope.")
     _ -> parseError $ "Invalid function name expression " <> show name <> ", must be a symbol."
 
@@ -255,6 +255,8 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
   --
   -- NOTE: This is term is currently not generated on the julia side
   --
+
+  {-
   (t@"mcreate", [a1, a2, a3]) -> f <$> pSingle a1 <*> pSingle a2 <*> extractLambdaArgs a3
     where
       f a b (c,d) = MCreate a b c d
@@ -279,10 +281,10 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
       -- lambda? no => error
       extractLambdaArgs term = parseError $ "In the 3rd argument of " <> T.unpack t
                                             <> ", expected a lambda term, got: " <> show term
-
   -- 3 args? no => error
   (t@"mcreate", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 3 arguments, but has been given " <> show (length args)
 
+-}
   ------------
   -- the non binding builtins
 
