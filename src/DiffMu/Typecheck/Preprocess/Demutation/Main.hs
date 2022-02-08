@@ -98,7 +98,12 @@ makeTermList :: [TermType] -> MTC (LastValue, [DemutDMTerm])
 makeTermList [] = demutationError $ "Found an empty list of statements."
 
 -- single element left
-makeTermList (Value it mt : [])         = return (PureValue mt, [])
+makeTermList (Value it mt : [])         = case it of
+                                            Pure -> return (PureValue mt, [moveTypeAsTerm mt])
+                                            _    -> demutationError $ "The last value of a block has the type " <> show it <> "\n"
+                                                                    <> "Only pure values are allowed.\n"
+                                                                    <> "The value is:\n"
+                                                                    <> show mt
 makeTermList (Statement term last : []) = return (PureValue last, [moveTypeAsTerm last, term])
 makeTermList (MutatingFunctionEnd : []) = return (MutatingFunctionEndValue , [])
 
