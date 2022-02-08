@@ -686,10 +686,10 @@ instance TCConstraint IsTypeOpResult where
 
 type Clip = DMTypeOf ClipKind
 
-data Asgmt a = (:-) (Maybe TeVar) a
+data Asgmt a = (:-) TeVar a
   deriving (Generic, Show, Eq, Ord)
 
-fstA :: Asgmt a -> Maybe TeVar
+fstA :: Asgmt a -> TeVar
 fstA (x :- τ) = x
 
 sndA :: Asgmt a -> a
@@ -919,10 +919,9 @@ recDMTermM f h (InternalExpectConst a) = InternalExpectConst <$> (f a)
 -- Free variables for terms
 
 freeVarsOfDMTerm :: DMTerm -> [TeVar]
-freeVarsOfDMTerm (Var (Just v  :- jt)) = [v]
-freeVarsOfDMTerm (Var (Nothing :- jt)) = []
-freeVarsOfDMTerm (Lam jts body) = freeVarsOfDMTerm body \\ [v | (Just v :- _) <- jts]
-freeVarsOfDMTerm (LamStar jts body) = freeVarsOfDMTerm body \\ [v | (Just v :- _) <- jts]
+freeVarsOfDMTerm (Var (v  :- jt)) = [v]
+freeVarsOfDMTerm (Lam jts body) = freeVarsOfDMTerm body \\ [v | (v :- _) <- jts]
+freeVarsOfDMTerm (LamStar jts body) = freeVarsOfDMTerm body \\ [v | (v :- _) <- jts]
 freeVarsOfDMTerm t = fst $ recDMTermMSameExtension f t
   where
     f :: DMTerm -> ([TeVar] , DMTerm)
@@ -965,8 +964,7 @@ instance ShowPretty (ProcVar) where
   showPretty (v) = show v
 
 instance ShowPretty a => ShowPretty (Asgmt a) where
-  showPretty (Nothing :- x) = "_ :- " <> showPretty x
-  showPretty (Just a :- x) = showPretty a <> " :- " <> showPretty x
+  showPretty (a :- x) = showPretty a <> " :- " <> showPretty x
 
 
 instance ShowPretty a => ShowPretty (ProcAsgmt a) where
@@ -990,9 +988,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (Extra e)          = showPretty e
   showPretty (Ret (r))          = "Ret (" <>  showPretty r <> ")"
   showPretty (Sng g jt)         = show g
-  showPretty (Var (v :- jt))    = case v of
-                                    Nothing -> "_"
-                                    Just tv -> show tv
+  showPretty (Var (v :- jt))    = show v
 --  showPretty (Rnd jt)           = "Rnd"
   showPretty (Arg v jt r)       = show v
   showPretty (Op op ts)         = showPretty op <> " " <> showPretty ts

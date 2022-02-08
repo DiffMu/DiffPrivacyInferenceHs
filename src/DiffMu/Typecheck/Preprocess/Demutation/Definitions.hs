@@ -618,7 +618,7 @@ moveTypeAsTerm = \case
   TupleMove mts ->
     let terms = moveTypeAsTerm <$> mts
     in Tup $ terms
-  SingleMove pv -> Var $ (Just (procVarAsTeVar pv) :- JTAny)
+  SingleMove pv -> Var $ ((procVarAsTeVar pv) :- JTAny)
   RefMove pdt -> pdt
   NoMove pdt -> pdt
 

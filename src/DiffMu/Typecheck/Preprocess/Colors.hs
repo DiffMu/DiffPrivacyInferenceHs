@@ -63,10 +63,9 @@ isPFunction name = functionNames %%= (\set -> (H.member name set, set))
 -- push all names to the priv function scope that are annotated as privacy
 -- functions in the given argument list.
 pushFunctionArgs :: (MonadState ColorFull m) => [Asgmt JuliaType] -> m ()
-pushFunctionArgs args = let pushArg (Just x :- t) = case t of
+pushFunctionArgs args = let pushArg (x :- t) = case t of
                                 JTPFunction -> pushFunction x -- user annotation says its a priva function
                                 _ -> pure ()
-                            pushArg (Nothing :- _) = pure ()
                         in do
                             mapM pushArg args
                             pure ()
@@ -132,16 +131,16 @@ retRequired reqc term = case reqc of
 transformLets :: Maybe Color -> DMTerm -> ColorTC DMTerm
 transformLets reqc term = case term of
 
-   SLetBase PureLet (Just x :- t) body tail -> do
+   SLetBase PureLet (x :- t) body tail -> do
        tbody <- handleAnyTerm body
        cbody <- getColor
        case cbody of
             SensitivityK -> do
                 ttail <- transformLets reqc tail
-                return (SLetBase PureLet (Just x :- t) tbody ttail)
+                return (SLetBase PureLet (x :- t) tbody ttail)
             PrivacyK -> do
                 ttail <- handlePrivTerm tail
-                return (SLetBase BindLet (Just x :- t) tbody ttail)
+                return (SLetBase BindLet (x :- t) tbody ttail)
 
    TLetBase PureLet ns body tail -> do
        tbody <- handleAnyTerm body
@@ -194,7 +193,7 @@ transformLets reqc term = case term of
    Apply f xs -> do
        txs <- mapM handleSensTerm xs
        case f of
-            Var (Just fn :- _) -> do
+            Var (fn :- _) -> do
                                     isP <- isPFunction fn
                                     case isP of
                                        True  -> retPriv (Apply f txs)

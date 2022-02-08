@@ -240,8 +240,6 @@ getArgList xτs = do
 
   let f :: Asgmt JuliaType -> t (DMTypeOf MainKind :@ Annotation e)
       f (x :- τ) = do
-        case x of
-          Just x -> do
             val <- getValueM x γ
             case val of
               -- If the symbol was in the context γ, then we get its type and sensitivity
@@ -252,14 +250,10 @@ getArgList xτs = do
               Nothing -> do
                 τv <- newVar
                 return (τv :@ zeroId) -- scale with 0
-          -- 
-          Nothing -> do
-             τv <- newVar
-             return (τv :@ zeroId) -- scale with 0
 
   xτs' <- mapM f xτs
 
-  let xsWithName = [x | (Just x :- _) <- xτs]
+  let xsWithName = [x | (x :- _) <- xτs]
   -- We have to remove all symbols x from the context
   let deleteWithRelev :: [TypeCtxSP -> t (TypeCtxSP)]
       deleteWithRelev = ((\(x) -> deleteValueM x) <$> xsWithName)

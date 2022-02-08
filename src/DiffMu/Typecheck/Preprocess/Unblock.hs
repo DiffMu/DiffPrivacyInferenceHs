@@ -39,7 +39,7 @@ unlistM mlast mxs = let
       unlist last ((Extra (DemutFLet a b)) : xs) = unlistM (FLet a <$> (unblock b) <*> pure last) xs
       unlist last ((Extra (DemutBBLet a b)) : xs) = unlist (BBLet a b last) xs
       unlist last ((Extra (DemutLoop n cvars it body)) : xs) =
-             unlistM (TLet [Just s :- JTAny | s <- cvars] <$> (Loop <$> (unblock n) <*> pure cvars <*> pure it <*> (unblock body)) <*> pure last) xs
+             unlistM (TLet [s :- JTAny | s <- cvars] <$> (Loop <$> (unblock n) <*> pure cvars <*> pure it <*> (unblock body)) <*> pure last) xs
       unlist last (x:xs) = internalError $ "found a DMTerm where a DemutDMTerm was expected:" <> show x
    in join $ unlist <$> mlast <*> (pure mxs)
 

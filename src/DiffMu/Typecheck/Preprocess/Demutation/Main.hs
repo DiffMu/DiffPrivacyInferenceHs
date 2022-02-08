@@ -34,7 +34,7 @@ import Control.Exception (throw)
   
 demutTLetStatement :: LetKind -> [ProcVar] -> DemutDMTerm -> TermType
 demutTLetStatement ltype vars term =
-  (Statement (Extra (DemutTLetBase ltype ([(Just $ procVarAsTeVar v) :- JTAny | v <- vars ]) term))
+  (Statement (Extra (DemutTLetBase ltype ([(procVarAsTeVar v) :- JTAny | v <- vars ]) term))
           (TupleMove [SingleMove v | v <- vars]))
 
 ---
@@ -214,7 +214,7 @@ elaborateMut scname (Extra (ProcSLetBase ltype (x ::- τ) term)) = do
   debug $ show logmem
 
 
-  return (Statement (Extra (DemutSLetBase ltype ((Just $ procVarAsTeVar x) :- τ) (moveTypeAsTerm moveType)))
+  return (Statement (Extra (DemutSLetBase ltype ((procVarAsTeVar x) :- τ) (moveTypeAsTerm moveType)))
           (SingleMove x))
 
 
@@ -252,12 +252,12 @@ elaborateMut scname fullterm@(Extra (ProcTLetBase ltype vars term)) = do
 elaborateMut scname (Extra (ProcLamStar args body)) = do
   bodyscname <- newScopeVar "lamstar"
   (newBody, newBodyType) <- elaborateLambda bodyscname [(v ::- x) | (v ::- (x , _)) <- args] body
-  return (Value newBodyType (NoMove (LamStar [Just (procVarAsTeVar v) :- x | (v ::- x) <- args] newBody)))
+  return (Value newBodyType (NoMove (LamStar [(procVarAsTeVar v) :- x | (v ::- x) <- args] newBody)))
 
 elaborateMut scname (Extra (ProcLam args body)) = do
   bodyscname <- newScopeVar "lam"
   (newBody, newBodyType) <- elaborateLambda bodyscname [(v ::- x) | (v ::- x) <- args] body
-  return (Value newBodyType (NoMove (Lam [Just (procVarAsTeVar v) :- x | (v ::- x) <- args] newBody)))
+  return (Value newBodyType (NoMove (Lam [(procVarAsTeVar v) :- x | (v ::- x) <- args] newBody)))
 
 
 
@@ -1007,7 +1007,7 @@ elaborateMutList f scname mutargs = do
             mt <- expectSingleMem =<< expectNotMoved x
             markMutated mt
 
-            return (Var (Just (procVarAsTeVar x) :- a), SingleMove x, Just x)
+            return (Var ((procVarAsTeVar x) :- a), SingleMove x, Just x)
 
           -- if argument is not a var, throw error
           _ -> throwError (DemutationError $ "When calling the mutating function " <> f <> " found the term " <> showPretty arg <> " as argument in a mutable-argument-position. Only variables are allowed here.")
