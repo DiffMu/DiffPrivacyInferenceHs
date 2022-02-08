@@ -7,7 +7,7 @@ import Spec.Base
 testCheck_Rules = do
   describe "rules-privacy-slet" $ do
     it "forwards inner type correctly" $ do
-      let term = SLet (Just (UserTeVar (Symbol "x")) :- JTAny) (Sng 1.0 (JTReal)) (Ret (Var (Just ((UserTeVar (Symbol "x"))) :- JTAny)))
+      let term = SLet (Just (UserTeVar ((UserProcVar $ Symbol "x"))) :- JTAny) (Sng 1.0 (JTReal)) (Ret (Var (Just ((UserTeVar (UserProcVar $ Symbol "x"))) :- JTAny)))
       let f = checkPriv def term
       -- do
       --       let tres = checkPriv term def
