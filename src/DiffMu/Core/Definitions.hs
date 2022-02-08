@@ -927,8 +927,15 @@ freeVarsOfDMTerm t = fst $ recDMTermMSameExtension f t
     f :: DMTerm -> ([TeVar] , DMTerm)
     f = (\a -> (freeVarsOfDMTerm a, a))
 
+
 freeVarsOfProcDMTerm :: ProcDMTerm -> [ProcVar]
-freeVarsOfProcDMTerm = undefined
+freeVarsOfProcDMTerm (Extra (ProcVarTerm (v  ::- jt))) = [v]
+freeVarsOfProcDMTerm (Extra (ProcLam jts body)) = freeVarsOfProcDMTerm body \\ [v | (v ::- _) <- jts]
+freeVarsOfProcDMTerm (Extra (ProcLamStar jts body)) = freeVarsOfProcDMTerm body \\ [v | (v ::- _) <- jts]
+freeVarsOfProcDMTerm t = fst $ recDMTermMSameExtension f t
+  where
+    f :: ProcDMTerm -> ([ProcVar] , ProcDMTerm)
+    f = (\a -> (freeVarsOfProcDMTerm a, a))
 
 --------------------------------------------------------------------------
 -- pretty printing
