@@ -946,6 +946,10 @@ newlineIndentIfLong xs = case '\n' `elem` xs of
 parenIndent :: String -> String
 parenIndent s = "\n(\n" <> unlines (fmap ("  " <>) (lines s)) <> ")"
 
+braceIndent :: String -> String
+braceIndent s = "\n{\n" <> unlines (fmap ("  " <>) (lines s)) <> "}"
+
+
 justIndent :: String -> String
 justIndent s = unlines (fmap ("  " <>) (lines s))
 
@@ -955,9 +959,16 @@ indent s = unlines (fmap ("  " <>) (lines s))
 instance ShowPretty (TeVar) where
   showPretty (v) = show v
 
+instance ShowPretty (ProcVar) where
+  showPretty (v) = show v
+
 instance ShowPretty a => ShowPretty (Asgmt a) where
   showPretty (Nothing :- x) = "_ :- " <> showPretty x
   showPretty (Just a :- x) = showPretty a <> " :- " <> showPretty x
+
+
+instance ShowPretty a => ShowPretty (ProcAsgmt a) where
+  showPretty (a ::- x) = showPretty a <> " :- " <> showPretty x
 
 instance ShowPretty (DMTypeOp_Some) where
   showPretty (IsBinary op) = show op
@@ -1035,8 +1046,28 @@ instance ShowPretty a => ShowPretty (MutabilityExtension a) where
   showPretty (DefaultRet x)  = "DefaultRet (" <> showPretty x <> ")"
 
 instance ShowPretty a => ShowPretty (ProceduralExtension a) where
+  showPretty = \case
+    ProcTLetBase lk v a -> "PTLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty a)
+    ProcSLetBase lk v a -> "PSLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty a)
+    ProcFLet v a        -> "PFLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty a)
+    ProcBBLet v jts     -> "PBBLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty jts)
+    ProcPhi a as        -> "PPhi " <> showPretty a <> "\n" <> braceIndent (intercalate "\n," $ showPretty <$> as)
+    ProcPreLoop a x d   -> "PLoop (" <> (showPretty a) <> ", " <> show x <> ")" <> parenIndent (showPretty d)
+    ProcReturn          -> "PReturn"
+    ProcVar (pa ::- _)  -> showPretty pa
+    ProcLam jts a       -> "PLam (" <> showPretty jts <> ")" <> parenIndent (showPretty a)
+    ProcLamStar jts a   -> "PLamStar (" <> showPretty jts <> ")" <> parenIndent (showPretty a)
+    Block as -> braceIndent $ intercalate "\n" $ showPretty <$> as
 
 instance ShowPretty a => ShowPretty (DemutatedExtension a) where
+  showPretty = \case
+    DemutTLetBase lk v a -> "DTLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty a)
+    DemutSLetBase lk v a -> "DSLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty a)
+    DemutFLet v a        -> "DFLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty a)
+    DemutBBLet v jts     -> "DBBLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty jts)
+    DemutPhi a as        -> "DPhi " <> showPretty a <> "\n" <> braceIndent (intercalate "\n," $ showPretty <$> as)
+    DemutLoop a b x d    -> "Loop (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> show x <> ")" <> parenIndent (showPretty d)
+    DemutBlock as        -> braceIndent $ intercalate "\n" $ showPretty <$> as
 
 instance ShowPretty (EmptyExtension a) where
   showPretty a = undefined
