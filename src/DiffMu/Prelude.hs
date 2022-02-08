@@ -88,7 +88,7 @@ instance DictKey ProcVar
 
 -- term variables
 
-data TeVar = UserTeVar Symbol | GenTeVar Symbol
+data TeVar = UserTeVar ProcVar | GenTeVar Symbol
   deriving (Eq,Generic, Ord)
 
 instance Hashable TeVar

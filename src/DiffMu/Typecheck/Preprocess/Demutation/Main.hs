@@ -26,12 +26,16 @@ import Test.QuickCheck.Property (Result(expect))
 
 import Control.Monad.Trans.Class
 import qualified GHC.RTS.Flags as LHS
-import DiffMu.Typecheck.Preprocess.Demutation.Definitions (setImmutTypeOverwritePrevious)
+import Control.Exception (throw)
 
 
 
 
   
+demutTLetStatement :: LetKind -> [ProcVar] -> DemutDMTerm -> TermType
+demutTLetStatement ltype vars term =
+  (Statement (Extra (DemutTLetBase ltype ([(Just $ procVarAsTeVar v) :- JTAny | v <- vars ]) term))
+          (TupleMove [SingleMove v | v <- vars]))
 
 ---
 -- elaborating loops
@@ -40,36 +44,34 @@ import DiffMu.Typecheck.Preprocess.Demutation.Definitions (setImmutTypeOverwrite
 -- - JuliaReturn
 -- - modify iteration variable
 
-demutate :: ProcDMTerm -> MTC (ProcDMTerm)
-demutate term = undefined
-{-
-do
-  logForce $ "Term before phi rearranging:\n" <> showPretty term
+demutate :: ProcDMTerm -> MTC (DemutDMTerm)
+demutate term = do
+  -- logForce $ "Term before phi rearranging:\n" <> showPretty term
 
-  term' <- rearrangePhi term
+  -- term' <- rearrangePhi term
 
-  logForce $ "-----------------------------------"
-  logForce $ "Term before mutation elaboration:\n" <> showPretty term'
+  -- logForce $ "-----------------------------------"
+  logForce $ "Term before mutation elaboration:\n" <> showPretty term
 
   topscname <- newScopeVar "toplevel"
 
-  (res , _, _) <- elaborateMut topscname def term'
+  res <- elaborateMut topscname term
+  let resterm = termTypeAsTerm res
   logForce $ "-----------------------------------"
-  logForce $ "Mutation elaborated term is:\n" <> showPretty res
+  logForce $ "Mutation elaborated term is:\n" <> showPretty resterm
 
   -- let optimized = optimizeTLet res
   -- logForce $ "-----------------------------------"
   -- logForce $ "TLet optimized term is:\n" <> showPretty optimized
 
-  return optimized
--}
+  return resterm
 
 
 elaborateValue :: ScopeVar -> ProcDMTerm -> MTC (ImmutType , MoveType)
 elaborateValue scname te = do
   (te1type) <- elaborateMut scname te
   case te1type of
-    Statements _ _ -> demutationError $ "Expected term to be a value, but it was a statement:\n" <> showPretty te
+    Statement _ _ -> demutationError $ "Expected term to be a value, but it was a statement:\n" <> showPretty te
     Value it mt -> return (it , mt)
     MutatingFunctionEnd -> demutationError $ "Expected term to be a value, but it was a return."
 
@@ -77,7 +79,7 @@ elaboratePureValue :: ScopeVar -> ProcDMTerm -> MTC (MoveType)
 elaboratePureValue scname te = do
   (te1type) <- elaborateMut scname te
   case te1type of
-    Statements _ _   -> demutationError $ "Expected term to be a value, but it was a statement:\n" <> showPretty te
+    Statement _ _   -> demutationError $ "Expected term to be a value, but it was a statement:\n" <> showPretty te
     MutatingFunctionEnd -> demutationError $ "Expected term to be a value, but it was a return."
     Value Pure mt -> return (mt)
     Value _ mt    -> demutationError $ "Expected term to be a pure value, but it has type: " <> show mt
@@ -91,43 +93,29 @@ elaboratePureValue scname te = do
 -- concatenate Statements blocks
 -- determine the correct LastTerm for the concatenation result
 makeTermList :: [TermType] -> MTC (LastValue, [DemutDMTerm])
-makeTermList termstt = let
-    inside :: TermType -> MTC [DemutDMTerm]
-    inside t = case t of
-                    Value it mt -> demutationError $ "Found a value term " <> show mt <> " inside a list of statements."
-                    MutatingFunctionEnd -> demutationError $ "Found a MutatingFunctionEnd inside a list of statements."
-                    Statements terms last -> return (last : (reverse terms))
-    in case (reverse termstt) of
-            [] -> demutationError $ "Found an empty block"
-            (Value it mt : insideTerms) -> do
-                insides <- mapM inside insideTerms
-                case it of
-                     Pure -> return ((PureValue mt), concat insides)
-                     _ -> demutationError $ "Found an impure value "<> show mt <>" as last term in a list of statements."
-            ((Statements terms last) : insideTerms) -> do
-                insides <- mapM inside insideTerms
-                return ((DefaultValue last), (reverse terms) ++ (concat insides))
-            (MutatingFunctionEnd : insideTerms) -> do
-                insides <- mapM inside insideTerms
-                return (MutatingFunctionEndValue, concat insides)
 
--- elaborateNonmut :: ScopeVar -> ProcDMTerm -> MTC (DemutDMTerm , ImmutType , MoveType)
--- elaborateNonmut scname term = undefined -- do
-  -- (resTerm , resType, mType) <- elaborateMut scname term
+-- empty list
+makeTermList [] = demutationError $ "Found an empty list of statements."
 
-  -- case resType of
-  --   Pure _ -> pure ()
-  --   VirtualMutated mutvars -> throwError (DemutationError $ "expected that the term " <> showPretty term <> " does not mutate anything, but it mutates the following variables: " <> show mutvars)
-  --   Mutating _ -> pure ()
-  --   PureBlackBox -> pure ()
+-- single element left
+makeTermList (Value it mt : [])         = return (PureValue mt, [])
+makeTermList (Statement term last : []) = return (PureValue last, [moveTypeAsTerm last, term])
+makeTermList (MutatingFunctionEnd : []) = return (MutatingFunctionEndValue , [])
 
-  -- return (resTerm , resType, mType)
+-- more than one element left
+makeTermList (Value _ mt : ts)          = demutationError $ "Found a value term " <> show mt <> " inside a list of statements."
+makeTermList (Statement term _ : ts)    = do (last, ts') <- makeTermList ts
+                                             return (last, ts' <> [term])
+makeTermList (MutatingFunctionEnd : ts) = demutationError $ "Found a MutatingFunctionEnd inside a list of statements."
+
+  
+
 
 elaborateMut :: ScopeVar -> ProcDMTerm -> MTC (TermType)
     
 elaborateMut scname (Op op args) = do
-  args' <- mapM (elaboratePureValue scname >=> moveTypeAsTerm) args
-  pure (Value Pure (NoMove (Op op args')))
+  args' <- mapM (elaboratePureValue scname) args
+  pure (Value Pure (NoMove (Op op (moveTypeAsTerm <$> args'))))
 
 elaborateMut scname (Sng η τ) = do
   return (Value Pure (NoMove $ Sng η τ))
@@ -135,13 +123,10 @@ elaborateMut scname (Sng η τ) = do
 elaborateMut scname term@(Var _) = demutationError $ "Unsupported term: " <> showPretty term
 
 elaborateMut scname (Extra (ProcVar (x ::- j))) = do
-  case x of
-    Nothing -> demutationError $ "Anonymous variable encountered."
-    Just x -> do
-      mx <- expectNotMoved x
-      itype <- expectImmutType scname x
+  mx <- expectNotMoved x
+  itype <- expectImmutType scname x
 
-      return (Value itype (SingleMove x))
+  return (Value itype (SingleMove x))
 
 elaborateMut scname (Extra (ProcBBLet procx args)) = do
 
@@ -152,11 +137,11 @@ elaborateMut scname (Extra (ProcBBLet procx args)) = do
   memx <- allocateMem scname (Left procx)
 
   -- write it into the memctx
-  setMem procx (SingleMem memx)
+  setMem procx [(SingleMem memx)]
 
-  let tevarx = procVarAsTeVar memx
+  let tevarx = procVarAsTeVar procx
 
-  return (Statements [Extra (DemutBBLet tevarx args)] (Var (Just tevarx :- JTAny)))
+  return (Statement (Extra (DemutBBLet tevarx args)) (SingleMove procx))
 
 
 elaborateMut scname (Extra (ProcSLetBase ltype (x ::- τ) term)) = do
@@ -175,11 +160,11 @@ elaborateMut scname (Extra (ProcSLetBase ltype (x ::- τ) term)) = do
   -- 1. set memory locations for variables on the LHS
   -- 2. generate terms for the memory allocations
   -- 
-  (mem,_) <- moveGetMemAndAllocs scname moveType
-  setMemMaybe x mem
+  (mem) <- moveGetMem scname moveType
+  setMem x mem
 
   -- write the immut type into the scope
-  setImmutTypeMaybe scname x newTermType
+  setImmutType scname x newTermType
 
   -- log what happened
   debug $ "[elaborateMut/SLetBase]: The variable " <> show x <> " is being assigned." 
@@ -187,10 +172,10 @@ elaborateMut scname (Extra (ProcSLetBase ltype (x ::- τ) term)) = do
   debug $ "The memctx is now:\n"
   debug $ show logmem
 
-  -- the result is a list of statements,
-  -- containing the required memory allocations
-  -- done in this "slet"
-  return (Var (x :- τ))
+
+  return (Statement (Extra (DemutSLetBase ltype ((Just $ procVarAsTeVar x) :- τ) (moveTypeAsTerm moveType)))
+          (SingleMove x))
+
 
 
 elaborateMut scname fullterm@(Extra (ProcTLetBase ltype vars term)) = do
@@ -210,137 +195,39 @@ elaborateMut scname fullterm@(Extra (ProcTLetBase ltype vars term)) = do
   --
   -- we set the immuttype of every element on the LHS to Pure
   --
-  mapM (\(x ::- _) -> setImmutTypeMaybe scname x Pure) vars
+  mapM (\(x ::- _) -> setImmutType scname x Pure) vars
+
+  -- get memory of the RHS
+  mem <- moveGetMem scname moveType
+
+  -- write the list of possible memory types into the
+  -- variables of the lhs
+  setMemTupleInManyMems scname ([v | (v ::- _) <- vars]) mem
+
+  return $ demutTLetStatement ltype [v | (v ::- _) <- vars] (moveTypeAsTerm moveType)
 
 
 
-  -- deal with move type
-  case moveType of
-    -- case 1: RHS is a tuple
-    -- 
-    -- We do not need to forward this tlet,
-    -- as we can transparently see which move
-    -- type is used for every entry of the LHS.
-    -- 
-    -- We do practically an slet on every element. 
-    --
-    TupleMove mts -> case length mts == length vars of
-      False -> demutationError $ "Found a tuple assignment where the RHS has a different number of entries than the LHS.\n"
-                              <> "In the term:\n"
-                              <> showPretty fullterm
-      True -> do
-        let statement (mvar,term) = Extra (DemutSLetBase ltype (Just (procVarAsTeVar mvar) :- JTAny) term)
-        let handleElement (x ::- _ ,mt) = do
-              (mem,allocs) <- moveGetMemAndAllocs scname mt
-              setMemMaybe x mem
-              return (statement <$> allocs, mem)
-
-        (allocStatements, mts) <- unzip <$> mapM handleElement (zip vars mts)
-
-        return (Statements (join allocStatements) (memTypeAsTerm (TupleMem mts)))
-
-    --
-    -- case 2: RHS is a single procvar
-    --   We necessarily mark the procvar as moved.
-    --   Next:
-    --
-    --   We have three subcases:
-    --     case 2.1: The memory of RHS is a tuple.
-    --               We assign the memory locs of the RHS to the vars on the LHS.
-    --               We do not need this tlet statement in the output.
-    --     case 2.2: The memory of RHS is a single.
-    --               This means that this tlet "refines" the
-    --               memory type of the RHS. The variables on the
-    --               LHS are necessarily allocated new memory locations. 
-    --               And the memvar of the RHS is updated to point to this new tuple of memlocs.
-    --               We do need this tlet statement in the output.
-    --     case 2.3: The memory of RHS is a ref.
-    --               Currently we do not allow this case.
-    --
-    SingleMove pv -> do
-      mt <- expectNotMoved pv
-      case mt of
-        -- (case 2.1)
-        TupleMem mts ->
-          case length mts == length vars of
-            False -> demutationError $ "Found a tuple assignment where the RHS has a different number of entries than the LHS.\n"
-                              <> "In the term:\n"
-                              <> showPretty fullterm
-            True -> do
-              let handleElement (x ::- _, mt) = setMemMaybe x mt
-              mapM handleElement (zip vars mts)
-              return (Statements [] (memTypeAsTerm (TupleMem $ mts)))
-
-        -- (case 2.2)
-        SingleMem rhs_mv -> do
-          -- new memory locations for every lhs var
-          let handleElement (x ::- _) = do
-                let hint = case x of
-                      Nothing  -> Right (T.pack $ show rhs_mv)
-                      Just pv' -> Left pv'
-                lhs_mv <- allocateMem scname hint
-                setMemMaybe x (SingleMem lhs_mv)
-                return lhs_mv
-
-          lhs_mvs <- mapM handleElement vars
-
-          -- Redirect the rhs var to point to the new tuple of lhs vars
-          setMemRedirection rhs_mv (TupleMem (SingleMem <$> lhs_mvs))
-
-          -- statement for destructuring the rhs var to the lhs vars
-          let statement = Extra (DemutTLetBase ltype ([Just (procVarAsTeVar lhs_mv) :- JTAny | lhs_mv <- lhs_mvs])
-                                                     (Var (Just (procVarAsTeVar rhs_mv) :- JTAny)))
-
-          return (Statements [statement] (memTypeAsTerm (TupleMem $ SingleMem <$> lhs_mvs)))
-
-        -- (case 2.3)
-        RefMem mv -> demutationError $ "We currently do not support tlet assignments where RHS is a reference."
-
-    --
-    -- case 3: RHS is a term without move-value
-    --   For every var on the lhs we allocate a new memory location.
-    --   The tlet statement has the proper term on the rhs.
-    --
-    NoMove pdt -> do
-      -- new memory locations for every lhs var
-      let handleElement (x ::- _) = do
-            let hint = case x of
-                  Nothing  -> Right ("")
-                  Just pv' -> Left pv'
-            lhs_mv <- allocateMem scname hint
-            setMemMaybe x (SingleMem lhs_mv)
-            return lhs_mv
-
-      lhs_mvs <- mapM handleElement vars
-
-      -- statement for destructuring the rhs term to the lhs vars
-      let statement = Extra (DemutTLetBase ltype ([Just (procVarAsTeVar lhs_mv) :- JTAny | lhs_mv <- lhs_mvs]) pdt)
-
-      return (Statements [statement] (memTypeAsTerm (TupleMem $ SingleMem <$> lhs_mvs)))
-
-    --
-    -- case 4: RHS is a reference move
-    --
-    RefMove pdt -> demutationError $ "We currently do not support tlet assignments where RHS is a reference."
-
-
-
-
-elaborateMut scname (LamStar args body) = do
+elaborateMut scname (Extra (ProcLamStar args body)) = do
   bodyscname <- newScopeVar "lamstar"
-  undefined
-  -- (newBody, newBodyType) <- elaborateLambda bodyscname scope [(v :- x) | (v :- (x , _)) <- args] body
-  -- return (LamStar args newBody, newBodyType, NoMove)
+  (newBody, newBodyType) <- elaborateLambda bodyscname [(v ::- x) | (v ::- (x , _)) <- args] body
+  return (Value newBodyType (NoMove (LamStar [Just (procVarAsTeVar v) :- x | (v ::- x) <- args] newBody)))
 
-elaborateMut scname (Lam args body) = do
+elaborateMut scname (Extra (ProcLam args body)) = do
   bodyscname <- newScopeVar "lam"
-  undefined
-  -- (newBody, newBodyType) <- elaborateLambda bodyscname scope args body
-  -- return (Lam args newBody, newBodyType, NoMove)
+  (newBody, newBodyType) <- elaborateLambda bodyscname [(v ::- x) | (v ::- x) <- args] body
+  return (Value newBodyType (NoMove (Lam [Just (procVarAsTeVar v) :- x | (v ::- x) <- args] newBody)))
 
 
 
 elaborateMut scname (Extra (ProcFLet name term)) = do
+  --
+  -- Regarding MoveType: it is not possible to have terms
+  -- where an flet is followed by something movable, i.e.
+  -- a variable. Because FLets are only generated when they
+  -- are actually followed by an (anonymous) function definition.
+  -- Which means that we do not have to mark anything as moved here.
+  --
 
   (newTermType, moveType) <- elaborateValue scname term
 
@@ -355,10 +242,10 @@ elaborateMut scname (Extra (ProcFLet name term)) = do
 
   -- create memory location for function name
   mem <- allocateMem scname (Right "val")
-  setMem name (SingleMem mem)
+  setMem name [(SingleMem mem)]
 
   -- write the immut type into the scope
-  setImmutType scname name newTermType
+  setImmutTypeFLetDefined scname name newTermType
 
   -- log what happened
   debug $ "[elaborateMut/FLetBase]: The function " <> show name <> " is being defined."
@@ -366,14 +253,9 @@ elaborateMut scname (Extra (ProcFLet name term)) = do
   debug $ "The memctx is now:\n"
   debug $ show logmem
 
-  return (Statements [Extra (DemutFLet (procVarAsTeVar mem) term')] (Var (Just (procVarAsTeVar mem) :- JTAny)))
+  return (Statement (Extra (DemutFLet (procVarAsTeVar name) term')) (SingleMove name))
 
   
-  
-elaborateMut scname _ = undefined
-
-{-
-
 
 elaborateMut scname (Apply f args) = do
   --
@@ -389,349 +271,61 @@ elaborateMut scname (Apply f args) = do
   --
 
   -- typecheck the function f
-  (newF , τ, _) <- elaborateNonmut scname f
+  (itype , movetype) <- elaborateValue scname f
 
   --------
   -- 2 cases
   --
-  -- case I : A (possibly mutating) function call
-  --
-  let applyMutating muts retType = do
+  case itype of
+    --
+    -- case I : A mutating function call
+    --
+    Mutating muts -> do
         -- make sure that there are as many arguments as the function requires
         case length muts == length args of
           True -> pure ()
           False -> throwError (DemutationError $ "Trying to call the function '" <> showPretty f <> "' with a wrong number of arguments.")
 
         let mutargs = zip muts args
-        (newArgs , muts) <- elaborateMutList (showPretty f) scname scope mutargs
+        (newArgs , muts) <- elaborateMutList (showPretty f) scname mutargs
+
+        let funcallterm = (Apply (moveTypeAsTerm movetype) newArgs)
 
         -- the new term
-        return (Apply newF newArgs , retType muts, NoMove)
-  --
-  -- case II: A call to a pure black box
-  --
-  let applyPureBlackBox = do
+        return $ demutTLetStatement PureLet muts funcallterm
+
+    --
+    -- case II : A pure function call
+    --
+    Pure -> do
+        let mutargs = zip (repeat NotMutated) args
+        (newArgs , muts) <- elaborateMutList (showPretty f) scname mutargs
+
+        let funcallterm = (Apply (moveTypeAsTerm movetype) newArgs)
+
+        -- the new term
+        return $ Value Pure (NoMove funcallterm)
+
+    --
+    -- case III: A call to a pure black box
+    --
+    PureBlackBox -> do
         -- the global variables which are implicitly applied
         -- and need to be added to the `BBApply`
         glvars <- globalNames <$> (use topLevelInfo)
 
         -- since the box is pure, we say so to `elaborateMutList`
-        let mutargs = [(NotMutated,a) | a <- args]
-        (newArgs , muts) <- elaborateMutList (showPretty f) scname scope mutargs
+        let mutargs = zip (repeat NotMutated) args
+        (newArgs , muts) <- elaborateMutList (showPretty f) scname mutargs
 
-        return (BBApply newF newArgs glvars , Pure UserValue, NoMove)
-  --
-  -- END cases
-  --------
-
-  --------
-  -- Dispatching which type of function call we have
-  --
-  -- get the type of `f`. if it is not a mutating function,
-  -- we give it a type where all arguments are not mutated,
-  -- also set the return type.
-  --
-  -- Alternatively it can be a pure black box call
-  case τ of
-        Pure _           -> applyMutating (take (length args) (repeat NotMutated)) (\_ -> Pure UserValue)
-        Mutating muts    -> applyMutating muts VirtualMutated
-        PureBlackBox     -> applyPureBlackBox
-        VirtualMutated _ -> throwError (DemutationError $ "Trying to call the result of a mutating call " <> showPretty f <> ". This is not allowed.")
+        return $ Value Pure (NoMove (BBApply (moveTypeAsTerm movetype) newArgs (procVarAsTeVar <$> glvars)))
 
 
 
 
 
-elaborateMut scname (FLet fname term body) = do
-  --
-  -- Regarding MoveType: it is not possible to have terms
-  -- where an flet is followed by something movable, i.e.
-  -- a variable. Because FLets are only generated when they
-  -- are actually followed by an (anonymous) function definition.
-  -- Which means that we do not have to mark anything as moved here.
-  --
-
-  -- check the term
-  (newTerm, newTermType, moveType) <- elaborateNonmut scname term
-
-  -- set the value in the memctx
-  setMemMaybe (Just fname) =<< SingleMem <$> allocateMem scname (T.pack $ show fname)
-
-  logmem <- use memCtx
-  debug $ "[elaborateMut/FLet] For flet for " <> show fname <> " memctx is\n"
-  debug $ show logmem
-  debug $ ""
-
-  -- get the current type for fname from the scope
-  let ftype = getValue fname scope
-
-  -- set the new scope with fname if not already existing
-  -- (but only allow pure uservalue-functions, or single-definition mutating functions)
-  scope' <- case ftype of
-        Nothing -> safeSetValueAllowFLet scname (Just fname) newTermType scope
-        Just (Pure UserValue) -> safeSetValueAllowFLet scname (Just fname) newTermType scope
-        Just (Mutating _) -> throwError (DemutationError $ "We do not allow mutating functions to have multiple definitions")
-        Just (Pure DefaultValue) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
-        Just (Pure (PureTuple _)) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
-        -- Just (Pure (SingleRef)) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
-        Just (Pure (SingleArg _)) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
-        Just (Pure (SingleArgPart _)) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
-        Just (VirtualMutated _) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
-        Just (PureBlackBox) -> internalError $ "Encountered FLet which contains a non function (" <> showPretty body <> ")"
-
-
-  -- check the body with this new scope
-  (newBody, newBodyType, newMoveType) <- elaborateMut scname' body
-
-  return (FLet fname newTerm newBody, consumeDefaultValue newBodyType, newMoveType)
-
-elaborateMut scname (Extra DNothing) = undefined
-elaborateMut scname (Extra (MutPhi _ _ _)) = internalError $ "MutPhi should have been resolved by rearrangePhi"
-elaborateMut scname (Extra (MutLet ltype term1 term2)) = do
-
-  --
-  -- Regarding MoveType:
-  -- As in mutlets no julia assignment is taking place,
-  -- there is no move going on. Thus we do not need to move stuff.
-  --
-  -- TODO: Check the correctness of above explanation.
-  --
-
-  -- elaborate the first term and get its mutated variables
-  (newTerm1, newTerm1Type, newTerm1MoveType) <- elaborateMut scname term1
-
-  --
-  -- Change the scope if the first term was virtually mutating,
-  -- 
-  case newTerm1Type of
-        Pure pt -> do
-          demutationError $ "Found a pure term in a place where it does not have any effects.\n"
-                     <> "The full term is:\n"
-                     <> "# ---------------------------\n"
-                     <> "# type: " <> show (Pure pt) <> "\n"
-                     <> showPretty term1 <> "\n"
-                     <> "# ------------\n"
-                     <> "# rest:\n"
-                     <> showPretty term2 <> "\n"
-                     <> "\n"
-                     <> "This implies a misunderstanding of semantics, and is thus not allowed."
-                    --  "It (the first, pure part) is thus ignored in the privacy analysis."
-          -- elaborateMut scname term2
-        VirtualMutated newScope -> do
-          debug $ "[elaborateMut/MutLet]: After first term, have mutctx:"
-          logmutctx <- use mutCtx
-          debug $ show logmutctx <> "\n"
-
-
-          let scope' = fromKeyElemPairs (getAllKeyElemPairs scope <> [(s, Pure UserValue) | s <- newScope])
-          (newTerm2, newTerm2Type, newTerm2MoveType) <- elaborateMut scname' term2
-
-          debug $ "[elaborateMut/MutLet]: After second term, have mutctx:"
-          logmutctx <- use mutCtx
-          debug $ show logmutctx <> "\n"
-
-          case newScope of
-            [] -> demutationError $ "Found a mutating term which does not mutate anything. This does not make sense.\n"
-                                  <> "In the first branch of a mutlet, the full term is:"
-                                  <> "# ---------------------------\n"
-                                  <> "# type: " <> show (VirtualMutated newScope) <> "\n"
-                                  <> showPretty term1 <> "\n"
-                                  <> "# ------------\n"
-                                  <> "# rest:\n"
-                                  <> showPretty term2 <> "\n"
-            [a] -> return (SLetBase ltype (Just a :- JTAny) newTerm1 newTerm2, newTerm2Type, newTerm2MoveType)
-            newScope -> do
-                          let ns1 = [Just n :- JTAny | n <- newScope]
-                          return (TLetBase ltype ns1 newTerm1 newTerm2, newTerm2Type, newTerm2MoveType)
-
-        mt -> demutationError $ "Unexpected type in first part of mutlet: " <> show mt
-
-
-
-
+elaborateMut scname (Extra (ProcPreLoop iters iterVar body)) = demutationError $ "Not implemented: loop." -- do
 {-
-  -- find out which variables have been locally modified,
-  -- add these to the scope
-  let locmutvars1 = case newTerm1Type of
-        VirtualMutated xs -> [x | (x,LocalMutation) <- xs]
-        _ -> []
-  let scope' = foldr (\v s -> setValue v (Pure UserValue) s) scope (locmutvars1)
-
-
-  -- elaborate the second term and get its mutated variables
-  (newTerm2, newTerm2Type, _) <- elaborateMut scname' term2
-
-  case (newTerm1Type , newTerm2Type) of
-
-    -----------------------------------
-    -- SINGLE GLOBAL, and irrelevant
-    -- only term1 is mutating
-    (VirtualMutated mutNames1, VirtualMutated []) -> do
-
-      warn $ "Found a term which is not a mutating function call in a place where only such calls make sense.\n"
-                     <> "The full term is:\n"
-                     <> "---------------------------\n"
-                     <> "-- type: " <> show (VirtualMutated mutNames1) <> "\n"
-                     <> showPretty term1 <> "\n"
-                     <> "------------\n"
-                     <> "-- type: " <> show (VirtualMutated []) <> "\n"
-                     <> showPretty term2 <> "\n"
-                     <> "---------------------------\n"
-                    --  <> " => It has the type " <> show (VirtualMutated []) <> "\n"
-                    --  <> " => In the term:\n" <> parenIndent (showPretty (Extra (MutLet ltype term1 term2))) <> "\n"
-                    --  <> " => Conclusion: It is ignored in the privacy analysis.")
-
-      let ns1 = [Just n :- JTAny | (n, _) <- mutNames1]
-          term = TLetBase ltype ns1 newTerm1
-                (
-                  Tup ((\(a, _) -> Var (Just a :- JTAny)) <$> mutNames1)
-                )
-      pure (term , VirtualMutated mutNames1, NoMove)
-
-
-    -- only term2 is mutating
-    (VirtualMutated [], VirtualMutated mutNames2) -> do
-
-      warn $ "Found a term which is not a mutating function call in a place where only such calls make sense.\n"
-                     <> "The full term is:\n"
-                     <> "---------------------------\n"
-                     <> "-- type: " <> show (VirtualMutated []) <> "\n"
-                     <> showPretty term1 <> "\n"
-                     <> "------------\n"
-                     <> "-- type: " <> show (VirtualMutated mutNames2) <> "\n"
-                     <> showPretty term2 <> "\n"
-                     <> "---------------------------\n"
-      -- warn ("Found the term " <> showPretty term1
-      --                <> " which is not a mutating function call in a place where only such calls make sense.\n"
-      --                <> " => It has the type " <> show (VirtualMutated []) <> "\n"
-      --                <> " => In the term:\n" <> parenIndent (showPretty (Extra (MutLet ltype term1 term2))) <> "\n"
-      --                <> " => Conclusion: It is ignored in the privacy analysis.")
-
-      let ns2 = [Just n :- JTAny | (n, _) <- mutNames2]
-          term = TLetBase ltype ns2 newTerm2
-                (
-                  Tup ((\(a, _) -> Var (Just a :- JTAny)) <$> mutNames2)
-                )
-      pure (term , VirtualMutated mutNames2, NoMove)
-
-    -------------------------------------------
-    -- DOUBLE GLOBAL
-    -- both are mutating
-    (VirtualMutated mutNames1, VirtualMutated mutNames2) ->
-      let commonMutNames = nub (mutNames1 <> mutNames2)
-          ns1 = [Just n :- JTAny | (n, _) <- mutNames1]
-          ns2 = [Just n :- JTAny | (n, _) <- mutNames2]
-          term = TLetBase ltype ns1 newTerm1
-                (
-                  newTerm2
-                  -- TLetBase ltype ns2 newTerm2
-                  -- (
-                  --   Tup ((\(a, _) -> Var (Just a :- JTAny)) <$> commonMutNames)
-                  -- )
-                )
-      -- we do not take the union here,
-      -- because this already must have happened
-      -- via tracking the mutated variables in the state
-      in pure (term , VirtualMutated mutNames2, NoMove)
-
-    -------------------------------------------
-    -- ONLY LOCAL MUTATION
-    --
-    -- the first command has only locally mutated variables,
-    -- and the second one is pure
-    (VirtualMutated mutNames1', Pure (p))
-      | onlyLocallyMutatedVariables mutNames1' -> do
-      log $ "[MutLet] We are in the ONLY LOCAL MUTATION BRANCH"
-
-      let mutNames1 = fst <$> mutNames1'
-      let ns1 = [Just n :- JTAny | (n) <- mutNames1]
-
-          valterm = TLetBase ltype ns1 newTerm1
-                (
-                  newTerm2
-                )
-
-      case p of
-        UserValue -> pure (valterm , Pure UserValue, NoMove)
-        PureTuple as -> pure (valterm , Pure (PureTuple as), NoMove)
-        SingleRef -> pure (valterm , Pure (SingleRef), NoMove)
-        SingleArg a -> pure (valterm , Pure (SingleArg a), NoMove)
-        SingleArgPart x -> pure (valterm , Pure (SingleArgPart x), NoMove)
-        -- UserValue -> throwError $ DemutationError $ "Found a local mutation followed by a pure value.\n"
-        --                                           <> "This makes not much sense since only one of both can currently be processed.\n\n"
-        --                                           <> "---- local mutation ----\n"
-        --                                           <> showPretty term1 <> "\n\n"
-        --                                           <> "---- pure value ----\n"
-        --                                           <> showPretty term2 <> "\n"
-        -- SingleArg _ -> throwError $ DemutationError $ "Found a local mutation followed by a pure value.\n"
-        --                                           <> "This makes not much sense since only one of both can currently be processed.\n"
-        --                                           <> "---- local mutation ----\n"
-        --                                           <> showPretty term1 <> "\n\n"
-        --                                           <> "---- pure value ----\n"
-        --                                           <> showPretty term2 <> "\n"
-        DefaultValue -> pure (newTerm1 , VirtualMutated mutNames1', NoMove)
-
-    -- the first command has only locally mutated variables,
-    -- and the second one is a single arg
-    -- (VirtualMutated mutNames1', Pure (SingleArg _)) -> do
-      -- -- | onlyLocallyMutatedVariables mutNames1' -> do
-
-      -- let mutNames1 = [v | (v, LocalMutation) <- mutNames1']
-      -- let ns1 = [n :- JTAny | (n) <- mutNames1]
-      --     term = TLet ns1 newTerm1
-      --           (
-      --               newTerm2
-      --           )
-      -- pure (term , GloballyPure mutNames1)
-      -- pure (newTerm1 , VirtualMutated mutNames1')
-
-    ------------------------------------
-    -- GLOBAL & PURE
-    -- term1 is globally! mutating
-    --
-    -- this means that we cannot turn this into a pure term
-    -- thus the second term has to be ignored
-    (VirtualMutated mutNames1, Pure p) -> do
-
-      case p of
-        DefaultValue -> return ()
-        _ ->  do warn $ "Found a term which is not a mutating function call in a place where only such calls make sense.\n"
-                     <> "The full term is:\n"
-                     <> "---------------------------\n"
-                     <> "-- type: " <> show (VirtualMutated mutNames1) <> "\n"
-                     <> showPretty term1 <> "\n"
-                     <> "------------\n"
-                     <> "-- type: " <> show (Pure p) <> "\n"
-                     <> showPretty term2 <> "\n"
-                     <> "---------------------------\n"
-          
-          
-          -- warn ("Found the term " <> showPretty term2
-          --            <> " which is not mutating in a place where only mutating terms make sense.\n"
-          --            <> " => It has the type " <> show (Pure p) <> "\n"
-          --            <> " => In the term:\n" <> parenIndent (showPretty (Extra (MutLet ltype term1 term2))) <> "\n"
-          --            <> " => Conclusion: It is ignored in the privacy analysis.")
-
-      -- let mutNames2 = [(v, LocalMutation) | v <- mutNames2']
-      --     commonMutNames = nub (mutNames1 <> mutNames2)
-      --     ns1 = [n :- JTAny | (n, _) <- mutNames1]
-
-      --     term = TLet ns1 newTerm1
-      --           (
-      --             Tup ((\(a, _) -> Var (a :- JTAny)) <$> mutNames1)
-      --           )
-      pure (newTerm1 , VirtualMutated mutNames1, NoMove)
-
-    ------------------------------------
-    -- UNSUPPORTED
-    -- neither term1 nor term2 are mutating
-    (ty1, ty2) -> throwError (DemutationError $ "Encountered a MutLet where the two commands have the following types: " <> show (ty1, ty2)
-                                                <> "\nThis is not supported."
-                                                <> "\nIn the term:\n" <> showPretty (Extra (MutLet ltype term1 term2)))
-
-                                                -}
-
-elaborateMut scname (Extra (MutLoop iters iterVar body)) = do
   -- first, elaborate the iters
   (newIters , newItersType, _) <- elaborateNonmut scname iters
 
@@ -874,38 +468,17 @@ elaborateMut scname (Extra (MutRet)) = do
   -- a single var is returned as value, not as tuple
   return (buildCopyReturnValue mutTeVars, VirtualMutated mutTeVars, NoMove)
 
+-}
 
-elaborateMut scname (Extra (LoopRet xs)) = do
-  ---------
-  -- get mutated variables from the (VA)context
 
-  -- all accessed vars
-  avars <- getAllKeyElemPairs <$> (use mutCtx)
-  -- mutated memvars with their locality
-  let mutMemVars = [(v) | (v, (_, Mutated)) <- avars ]
-  mutTeVars <- mapM (reverseMemLookup) mutMemVars
 
-  let extraMutTeVars = nub $ xs <> mutTeVars
+elaborateMut scname (LastTerm t) = demutationError "not implemented: last term" -- do
+  -- (newTerm, newType, moveType) <- elaborateMut scname t
+  -- return (LastTerm (newTerm), newType, moveType)
 
-  -- a single var is returned as value, not as tuple
-  return (buildReturnValue extraMutTeVars, VirtualMutated extraMutTeVars, NoMove)
 
-elaborateMut scname (LastTerm t) = do
-  (newTerm, newType, moveType) <- elaborateMut scname t
-  return (LastTerm (newTerm), newType, moveType)
-
-elaborateMut scname (Extra (DefaultRet x)) = do
-  (newX,newXType,moveType) <- elaborateNonmut scname x
-  case newXType of
-    -- if the term is pure, then we annotate
-    -- it to say that it is default
-    Pure a -> return (newX , Pure DefaultValue, moveType)
-
-    -- if it is not pure, it makes not sense
-    -- to say that it is default: we keep the actual type
-    t -> return (newX , t, moveType)
-
-elaborateMut scname term@(Phi cond t1 t2) = do
+elaborateMut scname term@(Extra (ProcPhi cond ts)) = demutationError "not implemented: phi" -- do
+  {-
   --
   -- Concerning moves: We need to backup the MoveCtx,
   -- and run the elaboration on both branches with the same input, 
@@ -1019,6 +592,8 @@ elaborateMut scname term@(Phi cond t1 t2) = do
     -- (SingleArg _, GloballyPure p2) -> return (Phi newCond newT1 newT2 , GloballyPure p2)
     (_, _) -> return (Phi newCond newT1 newT2 , Pure UserValue, moveType1)
 
+-}
+
 ----
 -- Demutation of vector / matrix likes
 --
@@ -1030,6 +605,8 @@ elaborateMut scname term@(Phi cond t1 t2) = do
 -- See #183.
 --
 
+{-
+-- TODO: Reimplement for #190
 elaborateMut scname (Index t1 t2 t3) = do
   (newT1, newT1Type, _) <- elaborateNonmut scname t1
   (newT2, newT2Type, _) <- elaborateNonmut scname t2
@@ -1047,12 +624,15 @@ elaborateMut scname (Row t1 t2) = do
   (newT1, newT1Type, _) <- elaborateNonmut scname t1
   (newT2, newT2Type, _) <- elaborateNonmut scname t2
   return (Row newT1 newT2, Pure UserValue, RefMove)
-
+-}
 
 
 ----
 -- the mutating builtin cases
 
+{-
+-- TODO: Reimplement for #190
+--
 elaborateMut scname (SubGrad t1 t2) = do
   (argTerms, mutVars) <- elaborateMutList "subgrad" scname scope [(Mutated , t1), (NotMutated , t2)]
   case argTerms of
@@ -1122,21 +702,24 @@ elaborateMut scname (ConvertM t1) = do
 elaborateMut scname (Transpose t1) = do
   (newT1, newT1Type, _) <- elaborateNonmut scname t1
   return (Transpose newT1 , Pure UserValue, NoMove)
+  -}
 
 -- the non mutating builtin cases
-elaborateMut scname (Ret t1) = do
-  (newT1, newT1Type, _) <- elaborateNonmut scname t1
-  return (Ret newT1 , Pure UserValue, NoMove)
+
 elaborateMut scname (Tup t1s) = do
-  results <- mapM (elaborateNonmut scname) t1s
-  let makeSureIsPure (_,Pure b,_) = pure b
-      makeSureIsPure (_,b,c)      = demutationError $ "Expected to have a pure term, but got the type " <> show b <> "instead"
 
-  let terms = [t1 | (t1, _, _) <- results]
-  let moves = [t3 | (_, _, t3) <- results]
-  itypes <- mapM makeSureIsPure results 
-  return (Tup terms , Pure (PureTuple itypes), TupleMove moves)
+  -- 
+  -- We need to make sure that everything put into
+  -- the tuple is pure, as this is expected when we
+  -- take those things out of the tuple again.
+  --
+  results <- mapM (elaboratePureValue scname) t1s
 
+  -- what we return is pure, and is a tuple move of the entries
+  return $ Value Pure (TupleMove results)
+
+{-
+-- TODO: Reimplement for #190.
 elaborateMut scname (MCreate t1 t2 t3 t4) = do
   (newT1, newT1Type, _) <- elaborateNonmut scname t1
   (newT2, newT2Type, _) <- elaborateNonmut scname t2
@@ -1187,6 +770,8 @@ elaborateMut scname (AboveThresh t1 t2 t3 t4) = do
   (newT4, newT4Type, _) <- elaborateNonmut scname t4
   return (AboveThresh newT1 newT2 newT3 newT4 , Pure UserValue, NoMove)
 
+  -}
+
 -- the unsupported terms
 elaborateMut scname term@(Choice t1)        = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
 elaborateMut scname term@(Loop t1 t2 t3 t4) = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
@@ -1194,16 +779,22 @@ elaborateMut scname term@(Reorder t1 t2)    = throwError (UnsupportedError ("Whe
 elaborateMut scname term@(TProject t1 t2)   = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
 elaborateMut scname term@(Arg x a b)        = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
 elaborateMut scname term@(BBApply x a b)    = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
+elaborateMut scname term@(Ret t1)           = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
+
+elaborateMut scname term@_    = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
 
 
-
--}
 
 
 
 
 elaborateAsList :: ScopeVar -> ProcDMTerm -> MTC (LastValue, [DemutDMTerm])
-elaborateAsList scname t = undefined
+elaborateAsList scname (Extra (Block ts)) = do
+  ts' <- mapM (elaborateMut scname) ts
+  makeTermList ts'
+elaborateAsList scname t = do
+  t' <- elaborateMut scname t
+  makeTermList [t']
 
 ---------------------------------------------------
 -- recurring utilities
@@ -1213,7 +804,7 @@ elaborateAsList scname t = undefined
 -- elaborating a lambda term
 --
 
-elaborateLambda :: ScopeVar -> [ProcAsgmt JuliaType] -> ProcDMTerm -> MTC (DMTerm , ImmutType)
+elaborateLambda :: ScopeVar -> [ProcAsgmt JuliaType] -> ProcDMTerm -> MTC (DemutDMTerm , ImmutType)
 elaborateLambda scname args body = do
   --
   -- Regarding Movetypes: We do not need to do anything here
@@ -1241,32 +832,11 @@ elaborateLambda scname args body = do
   -- END NO.
   --
   -- Allocate new memory for the arguments.
-  let arghint (Just x ::- _) = Left x
-      arghint (_ ::- _)      = Right "anon-arg"
+  let arghint (x ::- _) = Left x
   argmvs <- mapM (allocateMem scname) (arghint <$> args)
 
   -- assign memory to variables
-  mapM (\(x ::- _,a) -> setMemMaybe x (SingleMem a)) (zip args argmvs)
-
-
-  -- SINCE #190:
-  --   we do not have a scope anymore, so we do not have to do this.
-  {-
-  -- Add args as vars to the scope
-  --
-  -- NOTE: we do not use `safeSetValue` here, because function
-  --       arguments are allowed to have different types than
-  --       their eventually preexisting same named variables
-  --       outside of the function.
-  --       Also, we do not trigger a variable access type error.
-  let f (Just a :- _) = setValue a (Pure (SingleArg a))
-      f (Nothing :- _) = \x -> x
-  let scope' = foldr f -- (\(Just a :- _) -> setValue a (Pure (SingleArg a)))
-                     scope
-                     args
-
-  -}
-  -- SINCE #190 END.
+  mapM (\(x ::- _,a) -> setMem x [SingleMem a]) (zip args argmvs)
 
 
 
@@ -1278,37 +848,62 @@ elaborateLambda scname args body = do
   --
   -- find out which mem vars have been mutated
   --
-  mutated_argmvs <- do mut <- mapM getMemVarMutationStatus argmvs
-                       let amvs = zip argmvs mut
-                       return [mv | (mv, Mutated) <- amvs]
+  (mutated_argmvs, mut_states) <- do
+    muts <- mapM getMemVarMutationStatus argmvs
+    let amvs = zip args muts
+    return ([mv | (mv ::- _, Mutated) <- amvs], muts)
 
   --
   --------------------
 
 
-  {-
-  -- get the context and check if some variables are now mutated
-  ctx <- use vaCtx
-  let ctxElems = getAllElems ctx
-  -- let isMutatingFunction = or [True | WriteSingle _ <- ctxElems]
 
-  -- restore the VA-Types of the arguments to this lambda from the backup'ed `oldVaCtx`
-  -- and also get their new values
-  let getVar :: (Asgmt JuliaType,MemVar) -> MTC (Maybe (TeVar, IsMutated))
-      getVar (Just a :- t,memvar) = do
-        mstate <- use mutCtx
-        case getValue memvar mstate of
-          Nothing              -> pure (Just (a , NotMutated))
-          Just (_, Mutated) -> pure (Just (a , Mutated))
-          Just _               -> pure (Just (a , NotMutated))
-      getVar (Nothing :- t,_) = pure Nothing
+  ------------------------------
+  -- Compute the elaborated function body
+  --
+  --   For this we look at the mutated memvars and the last value of the body,
+  --   and if required append a statement which either returns the default value,
+  --   or returns the tuple of mutated args.
+  --
+  --   See #190.
+  --
+  --
+  (itype, full_body) <- case (lastValue, mutated_argmvs) of
+    --
+    -- case I: a pure function
+    --
+    (PureValue a, []) -> do
+      --
+      -- We lookup the proc vars of the move,
+      -- and check that they do not contain memory
+      -- locations which are function inputs.
+      --
+      case movedVarsOfMoveType a `intersect` mutated_argmvs of
+        [] -> pure ()
+        pv : pvs -> demutationError $ "Found a function which passes through a reference given as input. This is not allowed.\n"
+                                      <> "The function body is:\n" <> showPretty body
 
-  -- call this function on all args given in the signature
-  -- and extract those vars that are mutated
-  vars_mutationState <- mapM getVar argsWithMemVars
-  let mutVars = [v | Just (v , Mutated) <- vars_mutationState]
-  let mutationsStates = [m | Just (_ , m) <- vars_mutationState]
-  -}
+      return $ (Pure, Extra $ DemutBlock new_body_terms)
+
+
+    --
+    -- case II: not allowed
+    --
+    (PureValue a, xs) -> demutationError $ "Found a function which is mutating, but does not have a 'return'. This is not allowed."
+                                        <> "\nThe function body is:\n" <> showPretty body
+    --
+    -- case III: not allowed
+    --
+    (MutatingFunctionEndValue, []) -> demutationError $ "Found a function which is not mutating, but has a 'return'. This is not allowed."
+                                                    <> "\nThe function body is:\n" <> showPretty body
+
+    --
+    -- case IV: mutating function
+    --
+    (MutatingFunctionEndValue, mvs) -> do
+      let last_tuple = TupleMove [SingleMove v | v <- mvs]
+      return (Mutating mut_states, Extra (DemutBlock (moveTypeAsTerm last_tuple : new_body_terms)))
+
 
 
   ------------------------------
@@ -1329,107 +924,21 @@ elaborateLambda scname args body = do
         case getValue procvar oldVaCtx of
           Nothing -> vaCtx %%= (\ctx -> ((), deleteValue procvar ctx))
           Just (oldvalue) -> vaCtx %%= (\ctx -> ((), setValue procvar (oldvalue) ctx))
-  mapM restoreArg [a | (Just a ::- _) <- args]
+  mapM restoreArg [a | (a ::- _) <- args]
   --
   -----------
 
 
-  ------------------------------
-  -- Compute the elaborated function body
-  --
-  --   For this we look at the mutated memvars and the last value of the body,
-  --   and if required append a statement which either returns the default value,
-  --   or returns the tuple of mutated args.
-  --
-  --   See #190.
-  --
-  --   The `b_needs_ref_check` result tracks whether the return value of this
-  --   function definition might contain references which 
-  --
-  (term_to_append, b_needs_ref_check) <- case (lastValue, mutated_argmvs) of
-    (PureValue a, []) -> undefined
-    (PureValue a, xs) -> demutationError $ "Found a function which is mutating, but does not have a 'return'. This is not allowed."
-                                        <> "\nThe function body is:\n" <> showPretty body
-    (DefaultValue a, []) -> return (a, undefined)
-    (DefaultValue a, xs) -> demutationError $ "Found a function which is mutating, but does not have a 'return'. This is not allowed."
-                                          <> "\nThe function body is:\n" <> showPretty body
-    (MutatingFunctionEndValue, []) -> demutationError $ "Found a function which is not mutating, but has a 'return'. This is not allowed."
-                                                    <> "\nThe function body is:\n" <> showPretty body
-    (MutatingFunctionEndValue, mvs) -> return $ ((Tup [Var (Just (procVarAsTeVar mv) :- JTAny) | mv <- mvs]), False)
+  return (full_body, itype)
 
-  undefined
+  
 
-
-  {-
-
-
-
-  -- now, depending on whether we have a mutating lambda,
-  -- do the following
-
-  -- case isMutatingFunction of
-    --
-    -- case I : Mutating
-    --
-    -- True -> do
-      -- assert that now the context is empty
-      -- (i.e., no captures were used)
-      -- vaCtx <- use vaCtx
-      -- case isEmptyDict vaCtx of
-      --   False -> throwError (DemutationDefinitionOrderError $ "The variables " <> show vaCtx <> " are not in scope.")
-      --   True ->
-          -- check that the body is a mutation result
-          -- and reorder the resulting tuple
-          --
-  case (τ,mutVars) of
-    (VirtualMutated returnedMutVars, expectedMutVars) | expectedMutVars /= [] -> do 
-      -- [v | (v,NotLocalMutation) <- vars] /= [] -> do
-
-      -- get the permutation which tells us how to go
-      -- from the order in which the vars are returned by the body
-      -- to the order in which the lambda arguments are given
-      --
-
-      -- NOTE: WIP/test -v-
-      -- we also check that there is not a mixture of local/nonlocal mutated variable
-      -- let bothVars = [(v) | (v, NotLocalMutation) <- vars , (w,LocalMutation) <- vars, v == w]
-      -- case bothVars of
-      --   [] -> pure ()
-      --   xs -> throwError (DemutationError $ "The variable names " <> show xs <> " are used for both locally mutated and not locally mutated things. This is not allowed. ")
-
-      -- NOTE: WIP/test -v-
-      -- let vars' = [v | (v , NotLocalMutation) <- vars]
-      let mutVars' = [(v , NotLocalMutation) | v <- mutVars]
-
-      -- logForce $ "Found permutation " <> show vars <> " ↦ " <> show mutVars <>". It is: " <> show σ
-      pure ((wrapReorder expectedMutVars returnedMutVars newBody) , Mutating mutationsStates)
-
-    --
-    -- case II : Not Mutating
-    --
-    -- simply say that this function is not mutating
-    (Pure _,[]) -> pure (newBody , Pure UserValue)
-
-    --
-    -- case III : locally mutating without return value
-    --
-    -- this is not allowed
-    -- (VirtualMutated vars, [])
-    --   -> throwError (DemutationError $ "Found a function which is neither mutating, nor has a return value. This is not allowed."
-    --                                    <> "\nThe function type is: " <> show (VirtualMutated vars)
-    --                                    <> "\nThe function is:\n" <> showPretty body)
-
-    wrongτ -> throwError (DemutationError $ "Expected the result of the body of a mutating lambda to be a virtual mutated value. But it was "
-                          <> show wrongτ <> "\n where body is:\n" <> showPretty body)
--}
-
-{-
 -------------
 -- elaborating a list of terms which are used in individually either mutating, or not mutating places
 --
 
-elaborateMutList :: String -> ScopeVar -> Scope -> [(IsMutated , ProcDMTerm)] -> MTC ([DMTerm] , [TeVar])
-elaborateMutList f scname scope mutargs = do
+elaborateMutList :: String -> ScopeVar -> [(IsMutated , ProcDMTerm)] -> MTC ([DemutDMTerm] , [ProcVar])
+elaborateMutList f scname mutargs = do
   ---------------------------------------
   -- Regarding MoveTypes (#171)
   --
@@ -1441,16 +950,15 @@ elaborateMutList f scname scope mutargs = do
   -- to look into the official `MoveType`.
   --
 
-
   -- function for typechecking a single argument
-  let checkArg :: (IsMutated , ProcDMTerm) -> MTC (DMTerm , ImmutType, Maybe (TeVar))
+  let checkArg :: (IsMutated , ProcDMTerm) -> MTC (DemutDMTerm , MoveType, Maybe (ProcVar))
       checkArg (Mutated , arg) = do
         -- if the argument is given in a mutable position,
         -- it _must_ be a var
         case arg of
-          (Var (Just x :- a)) -> do 
+          Extra (ProcVar (x ::- a)) -> do 
             -- say that this variable is being reassigned (VAT)
-            markReassigned scname x
+            setImmutType scname (x) Pure
 
             -- get the memvar of this tevar from the memctx
             -- and say that the memory location is
@@ -1458,30 +966,7 @@ elaborateMutList f scname scope mutargs = do
             mt <- expectSingleMem =<< expectNotMoved x
             markMutated mt
 
-            return (Var (Just x :- a), Pure (SingleArg x), Just x)
-            -- this one needs to be a single arg
-            {-
-            -- get the type of this var from the scope
-            -- this one needs to be a single arg
-            case getValue x scope of
-              Nothing -> logForce ("The scope is" <> show scope) >> throwError (DemutationDefinitionOrderError x)
-              Just (Pure (SingleArg y)) | x == y -> do
-                debug $ "[elaborateMutList]: The non-local variable " <> show y <> " is being mutated."
-                loc <- markReassigned scname NotLocalMutation y
-                return (Var (Just x :- a) , Pure (SingleArg x), Just (x, loc))
-              Just (Pure (SingleArg y)) -> throwError (DemutationError $ "When calling the mutating function " <> f <> " found the variable " <> show x <> " as argument in a mutable-argument-position. It is bound to the function argument " <> show y <> ", but it is not allowed to use renamed function arguments in such a position.")
-              Just (Pure (SingleArgPart y)) -> demutationError $ "When calling the mutating function " <> f <> " found the variable " <> show x <> " as argument in a mutable-argument-position. It is a (tuple-)part of the function argument "
-                                                          <> show y <> ", and it is not allowed to mutate parts of arguments.\n"
-                                                          <> "If you want to mutate " <> show x <> " you need to pass it in as a seperate argument to the function."
-              Just (Pure (SingleRef)) -> demutationError $ "When calling the mutating function " <> f <> " found the variable " <> show x <> " as argument in a mutable-argument-position. It is a reference to a part of a vector or matrix."
-                                                          <> "It is not allowed to mutate matrices or vectors.\n"
-              Just (Pure _) -> do
-                loc <- markReassigned scname LocalMutation x
-                return (Var (Just x :- a) , Pure (SingleArg x), Just (x, loc))
-              Just res -> throwError (DemutationError $ "When calling the mutating function " <> f <> " found the variable " <> show x <> " as argument in a mutable-argument-position. It has the type " <> show res <> ", which is not allowed here.")
-
-          (Var (Nothing :- a)) -> throwError (DemutationError $ "When calling the mutating function " <> f <> " found the term " <> showPretty arg <> " as argument in a mutable-argument-position. Only named variables are allowed here.")
-          -}
+            return (Var (Just (procVarAsTeVar x) :- a), SingleMove x, Just x)
 
           -- if argument is not a var, throw error
           _ -> throwError (DemutationError $ "When calling the mutating function " <> f <> " found the term " <> showPretty arg <> " as argument in a mutable-argument-position. Only variables are allowed here.")
@@ -1489,16 +974,18 @@ elaborateMutList f scname scope mutargs = do
       checkArg (NotMutated , arg) = do
         -- if the argument is given in an immutable position,
         -- we allow to use the full immut checking
-        (arg' , τ, _) <- elaborateMut scname arg
+        (itype , movetype) <- elaborateValue scname arg
 
         -- we require the argument to be of pure type
-        case τ of
-          Pure _ -> pure ()
-          Mutating _ -> throwError (DemutationError $ "It is not allowed to pass mutating functions as arguments. " <> "\nWhen checking " <> f <> "(" <> show (fmap snd mutargs) <> ")")
-          VirtualMutated _ -> throwError (DemutationError $ "It is not allowed to use the result of mutating functions as arguments in other mutating functions. " <> "\nWhen checking " <> f <> "(" <> show (fmap snd mutargs) <> ")")
-          PureBlackBox -> throwError (DemutationError $ "It is not allowed to pass black boxes as arguments. " <> "\nWhen checking " <> f <> "(" <> show (fmap snd mutargs) <> ")")
+        case itype of
+          Pure -> pure ()
+          Mutating _ -> demutationError $ "It is not allowed to pass mutating functions as arguments. "
+                        <> "\nWhen checking " <> f <> "(" <> showPretty (fmap snd mutargs) <> ")"
+          PureBlackBox -> demutationError $ "It is not allowed to pass black boxes as arguments. "
+                        <> "\nWhen checking " <> f <> "(" <> showPretty (fmap snd mutargs) <> ")"
 
-        return (arg' , τ, Nothing)
+        return (moveTypeAsTerm movetype , movetype , Nothing)
+      
 
   -- check them
   newArgsWithMutTeVars <- mapM checkArg mutargs
@@ -1507,9 +994,9 @@ elaborateMutList f scname scope mutargs = do
   -- extract for return
   --
   -- these types of the arguments carry the contained "possibly aliased variable names"
-  let newArgs = [te | (te , _, _) <- newArgsWithMutTeVars]
-  let argTypes = [ty | (_ , Pure ty, _) <- newArgsWithMutTeVars]
-  let mutVars = [m | (_ , _, Just m) <- newArgsWithMutTeVars]
+  let newArgs = [te | (te , _ , _) <- newArgsWithMutTeVars]
+  let argTypes = [ty | (_ , ty, _) <- newArgsWithMutTeVars]
+  let mutVars = [m | (_ , _ , Just m) <- newArgsWithMutTeVars]
 
 
   --
@@ -1518,24 +1005,17 @@ elaborateMutList f scname scope mutargs = do
   --
   -- See #95
   --
-  let getPossiblyAliasedVars (SingleArg a) = [a]
-      getPossiblyAliasedVars (SingleArgPart a) = [a]
-      -- getPossiblyAliasedVars (SingleRef) = []
-      getPossiblyAliasedVars (PureTuple as) = getPossiblyAliasedVars =<< as
-      getPossiblyAliasedVars DefaultValue = []
-      getPossiblyAliasedVars UserValue = []
+  let getPossiblyAliasedVars a = freeVarsOfProcDMTerm a
 
-  -- let allVars = [t | (t, _) <- newArgsWithMutTeVars] >>= freeVarsDMTerm
-  let allVars = [t | (t) <- mutVars]
 
   -- Counting how many vars with a given name there are
-  let addCount :: (TeVar) -> Ctx TeVar Int -> Ctx TeVar Int
+  let addCount :: (ProcVar) -> Ctx ProcVar Int -> Ctx ProcVar Int
       addCount var counts = case getValue var counts of
                               Just a -> setValue var (a P.+ 1) counts
                               Nothing -> setValue var 1 counts
 
   -- number of occurences of all variables
-  let varcounts = getAllKeyElemPairs $ foldr addCount def (getPossiblyAliasedVars =<< argTypes)
+  let varcounts = getAllKeyElemPairs $ foldr addCount def (getPossiblyAliasedVars =<< (snd <$> mutargs))
   -- number of occurences of all variables, but only for variables which are mutated
   let mutvarcounts = filter (\(k,n) -> k `elem` (mutVars)) varcounts
   -- number of occurences of all variables, but only for variables which are mutated, with occurence > 1
@@ -1555,7 +1035,7 @@ elaborateMutList f scname scope mutargs = do
   return (newArgs, mutVars)
 
 
-
+{-
 ------------------------------------------------------------
 -- preprocessing a for loop body
 

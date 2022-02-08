@@ -94,16 +94,13 @@ data MoveType = TupleMove [MoveType] | SingleMove ProcVar | RefMove DemutDMTerm 
 
 data TermType =
   Value ImmutType MoveType
-  | Statements [DemutDMTerm] DemutDMTerm
+  | Statement DemutDMTerm MoveType
   | MutatingFunctionEnd
 
 data LastValue =
    PureValue MoveType
-   | DefaultValue DemutDMTerm
    | MutatingFunctionEndValue
 
-setLastValue :: LastValue -> MTC ()
-setLastValue = undefined
 
 --------------------------------------------------
 -- memory state
@@ -127,7 +124,7 @@ type MemCtx = Ctx ProcVar MemState
 
 type MutCtx = Ctx MemVar (ScopeVar, IsMutated)
 
-type MemRedirectionCtx = Ctx MemVar [MemVar]
+-- type MemRedirectionCtx = Ctx MemVar [MemVar]
 
 --------------------------------------------------------
 -- monoid instance for isMutated
@@ -222,9 +219,8 @@ data MFull = MFull
   {
     _vaCtx :: VarAccessCtx
   , _memCtx :: MemCtx
-  , _memRedirectionCtx :: MemRedirectionCtx
+  -- , _memRedirectionCtx :: MemRedirectionCtx
   , _mutCtx :: MutCtx
-  , _lastValue :: MutDMTerm
   , _termVarsOfMut :: NameCtx
   , _scopeNames :: NameCtx
   , _memNames :: NameCtx
@@ -281,7 +277,6 @@ demutationError = throwError . DemutationError
 --------------------------------------------------------------------------------------
 -- Accessing the VA-Ctx in the MTC monad
 
-{-
 markReassignedBase :: IsFLetDefined -> ScopeVar -> ProcVar -> ImmutType -> MTC ()
 markReassignedBase fletdef scname tevar itype = do
   debug $ "[markReassignedBase]: called for " <> show tevar <> " in " <> show scname 
@@ -334,7 +329,7 @@ markReassigned scname var itype = do
   markReassignedBase NotFLetDefined scname var itype
 
 
-markRead :: ScopeVar -> ProcVar -> MTC ()
+markRead :: ScopeVar -> ProcVar -> MTC ImmutType
 markRead scname tevar = do
    debug $ "[markRead]: called for tevar" <> show tevar <> " in " <> show scname 
   --  mvars <- getAllMemVars <$> expectNotMoved var -- we make sure that we are still allowed to use this variable
@@ -349,16 +344,19 @@ markRead scname tevar = do
                 return (setValue tevar (scname,newvatype, olditype) ctx)
 
    f tevar
-   return ()
+   
+   val <- getValue tevar <$> use vaCtx 
+   case val of
+     Nothing -> internalError $ "Expected the procvar " <> show tevar <> " to have an assignment because it was set just a moment ago."
+     Just (_,_,itype) -> return itype
 
-markReadMaybe :: ScopeVar -> Maybe ProcVar -> MTC ()
-markReadMaybe scname (Just x) = markRead scname x
-markReadMaybe scname Nothing = pure ()
+markReadMaybe :: ScopeVar -> Maybe ProcVar -> MTC (Maybe ImmutType)
+markReadMaybe scname (Just x) = Just <$> markRead scname x
+markReadMaybe scname Nothing = pure Nothing
 
 markReadOverwritePrevious :: ScopeVar -> ProcVar -> ImmutType -> MTC ()
 markReadOverwritePrevious scname var itype = vaCtx %%= (\scope -> ((), setValue var (scname, ReadSingle, itype) scope))
 
--}
 
 --------------------------------------------------------------------------------------
 
@@ -376,13 +374,13 @@ markMutated mv = do
 --------------------------------------------------------------------------------------
 
 
+{-
 wrapReorder :: (Eq a, Show a) => [a] -> [a] -> PreDMTerm t -> PreDMTerm t
 wrapReorder have want term | have == want = term
 wrapReorder have want term | otherwise    =
   let σ = getPermutationWithDrop have want
   in Reorder σ (term)
 
-{-
 immutTypeEq :: ImmutType -> ImmutType -> Bool
 immutTypeEq (Pure _) (Pure _) = True
 immutTypeEq (Mutating a) (Mutating b) = a == b
@@ -437,19 +435,17 @@ safeSetValueAllowFLet (Just var) newType scope =
 --------------------------------------------------------------------------------
 
 expectImmutType :: ScopeVar -> ProcVar -> MTC ImmutType
-expectImmutType a = undefined
+expectImmutType = markRead
 
 setImmutType :: ScopeVar -> ProcVar -> ImmutType -> MTC ()
-setImmutType a = undefined
+setImmutType = markReassigned
 
 setImmutTypeFLetDefined :: ScopeVar -> ProcVar -> ImmutType -> MTC ()
-setImmutTypeFLetDefined a = undefined
+setImmutTypeFLetDefined = markReassignedFLet
 
-setImmutTypeMaybe :: ScopeVar -> Maybe ProcVar -> ImmutType -> MTC ()
-setImmutTypeMaybe = undefined
+setImmutTypeOverwritePrevious :: ScopeVar -> ProcVar -> ImmutType -> MTC ()
+setImmutTypeOverwritePrevious = markReadOverwritePrevious
 
-setImmutTypeOverwritePrevious :: ScopeVar -> Maybe ProcVar -> ImmutType -> MTC ()
-setImmutTypeOverwritePrevious = undefined
 
 --------------------------------------------------------------------------------
 -- memory access
@@ -461,24 +457,38 @@ setImmutTypeOverwritePrevious = undefined
 -- This function marks variables as moved in the scope
 -- For #172
 --
-moveGetMemAndAllocs :: ScopeVar -> MoveType -> MTC ([MemType], [(MemVar,DemutDMTerm)])
-moveGetMemAndAllocs scname mt = runWriterT (moveGetMemAndAllocs_impl scname mt)
+-- moveGetMemAndAllocs :: ScopeVar -> MoveType -> MTC ([MemType], [(MemVar,DemutDMTerm)])
+-- moveGetMemAndAllocs scname mt = runWriterT (moveGetMemAndAllocs_impl scname mt)
 
-moveGetMemAndAllocs_impl :: ScopeVar -> MoveType -> WriterT [(MemVar,DemutDMTerm)] MTC [MemType]
-moveGetMemAndAllocs_impl scname (NoMove te) = do
-  mem <- lift $ allocateMem scname (Right "val")
-  tell [(mem,te)]
+
+--
+-- We have:
+-- ```
+-- Prelude> oneOfEach [[1,2], [10,20,30], [100]]
+-- [[1,10,100],[1,20,100],[1,30,100],[2,10,100],[2,20,100],[2,30,100]]
+-- ```
+--
+oneOfEach :: [[a]] -> [[a]]
+oneOfEach (xs:yss) = let yss' = oneOfEach yss
+                     in ([x:ys' | x <- xs, ys' <- yss'])
+oneOfEach [] = [[]]
+
+
+
+moveGetMem :: ScopeVar -> MoveType -> MTC [MemType]
+moveGetMem scname (NoMove te) = do
+  mem <- allocateMem scname (Right "val")
   return [(SingleMem mem)]
-moveGetMemAndAllocs_impl scname (SingleMove a) = do
-  memstate <- lift $ expectNotMoved a
+moveGetMem scname (SingleMove a) = do
+  memstate <- expectNotMoved a
   memCtx %= (setValue a MemMoved)
   return (memstate)
-moveGetMemAndAllocs_impl scname (TupleMove as) = do
-  undefined
-  -- mems <- mapM (moveGetMemAndAllocs_impl scname) as
-  -- return (TupleMem mems)
-moveGetMemAndAllocs_impl scname (RefMove te) = do
-  undefined
+moveGetMem scname (TupleMove as) = do
+  mems <- mapM (moveGetMem scname) as
+  return (TupleMem <$> oneOfEach mems)
+
+moveGetMem scname (RefMove te) = do
+  demutationError $ "Moving of references is not implemented."
   -- if we had a reference,
   -- allocate new memory for it
   -- memvar <- lift $ allocateMem scname (Right "ref")
@@ -486,38 +496,37 @@ moveGetMemAndAllocs_impl scname (RefMove te) = do
   -- pure $ RefMem memvar
 
 
-moveGetMemAndAllocsTuple :: ScopeVar -> MoveType -> MTC (MemType, [(MemVar,DemutDMTerm)])
-moveGetMemAndAllocsTuple = undefined
 
+setMem :: ProcVar -> [MemType] -> MTC () 
+setMem x mt = memCtx %= (setValue x (MemExists mt))
 
-setMem :: ProcVar -> MemType -> MTC () 
-setMem x mt = memCtx %= (setValue x (MemExists [mt]))
-
-setMemMaybe :: Maybe ProcVar -> MemType -> MTC () 
+setMemMaybe :: Maybe ProcVar -> [MemType] -> MTC () 
 setMemMaybe (Just x) mt = setMem x mt
 setMemMaybe (Nothing) _ = pure ()
 
 
-{-
-setMemTuple :: ScopeVar -> [Maybe ProcVar] -> MemType -> MTC ()
+setMemTupleInManyMems :: ScopeVar -> [ProcVar] -> [MemType] -> MTC ()
+setMemTupleInManyMems scname xs mems = mapM_ (setMemTuple scname xs) mems
+
+setMemTuple :: ScopeVar -> [ProcVar] -> MemType -> MTC ()
 setMemTuple scname xs (SingleMem a) = do
   -- We are deconstructing a tuple value,
   -- need to create memory locations for all parts
-  let f (Just x) = do
+  let f (x) = do
         mx <- allocateMem scname (Left x)
-        memCtx %= (setValue x (MemExists (SingleMem mx)))
-      f Nothing = pure ()
+        memCtx %= (setValue x (MemExists ([SingleMem mx])))
   mapM_ f xs
-setMemTuple scname xs (RefMem a) = undefined -- do
+
+setMemTuple scname xs (RefMem a) = internalError  $ "setMemTuple not implemented for references"
+  -- undefined -- do
   -- mapM_ (\(x) -> setMemMaybe x (RefMem)) xs
 
 setMemTuple scname xs (TupleMem as) | length xs == length as = do
   let xas = zip xs as
-  mapM_ (\(x, a) -> setMemMaybe x a) xas
+  mapM_ (\(x, a) -> setMem x [a]) xas
 
 setMemTuple scname xs (TupleMem as) | otherwise = demutationError $ "Trying to assign a tuple where lengths do not match:\n"
                                                                     <> show xs <> " = " <> show as
--}
 
 expectNotMoved :: ProcVar -> MTC [MemType]
 expectNotMoved tevar = do
@@ -529,15 +538,15 @@ expectNotMoved tevar = do
     Just (MemMoved) -> throwError $ DemutationMovedVariableAccessError tevar
     Just (MemExists a) -> pure a
 
-expectNotMovedMaybe :: Maybe ProcVar -> MTC (Maybe [MemType]) 
-expectNotMovedMaybe (Just a) = Just <$> expectNotMoved a
-expectNotMovedMaybe Nothing = undefined -- return ()
+-- expectNotMovedMaybe :: Maybe ProcVar -> MTC (Maybe [MemType]) 
+-- expectNotMovedMaybe (Just a) = Just <$> expectNotMoved a
+-- expectNotMovedMaybe Nothing = undefined -- return ()
 
 
 -------------------------------------
 -- memory redirection
-setMemRedirection :: MemVar -> MemType -> MTC ()
-setMemRedirection = undefined
+-- setMemRedirection :: MemVar -> MemType -> MTC ()
+-- setMemRedirection = undefined
 
 -------------------------------------
 -- accessing memories
@@ -545,13 +554,16 @@ setMemRedirection = undefined
 getAllMemVars :: MemType -> [MemVar]
 getAllMemVars (SingleMem a) = [a]
 getAllMemVars (TupleMem a) = a >>= getAllMemVars
-getAllMemVars (RefMem a) = undefined -- [a]
+getAllMemVars (RefMem a) = [a]
 
-expectSingleMem :: MemType -> MTC MemVar
-expectSingleMem mt = do
-  case mt of
-    (SingleMem a) -> pure a
-    (mem) -> demutationError $ "The memory type " <> show mem <> " was expected to contain a single memory location."
+expectSingleMem :: [MemType] -> MTC MemVar
+expectSingleMem mts = do
+  case mts of
+    [mt] -> case mt of
+              (SingleMem a) -> pure a
+              (mem) -> demutationError $ "The memory type " <> show mem <> " was expected to contain a single memory location."
+    mts -> demutationError $ "The memory type " <> show mts <> " was expected to only have one alternative."
+
 
 -- reverseMemLookup :: MemVar -> MTC ProcVar
 -- reverseMemLookup wantedMem = do
@@ -582,11 +594,11 @@ getMemVarMutationStatus mv = do
     -- to something which is. Thus we
     -- do a further lookup in the redirection
     -- context.
-    Just (_, NotMutated) -> do
-      rctx <- use memRedirectionCtx
-      case getValue mv rctx of
-        Nothing -> return NotMutated
-        Just mt -> mconcat <$> mapM getMemVarMutationStatus mt
+    Just (_, NotMutated) -> return NotMutated
+      -- rctx <- use memRedirectionCtx
+      -- case getValue mv rctx of
+      --   Nothing -> return NotMutated
+      --   Just mt -> mconcat <$> mapM getMemVarMutationStatus mt
 
 --------------------------------------------------------------------------
 -- Creating TeVars from MemVars
@@ -598,17 +610,30 @@ getMemVarMutationStatus mv = do
 --   RefMem mv -> undefined
 
 procVarAsTeVar :: ProcVar -> TeVar
-procVarAsTeVar mv = undefined
+procVarAsTeVar (mv) = UserTeVar mv
 
 
-moveTypeAsTerm :: MoveType -> MTC DemutDMTerm 
-moveTypeAsTerm = undefined -- \case
-  -- TupleMove mts -> do
-  --   terms <- mapM moveTypeAsTerm mts
-  --   return $ Tup $ terms
-  -- SingleMove pv -> do
-  --   mtype <- expectNotMoved pv
-  --   return $ memTypeAsTerm mtype
-  -- RefMove pdt -> pure pdt
-  -- NoMove pdt -> pure pdt
+moveTypeAsTerm :: MoveType -> DemutDMTerm 
+moveTypeAsTerm = \case
+  TupleMove mts ->
+    let terms = moveTypeAsTerm <$> mts
+    in Tup $ terms
+  SingleMove pv -> Var $ (Just (procVarAsTeVar pv) :- JTAny)
+  RefMove pdt -> pdt
+  NoMove pdt -> pdt
+
+
+movedVarsOfMoveType :: MoveType -> [ProcVar]
+movedVarsOfMoveType = \case
+  TupleMove mts -> mts >>= movedVarsOfMoveType 
+  SingleMove pv -> return pv
+  RefMove pdt -> []
+  NoMove pdt -> []
+
+termTypeAsTerm :: TermType -> DemutDMTerm
+termTypeAsTerm = \case
+  Value it mt -> moveTypeAsTerm mt
+  Statement pdt mt -> Extra $ DemutBlock [pdt, moveTypeAsTerm mt]
+  MutatingFunctionEnd -> Extra $ DemutBlock []
+
 
