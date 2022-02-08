@@ -808,6 +808,7 @@ data ProceduralExtension a =
   | ProcLam     [ProcAsgmt JuliaType] a
   | ProcLamStar [(ProcAsgmt (JuliaType, Relevance))] a
   | Block [a]
+  deriving (Show, Eq, Functor, Foldable, Traversable)
 
 
 type DemutDMTerm = PreDMTerm DemutatedExtension

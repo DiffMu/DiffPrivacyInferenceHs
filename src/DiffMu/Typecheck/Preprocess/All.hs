@@ -21,18 +21,18 @@ import Debug.Trace
 
 type PreProTC = LightTC Location_PreProcess ()
 
-preprocessAll :: MutDMTerm -> PreProTC (DMTerm)
+preprocessAll :: ProcDMTerm -> PreProTC (DMTerm)
 preprocessAll term = do
 
   -- top level processing
 
-  (tlinfo, term') <- liftLightTC def def (checkTopLevel term)
+  (tlinfo) <- liftLightTC def def (checkTopLevel term)
   info $ "-----------------------------------"
   info $ "Toplevel information:\n" <> show tlinfo
   info $ "term prior to preprocessing:\n" <> showPretty term
 
   -- -- mutation processing
-  term'' <- liftLightTC (MFull def def def def def def def def tlinfo) (\_ -> ()) (demutate term')
+  term'' <- liftLightTC (MFull def def def def def def tlinfo) (\_ -> ()) (demutate term)
   -- term'' <- liftLightTC () (\_ -> ()) (nondemutate term')
 
   info $ "-----------------------------------"

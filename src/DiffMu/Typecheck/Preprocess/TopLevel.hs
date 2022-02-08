@@ -14,13 +14,28 @@ import qualified Data.Text as T
 
 import Debug.Trace
 
-type TLTC = LightTC Location_PrePro_Global ()
 
 data TopLevelInformation = TopLevelInformation
   {
-    blackBoxNames :: [TeVar]
-  , globalNames :: [TeVar]
+    blackBoxNames :: [ProcVar]
+  , globalNames :: [ProcVar]
   }
+
+
+data TLFull = TLFull
+  {
+    _tlinfo :: TopLevelInformation
+  }
+
+instance Default TLFull where
+  def = TLFull (TopLevelInformation def def)
+
+
+$(makeLenses ''TLFull)
+
+type TLTC = LightTC Location_PrePro_Global TLFull
+
+
 
 
 instance Show TopLevelInformation where
@@ -35,12 +50,39 @@ instance Show TopLevelInformation where
 --
 -- returns (blackbox names, global names)
 
-checkTopLevel :: MutDMTerm -> TLTC (TopLevelInformation, MutDMTerm)
+
+--
+-- since the toplevel-dmterm constructor is either
+--  - Block: (contains multiple statements)
+--  - something else: (to be treated as single statement)
+--
+-- we extract the list of statements, and call for each
+-- of them the main `checkTopLevelStatement` function
+--
+checkTopLevel :: ProcDMTerm -> TLTC (TopLevelInformation)
+checkTopLevel term = do
+  let terms = case term of 
+        Extra (Block ts) -> ts
+        other -> [other]
+
+  -- compute for all statements
+  mapM checkTopLevelStatement terms
+
+  -- return the accumulated tlinfo
+  use tlinfo
+
+
+
+--
+-- check a single statement and update the state
+-- according to above rules
+--
+checkTopLevelStatement :: ProcDMTerm -> TLTC ()
 
 -- if we have a black box
 -- make sure that the name is not already taken by anything else
-checkTopLevel (BBLet v body rest) = do
-  (TopLevelInformation bbvars glvars, newRest) <- checkTopLevel rest
+checkTopLevelStatement (Extra (ProcBBLet v body)) = do
+  (TopLevelInformation bbvars glvars) <- use tlinfo
 
   case v `elem` bbvars of
     True -> throwError (BlackBoxError $ "Found multiple black boxes definitions for the name " <> show v <> ". Black boxes are only allowed to have a single implementation.")
@@ -50,64 +92,61 @@ checkTopLevel (BBLet v body rest) = do
     True -> throwError (BlackBoxError $ "Found a global definition for the name " <> show v <> ". This is not allowed since there already is a black box with that name.")
     False -> pure ()
 
+  tlinfo .= TopLevelInformation (v : bbvars) (v : glvars)
 
-  return (TopLevelInformation (v : bbvars) (v : glvars), BBLet v body newRest)
+  return ()
 
 -- if we have something else top level
-checkTopLevel (SLet (Nothing :- vt) body rest) = checkTopLevel rest
-checkTopLevel (SLet (Just v :- vt) body rest) = do
+checkTopLevelStatement (Extra (ProcSLetBase _ (v ::- vt) body)) = do
   checkNonTopLevelBB body
-  (TopLevelInformation bbvars glvars, newRest) <- checkTopLevel rest
+
+  (TopLevelInformation bbvars glvars) <- use tlinfo
 
   case v `elem` (bbvars) of
     True -> throwError (BlackBoxError $ "Found a black box definition for the name " <> show v <> ". This is not allowed since there already is a global variable with that name.")
     False -> pure ()
 
-  return (TopLevelInformation bbvars (v : glvars), SLet (Just v :- vt) body newRest)
-checkTopLevel (SBind (Nothing :- vt) body rest) = checkTopLevel rest
-checkTopLevel (SBind (Just v :- vt) body rest) = do
+  tlinfo .= TopLevelInformation bbvars (v : glvars)
+
+  return ()
+
+checkTopLevelStatement (Extra (ProcFLet v body)) = do
   checkNonTopLevelBB body
-  (TopLevelInformation bbvars glvars, newRest) <- checkTopLevel rest
+
+  (TopLevelInformation bbvars glvars) <- use tlinfo
 
   case v `elem` bbvars of
     True -> throwError (BlackBoxError $ "Found a black box definition for the name " <> show v <> ". This is not allowed since there already is a global variable with that name.")
     False -> pure ()
 
-  return (TopLevelInformation bbvars (v : glvars), SBind (Just v :- vt) body newRest)
-checkTopLevel (FLet v body rest) = do
+  tlinfo .= TopLevelInformation bbvars (v : glvars)
+
+  return ()
+
+checkTopLevelStatement (Extra (ProcTLetBase _ (vs) body)) = do
   checkNonTopLevelBB body
-  (TopLevelInformation bbvars glvars, newRest)<- checkTopLevel rest
 
-  case v `elem` bbvars of
-    True -> throwError (BlackBoxError $ "Found a black box definition for the name " <> show v <> ". This is not allowed since there already is a global variable with that name.")
-    False -> pure ()
+  (TopLevelInformation bbvars glvars) <- use tlinfo
 
-  return (TopLevelInformation bbvars (v : glvars), FLet v body newRest)
-checkTopLevel (TLet (vs) body rest) = do
-  checkNonTopLevelBB body
-  (TopLevelInformation bbvars glvars, newRest)<- checkTopLevel rest
+  let letvars = [v | v ::- _ <- vs]
 
-  let letvars = fstA <$> vs
-
-  let checkname v = case v `elem` (Just <$> bbvars) of
+  let checkname v = case v `elem` (bbvars) of
         True -> throwError (BlackBoxError $ "Found a black box definition for the name " <> show v <> ". This is not allowed since there already is a global variable with that name.")
         False -> pure ()
 
   mapM checkname letvars
 
-  let goodLetvars = [a | Just a <- letvars]
+  tlinfo .= TopLevelInformation bbvars (letvars <> glvars) 
 
-  return (TopLevelInformation bbvars (goodLetvars <> glvars) , TLet (vs) body newRest)
+  return ()
 
--- all other terms mean that the top level scope is done.
--- we make sure that there are no BBLets there
-checkTopLevel rest = do
-  checkNonTopLevelBB rest
-  return (TopLevelInformation [] [], LastTerm rest)
+-- all other terms do nothing
+checkTopLevelStatement rest = do
+  return ()
 
 
 -- make sure that no black box definitions are here.
-checkNonTopLevelBB :: MutDMTerm -> TLTC MutDMTerm
+checkNonTopLevelBB :: ProcDMTerm -> TLTC ProcDMTerm
 checkNonTopLevelBB (BBLet v jt rest) = throwError (BlackBoxError $ "Found a black box definition (" <> show v <> ") which is not in the top level scope. Black boxes can only be defined at the top level scope. " )
 checkNonTopLevelBB term = recDMTermMSameExtension checkNonTopLevelBB term
 

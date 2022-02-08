@@ -221,7 +221,6 @@ data MFull = MFull
   , _memCtx :: MemCtx
   -- , _memRedirectionCtx :: MemRedirectionCtx
   , _mutCtx :: MutCtx
-  , _lastValue :: MutDMTerm
   , _termVarsOfMut :: NameCtx
   , _scopeNames :: NameCtx
   , _memNames :: NameCtx
@@ -611,7 +610,7 @@ getMemVarMutationStatus mv = do
 --   RefMem mv -> undefined
 
 procVarAsTeVar :: ProcVar -> TeVar
-procVarAsTeVar mv = UserTeVar mv
+procVarAsTeVar (mv) = UserTeVar mv
 
 
 moveTypeAsTerm :: MoveType -> DemutDMTerm 
