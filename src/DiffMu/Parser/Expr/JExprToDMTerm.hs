@@ -1,48 +1,57 @@
 
-module DiffMu.Parser.Expr.JExprToDMTerm where
+{-# LANGUAGE TemplateHaskell #-}
 
+module DiffMu.Parser.Expr.JExprToDMTerm where
+    
 import DiffMu.Prelude
 import DiffMu.Core
+import DiffMu.Core.Logging
+import DiffMu.Core.TC
 import DiffMu.Parser.Expr.FromString
+import DiffMu.Typecheck.Preprocess.Common
 import qualified Data.Text as T
 
 import Debug.Trace
 
 
--- parse state is (filename, line number, are we inside a function, are we inside an assignment)
--- the former are for pretty error messages.
--- the latter are used to error upon non-toplevel back box definitions
--- and upon assignemnts within assignments (like x = y = 100).
-type ParseState = (StateT (String, Int, [Symbol], Bool) (Except DMException))
 
-parseError :: String -> ParseState a
+data ParseFull = ParseFull
+  {
+    _location :: (String, Int), -- filename and line number
+    _outerFuncNames :: [Symbol], -- to error upon non-toplevel back box definitions and simple recursion
+    _insideAssignment :: Bool -- to error upon assignemnts within assignments (like x = y = 100).
+  }
+
+instance Default ParseFull where
+    def = ParseFull ("unknown",0) [] False
+
+type ParseTC = LightTC Location_Parse ParseFull
+
+$(makeLenses ''ParseFull)
+
+parseError :: String -> ParseTC a
 parseError message = do
-                       (file,line,_,_) <- get
+                       (file, line) <- use location
                        throwOriginalError (ParseError message file line)
 
+
 -- set parse state to be inside a function
-enter_function s = do
-          (file, line, fs, a) <- get
-          put (file, line, s : fs, a)
+enterFunction :: (MonadState ParseFull m) => Symbol -> m ()
+enterFunction s = outerFuncNames %%= (\fs -> ((), s:fs))
 
 -- set parse state to be outside a function
-exit_function = do
-          (file, line, fs, a) <- get
-          case fs of
-              []     -> put (file, line, [], a)
-              (f:ff) -> put (file, line, ff, a)
+exitFunction :: (MonadState ParseFull m) => m ()
+exitFunction = outerFuncNames %%= (\fs -> ((), drop 1 fs))
 
 -- set parse state to be inside an assignment
-enter_assignment = do
-          (file, line, a,  _) <- get
-          put (file, line, a, True)
+enterAssignment :: (MonadState ParseFull m) => m ()
+enterAssignment = insideAssignment .= True
 
--- set parse state to be outside an assignment
-exit_assignment = do
-          (file, line, a, _) <- get
-          put (file, line, a, False)
+-- set parse state to be outside a function
+exitAssignment :: (MonadState ParseFull m) => m ()
+exitAssignment = insideAssignment .= False
 
-pSingle :: JExpr -> ParseState ProcDMTerm
+pSingle :: JExpr -> ParseTC ProcDMTerm
 pSingle e = case e of
                  JEInteger n -> pure $ Sng n JTInt
                  JEReal r -> pure $ Sng r JTReal
@@ -71,17 +80,14 @@ pSingle e = case e of
                  JELineNumber _ _ -> throwOriginalError (InternalError "What now?") -- TODO
 
 
-pList :: [JExpr] -> ParseState [ProcDMTerm]
+pList :: [JExpr] -> ParseTC [ProcDMTerm]
 pList [] = pure []
 pList (JEBlock stmts : tail) = pList (stmts ++ tail) -- handle nested blocks
 pList (s : tail) = do
     ps <- case s of
-               JELineNumber file line -> do
-                                           (_,_,d,a) <- get
-                                           put (file, line, d, a)
-                                           return Nothing
+               JELineNumber file line -> location .= (file, line) >> return Nothing
                JENothing -> return Nothing
-               _ -> Just <$> pSingle s
+               _ -> Just <$> (pSingle s)
                
     ptail <- pList tail
     case ps of
@@ -155,13 +161,13 @@ pJLoop ivar iter body =
 
 
 pJLet assignee assignment = do
-   (_,_,_,insideAssignment) <- get
-   case insideAssignment of
+   inside <- use insideAssignment
+   case inside of
         True -> parseError ("Assignments within assignments are forbidden, but variable " <> show assignee <> " is assigned to.")
         False -> do
-                   enter_assignment
+                   enterAssignment
                    dasgmt <- pSingle assignment
-                   exit_assignment
+                   exitAssignment
                    case assignee of
                         JEHole     -> return (Extra (ProcSLetBase PureLet (Nothing ::- JTAny) dasgmt))
                         JESymbol s -> return (Extra (ProcSLetBase PureLet (Just (UserProcVar s) ::- JTAny) dasgmt))
@@ -170,7 +176,7 @@ pJLet assignee assignment = do
                         _                    -> parseError ("Invalid assignee " <> (show assignee) <> ", must be a variable.")
 
 
-pJTLet :: [JExpr] -> JExpr -> ParseState ProcDMTerm
+pJTLet :: [JExpr] -> JExpr -> ParseTC ProcDMTerm
 pJTLet assignees assignment = let
    pSample args = case args of
                     [n, m1, m2] -> do
@@ -181,15 +187,15 @@ pJTLet assignees assignment = let
                     _ -> parseError ("Invalid number of arguments for sample, namely " <> (show (length args)) <> " instead of 2.")
                     
    -- make sure that all assignees are simply symbols
-   ensureSymbol (JESymbol s) = return (Just (UserProcVar s) ::- JTAny)
+   ensureSymbol (JESymbol s) = return (return (Just (UserProcVar s) ::- JTAny))
    ensureSymbol JEHole = return (Nothing ::- JTAny)
    ensureSymbol (JETypeAnnotation _ _) = parseError "Type annotations on variables are not supported."
    ensureSymbol (JENotRelevant _ _) = parseError "Type annotations on variables are not supported."
    ensureSymbol x = parseError ("Invalid assignee " <> (show x) <> ", must be a variable.")
 
    in do
-      (_,_,_,insideAssignment) <- get
-      case insideAssignment of
+      inside <- use insideAssignment
+      case inside of
            True -> parseError ("Assignments within assignments are forbidden, but variables " <> show assignees <> " are assigned to.")
            False -> do
                       assignee_vars <- mapM ensureSymbol assignees
@@ -199,18 +205,18 @@ pJTLet assignees assignment = let
                                                smp <- pSample args
                                                return (Extra (ProcTLetBase SampleLet assignee_vars smp))
                                         _ -> do  -- parse assignment, tail; and build term
-                                               enter_assignment
+                                               enterAssignment
                                                dasgmt <- pSingle assignment
-                                               exit_assignment
+                                               exitAssignment
                                                return (Extra (ProcTLetBase PureLet assignee_vars dasgmt))
 
 
 pJFLet name assignment =
   case name of
     JESymbol n -> do
-                       enter_function n
+                       enterFunction n
                        dasgmt <- pSingle assignment
-                       exit_function
+                       exitFunction
                        return (Extra (ProcFLet (UserProcVar n) dasgmt))
     _ -> parseError $ "Invalid function name expression " <> show name <> ", must be a symbol."
 
@@ -218,8 +224,8 @@ pJFLet name assignment =
 pJBlackBox name args =
   case name of
     JESymbol pname -> do
-                    (_,_,insideFunction,_) <- get
-                    case insideFunction of
+                    inside <- use outerFuncNames
+                    case inside of
                          [] -> do
                                     pargs <- mapM pArg args
                                     return (Extra (ProcBBLet (UserProcVar pname) (sndA <$> pargs)))
@@ -227,14 +233,14 @@ pJBlackBox name args =
     _ -> parseError $ "Invalid function name expression " <> show name <> ", must be a symbol."
 
 
-pClip :: JExpr -> ParseState (DMTypeOf ClipKind)
+pClip :: JExpr -> ParseTC (DMTypeOf ClipKind)
 pClip (JESymbol (Symbol "L1"))   = pure (Clip L1)
 pClip (JESymbol (Symbol "L2"))   = pure (Clip L2)
 pClip (JESymbol (Symbol "LInf")) = pure (Clip LInf)
 pClip term = parseError $ "The term " <> show term <> "is not a valid clip value."
 
 
-pJCall :: JExpr -> [JExpr] -> ParseState ProcDMTerm
+pJCall :: JExpr -> [JExpr] -> ParseTC ProcDMTerm
 -- if the term is a symbol, we check if it
 -- is a builtin/op, if so, we construct the appropriate DMTerm
 pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
@@ -372,20 +378,16 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
   --
   -- all other symbols turn into calls on TeVars
   (sym, args) -> do
-      (_,_,insideFunction,_) <- get
-      case ((Symbol sym) `elem` insideFunction) of
+      inside <- use outerFuncNames
+      case ((Symbol sym) `elem` inside) of
          False -> (Apply (Extra (ProcVar (Just (UserProcVar (Symbol sym)) ::- JTAny))) <$> mapM pSingle args)
          True -> parseError $ "Recursive call of " <> show sym <> " is not permitted."
 
 -- all other terms turn into calls
 pJCall term args = Apply <$> pSingle term <*> mapM pSingle args
 
-parseDMTermFromJExpr :: JExpr -> Either DMException ProcDMTerm
-parseDMTermFromJExpr expr =
-  let x = runStateT (pSingle expr) ("unknown",0,[],False)
-      y = case runExcept x of
-        Left err -> Left err
-        Right (term, _) -> Right term
-  in y
+--(arseDMTermFromJExpr :: JExpr -> Either DMException ProcDMTerm
+--parseDMTermFromJExpr expr = liftLightTC (ParseFull  (\_ -> ()) (pSingle expr)
 
-
+parseDMTermFromJExpr :: JExpr -> TC ProcDMTerm
+parseDMTermFromJExpr expr = liftNewLightTC (pSingle expr)
