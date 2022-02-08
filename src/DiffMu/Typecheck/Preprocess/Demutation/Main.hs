@@ -672,20 +672,15 @@ elaborateMut scname (Row t1 t2) = do
 ----
 -- the mutating builtin cases
 
-{-
 -- TODO: Reimplement for #190
 --
 elaborateMut scname (SubGrad t1 t2) = do
-  (argTerms, mutVars) <- elaborateMutList "subgrad" scname scope [(Mutated , t1), (NotMutated , t2)]
+  (argTerms, mutVars) <- elaborateMutList "subgrad" scname [(Mutated , t1), (NotMutated , t2)]
   case argTerms of
-    -- NOTE: Because of #95, we say that this function is pure
-    -- NOTE: Reenabled for #142
-    -- [newT1, newT2] -> pure (SubGrad newT1 newT2, Pure UserValue)
-    [newT1, newT2] -> pure (SubGrad newT1 newT2, VirtualMutated mutVars, NoMove)
-    --
-    -- END NOTE
+    [newT1, newT2] -> return $ demutTLetStatement PureLet mutVars (SubGrad newT1 newT2)
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
+{-
 elaborateMut scname (ScaleGrad scalar grads) = do
   (argTerms, mutVars) <- elaborateMutList "scalegrad" scname scope [(NotMutated , scalar), (Mutated , grads)]
   case argTerms of
