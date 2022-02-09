@@ -16,30 +16,38 @@ import Debug.Trace
 
 type BlockTC = LightTC Location_PrePro_Demutation ()
 
+unblockingError = throwError . UnblockingError
 
 unblock :: DemutDMTerm -> BlockTC DMTerm
-unblock pt = case pt of
-    Extra (DemutBlock []) -> internalError $ "empty block"
-    Extra (DemutBlock [b]) -> unblock b
-    Extra (DemutBlock (b:bs)) -> unlistM (unblock b) bs
-    Extra _ -> internalError $ "found a DemutDMTerm (that's not a block) where a DMTerm or block was expected: " <> show pt
-    _ -> recDMTermM unblock (\x -> unblock (Extra x)) pt
-    
+unblock = unblockValue
 
-unlistM :: BlockTC DMTerm -> [DemutDMTerm] -> BlockTC DMTerm
-unlistM mlast mxs = let
-      unlist :: DMTerm -> [DemutDMTerm] -> BlockTC DMTerm
-      unlist last [] = return last
-      unlist last ((Extra (DemutBlock bs)) : xs) = unlistM (unlist last bs) xs
-      unlist last ((Extra (DemutPhi c [t,f])) : xs) = unlistM (Phi <$> (unblock c) <*> (unlist last [t]) <*> (unlist last [f])) xs
-      unlist last ((Extra (DemutPhi c [t])) : xs) = unlistM (Phi <$> (unblock c) <*> (unlist last [t]) <*> pure last) xs
-      unlist last ((Extra (DemutPhi c bs)) : xs) = internalError $ "wrong number of branches in DemutPhi: " <> show bs
-      unlist last ((Extra (DemutSLetBase k a b)) : xs) = unlistM (SLetBase k a <$> (unblock b) <*> pure last) xs
-      unlist last ((Extra (DemutTLetBase k a b)) : xs) = unlistM (TLetBase k a <$> (unblock b) <*> pure last) xs
-      unlist last ((Extra (DemutFLet a b)) : xs) = unlistM (FLet a <$> (unblock b) <*> pure last) xs
-      unlist last ((Extra (DemutBBLet a b)) : xs) = unlist (BBLet a b last) xs
-      unlist last ((Extra (DemutLoop n cvars it body)) : xs) =
-             unlistM (TLet [s :- JTAny | s <- cvars] <$> (Loop <$> (unblock n) <*> pure cvars <*> pure it <*> (unblock body)) <*> pure last) xs
-      unlist last (x:xs) = internalError $ "found a DMTerm where a DemutDMTerm was expected:" <> show x
-   in join $ unlist <$> mlast <*> (pure mxs)
+
+unblockValue :: DemutDMTerm -> BlockTC DMTerm
+unblockValue (Extra e) = case e of
+  DemutBlock []     -> unblockingError $ "Found an empty block where a value was expected."
+  DemutBlock (x:xs) -> unblockStatementsM (unblockValue x) xs
+  _                 -> unblockingError $ "Found a statement without return value. This is not allowed.\n" <> "Statement:\n" <> showPretty e
+unblockValue t = recDMTermM unblockValue (\x -> unblock (Extra x)) t
+
+
+unblockStatementsM :: BlockTC DMTerm -> [DemutDMTerm] -> BlockTC DMTerm
+unblockStatementsM mlast xs = join $ unblockStatements <$> mlast <*> pure xs
+
+unblockStatements :: DMTerm -> [DemutDMTerm] -> BlockTC DMTerm
+unblockStatements last [] = pure last
+unblockStatements last ((Extra (DemutBlock bs))             : xs) = unblockStatementsM (unblockStatements last bs) xs
+unblockStatements last ((Extra (DemutPhi c [t,f]))          : xs) = unblockStatementsM (Phi <$> (unblock c) <*> (unblockStatements last [t]) <*> (unblockStatements last [f])) xs
+unblockStatements last ((Extra (DemutPhi c [t]))            : xs) = unblockStatementsM (Phi <$> (unblock c) <*> (unblockStatements last [t]) <*> pure last) xs
+unblockStatements last ((Extra (DemutPhi c bs))             : xs) = internalError $ "wrong number of branches in DemutPhi: " <> show bs
+unblockStatements last ((Extra (DemutSLetBase k a b))       : xs) = unblockStatementsM (SLetBase k a <$> (unblock b) <*> pure last) xs
+unblockStatements last ((Extra (DemutTLetBase k a b))       : xs) = unblockStatementsM (TLetBase k a <$> (unblock b) <*> pure last) xs
+unblockStatements last ((Extra (DemutFLet a b))             : xs) = unblockStatementsM (FLet a <$> (unblock b) <*> pure last) xs
+unblockStatements last ((Extra (DemutBBLet a b))            : xs) = unblockStatements (BBLet a b last) xs
+unblockStatements last ((Extra (DemutLoop n cvars it body)) : xs) =
+        unblockStatementsM (TLet [s :- JTAny | s <- cvars] <$> (Loop <$> (unblock n) <*> pure cvars <*> pure it <*> (unblock body)) <*> pure last) xs
+
+unblockStatements last (x                                   : xs) = unblockingError $ "Expected a statement, but encountered a term:"
+                                                                                   <> showPretty x
+
+
 

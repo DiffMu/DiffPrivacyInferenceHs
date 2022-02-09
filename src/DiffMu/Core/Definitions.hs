@@ -1097,6 +1097,7 @@ data DMException where
   UnsatisfiableConstraint :: String -> DMException
   TypeMismatchError       :: String -> DMException
   NoChoiceFoundError      :: String -> DMException
+  UnblockingError         :: String -> DMException
   DemutationError         :: String -> DMException
   DemutationDefinitionOrderError :: Show a => a -> DMException
   DemutationVariableAccessTypeError :: String -> DMException
@@ -1121,6 +1122,7 @@ instance Show DMException where
   show (TypeMismatchError e) = "Type mismatch: " <> e
   show (NoChoiceFoundError e) = "No choice found: " <> e
   show (UnificationShouldWaitError a b) = "Trying to unify types " <> show a <> " and " <> show b <> " with unresolved infimum (∧)."
+  show (UnblockingError e) = "While unblocking, the following error was encountered:\n " <> e
   show (DemutationError e) = "While demutating, the following error was encountered:\n " <> e
   show (BlackBoxError e) = "While preprocessing black boxes, the following error was encountered:\n " <> e
   show (FLetReorderError e) = "While processing function signatures, the following error was encountered:\n " <> e

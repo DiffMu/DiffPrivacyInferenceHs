@@ -526,8 +526,9 @@ elaborateMut scname (Extra (ProcPreLoop iters iterVar body)) = do -- demutationE
     (Just a) -> memCtx %= (setValue iterVar a)
     _ -> pure ()
 
-  return (StatementWithoutDefault (Extra (DemutTLetBase PureLet ([v :- JTAny | v <- captures]) demutated_loop)))
-
+  -- Note: We do not build the tlet which belongs to a loop here
+  --       This is done later in unblocking.
+  return (StatementWithoutDefault demutated_loop)
 
 
 
