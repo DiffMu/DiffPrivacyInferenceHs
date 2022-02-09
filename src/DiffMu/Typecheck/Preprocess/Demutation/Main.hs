@@ -35,9 +35,11 @@ import DiffMu.Typecheck.Preprocess.Demutation.Definitions (getAllMemVarsOfMemSta
 
   
 demutTLetStatement :: LetKind -> [ProcVar] -> DemutDMTerm -> TermType
-demutTLetStatement ltype vars term =
-  (Statement (Extra (DemutTLetBase ltype ([(procVarAsTeVar v) :- JTAny | v <- vars ]) term))
-          (TupleMove [SingleMove v | v <- vars]))
+demutTLetStatement ltype vars term = case vars of
+  [var] -> (Statement (Extra (DemutSLetBase ltype ((procVarAsTeVar var) :- JTAny) term))
+            (SingleMove var))
+  vars -> (Statement (Extra (DemutTLetBase ltype ([(procVarAsTeVar v) :- JTAny | v <- vars ]) term))
+            (TupleMove [SingleMove v | v <- vars]))
 
 ---
 -- elaborating loops

@@ -437,10 +437,7 @@ checkSen' scope (Loop niter cs' (xi, xc) body) = do
   let scope_vars = getAllKeys scope
 
   -- build the tup of variables
-  -- (except if there is only one, then we do not wrap it in a tuple)
-  let cs = case cs' of
-            [c] -> Var (c :- JTAny)
-            cs -> Tup ((\a -> Var (a :- JTAny)) <$> cs')
+  let cs = Tup ((\a -> Var (a :- JTAny)) <$> cs')
 
   -- check it
   let ccs = checkSens scope cs
@@ -1268,10 +1265,7 @@ checkPri' scope (Loop niter cs' (xi, xc) body) =
       let cniter = checkSens scope niter <* mtruncateP zeroId
 
       -- build the tup of variables
-      -- (except if there is only one, then we do not wrap it in a tuple)
-      let cs = case cs' of
-                [c] -> Var (c :- JTAny)
-                cs -> Tup ((\a -> Var (a :- JTAny)) <$> cs')
+      let cs = Tup ((\a -> Var (a :- JTAny)) <$> cs')
 
       -- check it
       let mcaps = checkSens scope cs <* mtruncateP inftyP
