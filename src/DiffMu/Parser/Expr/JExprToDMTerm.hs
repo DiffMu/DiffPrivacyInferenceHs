@@ -62,18 +62,19 @@ pSingle e = case e of
                  JEReal r -> pure $ Sng r JTReal
                  JESymbol s -> return  (Extra (ProcVarTerm ((UserProcVar s) ::- JTAny)))
                  JETup elems -> (Tup <$> (mapM pSingle elems))
-                 JELam args body -> pJLam args body
-                 JELamStar args body -> pJLamStar args body
                  JERef name refs -> pJRef name refs
                  JECall name args -> pJCall name args
                  
                  JEBlock stmts -> Extra <$> (Block <$> pList stmts)
+                 JELam args body -> pJLam args body
+                 JELamStar args body -> pJLamStar args body
                  JEIfElse cond bs -> Extra <$> (ProcPhi <$> (pSingle cond) <*> (mapM pSingle bs))
                  JELoop ivar iter body -> pJLoop ivar iter body
                  JEAssignment aee amt -> pJLet aee amt
                  JETupAssignment aee amt -> pJTLet aee amt
                  JEFunction name term -> pJFLet name term
                  JEBlackBox name args -> pJBlackBox name args
+                 JEReturn -> pure $ Extra ProcReturn
 
                  JEHole -> parseError "Holes (_) are only allowed in assignments."
                  JEUnsupported s -> parseError ("Unsupported expression " <> show s)
@@ -81,7 +82,6 @@ pSingle e = case e of
                  JEColon -> parseError "Colon (:) can only be used to access matrix rows like in M[1,:]."
                  JETypeAnnotation _ _ -> parseError "Type annotations are only supported on function arguments."
                  JENotRelevant _ _ -> parseError "Type annotations are only supported on function arguments."
-                 JENothing -> parseError "nothing is not valid here."
                  JELineNumber _ _ -> throwOriginalError (InternalError "What now?") -- TODO
 
 
@@ -91,7 +91,6 @@ pList (JEBlock stmts : tail) = pList (stmts ++ tail) -- handle nested blocks
 pList (s : tail) = do
     ps <- case s of
                JELineNumber file line -> location .= (file, line) >> return Nothing
-               JENothing -> return Nothing
                _ -> Just <$> (pSingle s)
                
     ptail <- pList tail

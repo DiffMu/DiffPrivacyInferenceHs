@@ -38,6 +38,7 @@ data JTree =
    | JBlock [JTree]
    | JTup [JTree]
    | JNothing
+   | JReturn [JTree]
    | JUnsupported String
    deriving Show
 
@@ -86,9 +87,11 @@ pTree =     try pTLineNumber
         <|> try (string ":_" >> return JHole)
         <|> try (string ":(==)" >> return (JSym "=="))
         <|> try (wskip (string ":nothing") >> return JNothing)
+        <|> try (wskip (string "nothing") >> return JNothing)
         <|> try (JSym <$> pSymbolString)
         <|> try (JReal <$> (wskip float))
         <|> try ((JInteger . fromIntegral) <$> (wskip decimal))
+        <|> try (":return"   `pWithCtor` JReturn)
         <|> try (":call"     `pWithCtor` JCall)
         <|> try (":curly"    `pWithCtor` JCurly)
         <|> try (":->"       `pWithCtor` JArrow)
@@ -155,7 +158,7 @@ data JExpr =
    | JETupAssignment [JExpr] JExpr
    | JEIfElse JExpr [JExpr]
    | JERef JExpr [JExpr]
-   | JENothing
+   | JEReturn
    deriving Show
 
 
@@ -227,7 +230,6 @@ pIter as = case as of
     [start, step, end] -> JEIter <$> pTreeToJExpr start <*> pTreeToJExpr step <*> pTreeToJExpr end
     _ -> jParseError ("Unsupported iteration statement " <> show (JCall (JColon : as)))
 
-
 pTreeToJExpr :: JTree -> JEParseState JExpr
 pTreeToJExpr tree = case tree of
      JLineNumber f l -> do -- put line number in the state for exquisit error messages
@@ -260,8 +262,11 @@ pTreeToJExpr tree = case tree of
          (name:refs) -> JERef <$> pTreeToJExpr name <*> mapM pTreeToJExpr refs
          _ -> error ("unsupported reference " <> show tree)
      JHole           -> pure JEHole
-     JNothing        -> pure JENothing
+     JNothing        -> jParseError ("Found nothing outside of a return statement. That's not supported.")
      JColon          -> pure JEColon
+     JReturn v -> case v of
+         [JNothing] -> pure JEReturn
+         v -> jParseError ("Returning of values (like " <> show v <> ") is not permitted. You may only return \'nothing\'.")
      JLoop as        -> case as of
          [(JAssign [ivar, JCall (JColon: iter)]), body] -> JELoop <$> pTreeToJExpr ivar <*> pIter iter <*> pTreeToJExpr body
          [(JAssign [_, iter]), _] -> jParseError ("Iterator has to be a range! Not like " <> show iter)
