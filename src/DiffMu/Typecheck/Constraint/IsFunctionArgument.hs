@@ -180,17 +180,6 @@ resolveChoiceHash (sign, (method, matches)) = do
    let resolveChoice :: (DMTypeOf FunKind) -> (DMTypeOf FunKind) -> t ()
        resolveChoice match mmethod = do
                                        case (match, mmethod) of
-                                          -- this is the case where checkPriv was called on the application of a -> arrow.
-                                          -- the privacy variables in match signature must hence be set to ∞ because what actually
-                                          -- happened is application of a -> arrow followed by Return.
-                                          (matchxs :->*: τmatch, methxs :->: τmeth) -> do
-                                             -- set new IFA constraints for arguments
-                                             mapM addC (zip3 sign [(τ1 :@ ()) | (τ1 :@ _) <- matchxs] [(τ2 :@ ()) | (τ2 :@ _) <- methxs])
-                                             -- set privacies of the match to ∞
-                                             mapM (\p -> unify p inftyP) [p | (_ :@ p) <- matchxs]
-                                             -- unify return types
-                                             unify τmatch τmeth
-                                             return ()
                                           -- in the regular cases the arrows can just be unified.
                                           (matchxs :->: τmatch, methxs :->: τmeth) -> do
                                              mapM addC (zip3 sign matchxs methxs)
@@ -200,6 +189,15 @@ resolveChoiceHash (sign, (method, matches)) = do
                                              mapM addC (zip3 sign matchxs methxs)
                                              addC (JTAny, (τmeth :@ ()), (τmatch :@ ()))
                                              return ()
+                                          -- this is the case where checkPriv was called on the application of a -> arrow.
+                                          (matchxs :->*: τmatch, methxs :->: τmeth) -> do
+                                              impossible $ "Found application of a sensitivity function " <> show mmethod <> " where a\
+                                                                                \private value was expected. Color preprocessing should\
+                                                                                \have prevented this."
+                                          (matchxs :->: τmatch, methxs :->*: τmeth) -> do
+                                              impossible $ "Found application of a privacy function " <> show mmethod <> " where a\
+                                                                                \sensitivity value was expected. Color preprocessing should\
+                                                                                \have prevented this."
                                           _ -> impossible $ "reached impossible case in resolving choices: " <> show (match, mmethod)
    -- unify each match with the method
    mapM (\match -> resolveChoice match method) matches

@@ -938,8 +938,6 @@ checkPri' scope (Rnd t) = do
   return (NoFun (Numeric (NonConst τ)))
 -}
 
--- it is ambiguous if this is an application of a LamStar or an application of a Lam followed by implicit Return.
--- we handle that by resolving IsFunctionArgument ( T -> T, S ->* S) by setting S's privacies to infinity.
 checkPri' scope (Apply f args) =
   let
     -- check the argument in the given scope,
