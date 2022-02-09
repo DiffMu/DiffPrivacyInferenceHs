@@ -95,6 +95,7 @@ data MoveType = TupleMove [MoveType] | SingleMove ProcVar | RefMove DemutDMTerm 
 data TermType =
   Value ImmutType MoveType
   | Statement DemutDMTerm MoveType
+  | StatementWithoutDefault DemutDMTerm
   | MutatingFunctionEnd
 
 data LastValue =
@@ -116,7 +117,7 @@ data MemType = TupleMem [MemType] | SingleMem MemVar | RefMem MemVar
   deriving (Eq, Show)
 
 data MemState = MemExists [MemType] | MemMoved
-  deriving (Show)
+  deriving (Show, Eq)
 
 data MemAssignmentType = AllocNecessary | PreexistingMem
 
@@ -234,8 +235,8 @@ $(makeLenses ''MFull)
 
 
 -- new variables
--- newTeVarOfMut :: (MonadState MFull m) => Text -> m (TeVar)
--- newTeVarOfMut hint = termVarsOfMut %%= (first GenTeVar . (newName hint))
+newTeVarOfMut :: (MonadState MFull m) => Text -> m (TeVar)
+newTeVarOfMut hint = termVarsOfMut %%= (first GenTeVar . (newName hint))
 
 newScopeVar :: (MonadState MFull m) => Text -> m (ScopeVar)
 newScopeVar hint = scopeNames %%= (first ScopeVar . (newName hint))
@@ -250,11 +251,15 @@ allocateMem scopename hint = do
   mutCtx %= (setValue mv (scopename, NotMutated))
   return mv
 
-
 cleanupMem :: ScopeVar -> MTC ()
 cleanupMem scname = mutCtx %= (\ctx -> f ctx)
   where
     f = fromKeyElemPairs . filter (\(_,(scname2,_)) -> scname2 /= scname) . getAllKeyElemPairs
+
+resetMutCtx :: MTC ()
+resetMutCtx = mutCtx %= (\ctx -> f ctx)
+  where
+    f = fromKeyElemPairs . fmap ((\(k,(sc,v)) -> (k,(sc,NotMutated)))) . getAllKeyElemPairs
 
 
 -----------------------------------------------------------------------------------------------------
@@ -440,6 +445,13 @@ expectImmutType = markRead
 setImmutType :: ScopeVar -> ProcVar -> ImmutType -> MTC ()
 setImmutType = markReassigned
 
+backupAndSetImmutType :: ScopeVar -> ProcVar -> ImmutType -> MTC (Maybe ImmutType)
+backupAndSetImmutType scname procvar itype = do
+  oldVal <- getValue procvar <$> use vaCtx
+  case oldVal of
+    Nothing          -> setImmutType scname procvar itype >> return Nothing
+    Just (_,_,itype) -> setImmutType scname procvar itype >> return (Just itype)
+
 setImmutTypeFLetDefined :: ScopeVar -> ProcVar -> ImmutType -> MTC ()
 setImmutTypeFLetDefined = markReassignedFLet
 
@@ -556,6 +568,10 @@ getAllMemVars (SingleMem a) = [a]
 getAllMemVars (TupleMem a) = a >>= getAllMemVars
 getAllMemVars (RefMem a) = [a]
 
+getAllMemVarsOfMemState :: MemState -> [MemVar]
+getAllMemVarsOfMemState (MemExists ms) = ms >>= getAllMemVars
+getAllMemVarsOfMemState (MemMoved) = []
+
 expectSingleMem :: [MemType] -> MTC MemVar
 expectSingleMem mts = do
   case mts of
@@ -634,6 +650,7 @@ termTypeAsTerm :: TermType -> DemutDMTerm
 termTypeAsTerm = \case
   Value it mt -> moveTypeAsTerm mt
   Statement pdt mt -> Extra $ DemutBlock [pdt, moveTypeAsTerm mt]
+  StatementWithoutDefault pdt -> Extra $ DemutBlock [pdt]
   MutatingFunctionEnd -> Extra $ DemutBlock []
 
 

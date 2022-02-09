@@ -27,6 +27,7 @@ import Test.QuickCheck.Property (Result(expect))
 import Control.Monad.Trans.Class
 import qualified GHC.RTS.Flags as LHS
 import Control.Exception (throw)
+import DiffMu.Typecheck.Preprocess.Demutation.Definitions (getAllMemVarsOfMemState)
 
 
 
@@ -73,6 +74,7 @@ elaborateValue scname te = do
   (te1type) <- elaborateMut scname te
   case te1type of
     Statement _ _ -> demutationError $ "Expected term to be a value, but it was a statement:\n" <> showPretty te
+    StatementWithoutDefault _ -> demutationError $ "Expected term to be a value, but it was a statement:\n" <> showPretty te
     Value it mt -> return (it , mt)
     MutatingFunctionEnd -> demutationError $ "Expected term to be a value, but it was a return."
 
@@ -81,6 +83,7 @@ elaboratePureValue scname te = do
   (te1type) <- elaborateMut scname te
   case te1type of
     Statement _ _   -> demutationError $ "Expected term to be a value, but it was a statement:\n" <> showPretty te
+    StatementWithoutDefault _   -> demutationError $ "Expected term to be a value, but it was a statement:\n" <> showPretty te
     MutatingFunctionEnd -> demutationError $ "Expected term to be a value, but it was a return."
     Value Pure mt -> return (mt)
     Value _ mt    -> demutationError $ "Expected term to be a pure value, but it has type: " <> show mt
@@ -93,26 +96,56 @@ elaboratePureValue scname te = do
 -- reverse the block statements
 -- concatenate Statements blocks
 -- determine the correct LastTerm for the concatenation result
-makeTermList :: [TermType] -> MTC (LastValue, [DemutDMTerm])
+makeTermList :: [TermType] -> MTC (LastValue, Maybe DemutDMTerm, [DemutDMTerm])
 
 -- empty list
 makeTermList [] = demutationError $ "Found an empty list of statements."
 
 -- single element left
 makeTermList (Value it mt : [])         = case it of
-                                            Pure -> return (PureValue mt, [moveTypeAsTerm mt])
+                                            Pure -> return (PureValue mt, Nothing, [moveTypeAsTerm mt])
                                             _    -> demutationError $ "The last value of a block has the type " <> show it <> "\n"
                                                                     <> "Only pure values are allowed.\n"
                                                                     <> "The value is:\n"
                                                                     <> show mt
-makeTermList (Statement term last : []) = return (PureValue last, [moveTypeAsTerm last, term])
-makeTermList (MutatingFunctionEnd : []) = return (MutatingFunctionEndValue , [])
+makeTermList (Statement term last : []) = return (PureValue last, Just (moveTypeAsTerm last), [term])
+makeTermList (StatementWithoutDefault term : []) = demutationError $ "Encountered a statement which is not allowed to be the last one in a block.\n"
+                                                                   <> "The statement is:\n"
+                                                                   <> showPretty term
+makeTermList (MutatingFunctionEnd : []) = return (MutatingFunctionEndValue , Nothing, [])
 
 -- more than one element left
 makeTermList (Value _ mt : ts)          = demutationError $ "Found a value term " <> show mt <> " inside a list of statements."
-makeTermList (Statement term _ : ts)    = do (last, ts') <- makeTermList ts
-                                             return (last, ts' <> [term])
+makeTermList (Statement term _ : ts)    = do (last, lastt, ts') <- makeTermList ts
+                                             return (last, lastt, ts' <> [term])
+makeTermList (StatementWithoutDefault term : ts)  
+                                        = do (last, lastt, ts') <- makeTermList ts
+                                             return (last, lastt, ts' <> [term])
 makeTermList (MutatingFunctionEnd : ts) = demutationError $ "Found a MutatingFunctionEnd inside a list of statements."
+
+--
+-- with actually appending
+--
+makeTermListAndAppend :: [TermType] -> MTC (LastValue, [DemutDMTerm])
+makeTermListAndAppend ts = do
+  (last, lastt, ts') <- makeTermList ts
+  case lastt of
+    Nothing -> return (last, ts')
+    Just lastt -> return (last, lastt:ts')
+
+--
+-- only allow terms which would have an append,
+-- but then cancel the appending. Such that we can
+-- append something of our own. (needed in loop demutation)
+-- 
+makeTermListAndCancelAppend :: [TermType] -> MTC (LastValue, [DemutDMTerm])
+makeTermListAndCancelAppend ts = do
+  (last, lastt, ts') <- makeTermList ts
+  case lastt of
+    Nothing -> demutationError $ "Found a block which has no default value to throw away. But such a block was expected here.\n"
+                              <> "Encountered block:\n"
+                              <> showPretty (Extra (DemutBlock ts'))
+    Just lastt -> return (last, ts')
 
   
 -- 
@@ -121,7 +154,7 @@ makeTermList (MutatingFunctionEnd : ts) = demutationError $ "Found a MutatingFun
 elaborateTopLevel :: ScopeVar -> ProcDMTerm -> MTC (TermType)
 elaborateTopLevel scname (Extra (Block ts)) = do
   ts' <- mapM (elaborateMut scname) ts
-  (last_val, ts'') <- makeTermList ts'
+  (last_val, ts'') <- makeTermListAndAppend ts'
 
   mt <- case last_val of
     PureValue mt -> return mt
@@ -143,7 +176,7 @@ elaborateMut :: ScopeVar -> ProcDMTerm -> MTC (TermType)
 
 elaborateMut scname (Extra (Block ts)) = do
   ts' <- mapM (elaborateMut scname) ts
-  (last_val, ts'') <- makeTermList ts'
+  (last_val, ts'') <- makeTermListAndAppend ts'
 
   mt <- case last_val of
     PureValue mt -> return mt
@@ -382,25 +415,26 @@ elaborateMut scname (Apply f args) = do
 
 
 
-elaborateMut scname (Extra (ProcPreLoop iters iterVar body)) = demutationError $ "Not implemented: loop." -- do
-{-
+elaborateMut scname (Extra (ProcPreLoop iters iterVar body)) = do -- demutationError $ "Not implemented: loop." -- do
   -- first, elaborate the iters
-  (newIters , newItersType, _) <- elaborateNonmut scname iters
+  (newIters) <- elaboratePureValue scname iters
+
 
   -- now, preprocess the body,
   -- i.e., find out which variables are getting mutated
   -- and change their `SLet`s to `modify!` terms
-  (preprocessedBody, modifyVars) <- runPreprocessLoopBody scope iterVar body
+  -- (preprocessedBody, modifyVars) <- runPreprocessLoopBody scope iterVar body
 
-  logForce $ "Preprocessed loop body. The modified vars are: " <> show modifyVars
-        <> "\nThe body is:\n" <> showPretty preprocessedBody
+  -- logForce $ "Preprocessed loop body. The modified vars are: " <> show modifyVars
+  --       <> "\nThe body is:\n" <> showPretty preprocessedBody
 
-  -- add the iterator to the scope
-  scope' <- safeSetValue scname iterVar (Pure UserValue) scope
+  -- add the iterator to the scope,
+  -- and backup old type
+  oldIterImmutType <- backupAndSetImmutType scname iterVar Pure
 
   -- backup iter memory location, and create a new one
-  oldIterMem <- getValueMaybe iterVar <$> use memCtx
-  setMemMaybe iterVar =<< SingleMem <$> allocateMem scname "iter"
+  oldIterMem <- getValue iterVar <$> use memCtx
+  setMem iterVar =<< pure <$> SingleMem <$> allocateMem scname (Right "iter")
 
   --
   -- [VAR FILTERING/Begin]
@@ -408,9 +442,67 @@ elaborateMut scname (Extra (ProcPreLoop iters iterVar body)) = demutationError $
   vanames <- getAllKeys <$> use vaCtx
   --
 
-  -- we can now elaborate the body, and thus get the actual list
-  -- of modified variables
-  (newBody, newBodyType, _) <- elaborateMut scname' preprocessedBody
+  --
+  -- backup the mut ctx, and set it to clean,
+  -- so that we can track the changes in the body
+  -- TODO: This.
+  -- mutCtxBefore <- use mutCtx
+  -- resetMutCtx
+
+  -------------------------------------------------
+  -- 
+  -- Body elaboration
+  --
+  --
+  -- We can now elaborate the body, and thus get the actual list
+  -- of modified variables.
+  --
+  -- For this, we keep track of the memctx. We look at which procvar assignments
+  -- changed during the body, and those are the captures.
+  -- Additionally we require that all changed procvars cannot contain memory locations
+  -- which were in use before the loop body.
+  -- 
+  memsBefore <- use memCtx
+  (lastVal, bodyTerms) <- elaborateAsListAndCancelAppend scname body
+  memsAfter <- use memCtx
+  --
+  -- get all procvars in `memsAfter` which are different from `memsBefore` (or new).
+  let isChangedOrNew (k,v0) = case getValue k memsBefore of
+        Nothing -> True
+        Just v1 | v0 == v1  -> False
+        Just v1 | otherwise -> True
+  let newMems = filter isChangedOrNew (getAllKeyElemPairs memsAfter)
+  --
+  -- get all memory vars used before, and make sure that
+  -- they are not used in the new vars.
+  let oldMemVars = getAllElems memsBefore >>= getAllMemVarsOfMemState
+  let newMemVars = (snd <$> newMems) >>= getAllMemVarsOfMemState
+  case newMemVars `intersect` oldMemVars of
+    [] -> pure ()
+    xs -> demutationError $ "Found a loop body which moves variables around.\n"
+                          <> "Since this means that we cannot track what actually happens in the case of an unknown number of iterations,\n"
+                          <> "this is not allowed.\n"
+                          <> "\n"
+                          <> "Loop body:\n"
+                          <> showPretty body
+  --
+  -- the captures are the list of variables whoose mem changed
+  -- TODO: This is only correct in non-mutating loops!
+  --       In mutating ones, the mutated variables are also captures!
+  let captures = procVarAsTeVar <$> fst <$> newMems
+  --
+  -- We have to add the capture assignment and the capture return
+  -- to the body. Note that the order of `bodyTerms` is already
+  -- reversed, hence the reversed appending.
+  captureVar <- newTeVarOfMut "loop_capture"
+  let capture_assignment   = Extra (DemutTLetBase PureLet [v :- JTAny | v <- captures] (Var (captureVar :- JTAny)))
+  let capture_return       = Tup [Var (v :- JTAny) | v <- captures]
+  let demutated_body_terms = [capture_return] <> bodyTerms <> [capture_assignment]
+  let demutated_loop = Extra (DemutLoop (moveTypeAsTerm newIters) captures ((Just (procVarAsTeVar iterVar), captureVar))
+                             (Extra (DemutBlock demutated_body_terms)))
+
+  --
+  ------------------------------------------------
 
   --
   -- [VAR FILTERING/End]
@@ -430,103 +522,12 @@ elaborateMut scname (Extra (ProcPreLoop iters iterVar body)) = demutationError $
   -- restore old iter memory location,
   -- if there was something
   --
-  case (iterVar, oldIterMem) of
-    (Just v, Just a) -> memCtx %= (setValue v a)
+  case (oldIterMem) of
+    (Just a) -> memCtx %= (setValue iterVar a)
     _ -> pure ()
 
-  -- we accept a full virtual mutated, or a globally pure value
-  case newBodyType of
-    ----------
-    -- case I
-    -- the loop is really mutating
-    VirtualMutated mutvars -> do
+  return (StatementWithoutDefault (Extra (DemutTLetBase PureLet ([v :- JTAny | v <- captures]) demutated_loop)))
 
-      -- we use the mutvars to build a tlet around the body,
-      -- and return that new `Loop` term
-      --
-      -- the actual body term is going to look as follows:
-      --
-      --   let (c1...cn) = captureVar
-      --   in term...
-      --
-      -- where `term` is made sure to return the captured tuple
-      -- by the general demutation machinery
-      captureVar <- newTeVarOfMut "loop_capture"
-
-      let inScope v = case getValue v scope of
-                        Just _ -> True
-                        Nothing -> False
-
-      let globalMutVars = filter (inScope) mutvars
-
-      let newBodyWithLet = case globalMutVars of
-            [globalMutVar] -> SLet (Just globalMutVar :- JTAny) (Var (Just captureVar :- JTAny)) (wrapReorder mutvars globalMutVars newBody)
-            globalMutVars -> TLet [(Just v :- JTAny) | v <- globalMutVars] (Var (Just captureVar :- JTAny)) (wrapReorder mutvars globalMutVars newBody)
-
-      let newTerm = Loop newIters (globalMutVars) (iterVar , captureVar) newBodyWithLet
-
-      return (newTerm , VirtualMutated globalMutVars, NoMove)
-
-    ----------
-    -- case I
-    -- the loop only mutates local variables,
-    -- and returns a pure value
-    Pure p -> throwError (DemutationError $ "Expected a loop body to be mutating, but it was of type " <> show (Pure p))
-    --   -> case xs of
-    -- GloballyPure xs -> case xs of
-      -- [] -> throwError (DemutationError $ "Expected a loop body to be mutating, but it was of type " <> show (Pure))
-      -- mutvars -> do
-      --   captureVar <- newTeVarOfMut "loop_capture"
-
-      --   let inScope v = case getValue v scope of
-      --                     Just _ -> True
-      --                     Nothing -> False
-
-      --   let globalMutVars = filter (inScope) mutvars
-      --   let bodyProjection = getPermutationWithDrop mutvars globalMutVars
-
-      --   let newBodyWithLet = TLet [(v :- JTAny) | (v) <- globalMutVars] (Var (captureVar :- JTAny)) (newBody)
-      --   let newTerm = Loop newIters (globalMutVars) (iterVar , captureVar) newBodyWithLet
-
-      --   return (newTerm , VirtualMutated ([(v , LocalMutation) | v <- globalMutVars]))
-
-
-    -- if there was no mutation, throw error
-    other -> throwError (DemutationError $ "Expected a loop body to be mutating, but it was of type " <> show other)
-
-
--- the loop-body-preprocessing creates these modify! terms
--- they get elaborated into tlet assignments again.
--- elaborateMut scname (Extra (SModify (Nothing :- _) t1)) = throwError (DemutationError $ "Found a nameless variable in a modify term.")
--- elaborateMut scname (Extra (SModify (Just v :- _) t1)) = do
---   (newT1, newT1Type, moveType) <- elaborateNonmut scname t1
---   return (newT1, VirtualMutated [(v)], SingleMove v)
-
--- -- We also have tuple modify
--- elaborateMut scname (Extra (TModify xs t1)) = do
---   let elabSingle (Just v :- _) = return (v)
---       elabSingle (Nothing :- _) = throwError (DemutationError $ "Found a nameless variable in a tuple modify term.")
-
---   allElab <- mapM elabSingle xs
-
---   (newT1, newT1Type, moveType) <- elaborateNonmut scname t1
---   -- markMoved moveType
---   return (newT1 , VirtualMutated allElab, NoMove)
-
-elaborateMut scname (Extra (MutRet)) = do
-  ---------
-  -- get mutated variables from the (VA)context
-
-  -- all accessed vars
-  avars <- getAllKeyElemPairs <$> (use mutCtx)
-  -- mutated memvars with their locality
-  let mutMemVars = [(v) | (v, (_, Mutated)) <- avars ]
-  mutTeVars <- mapM (reverseMemLookup) mutMemVars
-
-  -- a single var is returned as value, not as tuple
-  return (buildCopyReturnValue mutTeVars, VirtualMutated mutTeVars, NoMove)
-
--}
 
 
 
@@ -716,17 +717,6 @@ elaborateMut scname (ConvertM t1) = do
 -- The non mutating builtin cases
 -- ------------------------------
 --
-elaborateMut scname (Tup t1s) = do
-
-  -- 
-  -- We need to make sure that everything put into
-  -- the tuple is pure, as this is expected when we
-  -- take those things out of the tuple again.
-  --
-  results <- mapM (elaboratePureValue scname) t1s
-
-  -- what we return is pure, and is a tuple move of the entries
-  return $ Value Pure (TupleMove results)
 
 elaborateMut scname (MCreate t1 t2 t3 t4) = elaborateNonMut3 scname (\tt1 tt2 tt4 -> MCreate tt1 tt2 t3 tt4) t1 t2 t4
 elaborateMut scname (Transpose t1)   = elaborateNonMut1 scname Transpose t1
@@ -818,13 +808,23 @@ elaborateHelper4 scname ctr t1 t2 t3 t4 = do
 -- list elaboration
 
 
-elaborateAsList :: ScopeVar -> ProcDMTerm -> MTC (LastValue, [DemutDMTerm])
-elaborateAsList scname (Extra (Block ts)) = do
+elaborateAsListAndAppend :: ScopeVar -> ProcDMTerm -> MTC (LastValue, [DemutDMTerm])
+elaborateAsListAndAppend scname (Extra (Block ts)) = do
   ts' <- mapM (elaborateMut scname) ts
-  makeTermList ts'
-elaborateAsList scname t = do
+  makeTermListAndAppend ts'
+elaborateAsListAndAppend scname t = do
   t' <- elaborateMut scname t
-  makeTermList [t']
+  makeTermListAndAppend [t']
+
+
+elaborateAsListAndCancelAppend :: ScopeVar -> ProcDMTerm -> MTC (LastValue, [DemutDMTerm])
+elaborateAsListAndCancelAppend scname (Extra (Block ts)) = do
+  ts' <- mapM (elaborateMut scname) ts
+  makeTermListAndCancelAppend ts'
+elaborateAsListAndCancelAppend scname t = do
+  t' <- elaborateMut scname t
+  makeTermListAndCancelAppend [t']
+
 
 ---------------------------------------------------
 -- recurring utilities
@@ -874,7 +874,7 @@ elaborateLambda scname args body = do
   --
   -- check the body
   --
-  (lastValue, new_body_terms) <- elaborateAsList scname body
+  (lastValue, new_body_terms) <- elaborateAsListAndAppend scname body
   --
   -- find out which mem vars have been mutated
   --
