@@ -562,6 +562,21 @@ checkSen' scope (Size m) = do
 
   return (NoFun (DMTup [Numeric (Const nv DMInt), Numeric (Const mv DMInt)]))
 
+checkSen' scope (Length m) = do
+  mt <- checkSens scope m
+  
+  -- variables for vector dimension and entries
+  nv <- newVar
+  τ <- newVar
+
+  nrm <- newVar -- variable for norm
+  clp <- newVar -- variable for clip
+  unify mt (NoFun (DMVec nrm clp nv τ))
+
+  mscale zeroId
+
+  return (NoFun (Numeric (Const nv DMInt)))
+
 
 checkSen' scope (MutClipM c m) = checkSens scope (ClipM c m)
 checkSen' scope (ClipM c m) = do
