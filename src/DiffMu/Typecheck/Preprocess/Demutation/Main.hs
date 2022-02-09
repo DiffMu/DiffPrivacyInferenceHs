@@ -486,10 +486,20 @@ elaborateMut scname (Extra (ProcPreLoop iters iterVar body)) = do -- demutationE
                           <> "Loop body:\n"
                           <> showPretty body
   --
-  -- the captures are the list of variables whoose mem changed
+  -- The captures are the list of variables whoose mem changed.
+  -- For this we do almost the same as for `newMems`, except that we
+  -- do not want the procvars which were newly created in the body,
+  -- since these are body-local, and freshly assigned in each iteration. 
+  --
   -- TODO: This is only correct in non-mutating loops!
   --       In mutating ones, the mutated variables are also captures!
-  let captures = procVarAsTeVar <$> fst <$> newMems
+  --
+  let isChanged (k,v0) = case getValue k memsAfter of
+        Nothing -> undefined -- this case should actually not occur, since the variable `k` cannot simply disappear
+        Just v1 | v0 == v1  -> False
+        Just v1 | otherwise -> True
+  let captureMems = filter isChanged (getAllKeyElemPairs memsBefore)
+  let captures = procVarAsTeVar <$> fst <$> captureMems
   --
   -- We have to add the capture assignment and the capture return
   -- to the body. Note that the order of `bodyTerms` is already

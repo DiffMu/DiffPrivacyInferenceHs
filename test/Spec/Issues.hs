@@ -5,7 +5,7 @@ import Spec.Base
 
 testIssues pp = do
   test25 pp
-  test51 pp
+  test53 pp
   test58 pp
   test59 pp
   test60 pp
@@ -29,7 +29,7 @@ test25 pp = describe "issue 25" $ do
   parseEval pp "seems fixed (the example typechecks)" ex (pure ty)
 
 
-test51 pp = describe "issue 53" $ do
+test53 pp = describe "issue 53" $ do
   let ex = "function f(x::Integer) :: Priv() \n"
            <>  "(theta, mu) = (100,x) \n"
            <>  "theta + mu \n"
