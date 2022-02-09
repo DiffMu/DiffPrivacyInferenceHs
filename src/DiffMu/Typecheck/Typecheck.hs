@@ -157,7 +157,7 @@ checkSen' scope (Lam xτs body) =
 
     -- functions can only return deepcopies of DMModel and DMGrads
     restype <- newVar
-    addConstraint (Solvable (IsRefCopy (btype, restype)))
+    addConstraint (Solvable (IsClone (btype, restype)))
 
     -- make an arrow type.
     let τ = (xrτs' :->: restype)
@@ -204,7 +204,7 @@ checkSen' scope (LamStar xτs body) =
 
     -- functions can only return deepcopies of DMModel and DMGrads
     restype <- newVar
-    addConstraint (Solvable (IsRefCopy (btype, restype)))
+    addConstraint (Solvable (IsClone (btype, restype)))
 
     let τ = (xrτs' :->*: restype)
     return (Fun [τ :@ (Just sign)])
@@ -893,13 +893,13 @@ checkSen' scope term@(InternalExpectConst a) = do
 -- 
 -- The user can explicitly copy return values.
 --
-checkSen' scope term@(DeepcopyValue t) = do
+checkSen' scope term@(Clone t) = do
   res <- checkSens scope t
 
   ta <- newVar
   res' <- unify res (NoFun (ta))
 
-  return (NoFun (Deepcopied ta))
+  return (NoFun (Cloned ta))
 
 
 

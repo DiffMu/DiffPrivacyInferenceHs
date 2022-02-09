@@ -32,13 +32,13 @@ testSens pp = do
           τ <- newTVar ""
           return $ Fun([([TVar τ :@ oneId] :->: TVar τ) :@ Just [JTAny]])
     parseEvalUnify_customCheck pp "Checks the identity function" test ty $ do
-        ctrs <- getConstraintsByType (Proxy @(IsRefCopy (DMMain,DMMain))) 
+        ctrs <- getConstraintsByType (Proxy @(IsClone (DMMain,DMMain)))
         -- make sure that there is one constraint which requires a refcopy
         -- and that there are no other constraints
         allctrs <- getAllConstraints
         case (length ctrs, length allctrs) of
             (1,1) -> return $ Right ()
-            _ -> return $ Left $ "Expected a single RefCopy constraint but got:\n" <> show allctrs
+            _ -> return $ Left $ "Expected a single Clone constraint but got:\n" <> show allctrs
 
 
     let test2 = "function test(a :: Integer)\n"
@@ -75,10 +75,10 @@ testOps pp = describe "Ops" $ do
                  \ 2.0*x + y - z \n\
                  \ end"
         ex_mat = "function foo(x::Matrix{Integer}, y::Matrix{Integer}, z::Matrix{Integer}) \n\
-                 \ return_copy(2.0*x + y - z) \n\
+                 \ clone(2.0*x + y - z) \n\
                  \ end"
         ex_vec = "function foo(x::Vector{Integer}, y::Vector{Integer}, z::Vector{Integer}) \n\
-                 \ return_copy(2.0*x + y - z) \n\
+                 \ clone(2.0*x + y - z) \n\
                  \ end"
         int = NoFun(Numeric (NonConst DMInt))
         real = NoFun(Numeric (NonConst DMReal))
@@ -108,18 +108,18 @@ testPriv pp = describe "privacies" $ do
                \ scale_gradient!(0.1, x) \n\
                \ gaussian_mechanism!(0.1, 0.1, 0.1, x)  \n\
                \ scale_gradient!(100, x) \n\
-               \ return_copy(x) \n\
+               \ clone(x) \n\
                \ end"
         invv = "function g(x :: Vector) :: Priv() \n\
                \ x = 0.1 * x \n\
                \ gaussian_mechanism!(0.1, 0.1, 0.1, x)  \n\
-               \ return_copy(200 * x) \n\
+               \ clone(200 * x) \n\
                \ end"
         lap = "function g(x :: DMGrads) :: Priv() \n\
                \    scale_gradient!(0.1, x) \n\
                \    laplacian_mechanism!(0.1, 0.1, x)  \n\
                \    scale_gradient!(100, x) \n\
-               \    return_copy(x) \n\
+               \    clone(x) \n\
                \ end"
         int = NoFun(Numeric (NonConst DMInt))
         real = NonConst DMReal
@@ -216,7 +216,7 @@ testSample pp = describe "Sample" $ do
               \  clip!(L2,gs) \n\
               \  norm_convert!(gs) \n\
               \  gaussian_mechanism!(2, 0.2, 0.3, gs)  \n\
-              \  return_copy(x * gs) \n\
+              \  clone(x * gs) \n\
               \end"
         ty = "Fun([([NoFun(Matrix<n: L∞, c: τ_33>[s_11 × s_21](Num(Data))) @ (0.4⋅s_18⋅(1 / s_11),0.3⋅s_18⋅(1 / s_11)),NoFun(Num(Int[s_18])) @ (0,0),NoFun(Num(Int[--])) @ (∞,∞)] ->* NoFun(Grads<n: L∞, c: U>[s_16](Num(Real[--])))) @ Just [Any,Any,Integer]])"
         cs = ""
@@ -236,13 +236,13 @@ testMMap pp = describe "Matrix map" $ do
     let ex = "function foo(m::Vector{Integer}, y::Integer) \n\
               \   f(x) = 2*x + y\n\
               \   m = map(f,m) \n\
-              \   return_copy(m) \n\
+              \   clone(m) \n\
               \end"
         ex_fail = "function foo(m) \n\
               \   f(x::Integer) = 1 \n\
               \   f(x::Real) = 2 \n\
               \   m = map(f,m) \n\
-              \   return_copy(m) \n\
+              \   clone(m) \n\
               \end"
         ty :: TC DMMain = do
             c <- newVar

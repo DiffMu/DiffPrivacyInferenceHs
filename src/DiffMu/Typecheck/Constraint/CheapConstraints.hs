@@ -390,28 +390,28 @@ instance Solve MonadDMTC IsLess (Sensitivity, Sensitivity) where
 -------------------------------------------------------------------
 -- functions that return DMGrads or DMModel must deepcopy the return value.
 
-newtype IsRefCopy a = IsRefCopy a deriving Show
+newtype IsClone a = IsClone a deriving Show
 
-instance TCConstraint IsRefCopy where
-  constr = IsRefCopy
-  runConstr (IsRefCopy c) = c
+instance TCConstraint IsClone where
+  constr = IsClone
+  runConstr (IsClone c) = c
 
-instance FixedVars TVarOf (IsRefCopy (DMMain, DMMain)) where
-  fixedVars (IsRefCopy res) = freeVars res
+instance FixedVars TVarOf (IsClone (DMMain, DMMain)) where
+  fixedVars (IsClone res) = freeVars res
 
 
-instance Solve MonadDMTC IsRefCopy (DMMain, DMMain) where
-  solve_ Dict _ name (IsRefCopy (TVar v, _)) = return ()
-  solve_ Dict _ name (IsRefCopy (NoFun (TVar v), _)) = return ()
-  solve_ Dict _ name (IsRefCopy (NoFun (DMTup ts), tv)) = do
+instance Solve MonadDMTC IsClone (DMMain, DMMain) where
+  solve_ Dict _ name (IsClone (TVar v, _)) = return ()
+  solve_ Dict _ name (IsClone (NoFun (TVar v), _)) = return ()
+  solve_ Dict _ name (IsClone (NoFun (DMTup ts), tv)) = do
      nvs <- mapM (\_ -> newVar) ts
      unify tv (NoFun (DMTup nvs))
-     mapM (\(tt, nv) -> addConstraint (Solvable (IsRefCopy ((NoFun tt), (NoFun nv))))) (zip ts nvs)
+     mapM (\(tt, nv) -> addConstraint (Solvable (IsClone ((NoFun tt), (NoFun nv))))) (zip ts nvs)
      dischargeConstraint name
-  solve_ Dict _ name (IsRefCopy (NoFun (DMModel _ _), _)) = failConstraint name
-  solve_ Dict _ name (IsRefCopy (NoFun (DMContainer _ _ _ _ _), _)) = failConstraint name
-  solve_ Dict _ name (IsRefCopy (NoFun (Deepcopied v), t)) = unify (NoFun v) t >> dischargeConstraint name
-  solve_ Dict _ name (IsRefCopy (ti, tv)) = unify ti tv >> dischargeConstraint name
+  solve_ Dict _ name (IsClone (NoFun (DMModel _ _), _)) = failConstraint name
+  solve_ Dict _ name (IsClone (NoFun (DMContainer _ _ _ _ _), _)) = failConstraint name
+  solve_ Dict _ name (IsClone (NoFun (Cloned v), t)) = unify (NoFun v) t >> dischargeConstraint name
+  solve_ Dict _ name (IsClone (ti, tv)) = unify ti tv >> dischargeConstraint name
 
 
 

@@ -123,7 +123,7 @@ instance Show DMKind where
 
 -- so we don't get incomplete pattern warnings for them
 {-# COMPLETE DMInt, DMReal, Const, NonConst, DMData, Numeric, TVar, (:->:), (:->*:), DMTup, L1, L2, LInf, U, Clip, Vector, Gradient, Matrix,
- DMContainer, DMVec, DMGrads, DMMat, DMModel, NoFun, Fun, (:∧:), BlackBox, Deepcopied #-}
+ DMContainer, DMVec, DMGrads, DMMat, DMModel, NoFun, Fun, (:∧:), BlackBox, Cloned #-}
 
 --------------------
 -- 2. DMTypes
@@ -208,7 +208,7 @@ data DMTypeOf (k :: DMKind) where
   BlackBox :: [JuliaType] -> DMTypeOf MainKind
 
   -- deep copied type, thus allowed to be returned from functions
-  Deepcopied :: DMType -> DMType
+  Cloned :: DMType -> DMType
 
 
 
@@ -239,7 +239,7 @@ instance Hashable (DMTypeOf k) where
   hashWithSalt s (NoFun t) = s `hashWithSalt` t
   hashWithSalt s (n :∧: t) = s `hashWithSalt` n `hashWithSalt` t
   hashWithSalt s (BlackBox n) = s `hashWithSalt` n
-  hashWithSalt s (Deepcopied n) = s `hashWithSalt` n
+  hashWithSalt s (Cloned n) = s `hashWithSalt` n
 
 instance (Hashable a, Hashable b) => Hashable (a :@ b) where
   hashWithSalt s (a:@ b) = s `hashWithSalt` a `hashWithSalt` b
@@ -285,7 +285,7 @@ instance Show (DMTypeOf k) where
   show (Fun xs) = "Fun(" <> show xs <> ")"
   show (x :∧: y) = "(" <> show x <> "∧" <> show y <> ")"
   show (BlackBox n) = "BlackBox [" <> show n <> "]"
-  show (Deepcopied n) = "Deepcopied [" <> show n <> "]"
+  show (Cloned n) = "Cloned [" <> show n <> "]"
 
 showArgPretty :: (ShowPretty a, ShowPretty b) => (a :@ b) -> String
 showArgPretty (a :@ b) = "-  " <> showPretty a <> "\n"
@@ -338,7 +338,7 @@ instance ShowPretty (DMTypeOf k) where
   showPretty (Fun xs) = showPrettyEnumVertical (fmap fstAnn xs)
   showPretty (x :∧: y) = "(" <> showPretty x <> "∧" <> showPretty y <> ")"
   showPretty (BlackBox n) = "BlackBox[" <> showPretty n <> "]"
-  showPretty (Deepcopied n) = "Deepcopied[" <> showPretty n <> "]"
+  showPretty (Cloned n) = "Cloned[" <> showPretty n <> "]"
 
 
 -- instance Eq (DMTypeOf NormKind) where
@@ -488,7 +488,7 @@ recDMTypeM typemap sensmap (NoFun x) = NoFun <$> typemap x
 recDMTypeM typemap sensmap (Fun xs) = Fun <$> mapM (\(a :@ b) -> (:@) <$> typemap a <*> pure b) xs
 recDMTypeM typemap sensmap (x :∧: y) = (:∧:) <$> typemap x <*> typemap y
 recDMTypeM typemap sensmap (BlackBox n) = pure (BlackBox n)
-recDMTypeM typemap sensmap (Deepcopied n) = Deepcopied <$> typemap n
+recDMTypeM typemap sensmap (Cloned n) = Cloned <$> typemap n
 
 ---------------------------------------------------------
 -- Sensitivity and Privacy
@@ -755,7 +755,7 @@ data PreDMTerm (t :: * -> *) =
 -- Internal terms
   | InternalExpectConst (PreDMTerm t)
 -- Demutation related, but user specified
-  | DeepcopyValue (PreDMTerm t)
+  | Clone (PreDMTerm t)
   deriving (Generic)
 
 pattern SLet a b c = SLetBase PureLet a b c
@@ -912,7 +912,7 @@ recDMTermM f h (LastTerm x)       = LastTerm <$> (f x)
 recDMTermM f h (ZeroGrad a)       = ZeroGrad <$> (f a)
 recDMTermM f h (SumGrads a b)     = SumGrads <$> (f a) <*> (f b)
 recDMTermM f h (Sample a b c)     = Sample <$> (f a) <*> (f b) <*> (f c)
-recDMTermM f h (DeepcopyValue t) = DeepcopyValue <$> (f t)
+recDMTermM f h (Clone t) = Clone <$> (f t)
 recDMTermM f h (InternalExpectConst a) = InternalExpectConst <$> (f a)
 
 --------------------------------------------------------------------------
@@ -1039,7 +1039,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (SumGrads a b)     = "SumGrads (" <> (showPretty a) <> ", " <> (showPretty b) <> ")"
   showPretty (SmpLet v a b)     = "SmpLet " <> showPretty v <> " <- " <> (showPretty a) <> "\n" <> (showPretty b)
   showPretty (Sample a b c)     = "Sample (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ")"
-  showPretty (DeepcopyValue a)  = "(Copy " <> showPretty a <> ")"
+  showPretty (Clone a)  = "(Clone " <> showPretty a <> ")"
   showPretty (InternalExpectConst a) = "InternalExpectConst " <> (showPretty a)
 
 instance ShowPretty a => ShowPretty (MutabilityExtension a) where
