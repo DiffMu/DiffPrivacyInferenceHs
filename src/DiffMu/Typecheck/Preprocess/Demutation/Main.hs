@@ -665,27 +665,9 @@ elaborateMut scname term@(Extra (ProcPhi cond ts)) = demutationError "not implem
 -- See #183.
 --
 
-{-
--- TODO: Reimplement for #190
-elaborateMut scname (Index t1 t2 t3) = do
-  (newT1, newT1Type, _) <- elaborateNonmut scname t1
-  (newT2, newT2Type, _) <- elaborateNonmut scname t2
-  (newT3, newT3Type, _) <- elaborateNonmut scname t3
-  return (Index newT1 newT2 newT3 , Pure UserValue, RefMove)
-elaborateMut scname (VIndex t1 t2) = do
-  (newT1, newT1Type, _) <- elaborateNonmut scname t1
-  (newT2, newT2Type, _) <- elaborateNonmut scname t2
-  return (VIndex newT1 newT2 , Pure UserValue, RefMove)
-elaborateMut scname (MMap t1 t2) = do
-  (newT1, newT1Type, _) <- elaborateNonmut scname t1
-  (newT2, newT2Type, _) <- elaborateNonmut scname t2
-  return (MMap newT1 newT2 , Pure UserValue, RefMove)
-elaborateMut scname (Row t1 t2) = do
-  (newT1, newT1Type, _) <- elaborateNonmut scname t1
-  (newT2, newT2Type, _) <- elaborateNonmut scname t2
-  return (Row newT1 newT2, Pure UserValue, RefMove)
--}
-
+elaborateMut scname (Index t1 t2 t3) = elaborateRefMove3 scname Index t1 t2 t3
+elaborateMut scname (VIndex t1 t2) = elaborateRefMove2 scname VIndex t1 t2
+elaborateMut scname (Row t1 t2) = elaborateRefMove2 scname Row t1 t2
 
 ----
 -- the mutating builtin cases
@@ -760,6 +742,7 @@ elaborateMut scname (Gauss t1 t2 t3 t4) = elaborateNonMut4 scname Gauss t1 t2 t3
 elaborateMut scname (Laplace t1 t2 t3) = elaborateNonMut3 scname Laplace t1 t2 t3
 elaborateMut scname (AboveThresh t1 t2 t3 t4) = elaborateNonMut4 scname AboveThresh t1 t2 t3 t4
 elaborateMut scname (ClipN t1 t2 t3) = elaborateNonMut3 scname ClipN t1 t2 t3
+elaborateMut scname (MMap t1 t2) = elaborateNonMut2 scname MMap t1 t2
 
 
 -- the unsupported terms
@@ -775,46 +758,60 @@ elaborateMut scname term@_    = throwError (UnsupportedError ("When mutation-ela
 
 
 ------------------------------------------------------
--- Non mutating elaboration helpers
+-- elaboration helpers
 --
 
-elaborateNonMut1 :: ScopeVar -> (DemutDMTerm -> DemutDMTerm) -> ProcDMTerm -> MTC TermType
-elaborateNonMut1 scname ctr t1 = do
+-- non mutating
+elaborateNonMut1 :: ScopeVar -> (DemutDMTerm -> DemutDMTerm) -> (ProcDMTerm -> MTC TermType)
+elaborateNonMut1 scname ctr = elaborateHelper1 scname (NoMove . ctr)
+elaborateNonMut2 scname ctr = elaborateHelper2 scname (((.).(.)) NoMove ctr)
+elaborateNonMut3 scname ctr = elaborateHelper3 scname (((.).(.).(.)) NoMove ctr)
+elaborateNonMut4 scname ctr = elaborateHelper4 scname (((.).(.).(.).(.)) NoMove ctr)
+
+-- refMove
+elaborateRefMove1 :: ScopeVar -> (DemutDMTerm -> DemutDMTerm) -> (ProcDMTerm -> MTC TermType)
+elaborateRefMove1 scname ctr = elaborateHelper1 scname (RefMove . ctr)
+elaborateRefMove2 scname ctr = elaborateHelper2 scname (((.).(.)) RefMove ctr)
+elaborateRefMove3 scname ctr = elaborateHelper3 scname (((.).(.).(.)) RefMove ctr)
+elaborateRefMove4 scname ctr = elaborateHelper4 scname (((.).(.).(.).(.)) RefMove ctr)
+    
+elaborateHelper1 :: ScopeVar -> (DemutDMTerm -> MoveType) -> ProcDMTerm -> MTC TermType
+elaborateHelper1 scname ctr t1 = do
   (newT1) <- moveTypeAsTerm <$> elaboratePureValue scname t1
-  return (Value Pure (NoMove (ctr newT1)))
+  return (Value Pure (ctr newT1))
 
 
-elaborateNonMut2 :: ScopeVar
-                    -> (DemutDMTerm -> DemutDMTerm -> DemutDMTerm)
+elaborateHelper2 :: ScopeVar
+                    -> (DemutDMTerm -> DemutDMTerm -> MoveType)
                     -> ProcDMTerm -> ProcDMTerm
                     -> MTC TermType
-elaborateNonMut2 scname ctr t1 t2 = do
+elaborateHelper2 scname ctr t1 t2 = do
   (newT1) <- moveTypeAsTerm <$> elaboratePureValue scname t1
   (newT2) <- moveTypeAsTerm <$> elaboratePureValue scname t2
-  return (Value Pure (NoMove (ctr newT1 newT2)))
+  return (Value Pure (ctr newT1 newT2))
 
 
-elaborateNonMut3 :: ScopeVar
-                    -> (DemutDMTerm -> DemutDMTerm -> DemutDMTerm -> DemutDMTerm)
+elaborateHelper3 :: ScopeVar
+                    -> (DemutDMTerm -> DemutDMTerm -> DemutDMTerm -> MoveType)
                     -> ProcDMTerm -> ProcDMTerm -> ProcDMTerm
                     -> MTC TermType
-elaborateNonMut3 scname ctr t1 t2 t3 = do
+elaborateHelper3 scname ctr t1 t2 t3 = do
   (newT1) <- moveTypeAsTerm <$> elaboratePureValue scname t1
   (newT2) <- moveTypeAsTerm <$> elaboratePureValue scname t2
   (newT3) <- moveTypeAsTerm <$> elaboratePureValue scname t3
-  return (Value Pure (NoMove (ctr newT1 newT2 newT3)))
+  return (Value Pure (ctr newT1 newT2 newT3))
 
 
-elaborateNonMut4 :: ScopeVar
-                    -> (DemutDMTerm -> DemutDMTerm -> DemutDMTerm -> DemutDMTerm -> DemutDMTerm)
+elaborateHelper4 :: ScopeVar
+                    -> (DemutDMTerm -> DemutDMTerm -> DemutDMTerm -> DemutDMTerm -> MoveType)
                     -> ProcDMTerm -> ProcDMTerm -> ProcDMTerm -> ProcDMTerm
                     -> MTC TermType
-elaborateNonMut4 scname ctr t1 t2 t3 t4 = do
+elaborateHelper4 scname ctr t1 t2 t3 t4 = do
   (newT1) <- moveTypeAsTerm <$> elaboratePureValue scname t1
   (newT2) <- moveTypeAsTerm <$> elaboratePureValue scname t2
   (newT3) <- moveTypeAsTerm <$> elaboratePureValue scname t3
   (newT4) <- moveTypeAsTerm <$> elaboratePureValue scname t4
-  return (Value Pure (NoMove (ctr newT1 newT2 newT3 newT4)))
+  return (Value Pure (ctr newT1 newT2 newT3 newT4))
 
 
 ---------------------------------------------------
