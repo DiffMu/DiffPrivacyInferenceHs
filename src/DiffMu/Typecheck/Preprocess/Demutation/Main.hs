@@ -34,12 +34,16 @@ import DiffMu.Typecheck.Preprocess.Demutation.Definitions (getAllMemVarsOfMemSta
 
 
   
-demutTLetStatement :: LetKind -> [ProcVar] -> DemutDMTerm -> TermType
+demutTLetStatement :: LetKind -> [ProcVar] -> DemutDMTerm -> MTC TermType
 demutTLetStatement ltype vars term = case vars of
-  [var] -> (Statement (Extra (DemutSLetBase ltype ((procVarAsTeVar var) :- JTAny) term))
-            (SingleMove var))
-  vars -> (Statement (Extra (DemutTLetBase ltype ([(procVarAsTeVar v) :- JTAny | v <- vars ]) term))
-            (TupleMove [SingleMove v | v <- vars]))
+  [var] -> do
+            var' <- (procVarAsTeVar var)
+            return (Statement (Extra (DemutSLetBase ltype (var' :- JTAny) term))
+                   (SingleMove var))
+  vars -> do
+            vars' <- mapM procVarAsTeVar vars
+            return (Statement (Extra (DemutTLetBase ltype ([v :- JTAny | v <- vars']) term))
+                   (TupleMove [SingleMove v | v <- vars]))
 
 ---
 -- elaborating loops
@@ -60,7 +64,7 @@ demutate term = do
   topscname <- newScopeVar "toplevel"
 
   res <- elaborateTopLevel topscname term
-  let resterm = termTypeAsTerm res
+  resterm <- termTypeAsTerm res
   logForce $ "-----------------------------------"
   logForce $ "Mutation elaborated term is:\n" <> showPretty resterm
 
@@ -105,12 +109,12 @@ makeTermList [] = demutationError $ "Found an empty list of statements."
 
 -- single element left
 makeTermList (Value it mt : [])         = case it of
-                                            Pure -> return (PureValue mt, Nothing, [moveTypeAsTerm mt])
+                                            Pure -> do mt' <- moveTypeAsTerm mt ; return (PureValue mt, Nothing, [mt'])
                                             _    -> demutationError $ "The last value of a block has the type " <> show it <> "\n"
                                                                     <> "Only pure values are allowed.\n"
                                                                     <> "The value is:\n"
                                                                     <> show mt
-makeTermList (Statement term last : []) = return (PureValue last, Just (moveTypeAsTerm last), [term])
+makeTermList (Statement term last : []) = do last' <- (moveTypeAsTerm last) ; return (PureValue last, Just last', [term])
 makeTermList (StatementWithoutDefault term : []) = demutationError $ "Encountered a statement which is not allowed to be the last one in a block.\n"
                                                                    <> "The statement is:\n"
                                                                    <> showPretty term
@@ -192,7 +196,8 @@ elaborateMut scname (Extra (Block ts)) = do
     
 elaborateMut scname (Op op args) = do
   args' <- mapM (elaboratePureValue scname) args
-  pure (Value Pure (NoMove (Op op (moveTypeAsTerm <$> args'))))
+  args'' <- mapM moveTypeAsTerm args'
+  pure (Value Pure (NoMove (Op op args'')))
 
 elaborateMut scname (Sng η τ) = do
   return (Value Pure (NoMove $ Sng η τ))
@@ -216,7 +221,7 @@ elaborateMut scname (Extra (ProcBBLet procx args)) = do
   -- write it into the memctx
   setMem procx [(SingleMem memx)]
 
-  let tevarx = procVarAsTeVar procx
+  tevarx <- procVarAsTeVar procx
 
   return (Statement (Extra (DemutBBLet tevarx args)) (SingleMove procx))
 
@@ -250,7 +255,10 @@ elaborateMut scname (Extra (ProcSLetBase ltype (x ::- τ) term)) = do
   debug $ show logmem
 
 
-  return (Statement (Extra (DemutSLetBase ltype ((procVarAsTeVar x) :- τ) (moveTypeAsTerm moveType)))
+  x' <- procVarAsTeVar x
+  moveType' <- (moveTypeAsTerm moveType)
+
+  return (Statement (Extra (DemutSLetBase ltype (x' :- τ) moveType'))
           (SingleMove x))
 
 
@@ -297,19 +305,20 @@ elaborateMut scname fullterm@(Extra (ProcTLetBase ltype vars term)) = do
   -- variables of the lhs
   setMemTupleInManyMems scname ([v | (v ::- _) <- vars]) mem
 
-  return $ demutTLetStatement ltype [v | (v ::- _) <- vars] (moveTypeAsTerm moveType)
+  moveType' <- (moveTypeAsTerm moveType)
+  demutTLetStatement ltype [v | (v ::- _) <- vars] moveType'
 
 
 
 elaborateMut scname (Extra (ProcLamStar args body)) = do
   bodyscname <- newScopeVar "lamstar"
   (newBody, newBodyType) <- elaborateLambda bodyscname [(v ::- x) | (v ::- (x , _)) <- args] body
-  return (Value newBodyType (NoMove (LamStar [(procVarAsTeVar v) :- x | (v ::- x) <- args] newBody)))
+  return (Value newBodyType (NoMove (LamStar [(UserTeVar v) :- x | (v ::- x) <- args] newBody)))
 
 elaborateMut scname (Extra (ProcLam args body)) = do
   bodyscname <- newScopeVar "lam"
   (newBody, newBodyType) <- elaborateLambda bodyscname [(v ::- x) | (v ::- x) <- args] body
-  return (Value newBodyType (NoMove (Lam [(procVarAsTeVar v) :- x | (v ::- x) <- args] newBody)))
+  return (Value newBodyType (NoMove (Lam [(UserTeVar v) :- x | (v ::- x) <- args] newBody)))
 
 
 
@@ -346,7 +355,7 @@ elaborateMut scname (Extra (ProcFLet name term)) = do
   debug $ "The memctx is now:\n"
   debug $ show logmem
 
-  return (Statement (Extra (DemutFLet (procVarAsTeVar name) term')) (SingleMove name))
+  return (Statement (Extra (DemutFLet (UserTeVar name) term')) (SingleMove name))
 
   
 
@@ -382,10 +391,11 @@ elaborateMut scname (Apply f args) = do
         let mutargs = zip muts args
         (newArgs , muts) <- elaborateMutList (showPretty f) scname mutargs
 
-        let funcallterm = (Apply (moveTypeAsTerm movetype) newArgs)
+        movetype' <- (moveTypeAsTerm movetype)
+        let funcallterm = (Apply movetype' newArgs)
 
         -- the new term
-        return $ demutTLetStatement PureLet muts funcallterm
+        demutTLetStatement PureLet muts funcallterm
 
     --
     -- case II : A pure function call
@@ -394,7 +404,8 @@ elaborateMut scname (Apply f args) = do
         let mutargs = zip (repeat NotMutated) args
         (newArgs , muts) <- elaborateMutList (showPretty f) scname mutargs
 
-        let funcallterm = (Apply (moveTypeAsTerm movetype) newArgs)
+        movetype' <- (moveTypeAsTerm movetype)
+        let funcallterm = (Apply movetype' newArgs)
 
         -- the new term
         return $ Value Pure (NoMove funcallterm)
@@ -411,7 +422,9 @@ elaborateMut scname (Apply f args) = do
         let mutargs = zip (repeat NotMutated) args
         (newArgs , muts) <- elaborateMutList (showPretty f) scname mutargs
 
-        return $ Value Pure (NoMove (BBApply (moveTypeAsTerm movetype) newArgs (procVarAsTeVar <$> glvars)))
+        movetype' <- (moveTypeAsTerm movetype)
+        glvars' <- mapM procVarAsTeVar glvars
+        return $ Value Pure (NoMove (BBApply movetype' newArgs glvars'))
 
 
 
@@ -420,6 +433,7 @@ elaborateMut scname (Apply f args) = do
 elaborateMut scname (Extra (ProcPreLoop iters iterVar body)) = do -- demutationError $ "Not implemented: loop." -- do
   -- first, elaborate the iters
   (newIters) <- elaboratePureValue scname iters
+  newIters' <- moveTypeAsTerm newIters
 
 
   -- now, preprocess the body,
@@ -501,7 +515,7 @@ elaborateMut scname (Extra (ProcPreLoop iters iterVar body)) = do -- demutationE
         Just v1 | v0 == v1  -> False
         Just v1 | otherwise -> True
   let captureMems = filter isChanged (getAllKeyElemPairs memsBefore)
-  let captures = procVarAsTeVar <$> fst <$> captureMems
+  captures <- mapM procVarAsTeVar $ fst <$> captureMems
   --
   -- We have to add the capture assignment and the capture return
   -- to the body. Note that the order of `bodyTerms` is already
@@ -510,7 +524,7 @@ elaborateMut scname (Extra (ProcPreLoop iters iterVar body)) = do -- demutationE
   let capture_assignment   = Extra (DemutTLetBase PureLet [v :- JTAny | v <- captures] (Var (captureVar :- JTAny)))
   let capture_return       = Tup [Var (v :- JTAny) | v <- captures]
   let demutated_body_terms = [capture_return] <> bodyTerms <> [capture_assignment]
-  let demutated_loop = Extra (DemutLoop (moveTypeAsTerm newIters) captures ((Just (procVarAsTeVar iterVar), captureVar))
+  let demutated_loop = Extra (DemutLoop (newIters') captures ((Just (UserTeVar iterVar), captureVar))
                              (Extra (DemutBlock demutated_body_terms)))
 
   --
@@ -542,7 +556,7 @@ elaborateMut scname (Extra (ProcPreLoop iters iterVar body)) = do -- demutationE
   --       This is done later in unblocking.
   return (StatementWithoutDefault demutated_loop)
 
-
+elaborateMut scname (Extra (ProcReturn)) = return MutatingFunctionEnd 
 
 elaborateMut scname (LastTerm t) = demutationError "not implemented: last term" -- do
   -- (newTerm, newType, moveType) <- elaborateMut scname t
@@ -691,37 +705,37 @@ elaborateMut scname (Row t1 t2) = elaborateRefMove2 scname Row t1 t2
 elaborateMut scname (SubGrad t1 t2) = do
   (argTerms, mutVars) <- elaborateMutList "subgrad" scname [(Mutated , t1), (NotMutated , t2)]
   case argTerms of
-    [newT1, newT2] -> return $ demutTLetStatement PureLet mutVars (SubGrad newT1 newT2)
+    [newT1, newT2] -> demutTLetStatement PureLet mutVars (SubGrad newT1 newT2)
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 elaborateMut scname (ScaleGrad scalar grads) = do
   (argTerms, mutVars) <- elaborateMutList "scalegrad" scname [(NotMutated , scalar), (Mutated , grads)]
   case argTerms of
-    [newT1, newT2] -> return $ demutTLetStatement PureLet mutVars (ScaleGrad newT1 newT2)
+    [newT1, newT2] -> demutTLetStatement PureLet mutVars (ScaleGrad newT1 newT2)
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 elaborateMut scname (MutClipM c t) = do
   (argTerms, mutVars) <- elaborateMutList "clip" scname [(Mutated , t)]
   case argTerms of
-    [newT] -> return $ demutTLetStatement PureLet mutVars (MutClipM c newT)
+    [newT] -> demutTLetStatement PureLet mutVars (MutClipM c newT)
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 elaborateMut scname (MutGauss t1 t2 t3 t4) = do
   (argTerms, mutVars) <- elaborateMutList "gauss" scname [(NotMutated , t1), (NotMutated , t2), (NotMutated , t3), (Mutated , t4)]
   case argTerms of
-    [newT1, newT2, newT3, newT4] -> return $ demutTLetStatement PureLet mutVars (Gauss newT1 newT2 newT3 newT4)
+    [newT1, newT2, newT3, newT4] -> demutTLetStatement PureLet mutVars (Gauss newT1 newT2 newT3 newT4)
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 elaborateMut scname (MutLaplace t1 t2 t3) = do
   (argTerms, mutVars) <- elaborateMutList "laplace" scname [(NotMutated , t1), (NotMutated , t2), (Mutated , t3)]
   case argTerms of
-    [newT1, newT2, newT3] -> return $ demutTLetStatement PureLet mutVars (Laplace newT1 newT2 newT3)
+    [newT1, newT2, newT3] -> demutTLetStatement PureLet mutVars (Laplace newT1 newT2 newT3)
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 elaborateMut scname (ConvertM t1) = do
   (argTerms, mutVars) <- elaborateMutList "convert" scname [(Mutated , t1)]
   case argTerms of
-    [newT1] -> return $ demutTLetStatement PureLet mutVars (ConvertM newT1)
+    [newT1] -> demutTLetStatement PureLet mutVars (ConvertM newT1)
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 
@@ -780,7 +794,7 @@ elaborateRefMove4 scname ctr = elaborateHelper4 scname (((.).(.).(.).(.)) RefMov
     
 elaborateHelper1 :: ScopeVar -> (DemutDMTerm -> MoveType) -> ProcDMTerm -> MTC TermType
 elaborateHelper1 scname ctr t1 = do
-  (newT1) <- moveTypeAsTerm <$> elaboratePureValue scname t1
+  (newT1) <- moveTypeAsTerm =<< elaboratePureValue scname t1
   return (Value Pure (ctr newT1))
 
 
@@ -789,8 +803,8 @@ elaborateHelper2 :: ScopeVar
                     -> ProcDMTerm -> ProcDMTerm
                     -> MTC TermType
 elaborateHelper2 scname ctr t1 t2 = do
-  (newT1) <- moveTypeAsTerm <$> elaboratePureValue scname t1
-  (newT2) <- moveTypeAsTerm <$> elaboratePureValue scname t2
+  (newT1) <- moveTypeAsTerm =<< elaboratePureValue scname t1
+  (newT2) <- moveTypeAsTerm =<< elaboratePureValue scname t2
   return (Value Pure (ctr newT1 newT2))
 
 
@@ -799,9 +813,9 @@ elaborateHelper3 :: ScopeVar
                     -> ProcDMTerm -> ProcDMTerm -> ProcDMTerm
                     -> MTC TermType
 elaborateHelper3 scname ctr t1 t2 t3 = do
-  (newT1) <- moveTypeAsTerm <$> elaboratePureValue scname t1
-  (newT2) <- moveTypeAsTerm <$> elaboratePureValue scname t2
-  (newT3) <- moveTypeAsTerm <$> elaboratePureValue scname t3
+  (newT1) <- moveTypeAsTerm =<< elaboratePureValue scname t1
+  (newT2) <- moveTypeAsTerm =<< elaboratePureValue scname t2
+  (newT3) <- moveTypeAsTerm =<< elaboratePureValue scname t3
   return (Value Pure (ctr newT1 newT2 newT3))
 
 
@@ -810,10 +824,10 @@ elaborateHelper4 :: ScopeVar
                     -> ProcDMTerm -> ProcDMTerm -> ProcDMTerm -> ProcDMTerm
                     -> MTC TermType
 elaborateHelper4 scname ctr t1 t2 t3 t4 = do
-  (newT1) <- moveTypeAsTerm <$> elaboratePureValue scname t1
-  (newT2) <- moveTypeAsTerm <$> elaboratePureValue scname t2
-  (newT3) <- moveTypeAsTerm <$> elaboratePureValue scname t3
-  (newT4) <- moveTypeAsTerm <$> elaboratePureValue scname t4
+  (newT1) <- moveTypeAsTerm =<< elaboratePureValue scname t1
+  (newT2) <- moveTypeAsTerm =<< elaboratePureValue scname t2
+  (newT3) <- moveTypeAsTerm =<< elaboratePureValue scname t3
+  (newT4) <- moveTypeAsTerm =<< elaboratePureValue scname t4
   return (Value Pure (ctr newT1 newT2 newT3 newT4))
 
 
@@ -893,8 +907,10 @@ elaborateLambda scname args body = do
   --
   (mutated_argmvs, mut_states) <- do
     muts <- mapM getMemVarMutationStatus argmvs
-    let amvs = zip args muts
-    return ([mv | (mv ::- _, Mutated) <- amvs], muts)
+    let toMutState [] = NotMutated
+        toMutState _  = Mutated
+    -- let amvs = zip args muts
+    return ([t | ((t:ts)) <- muts], toMutState <$> muts)
 
   --
   --------------------
@@ -951,8 +967,8 @@ elaborateLambda scname args body = do
     -- case IV: mutating function
     --
     (MutatingFunctionEndValue, mvs) -> do
-      let last_tuple = TupleMove [SingleMove v | v <- mvs]
-      return (Mutating mut_states, Extra (DemutBlock (moveTypeAsTerm last_tuple : new_body_terms)))
+      let last_tuple = Tup [Var (v :- JTAny) | v <- mvs]
+      return (Mutating mut_states, Extra (DemutBlock (last_tuple : new_body_terms)))
 
 
 
@@ -1008,7 +1024,11 @@ elaborateMutList f scname mutargs = do
         case arg of
           Extra (ProcVarTerm (x ::- a)) -> do 
             -- say that this variable is being reassigned (VAT)
-            setImmutType scname (x) Pure
+            setImmutType scname x Pure
+
+            -- the elaborated value of x
+            -- (this needs to be done before `markMutated` is called)
+            x' <- (procVarAsTeVar x)
 
             -- get the memvar of this tevar from the memctx
             -- and say that the memory location is
@@ -1016,7 +1036,7 @@ elaborateMutList f scname mutargs = do
             mt <- expectSingleMem =<< expectNotMoved x
             markMutated mt
 
-            return (Var ((procVarAsTeVar x) :- a), SingleMove x, Just x)
+            return (Var (x' :- a), SingleMove x, Just x)
 
           -- if argument is not a var, throw error
           _ -> throwError (DemutationError $ "When calling the mutating function " <> f <> " found the term " <> showPretty arg <> " as argument in a mutable-argument-position. Only variables are allowed here.")
@@ -1034,7 +1054,9 @@ elaborateMutList f scname mutargs = do
           PureBlackBox -> demutationError $ "It is not allowed to pass black boxes as arguments. "
                         <> "\nWhen checking " <> f <> "(" <> showPretty (fmap snd mutargs) <> ")"
 
-        return (moveTypeAsTerm movetype , movetype , Nothing)
+        movetype' <- moveTypeAsTerm movetype
+
+        return (movetype' , movetype , Nothing)
       
 
   -- check them

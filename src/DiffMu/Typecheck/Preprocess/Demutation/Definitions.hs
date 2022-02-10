@@ -123,7 +123,7 @@ data MemAssignmentType = AllocNecessary | PreexistingMem
 
 type MemCtx = Ctx ProcVar MemState
 
-type MutCtx = Ctx MemVar (ScopeVar, IsMutated)
+type MutCtx = Ctx MemVar (ScopeVar, [TeVar])
 
 -- type MemRedirectionCtx = Ctx MemVar [MemVar]
 
@@ -248,7 +248,7 @@ newMemVar (Right hint) = scopeNames %%= (first StandaloneMemVar . (newName hint)
 allocateMem :: ScopeVar -> Either ProcVar Text -> MTC (MemVar)
 allocateMem scopename hint = do
   mv <- newMemVar (hint)
-  mutCtx %= (setValue mv (scopename, NotMutated))
+  mutCtx %= (setValue mv (scopename, []))
   return mv
 
 cleanupMem :: ScopeVar -> MTC ()
@@ -256,10 +256,10 @@ cleanupMem scname = mutCtx %= (\ctx -> f ctx)
   where
     f = fromKeyElemPairs . filter (\(_,(scname2,_)) -> scname2 /= scname) . getAllKeyElemPairs
 
-resetMutCtx :: MTC ()
-resetMutCtx = mutCtx %= (\ctx -> f ctx)
-  where
-    f = fromKeyElemPairs . fmap ((\(k,(sc,v)) -> (k,(sc,NotMutated)))) . getAllKeyElemPairs
+-- resetMutCtx :: MTC ()
+-- resetMutCtx = mutCtx %= (\ctx -> f ctx)
+--   where
+--     f = fromKeyElemPairs . fmap ((\(k,(sc,v)) -> (k,(sc,[])))) . getAllKeyElemPairs
 
 
 -----------------------------------------------------------------------------------------------------
@@ -365,15 +365,16 @@ markReadOverwritePrevious scname var itype = vaCtx %%= (\scope -> ((), setValue 
 
 --------------------------------------------------------------------------------------
 
-markMutated :: MemVar -> MTC ()
+markMutated :: MemVar -> MTC TeVar
 markMutated mv = do
+  tevar <- newTeVarOfMut (T.pack $ show mv)
   let f ctx = do
         case getValue mv ctx of
-          Nothing -> impossible ""
-          Just (scvar,_) -> return $ setValue mv (scvar, Mutated) ctx
+          Nothing -> impossible $ "Wanted to mark the memvar " <> show mv <> " as mutated, but it was not in the mutctx."
+          Just (scvar,tevars) -> return $ setValue mv (scvar, tevar:tevars) ctx
 
   mutCtx %=~ f
-  return ()
+  return tevar
 
 
 --------------------------------------------------------------------------------------
@@ -595,26 +596,13 @@ expectSingleMem mts = do
 --     xs -> demutationError $ "When doing a reverse memory lookup for memory variable " <> show wantedMem <> ", multiple tevars were found: " <> show xs
 
 
-getMemVarMutationStatus :: MemVar -> MTC IsMutated
+getMemVarMutationStatus :: MemVar -> MTC [TeVar]
 getMemVarMutationStatus mv = do
   mctx <- use mutCtx
   case getValue mv mctx of
     Nothing -> internalError $ "Expected memory location to have a mutation status, but it didn't. MemVar: " <> show mv
+    Just (_, tvars) -> return tvars
 
-    -- If the variable is marked as mutated,
-    -- we know that it is.
-    Just (_, Mutated) -> return Mutated
-
-    -- If it is not marked as mutated,
-    -- it might still be that it redirects
-    -- to something which is. Thus we
-    -- do a further lookup in the redirection
-    -- context.
-    Just (_, NotMutated) -> return NotMutated
-      -- rctx <- use memRedirectionCtx
-      -- case getValue mv rctx of
-      --   Nothing -> return NotMutated
-      --   Just mt -> mconcat <$> mapM getMemVarMutationStatus mt
 
 --------------------------------------------------------------------------
 -- Creating TeVars from MemVars
@@ -625,19 +613,55 @@ getMemVarMutationStatus mv = do
 --   SingleMem mv -> undefined
 --   RefMem mv -> undefined
 
-procVarAsTeVar :: ProcVar -> TeVar
-procVarAsTeVar (mv) = UserTeVar mv
 
 
-moveTypeAsTerm :: MoveType -> DemutDMTerm 
+--
+-- | Create a tevar for a procvar.
+--    If procvar contains a memory location which is
+--    a `SingleMem` and is mutated, use the newest variable
+--    name from the `mutCtx`. Else create a tvar based on the
+--    input name `mv`.
+--
+--    Since there are multiple memory types associated to
+--    a procvar, they are dealt with as follows:
+--    There are two valid possibilities:
+--    1. all memory types do not contain mutated variables
+--    2. all memory types are single var, and all are mutated,
+--       with last tevar being the same
+procVarAsTeVar :: ProcVar -> MTC TeVar
+procVarAsTeVar pv = do
+  mts <- expectNotMoved pv
+  --
+  -- all memory types which contain mutated vars
+  let getMutatedName x = do
+        mmut <- getMemVarMutationStatus x
+        case mmut of
+          []     -> return []
+          (x:xs) -> return [x]
+  mut_mts <- join <$> mapM getMutatedName (getAllMemVars =<< mts)
+  --
+  -- if we have no mutations, we are done
+  case mut_mts of
+    []     -> pure (UserTeVar pv)
+    --
+    -- if we there are mutations, we need
+    -- to make sure that all tevars are the same
+    (x:xs) -> case all (== x) xs of
+      False -> demutationError $ "The tevars assigned to mutated " <> show pv <> " do not match in different execution branches.\n"
+                                <> "This is not allowed.\n"
+                                <> "Tevars: " <> show (x:xs)
+
+      True  -> return x
+
+
+moveTypeAsTerm :: MoveType -> MTC DemutDMTerm 
 moveTypeAsTerm = \case
-  TupleMove mts ->
-    let terms = moveTypeAsTerm <$> mts
-    in Tup $ terms
-  SingleMove pv -> Var $ ((procVarAsTeVar pv) :- JTAny)
-  RefMove pdt -> pdt
-  NoMove pdt -> pdt
-
+  TupleMove mts -> do
+    terms <- mapM moveTypeAsTerm mts
+    pure $ Tup $ terms
+  SingleMove pv -> do tv <- procVarAsTeVar pv ; pure $ Var $ (tv :- JTAny)
+  RefMove pdt   -> pure pdt
+  NoMove pdt    -> pure pdt
 
 movedVarsOfMoveType :: MoveType -> [ProcVar]
 movedVarsOfMoveType = \case
@@ -646,12 +670,13 @@ movedVarsOfMoveType = \case
   RefMove pdt -> []
   NoMove pdt -> []
 
-termTypeAsTerm :: TermType -> DemutDMTerm
+termTypeAsTerm :: TermType -> MTC DemutDMTerm
 termTypeAsTerm = \case
   Value it mt -> moveTypeAsTerm mt
-  Statement pdt mt -> Extra $ DemutBlock [pdt, moveTypeAsTerm mt]
-  StatementWithoutDefault pdt -> Extra $ DemutBlock [pdt]
-  MutatingFunctionEnd -> Extra $ DemutBlock []
-
+  Statement pdt mt -> do
+    mt' <- moveTypeAsTerm mt
+    pure $ Extra $ DemutBlock [pdt, mt']
+  StatementWithoutDefault pdt -> pure $ Extra $ DemutBlock [pdt]
+  MutatingFunctionEnd         -> pure $ Extra $ DemutBlock []
 
 
