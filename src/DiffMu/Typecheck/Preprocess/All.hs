@@ -64,5 +64,5 @@ preprocessAll term = do
   info $ "Color processed term:\n" <> showPretty term''''''
 
   -- done
-  return term'''''
+  return term''''''
 

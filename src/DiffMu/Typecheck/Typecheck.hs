@@ -911,8 +911,7 @@ checkSen' scope term@(Clone t) = do
 
 
 -- Everything else is currently not supported.
-checkSen' scope t = (throwError (UnsupportedTermError t))
-
+checkSen' scope t = throwError (TermColorError SensitivityK t)
 
 --------------------------------------------------------------------------------
 -- Privacy terms
@@ -1397,4 +1396,4 @@ checkPri' scope (SmpLet xs (Sample n m1_in m2_in) tail) =
       -- expression has type of the tail
       return ttail
     
-checkPri' scope t = (throwError (UnsupportedTermError t))
+checkPri' scope t = throwError (TermColorError PrivacyK t)
