@@ -845,9 +845,6 @@ checkSen' scope (ZeroGrad m) = do
    -- input must be a model
    unify tm (NoFun (DMModel n τps))
 
-   -- model gets copied into the params so it's infinitely sensitive
-   mscale inftyS
-
    return (NoFun (DMGrads nrm clp n (NoFun (Numeric τps))))
 
 
