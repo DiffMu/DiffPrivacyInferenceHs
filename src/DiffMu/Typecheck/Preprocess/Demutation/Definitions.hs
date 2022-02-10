@@ -666,6 +666,14 @@ procVarAsTeVar pv = do
 
       True  -> return x
 
+procVarAsTeVarInMutCtx :: MutCtx -> ProcVar -> MTC TeVar
+procVarAsTeVarInMutCtx tempctx pv = do
+  oldctx <- use mutCtx
+  mutCtx .= tempctx
+  val <- procVarAsTeVar pv
+  mutCtx .= oldctx
+  return val
+
 
 moveTypeAsTerm :: MoveType -> MTC DemutDMTerm 
 moveTypeAsTerm = \case

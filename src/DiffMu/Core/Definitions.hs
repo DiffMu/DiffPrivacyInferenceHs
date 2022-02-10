@@ -740,7 +740,7 @@ data PreDMTerm (t :: * -> *) =
   | ClipN (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
   | MutClipM Clip (PreDMTerm t)
   -- Loop (DMTerm : "Number of iterations") ([TeVar] : "Captured variables") (TeVar : "name of iteration var", TeVar : "name of capture variable") (DMTerm : "body")
-  | Loop (PreDMTerm t) [TeVar] (Maybe TeVar, TeVar) (PreDMTerm t)
+  | Loop (PreDMTerm t) [TeVar] (TeVar, TeVar) (PreDMTerm t)
 -- Special NN builtins
   | SubGrad (PreDMTerm t) (PreDMTerm t)
   | ScaleGrad (PreDMTerm t) (PreDMTerm t) -- scale (a : Scalar) (g : Mutating Gradient)
@@ -820,7 +820,7 @@ data DemutatedExtension a =
   | DemutFLet TeVar a
   | DemutBBLet TeVar [JuliaType] -- name, arguments
   | DemutPhi a a (Maybe a)
-  | DemutLoop a [TeVar] (Maybe TeVar, TeVar) a
+  | DemutLoop a [TeVar] [TeVar] (TeVar, TeVar) a -- number of iters, captures before, captures after, iter-var, capture-var
   | DemutBlock [a]
   deriving (Show, Eq, Functor, Foldable, Traversable)
 
@@ -1076,7 +1076,7 @@ instance ShowPretty a => ShowPretty (DemutatedExtension a) where
     DemutFLet v a        -> "DFLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty a)
     DemutBBLet v jts     -> "DBBLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty jts)
     DemutPhi a b c       -> "DPhi " <> showPretty a <> "\n" <> braceIndent (showPretty b) <> "\n" <> braceIndent (showPretty c)
-    DemutLoop a b x d    -> "Loop (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> show x <> ")" <> parenIndent (showPretty d)
+    DemutLoop a b c x d    -> "Loop (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> (showPretty c)  <> ", " <> show x <> ")" <> parenIndent (showPretty d)
     DemutBlock as        -> braceIndent $ intercalate "\n" $ showPretty <$> reverse as
 
 instance ShowPretty (EmptyExtension a) where
