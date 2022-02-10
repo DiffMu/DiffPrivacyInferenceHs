@@ -123,7 +123,7 @@ data MemAssignmentType = AllocNecessary | PreexistingMem
 
 type MemCtx = Ctx ProcVar MemState
 
-newtype TeVarMutTrace = TeVarMutTrace {getTeVarMutTrace :: [TeVar]}
+data TeVarMutTrace = TeVarMutTrace (Maybe ProcVar) [TeVar]
   deriving (Eq)
 
 type MutCtx = Ctx MemVar (ScopeVar, TeVarMutTrace)
@@ -249,10 +249,13 @@ newMemVar :: (MonadState MFull m) => Either ProcVar Text -> m (MemVar)
 newMemVar (Left hint) = scopeNames %%= (first (MemVarForProcVar hint) . (newName ""))
 newMemVar (Right hint) = scopeNames %%= (first StandaloneMemVar . (newName hint))
 
-allocateMem :: ScopeVar -> Either ProcVar Text -> MTC (MemVar)
-allocateMem scopename hint = do
-  mv <- newMemVar (hint)
-  mutCtx %= (setValue mv (scopename, TeVarMutTrace []))
+allocateMem :: ScopeVar -> Maybe ProcVar -> MTC (MemVar)
+allocateMem scopename procvar = do
+  let hint = case procvar of
+              Just a -> Left a
+              Nothing -> Right "anon"
+  mv <- newMemVar hint
+  mutCtx %= (setValue mv (scopename, TeVarMutTrace Nothing []))
   return mv
 
 cleanupMem :: ScopeVar -> MTC ()
@@ -398,13 +401,14 @@ cleanupVACtxAfterScopeEnd vaCtxBefore = do
 
 --------------------------------------------------------------------------------------
 
-markMutated :: MemVar -> MTC TeVar
-markMutated mv = do
+markMutated :: ProcVar -> MTC TeVar
+markMutated pv = do
+  mv <- expectSingleMem =<< expectNotMoved pv
   tevar <- newTeVarOfMut (T.pack $ show mv)
   let f ctx = do
         case getValue mv ctx of
           Nothing -> impossible $ "Wanted to mark the memvar " <> show mv <> " as mutated, but it was not in the mutctx."
-          Just (scvar, TeVarMutTrace tevars) -> return $ setValue mv (scvar, TeVarMutTrace (tevar:tevars)) ctx
+          Just (scvar, TeVarMutTrace pv tevars) -> return $ setValue mv (scvar, TeVarMutTrace pv (tevar:tevars)) ctx
 
   mutCtx %=~ f
   return tevar
@@ -521,19 +525,20 @@ oneOfEach [] = [[]]
 
 
 
-moveGetMem :: ScopeVar -> MoveType -> MTC [MemType]
-moveGetMem scname (NoMove te) = do
-  mem <- allocateMem scname (Right "val")
+moveGetMem :: ScopeVar -> Maybe ProcVar -> MoveType -> MTC [MemType]
+moveGetMem scname pv (NoMove te) = do
+  mem <- allocateMem scname pv
   return [(SingleMem mem)]
-moveGetMem scname (SingleMove a) = do
+moveGetMem scname pv (SingleMove a) = do
   memstate <- expectNotMoved a
   memCtx %= (setValue a MemMoved)
   return (memstate)
-moveGetMem scname (TupleMove as) = do
-  mems <- mapM (moveGetMem scname) as
+moveGetMem scname pv (TupleMove as) = do
+  mems <- mapM (moveGetMem scname Nothing) as
   return (TupleMem <$> oneOfEach mems)
 
-moveGetMem scname (RefMove te) = do
+
+moveGetMem scname pv (RefMove te) = do
   demutationError $ "Moving of references is not implemented."
   -- if we had a reference,
   -- allocate new memory for it
@@ -544,7 +549,19 @@ moveGetMem scname (RefMove te) = do
 
 
 setMem :: ProcVar -> [MemType] -> MTC () 
-setMem x mt = memCtx %= (setValue x (MemExists mt))
+setMem x mt = do
+  -- set the memory type for procvar `x`
+  memCtx %= (setValue x (MemExists mt))
+
+  -- set the owner of the SingleVars in `mt`
+  let smt = [s | SingleMem s <- mt]
+  let setOwner s = do
+        sv <- getValue s <$> use mutCtx
+        case sv of
+          Just (scopeVar, TeVarMutTrace oldOwner trace) -> mutCtx %= (setValue s (scopeVar, TeVarMutTrace (Just x) trace))
+          Nothing -> pure ()
+
+  mapM_ setOwner smt
 
 setMemMaybe :: Maybe ProcVar -> [MemType] -> MTC () 
 setMemMaybe (Just x) mt = setMem x mt
@@ -559,8 +576,8 @@ setMemTuple scname xs (SingleMem a) = do
   -- We are deconstructing a tuple value,
   -- need to create memory locations for all parts
   let f (x) = do
-        mx <- allocateMem scname (Left x)
-        memCtx %= (setValue x (MemExists ([SingleMem mx])))
+        mx <- allocateMem scname (Just x)
+        setMem x [SingleMem mx]
   mapM_ f xs
 
 setMemTuple scname xs (RefMem a) = internalError  $ "setMemTuple not implemented for references"
@@ -634,24 +651,47 @@ getMemVarMutationStatus mv = do
   mctx <- use mutCtx
   case getValue mv mctx of
     Nothing -> internalError $ "Expected memory location to have a mutation status, but it didn't. MemVar: " <> show mv
-    Just (_, TeVarMutTrace tvars) -> return tvars
+    Just (_, TeVarMutTrace _ tvars) -> return tvars
 
 
 coequalizeTeVarMutTrace :: TeVarMutTrace -> TeVarMutTrace -> WriterT ([DemutDMTerm],[DemutDMTerm]) MTC TeVarMutTrace
-coequalizeTeVarMutTrace = undefined
+coequalizeTeVarMutTrace (TeVarMutTrace pv1 ts1) (TeVarMutTrace pv2 ts2) | and [ts1 == ts2, pv1 == pv2] = pure $ TeVarMutTrace pv1 ts1
+coequalizeTeVarMutTrace (TeVarMutTrace pv1 ts1) (TeVarMutTrace pv2 ts2) | pv1 == pv2  = do
+  t3 <- newTeVarOfMut "phi"
+  let makeProj (Just pv) []     = pure $ Extra (DemutSLetBase PureLet (t3 :- JTAny) (Var (UserTeVar pv :- JTAny))) 
+      makeProj Nothing   []     = lift $ demutationError $ "While demutating phi encountered a branch where a proc-var-less memory location is mutated. This cannot be done."
+      makeProj _         (t:ts) = pure $ Extra (DemutSLetBase PureLet (t3 :- JTAny) (Var (t :- JTAny)))
+
+  proj1 <- makeProj pv1 ts1 
+  proj2 <- makeProj pv2 ts2
+
+  tell ([proj1],[proj2])
+
+  pure $ TeVarMutTrace pv1 (t3 : ts1 <> ts2)
+
+coequalizeTeVarMutTrace (TeVarMutTrace pv1 ts1) (TeVarMutTrace pv2 ts2) | otherwise   = lift $ demutationError $ "While demutating phi, encountered two branches where the owners of a tvar differ. This is not allowed."
+
 
 instance SemigroupM (WriterT ([DemutDMTerm],[DemutDMTerm]) MTC) TeVarMutTrace where
   (⋆) = coequalizeTeVarMutTrace
+instance MonoidM (WriterT ([DemutDMTerm],[DemutDMTerm]) MTC) TeVarMutTrace where
+  neutral = pure $ TeVarMutTrace Nothing []
+instance CheckNeutral (WriterT ([DemutDMTerm],[DemutDMTerm]) MTC) TeVarMutTrace where
+  checkNeutral _ = pure False
 
-coequalizeMutCtx :: MutCtx -> MutCtx -> MTC (MutCtx, [DemutDMTerm], [DemutDMTerm])
-coequalizeMutCtx muts1 muts2 = do
-  let muts1' = getAllKeyElemPairs muts1
+instance SemigroupM (WriterT ([DemutDMTerm],[DemutDMTerm]) MTC) ScopeVar where
+  (⋆) a b | a == b    = pure a
+  (⋆) a b | otherwise = lift $ demutationError $ "While demutating phi, encountered two branches where the scopevars of a memvar differ. This is not allowed."
+instance MonoidM (WriterT ([DemutDMTerm],[DemutDMTerm]) MTC) ScopeVar where
+  neutral = lift $ internalError $ "There is no neutral element for scopevars"
 
-  undefined
+instance CheckNeutral (WriterT ([DemutDMTerm],[DemutDMTerm]) MTC) ScopeVar where
+  checkNeutral _ = pure False
 
-  where
-    coequalizeMutCtx_impl :: ([TeVar]) -> ([TeVar]) -> MTC ([DemutDMTerm],[DemutDMTerm],[TeVar],[TeVar])
-    coequalizeMutCtx_impl = undefined
+coequalizeMutCtx :: MutCtx -> MutCtx -> MTC (MutCtx, ([DemutDMTerm], [DemutDMTerm]))
+coequalizeMutCtx muts1 muts2 = runWriterT (muts1 ⋆ muts2)
+
+
 
 --------------------------------------------------------------------------
 -- Creating TeVars from MemVars

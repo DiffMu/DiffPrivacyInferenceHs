@@ -216,7 +216,7 @@ elaborateMut scname (Extra (ProcBBLet procx args)) = do
   scope'  <- setImmutType scname procx PureBlackBox
 
   -- allocate a memory location
-  memx <- allocateMem scname (Left procx)
+  memx <- allocateMem scname (Just procx)
 
   -- write it into the memctx
   setMem procx [(SingleMem memx)]
@@ -242,8 +242,8 @@ elaborateMut scname (Extra (ProcSLetBase ltype (x ::- τ) term)) = do
   --
   -- 1. set memory locations for variables on the LHS
   -- 2. generate terms for the memory allocations
-  --
-  (mem) <- moveGetMem scname moveType
+  -- 
+  (mem) <- moveGetMem scname (Just x) moveType
   setMem x mem
 
   x' <- procVarAsTeVar x
@@ -302,7 +302,7 @@ elaborateMut scname fullterm@(Extra (ProcTLetBase ltype vars term)) = do
   moveType' <- (moveTypeAsTerm moveType)
 
   -- get memory of the RHS
-  mem <- moveGetMem scname moveType
+  mem <- moveGetMem scname Nothing moveType
 
   -- write the list of possible memory types into the
   -- variables of the lhs
@@ -345,7 +345,7 @@ elaborateMut scname (Extra (ProcFLet name term)) = do
                 _ -> internalError $ "got a move from the FLet body, this should not happen"
 
   -- create memory location for function name
-  mem <- allocateMem scname (Right "val")
+  mem <- allocateMem scname (Just name)
   setMem name [(SingleMem mem)]
 
   -- write the immut type into the scope
@@ -447,7 +447,7 @@ elaborateMut scname (Extra (ProcPreLoop iters iterVar body)) = do -- demutationE
   --
   -- backup iter memory location, and create a new one
   oldIterMem <- getValue iterVar <$> use memCtx
-  setMem iterVar =<< pure <$> SingleMem <$> allocateMem scname (Right "iter")
+  setMem iterVar =<< pure <$> SingleMem <$> allocateMem scname (Just iterVar)
   --
   -- backup the vactx
   vanames <- getAllKeys <$> use vaCtx
@@ -645,7 +645,7 @@ elaborateMut scname term@(Extra (ProcPhi cond tr fs)) = do
   -- Compute the resulting contexts
   --
   let memCtxAfter = memCtxAfter1 ⋆! memCtxAfter2
-  (mutCtxAfter, proj1, proj2) <- coequalizeMutCtx mutCtxAfter1 mutCtxAfter2
+  (mutCtxAfter, (proj1, proj2)) <- coequalizeMutCtx mutCtxAfter1 mutCtxAfter2
   cleanupVACtxAfterScopeEnd vaCtxBefore
 
   ---------------------------------
@@ -1026,7 +1026,7 @@ elaborateLambda scname args body = do
   -- END NO.
   --
   -- Allocate new memory for the arguments.
-  let arghint (x ::- _) = Left x
+  let arghint (x ::- _) = Just x
   argmvs <- mapM (allocateMem scname) (arghint <$> args)
 
   -- assign memory to variables
@@ -1170,10 +1170,8 @@ elaborateMutList f scname mutargs = do
             x' <- (procVarAsTeVar x)
 
             -- get the memvar of this tevar from the memctx
-            -- and say that the memory location is
-            -- mutated
-            mt <- expectSingleMem =<< expectNotMoved x
-            markMutated mt
+            -- and say that the memory location is mutated
+            markMutated x
 
             return (Var (x' :- a), SingleMove x, Just x)
 
