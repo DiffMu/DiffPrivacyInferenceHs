@@ -802,7 +802,7 @@ data ProceduralExtension a =
   | ProcSLetBase LetKind (ProcAsgmt JuliaType) a
   | ProcFLet ProcVar a
   | ProcBBLet ProcVar [JuliaType] -- name, arguments
-  | ProcPhi a [a]
+  | ProcPhi a a (Maybe a)
   | ProcPreLoop a (ProcVar) a
   | ProcReturn
   | ProcVarTerm (ProcAsgmt JuliaType)
@@ -819,7 +819,7 @@ data DemutatedExtension a =
   | DemutSLetBase LetKind (Asgmt JuliaType) a
   | DemutFLet TeVar a
   | DemutBBLet TeVar [JuliaType] -- name, arguments
-  | DemutPhi a [a]
+  | DemutPhi a a (Maybe a)
   | DemutLoop a [TeVar] (Maybe TeVar, TeVar) a
   | DemutBlock [a]
   deriving (Show, Eq, Functor, Foldable, Traversable)
@@ -946,6 +946,10 @@ class ShowPretty a where
 instance ShowPretty a => ShowPretty [a] where
   showPretty as = "[" <> intercalate ", " (fmap showPretty as) <> "]"
 
+instance ShowPretty a => ShowPretty (Maybe a) where
+      showPretty (Just v) = "Just " <> (showPretty v)
+      showPretty Nothing = "Nothing"
+
 newlineIndentIfLong :: String -> String
 newlineIndentIfLong xs = case '\n' `elem` xs of
   False -> xs
@@ -1057,7 +1061,7 @@ instance ShowPretty a => ShowPretty (ProceduralExtension a) where
     ProcSLetBase lk v a -> "PSLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty a)
     ProcFLet v a        -> "PFLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty a)
     ProcBBLet v jts     -> "PBBLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty jts)
-    ProcPhi a as        -> "PPhi " <> showPretty a <> "\n" <> braceIndent (intercalate "\n," $ showPretty <$> as)
+    ProcPhi a b c        -> "PPhi " <> showPretty a <> "\n" <> braceIndent (showPretty b) <> "\n" <> braceIndent (showPretty c)
     ProcPreLoop a x d   -> "PLoop (" <> (showPretty a) <> ", " <> show x <> ")" <> parenIndent (showPretty d)
     ProcReturn          -> "PReturn"
     ProcVarTerm (pa ::- _)  -> showPretty pa
@@ -1071,7 +1075,7 @@ instance ShowPretty a => ShowPretty (DemutatedExtension a) where
     DemutSLetBase lk v a -> "DSLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty a)
     DemutFLet v a        -> "DFLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty a)
     DemutBBLet v jts     -> "DBBLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty jts)
-    DemutPhi a as        -> "DPhi " <> showPretty a <> "\n" <> braceIndent (intercalate "\n," $ showPretty <$> as)
+    DemutPhi a b c       -> "DPhi " <> showPretty a <> "\n" <> braceIndent (showPretty b) <> "\n" <> braceIndent (showPretty c)
     DemutLoop a b x d    -> "Loop (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> show x <> ")" <> parenIndent (showPretty d)
     DemutBlock as        -> braceIndent $ intercalate "\n" $ showPretty <$> reverse as
 

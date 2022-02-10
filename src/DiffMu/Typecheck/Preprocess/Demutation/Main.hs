@@ -563,8 +563,36 @@ elaborateMut scname (LastTerm t) = demutationError "not implemented: last term" 
   -- return (LastTerm (newTerm), newType, moveType)
 
 
-elaborateMut scname term@(Extra (ProcPhi cond ts)) = demutationError "not implemented: phi" -- do
-  {-
+elaborateMut scname term@(Extra (ProcPhi cond tr fs)) = let
+    -- set memctx to startM, then demutate the term input
+    -- append the result term to tts and unify the result memctx with unifiedM
+    -- used with fold, this will demutate all branches with the same starting state,
+    -- then in unification if the same name is used in both branches, they will
+    --    - be set to "moved" if they were moved in one branch
+    --    - be set to the concatenation of the memory locations they were given in the branches
+    elaborateBranch :: MemCtx -> ProcDMTerm -> MTC (DemutDMTerm, MemCtx)
+    elaborateBranch startM t = do
+        memCtx .= startM
+        td <- elaborateMut scname t
+        resM <- use memCtx
+        return (termTypeAsTerm td, resM)
+        
+  in do
+      startM <- use memCtx
+      c <- moveTypeAsTerm <$> elaboratePureValue scname cond
+
+      -- elaborate all branches using the same start memctx
+      -- collect the result terms, unify the resulting memctxs with emptyM
+      (dt, mt) <- elaborateBranch startM tr
+      df <- case fs of
+                 Nothing ->  memCtx .= mt >> return Nothing
+                 Just tfs -> do
+                             (df, mf) <- elaborateBranch startM tfs
+                             memCtx .= (mt ⋆! mf)
+                             return (Just df)
+      return (StatementWithoutDefault (Extra (DemutPhi c dt df)))
+
+{-
   --
   -- Concerning moves: We need to backup the MoveCtx,
   -- and run the elaboration on both branches with the same input, 

@@ -68,7 +68,7 @@ pSingle e = case e of
                  JEBlock stmts -> Extra <$> (Block <$> pList stmts)
                  JELam args body -> pJLam args body
                  JELamStar args body -> pJLamStar args body
-                 JEIfElse cond bs -> Extra <$> (ProcPhi <$> (pSingle cond) <*> (mapM pSingle bs))
+                 JEIfElse cond tr fs -> Extra <$> (ProcPhi <$> (pSingle cond) <*> (pSingle tr) <*> (mapM pSingle fs))
                  JELoop ivar iter body -> pJLoop ivar iter body
                  JEAssignment aee amt -> pJLet aee amt
                  JETupAssignment aee amt -> pJTLet aee amt

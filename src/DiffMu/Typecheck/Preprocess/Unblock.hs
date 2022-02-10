@@ -36,9 +36,8 @@ unblockStatementsM mlast xs = join $ unblockStatements <$> mlast <*> pure xs
 unblockStatements :: DMTerm -> [DemutDMTerm] -> BlockTC DMTerm
 unblockStatements last [] = pure last
 unblockStatements last ((Extra (DemutBlock bs))             : xs) = unblockStatementsM (unblockStatements last bs) xs
-unblockStatements last ((Extra (DemutPhi c [t,f]))          : xs) = unblockStatementsM (Phi <$> (unblock c) <*> (unblockStatements last [t]) <*> (unblockStatements last [f])) xs
-unblockStatements last ((Extra (DemutPhi c [t]))            : xs) = unblockStatementsM (Phi <$> (unblock c) <*> (unblockStatements last [t]) <*> pure last) xs
-unblockStatements last ((Extra (DemutPhi c bs))             : xs) = internalError $ "wrong number of branches in DemutPhi: " <> show bs
+unblockStatements last ((Extra (DemutPhi c t (Just f)))     : xs) = unblockStatementsM (Phi <$> (unblock c) <*> (unblockStatements last [t]) <*> (unblockStatements last [f])) xs
+unblockStatements last ((Extra (DemutPhi c t Nothing))      : xs) = unblockStatementsM (Phi <$> (unblock c) <*> (unblockStatements last [t]) <*> pure last) xs
 unblockStatements last ((Extra (DemutSLetBase k a b))       : xs) = unblockStatementsM (SLetBase k a <$> (unblock b) <*> pure last) xs
 unblockStatements last ((Extra (DemutTLetBase k a b))       : xs) = unblockStatementsM (TLetBase k a <$> (unblock b) <*> pure last) xs
 unblockStatements last ((Extra (DemutFLet a b))             : xs) = unblockStatementsM (FLet a <$> (unblock b) <*> pure last) xs

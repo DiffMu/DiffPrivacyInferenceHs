@@ -156,7 +156,7 @@ data JExpr =
    | JEAssignment JExpr JExpr
    | JETup [JExpr]
    | JETupAssignment [JExpr] JExpr
-   | JEIfElse JExpr [JExpr]
+   | JEIfElse JExpr JExpr (Maybe JExpr)
    | JERef JExpr [JExpr]
    | JEReturn
    deriving Show
@@ -249,8 +249,8 @@ pTreeToJExpr tree = case tree of
          [s, body]         -> JELam <$> pArgs [s] <*> pTreeToJExpr body
          _                 -> error ("invalid shape or number of args in lam " <> show tree)
      JIf as          -> case as of
-         [cond, tr, fs] -> JEIfElse <$> pTreeToJExpr cond <*> (mapM pTreeToJExpr [tr, fs])
-         [cond, tr]     -> JEIfElse <$> pTreeToJExpr cond <*> (mapM  pTreeToJExpr [tr])
+         [cond, tr, fs] -> JEIfElse <$> pTreeToJExpr cond <*> (pTreeToJExpr tr) <*> (Just <$> (pTreeToJExpr fs))
+         [cond, tr]     -> JEIfElse <$> pTreeToJExpr cond <*> (pTreeToJExpr tr) <*> pure Nothing
          _              -> error ("wrong number of arguments in ifelse expression " <> show tree)
      JFunction as    -> case as of
          [call, body] -> pFLet call body

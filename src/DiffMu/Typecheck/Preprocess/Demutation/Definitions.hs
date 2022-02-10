@@ -261,6 +261,19 @@ cleanupMem scname = mutCtx %= (\ctx -> f ctx)
 --   where
 --     f = fromKeyElemPairs . fmap ((\(k,(sc,v)) -> (k,(sc,[])))) . getAllKeyElemPairs
 
+instance Monad m => MonoidM m MemState where
+    neutral = pure $ MemExists []
+
+instance Monad m => CheckNeutral m MemState where
+    checkNeutral a = return (a == (MemExists []))
+
+instance Monad m => SemigroupM m MemState where
+    (⋆) MemMoved _ = pure MemMoved
+    (⋆) _ MemMoved = pure MemMoved
+    (⋆) (MemExists l1) (MemExists l2) = pure $ MemExists (l1 ++ l2)
+
+mergeMemCtx = (⋆!)
+
 
 -----------------------------------------------------------------------------------------------------
 -- Memory and VA actions
