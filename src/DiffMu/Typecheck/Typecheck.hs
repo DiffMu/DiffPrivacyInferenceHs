@@ -444,9 +444,7 @@ checkSen' scope (Loop niter cs' (xi, xc) body) = do
 
   -- add iteration and capture variables as args-checking-commands to the scope
   -- TODO: do we need to make sure that we have unique names here?
-  let scope' = case xi of
-                 Just xi -> setValue xi (checkSens scope (Arg xi JTInt NotRelevant)) scope
-                 Nothing -> scope
+  let scope' = setValue xi (checkSens scope (Arg xi JTInt NotRelevant)) scope
   let scope'' = setValue xc (checkSens scope (Arg xc JTAny IsRelevant)) scope'
 
   -- check body term in that new scope
@@ -456,7 +454,7 @@ checkSen' scope (Loop niter cs' (xi, xc) body) = do
   -- and sensitivities
   let cbody' = do
         τ <- cbody
-        WithRelev _ (τi :@ si) <- removeVarMaybe @SensitivityK xi
+        WithRelev _ (τi :@ si) <- removeVar @SensitivityK xi
         WithRelev _ (τc :@ sc) <- removeVar @SensitivityK xc
         return (τ, (τi, si), (τc, sc))
 
@@ -1270,9 +1268,7 @@ checkPri' scope (Loop niter cs' (xi, xc) body) =
       -- add iteration and capture variables as args-checking-commands to the scope
       -- capture variable is not relevant bc captures get ∞ privacy anyways
       -- TODO: do we need to make sure that we have unique names here?
-      let scope' = case xi of
-                     Just xi -> setValue xi (checkSens scope (Arg xi JTInt NotRelevant)) scope
-                     Nothing -> scope
+      let scope'  = setValue xi (checkSens scope (Arg xi JTInt NotRelevant)) scope
       let scope'' = setValue xc (checkSens scope (Arg xc JTAny NotRelevant)) scope'
 
       -- check body term in that new scope
@@ -1282,7 +1278,7 @@ checkPri' scope (Loop niter cs' (xi, xc) body) =
       -- and sensitivities
       let cbody' = do
             τ <- cbody
-            WithRelev _ (τi :@ _) <- removeVarMaybe @PrivacyK xi
+            WithRelev _ (τi :@ _) <- removeVar @PrivacyK xi
             WithRelev _ (τc :@ _) <- removeVar @PrivacyK xc -- unify with caps type?
 
             interesting <- getInteresting

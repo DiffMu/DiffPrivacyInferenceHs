@@ -83,5 +83,5 @@ substituteNames names term = let
    SLetBase k (x :- t) body tail -> SLetBase k ((subIf x) :- t) <$> subSame body <*> subSame tail
    TLetBase k ns body tail -> TLetBase k (map subAsgmt ns) <$> subSame body <*> subSame tail
    MCreate t1 t2 (x1, x2) t3 -> MCreate <$> subSame t1 <*> subSame t2 <*> return (subIf x1, subIf x2) <*> subSame t3
-   Loop t1 cs (x1, x2) body -> Loop <$> subSame t1 <*> return (map subIf cs) <*> return (fmap subIf x1, subIf x2) <*> subSame body
+   Loop t1 cs (x1, x2) body -> Loop <$> subSame t1 <*> return (map subIf cs) <*> return (subIf x1, subIf x2) <*> subSame body
    _ -> recDMTermMSameExtension (substituteNames names) term

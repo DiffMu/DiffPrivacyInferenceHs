@@ -27,7 +27,7 @@ import Test.QuickCheck.Property (Result(expect))
 import Control.Monad.Trans.Class
 import qualified GHC.RTS.Flags as LHS
 import Control.Exception (throw)
-import DiffMu.Typecheck.Preprocess.Demutation.Definitions (getAllMemVarsOfMemState)
+import DiffMu.Typecheck.Preprocess.Demutation.Definitions (getAllMemVarsOfMemState, procVarAsTeVarInMutCtx)
 
 
 
@@ -434,36 +434,19 @@ elaborateMut scname (Extra (ProcPreLoop iters iterVar body)) = do -- demutationE
   -- first, elaborate the iters
   (newIters) <- elaboratePureValue scname iters
   newIters' <- moveTypeAsTerm newIters
-
-
-  -- now, preprocess the body,
-  -- i.e., find out which variables are getting mutated
-  -- and change their `SLet`s to `modify!` terms
-  -- (preprocessedBody, modifyVars) <- runPreprocessLoopBody scope iterVar body
-
-  -- logForce $ "Preprocessed loop body. The modified vars are: " <> show modifyVars
-  --       <> "\nThe body is:\n" <> showPretty preprocessedBody
-
+  --
   -- add the iterator to the scope,
   -- and backup old type
   oldIterImmutType <- backupAndSetImmutType scname iterVar Pure
-
+  --
   -- backup iter memory location, and create a new one
   oldIterMem <- getValue iterVar <$> use memCtx
   setMem iterVar =<< pure <$> SingleMem <$> allocateMem scname (Right "iter")
-
   --
-  -- [VAR FILTERING/Begin]
-  --
+  -- backup the vactx
   vanames <- getAllKeys <$> use vaCtx
   --
 
-  --
-  -- backup the mut ctx, and set it to clean,
-  -- so that we can track the changes in the body
-  -- TODO: This.
-  -- mutCtxBefore <- use mutCtx
-  -- resetMutCtx
 
   -------------------------------------------------
   -- 
@@ -479,8 +462,10 @@ elaborateMut scname (Extra (ProcPreLoop iters iterVar body)) = do -- demutationE
   -- which were in use before the loop body.
   -- 
   memsBefore <- use memCtx
+  mutsBefore <- use mutCtx
   (lastVal, bodyTerms) <- elaborateAsListAndCancelAppend scname body
   memsAfter <- use memCtx
+  mutsAfter <- use mutCtx
   --
   -- get all procvars in `memsAfter` which are different from `memsBefore` (or new).
   let isChangedOrNew (k,v0) = case getValue k memsBefore of
@@ -511,27 +496,50 @@ elaborateMut scname (Extra (ProcPreLoop iters iterVar body)) = do -- demutationE
   --       In mutating ones, the mutated variables are also captures!
   --
   let isChanged (k,v0) = case getValue k memsAfter of
-        Nothing -> undefined -- this case should actually not occur, since the variable `k` cannot simply disappear
-        Just v1 | v0 == v1  -> False
-        Just v1 | otherwise -> True
-  let captureMems = filter isChanged (getAllKeyElemPairs memsBefore)
-  captures <- mapM procVarAsTeVar $ fst <$> captureMems
+        -- 
+        -- this case should actually not occur, since the variable `k` cannot simply disappear
+        Nothing -> undefined
+        -- 
+        -- case 1: mem_after = mem_before,
+        --   then we have to check whether the mem location was
+        --   mutated (if the mem is a single_mem)
+        Just v1 | v0 == v1  -> do
+          case v1 of
+            MemExists mts -> do
+              let single_mems = [m | SingleMem m <- mts]
+              let isChanged m = case (getValue m mutsBefore, getValue m mutsAfter) of {
+                    (Just ma, Just ma') -> pure $ not $ ma == ma'
+                    ; (ma, ma')         -> internalError $ "Did not expect the mutctx to have no entry for: " <> show v1
+                    }
+              mems_changed <- mapM isChanged single_mems
+              return $ any (== True) mems_changed
+            MemMoved      -> return False
+        --
+        -- case 2: mem_after /= mem_before,
+        --   then obviously something changed,
+        --   so this is a capture
+        Just v1 | otherwise -> return True
+
+  captureMems <- filterM isChanged (getAllKeyElemPairs memsBefore)
+  capturesBefore <- mapM (procVarAsTeVarInMutCtx mutsBefore) $ fst <$> captureMems
+  capturesAfter  <- mapM (procVarAsTeVarInMutCtx mutsAfter)  $ fst <$> captureMems
   --
   -- We have to add the capture assignment and the capture return
   -- to the body. Note that the order of `bodyTerms` is already
   -- reversed, hence the reversed appending.
   captureVar <- newTeVarOfMut "loop_capture"
-  let capture_assignment   = Extra (DemutTLetBase PureLet [v :- JTAny | v <- captures] (Var (captureVar :- JTAny)))
-  let capture_return       = Tup [Var (v :- JTAny) | v <- captures]
+  let capture_assignment   = Extra (DemutTLetBase PureLet [v :- JTAny | v <- capturesBefore] (Var (captureVar :- JTAny)))
+  let capture_return       = Tup [Var (v :- JTAny) | v <- capturesAfter]
   let demutated_body_terms = [capture_return] <> bodyTerms <> [capture_assignment]
-  let demutated_loop = Extra (DemutLoop (newIters') captures ((Just (UserTeVar iterVar), captureVar))
+  let demutated_loop = Extra (DemutLoop (newIters') capturesBefore capturesAfter ((UserTeVar iterVar, captureVar))
                              (Extra (DemutBlock demutated_body_terms)))
 
   --
   ------------------------------------------------
 
-  --
-  -- [VAR FILTERING/End]
+
+  ------------------------------------------------
+  -- Restore the backups / apply appropriate diffs
   --
   -- After the body was elaborated, it might be that we have new
   -- variables in scope which are only local in the body
@@ -542,8 +550,6 @@ elaborateMut scname (Extra (ProcPreLoop iters iterVar body)) = do -- demutationE
                               True  -> ctx
                               False -> deleteValue k ctx
   vaCtx %= (\ctx -> foldr (\k ctx -> deleteIfNotOld k ctx) ctx (getAllKeys ctx))
-  --
-
   --
   -- restore old iter memory location,
   -- if there was something
@@ -557,6 +563,7 @@ elaborateMut scname (Extra (ProcPreLoop iters iterVar body)) = do -- demutationE
   return (StatementWithoutDefault demutated_loop)
 
 elaborateMut scname (Extra (ProcReturn)) = return MutatingFunctionEnd 
+
 
 elaborateMut scname (LastTerm t) = demutationError "not implemented: last term" -- do
   -- (newTerm, newType, moveType) <- elaborateMut scname t
