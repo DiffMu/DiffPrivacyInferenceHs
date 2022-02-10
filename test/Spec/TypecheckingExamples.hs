@@ -14,6 +14,7 @@ testTypecheckingExamples pp = do
   testSLoop pp
   testSample pp
   testMMap pp
+  testRet pp
   testAboveThresh pp
   testPrivFunc pp
 --   testDPGD pp
@@ -108,7 +109,7 @@ testPriv pp = describe "privacies" $ do
                \ scale_gradient!(0.1, x) \n\
                \ gaussian_mechanism!(0.1, 0.1, 0.1, x)  \n\
                \ scale_gradient!(100, x) \n\
-               \ clone(x) \n\
+               \ return \n\
                \ end"
         invv = "function g(x :: Vector) :: Priv() \n\
                \ x = 0.1 * x \n\
@@ -119,7 +120,7 @@ testPriv pp = describe "privacies" $ do
                \    scale_gradient!(0.1, x) \n\
                \    laplacian_mechanism!(0.1, 0.1, x)  \n\
                \    scale_gradient!(100, x) \n\
-               \    clone(x) \n\
+               \    return \n\
                \ end"
         int = NoFun(Numeric (NonConst DMInt))
         real = NonConst DMReal

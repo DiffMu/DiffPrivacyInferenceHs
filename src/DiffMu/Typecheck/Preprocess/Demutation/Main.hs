@@ -227,7 +227,6 @@ elaborateMut scname (Extra (ProcBBLet procx args)) = do
 
 
 elaborateMut scname (Extra (ProcSLetBase ltype (x ::- τ) term)) = do
-
   (newTermType, moveType) <- elaborateValue scname term
 
   case newTermType of
@@ -235,7 +234,6 @@ elaborateMut scname (Extra (ProcSLetBase ltype (x ::- τ) term)) = do
     Mutating _ -> pure ()
     PureBlackBox     -> throwError (DemutationError $ "Found an assignment " <> show x <> " = " <> showPretty term <> " where RHS is a black box. This is not allowed.")
 
-  x' <- procVarAsTeVar x
   moveType' <- (moveTypeAsTerm moveType)
 
   --
@@ -244,9 +242,11 @@ elaborateMut scname (Extra (ProcSLetBase ltype (x ::- τ) term)) = do
   --
   -- 1. set memory locations for variables on the LHS
   -- 2. generate terms for the memory allocations
-  -- 
+  --
   (mem) <- moveGetMem scname moveType
   setMem x mem
+
+  x' <- procVarAsTeVar x
 
   -- write the immut type into the scope
   setImmutType scname x newTermType
@@ -256,6 +256,7 @@ elaborateMut scname (Extra (ProcSLetBase ltype (x ::- τ) term)) = do
   logmem <- use memCtx
   debug $ "The memctx is now:\n"
   debug $ show logmem
+  
 
 
   return (Statement (Extra (DemutSLetBase ltype (x' :- τ) moveType'))
@@ -356,6 +357,7 @@ elaborateMut scname (Extra (ProcFLet name term)) = do
   debug $ "The memctx is now:\n"
   debug $ show logmem
 
+
   return (Statement (Extra (DemutFLet (UserTeVar name) term')) (SingleMove name))
 
   
@@ -415,16 +417,19 @@ elaborateMut scname (Apply f args) = do
     -- case III: A call to a pure black box
     --
     PureBlackBox -> do
+        
         -- the global variables which are implicitly applied
         -- and need to be added to the `BBApply`
         glvars <- globalNames <$> (use topLevelInfo)
+
+
 
         -- since the box is pure, we say so to `elaborateMutList`
         let mutargs = zip (repeat NotMutated) args
         (newArgs , muts) <- elaborateMutList (showPretty f) scname mutargs
 
         movetype' <- (moveTypeAsTerm movetype)
-        glvars' <- mapM procVarAsTeVar glvars
+        let glvars' = map UserTeVar glvars
         return $ Value Pure (NoMove (BBApply movetype' newArgs glvars'))
 
 
@@ -1099,7 +1104,9 @@ elaborateLambda scname args body = do
     -- case IV: mutating function
     --
     (MutatingFunctionEndValue, mvs) -> do
-      let last_tuple = Tup [Var (v :- JTAny) | v <- mvs]
+      let last_tuple = case mvs of
+              [v] -> Clone $ Var (v :- JTAny) -- TODO cloning for now even though we don't like it, see #198
+              vs -> Clone $ Tup [Var (v :- JTAny) | v <- mvs] -- TODO cloning for now even though we don't like it, see #198
       return (Mutating mut_states, Extra (DemutBlock (last_tuple : new_body_terms)))
 
 
