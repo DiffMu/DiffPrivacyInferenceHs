@@ -231,6 +231,16 @@ testAboveThresh pp = describe "Above threshold" $ do
         cs = ""
     parseEvalString_customCheck pp "" ex (ty, cs) (pure $ Right ())
 
+testRet pp = describe "Color" $ do
+    let ex =  "function f(x::Integer) :: Priv() \n\
+              \    (theta, mu) = (100,x) \n\
+              \    theta + mu \n\
+              \ end"
+        int = NoFun(Numeric (NonConst DMInt))
+        ty = Fun([([int :@ inftyP] :->*: int) :@ Just [JTInt]])
+    parseEval pp "Ret" ex (pure ty)
+                                 
+
 
 testMMap pp = describe "Matrix map" $ do
     let ex = "function foo(m::Vector{Integer}, y::Integer) \n\

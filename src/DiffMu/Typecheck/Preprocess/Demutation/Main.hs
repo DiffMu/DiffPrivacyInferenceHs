@@ -235,6 +235,9 @@ elaborateMut scname (Extra (ProcSLetBase ltype (x ::- τ) term)) = do
     Mutating _ -> pure ()
     PureBlackBox     -> throwError (DemutationError $ "Found an assignment " <> show x <> " = " <> showPretty term <> " where RHS is a black box. This is not allowed.")
 
+  x' <- procVarAsTeVar x
+  moveType' <- (moveTypeAsTerm moveType)
+
   --
   -- move out of variables on the RHS, getting the memory
   -- locations, and the new allocations, then:
@@ -254,9 +257,6 @@ elaborateMut scname (Extra (ProcSLetBase ltype (x ::- τ) term)) = do
   debug $ "The memctx is now:\n"
   debug $ show logmem
 
-
-  x' <- procVarAsTeVar x
-  moveType' <- (moveTypeAsTerm moveType)
 
   return (Statement (Extra (DemutSLetBase ltype (x' :- τ) moveType'))
           (SingleMove x))
@@ -298,6 +298,8 @@ elaborateMut scname fullterm@(Extra (ProcTLetBase ltype vars term)) = do
   --
   mapM (\(x ::- _) -> setImmutType scname x Pure) vars
 
+  moveType' <- (moveTypeAsTerm moveType)
+
   -- get memory of the RHS
   mem <- moveGetMem scname moveType
 
@@ -305,7 +307,6 @@ elaborateMut scname fullterm@(Extra (ProcTLetBase ltype vars term)) = do
   -- variables of the lhs
   setMemTupleInManyMems scname ([v | (v ::- _) <- vars]) mem
 
-  moveType' <- (moveTypeAsTerm moveType)
   demutTLetStatement ltype [v | (v ::- _) <- vars] moveType'
 
 
