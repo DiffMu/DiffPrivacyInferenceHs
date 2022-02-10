@@ -570,7 +570,89 @@ elaborateMut scname (LastTerm t) = demutationError "not implemented: last term" 
   -- return (LastTerm (newTerm), newType, moveType)
 
 
-elaborateMut scname term@(Extra (ProcPhi cond tr fs)) = let
+elaborateMut scname term@(Extra (ProcPhi cond tr fs)) = do
+  ---------------------------------
+  --
+  -- elaborate the condition
+  --
+  cond' <- moveTypeAsTerm =<< elaboratePureValue scname cond
+
+  ---------------------------------
+  --
+  -- backup the contexts
+  --
+  vaCtxBefore  <- use vaCtx
+  mutCtxBefore <- use mutCtx
+  memCtxBefore <- use memCtx
+
+  ---------------------------------
+  --
+  -- Elaborate the if branches as lists
+  --   We have to make sure that they do not contain return statements,
+  --   so we check this using the `lastValue`
+  --
+  -------------
+  -- Branch 1:
+  --
+  trTerms <- do
+    (trLast,trTerms) <- elaborateAsListAndCancelAppend scname tr
+    case trLast of
+      MutatingFunctionEndValue -> demutationError $ "Ifs cannot contain `return` statements.\n"
+                                                  <> "In the term:\n"
+                                                  <> showPretty term
+      PureValue _ -> pure trTerms
+  --
+  -- save the mut and mem ctxs, since we need to know
+  -- which assignments / mutations happened in either branch.
+  mutCtxAfter1 <- use mutCtx
+  memCtxAfter1 <- use memCtx
+  --
+  -- 
+  -------------
+  -- Branch 2:
+  --
+  -- Here we first have to reset the state to its original state.
+  cleanupVACtxAfterScopeEnd vaCtxBefore
+  mutCtx .= mutCtxBefore
+  memCtx .= memCtxBefore
+  --
+  -- Now do the actual elaboration of this branch
+  fsTerms <- do
+    case fs of
+      Nothing  -> return []
+      Just fs -> do 
+        (fsLast,fsTerms) <- elaborateAsListAndCancelAppend scname fs
+        case fsLast of
+          MutatingFunctionEndValue -> demutationError $ "Ifs cannot contain `return` statements.\n"
+                                                      <> "In the term:\n"
+                                                      <> showPretty term
+          PureValue _ -> pure fsTerms
+  --
+  -- Again save mem / mut after second branch
+  mutCtxAfter2 <- use mutCtx
+  memCtxAfter2 <- use memCtx
+  --
+  ------------
+
+  ---------------------------------
+  --
+  -- Compute the resulting contexts
+  --
+  let memCtxAfter = memCtxAfter1 ⋆! memCtxAfter2
+  (mutCtxAfter, proj1, proj2) <- coequalizeMutCtx mutCtxAfter1 mutCtxAfter2
+  cleanupVACtxAfterScopeEnd vaCtxBefore
+
+  ---------------------------------
+  --
+  -- Return the resulting term type
+  let trTerms' = (Extra (DemutBlock (trTerms <> proj1)))
+  let fsTerms' = (Extra (DemutBlock (fsTerms <> proj2)))
+  
+  return (StatementWithoutDefault (Extra (DemutPhi cond' trTerms' fsTerms')))
+
+  
+  {-
+  let
     -- set memctx to startM, then demutate the term input
     -- append the result term to tts and unify the result memctx with unifiedM
     -- used with fold, this will demutate all branches with the same starting state,
@@ -582,9 +664,19 @@ elaborateMut scname term@(Extra (ProcPhi cond tr fs)) = let
         memCtx .= startM
         td <- elaborateMut scname t
         resM <- use memCtx
-        return (termTypeAsTerm td, resM)
+        undefined
+        -- return (termTypeAsTerm td, resM)
         
   in do
+      --
+      -- Begin actual function
+      --
+      --
+
+
+
+
+
       startM <- use memCtx
       c <- moveTypeAsTerm <$> elaboratePureValue scname cond
 
@@ -597,7 +689,11 @@ elaborateMut scname term@(Extra (ProcPhi cond tr fs)) = let
                              (df, mf) <- elaborateBranch startM tfs
                              memCtx .= (mt ⋆! mf)
                              return (Just df)
-      return (StatementWithoutDefault (Extra (DemutPhi c dt df)))
+      undefined
+      -- return (StatementWithoutDefault (Extra (DemutPhi c dt df)))
+-}
+
+
 
 {-
   --

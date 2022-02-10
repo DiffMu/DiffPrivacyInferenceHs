@@ -819,7 +819,7 @@ data DemutatedExtension a =
   | DemutSLetBase LetKind (Asgmt JuliaType) a
   | DemutFLet TeVar a
   | DemutBBLet TeVar [JuliaType] -- name, arguments
-  | DemutPhi a a (Maybe a)
+  | DemutPhi a a a
   | DemutLoop a [TeVar] [TeVar] (TeVar, TeVar) a -- number of iters, captures before, captures after, iter-var, capture-var
   | DemutBlock [a]
   deriving (Show, Eq, Functor, Foldable, Traversable)

@@ -123,7 +123,11 @@ data MemAssignmentType = AllocNecessary | PreexistingMem
 
 type MemCtx = Ctx ProcVar MemState
 
-type MutCtx = Ctx MemVar (ScopeVar, [TeVar])
+newtype TeVarMutTrace = TeVarMutTrace {getTeVarMutTrace :: [TeVar]}
+  deriving (Eq)
+
+type MutCtx = Ctx MemVar (ScopeVar, TeVarMutTrace)
+
 
 -- type MemRedirectionCtx = Ctx MemVar [MemVar]
 
@@ -248,7 +252,7 @@ newMemVar (Right hint) = scopeNames %%= (first StandaloneMemVar . (newName hint)
 allocateMem :: ScopeVar -> Either ProcVar Text -> MTC (MemVar)
 allocateMem scopename hint = do
   mv <- newMemVar (hint)
-  mutCtx %= (setValue mv (scopename, []))
+  mutCtx %= (setValue mv (scopename, TeVarMutTrace []))
   return mv
 
 cleanupMem :: ScopeVar -> MTC ()
@@ -376,6 +380,22 @@ markReadOverwritePrevious :: ScopeVar -> ProcVar -> ImmutType -> MTC ()
 markReadOverwritePrevious scname var itype = vaCtx %%= (\scope -> ((), setValue var (scname, ReadSingle, itype) scope))
 
 
+cleanupVACtxAfterScopeEnd :: VarAccessCtx -> MTC ()
+cleanupVACtxAfterScopeEnd vaCtxBefore = do
+  --
+  -- if a procvar was not in the vactx before,
+  -- it means that it is local, and thus should be removed.
+  let restoreArg procvar = do
+        case getValue procvar vaCtxBefore of
+          Nothing       -> vaCtx %%= (\ctx -> ((), deleteValue procvar ctx))
+          Just oldvalue -> pure ()
+  --
+  -- We do this for all vars in the current vactx
+  vaCtxAfter <- use vaCtx
+  mapM_ restoreArg (getAllKeys vaCtxAfter)
+
+
+
 --------------------------------------------------------------------------------------
 
 markMutated :: MemVar -> MTC TeVar
@@ -384,7 +404,7 @@ markMutated mv = do
   let f ctx = do
         case getValue mv ctx of
           Nothing -> impossible $ "Wanted to mark the memvar " <> show mv <> " as mutated, but it was not in the mutctx."
-          Just (scvar,tevars) -> return $ setValue mv (scvar, tevar:tevars) ctx
+          Just (scvar, TeVarMutTrace tevars) -> return $ setValue mv (scvar, TeVarMutTrace (tevar:tevars)) ctx
 
   mutCtx %=~ f
   return tevar
@@ -614,8 +634,24 @@ getMemVarMutationStatus mv = do
   mctx <- use mutCtx
   case getValue mv mctx of
     Nothing -> internalError $ "Expected memory location to have a mutation status, but it didn't. MemVar: " <> show mv
-    Just (_, tvars) -> return tvars
+    Just (_, TeVarMutTrace tvars) -> return tvars
 
+
+coequalizeTeVarMutTrace :: TeVarMutTrace -> TeVarMutTrace -> WriterT ([DemutDMTerm],[DemutDMTerm]) MTC TeVarMutTrace
+coequalizeTeVarMutTrace = undefined
+
+instance SemigroupM (WriterT ([DemutDMTerm],[DemutDMTerm]) MTC) TeVarMutTrace where
+  (⋆) = coequalizeTeVarMutTrace
+
+coequalizeMutCtx :: MutCtx -> MutCtx -> MTC (MutCtx, [DemutDMTerm], [DemutDMTerm])
+coequalizeMutCtx muts1 muts2 = do
+  let muts1' = getAllKeyElemPairs muts1
+
+  undefined
+
+  where
+    coequalizeMutCtx_impl :: ([TeVar]) -> ([TeVar]) -> MTC ([DemutDMTerm],[DemutDMTerm],[TeVar],[TeVar])
+    coequalizeMutCtx_impl = undefined
 
 --------------------------------------------------------------------------
 -- Creating TeVars from MemVars
