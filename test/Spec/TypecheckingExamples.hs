@@ -20,6 +20,7 @@ testTypecheckingExamples pp = do
 --   testDPGD pp
   
 
+testSens :: (String -> IO String) -> SpecWith ()
 testSens pp = do
   describe "checkSens" $ do
 
@@ -27,35 +28,12 @@ testSens pp = do
     parseEvalSimple pp"2.2 * 3"   (pure $ NoFun (Numeric (Const (constCoeff (Fin 6.6000004)) DMReal)))
 
     let test = "function test(a)\n"
-            <> "  a\n"
+            <> "  clone(a)\n"
             <> "end"
     let ty   = do
           τ <- newTVar ""
           return $ Fun([([TVar τ :@ oneId] :->: TVar τ) :@ Just [JTAny]])
-    parseEvalUnify_customCheck pp "Checks the identity function" test ty $ do
-        ctrs <- getConstraintsByType (Proxy @(IsClone (DMMain,DMMain)))
-        -- make sure that there is one constraint which requires a refcopy
-        -- and that there are no other constraints
-        allctrs <- getAllConstraints
-        case (length ctrs, length allctrs) of
-            (1,1) -> return $ Right ()
-            _ -> return $ Left $ "Expected a single Clone constraint but got:\n" <> show allctrs
-
-
-    let test2 = "function test(a :: Integer)\n"
-            <> "  a\n"
-            <> "end"
-    let ty2   = do
-          τ <- newTVar ""
-          return $ Fun([([NoFun (Numeric (TVar τ)) :@ oneId] :->: NoFun (Numeric (TVar τ))) :@ Just [JTInt]])
-
-    parseEvalUnify_customCheck pp "Checks the identity function for integers" test2 ty2 $ do
-        ctrs <- getConstraintsByType (Proxy @(IsLessEqual (DMTypeOf NumKind,DMTypeOf NumKind))) 
-        -- make sure that the only constraint we get is (a `IsLessEqual` Int[--])
-        allctrs <- getAllConstraints
-        case (ctrs, length allctrs) of
-            ([(_,IsLessEqual (_,(NonConst DMInt)))],1) -> return $ Right ()
-            _ -> return $ Left $ "Expected a single LessEqual constraint but got:\n" <> show allctrs
+    parseEvalUnify pp "Checks the identity function" test ty 
 
 
 testOps :: IsString t => (t -> IO String) -> SpecWith ()

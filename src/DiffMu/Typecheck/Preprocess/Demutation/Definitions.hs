@@ -619,7 +619,7 @@ expectNotMoved :: ProcVar -> MTC [MemType]
 expectNotMoved tevar = do
   mc <- use memCtx
   case getValue tevar mc of
-    Nothing          -> demutationError $ "The variable " <> show tevar <> " is not assigned to anything.\n"
+    Nothing          -> throwError $ DemutationDefinitionOrderError $ "The variable " <> show tevar <> " is not assigned to anything.\n"
                                         <> "The memctx is:\n"
                                         <> show mc
     Just (MemMoved) -> throwError $ DemutationMovedVariableAccessError tevar

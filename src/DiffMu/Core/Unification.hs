@@ -117,7 +117,6 @@ instance MonadDMTC t => Unifyᵢ (INCResT DMException t) (DMTypeOf k) where
   unifyᵢ_ Gradient Gradient             = pure Gradient
   unifyᵢ_ (Matrix r1) (Matrix r2)       = Matrix <$> unifyᵢ r1 r2
   unifyᵢ_ (Clip k) (Clip s)             = Clip <$> unifyᵢ k s
-  unifyᵢ_ (Cloned k) (Cloned s) = Cloned <$> unifyᵢ k s
   unifyᵢ_ (DMContainer k1 nrm1 clp1 n1 τ1) (DMContainer k2 nrm2 clp2 n2 τ2) =
       DMContainer <$> unifyᵢ k1 k2 <*> unifyᵢ nrm1 nrm2 <*> unifyᵢ clp1 clp2 <*> unifyᵢ n1 n2 <*> unifyᵢ τ1 τ2
   unifyᵢ_ (DMModel m1 τ1) (DMModel m2 τ2) =

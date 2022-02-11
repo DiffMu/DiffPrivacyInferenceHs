@@ -123,7 +123,7 @@ instance Show DMKind where
 
 -- so we don't get incomplete pattern warnings for them
 {-# COMPLETE DMInt, DMReal, Const, NonConst, DMData, Numeric, TVar, (:->:), (:->*:), DMTup, L1, L2, LInf, U, Clip, Vector, Gradient, Matrix,
- DMContainer, DMVec, DMGrads, DMMat, DMModel, NoFun, Fun, (:∧:), BlackBox, Cloned #-}
+ DMContainer, DMVec, DMGrads, DMMat, DMModel, NoFun, Fun, (:∧:), BlackBox #-}
 
 --------------------
 -- 2. DMTypes
@@ -207,9 +207,6 @@ data DMTypeOf (k :: DMKind) where
   -- black box functions (and a wrapper to make them MainKind but still have a BlackBoxKind so we can have TVars of it)
   BlackBox :: [JuliaType] -> DMTypeOf MainKind
 
-  -- deep copied type, thus allowed to be returned from functions
-  Cloned :: DMType -> DMType
-
 
 
 instance Hashable (DMTypeOf k) where
@@ -239,7 +236,6 @@ instance Hashable (DMTypeOf k) where
   hashWithSalt s (NoFun t) = s `hashWithSalt` t
   hashWithSalt s (n :∧: t) = s `hashWithSalt` n `hashWithSalt` t
   hashWithSalt s (BlackBox n) = s `hashWithSalt` n
-  hashWithSalt s (Cloned n) = s `hashWithSalt` n
 
 instance (Hashable a, Hashable b) => Hashable (a :@ b) where
   hashWithSalt s (a:@ b) = s `hashWithSalt` a `hashWithSalt` b
@@ -285,7 +281,6 @@ instance Show (DMTypeOf k) where
   show (Fun xs) = "Fun(" <> show xs <> ")"
   show (x :∧: y) = "(" <> show x <> "∧" <> show y <> ")"
   show (BlackBox n) = "BlackBox [" <> show n <> "]"
-  show (Cloned n) = "Cloned [" <> show n <> "]"
 
 showArgPretty :: (ShowPretty a, ShowPretty b) => (a :@ b) -> String
 showArgPretty (a :@ b) = "-  " <> showPretty a <> "\n"
@@ -338,7 +333,6 @@ instance ShowPretty (DMTypeOf k) where
   showPretty (Fun xs) = showPrettyEnumVertical (fmap fstAnn xs)
   showPretty (x :∧: y) = "(" <> showPretty x <> "∧" <> showPretty y <> ")"
   showPretty (BlackBox n) = "BlackBox[" <> showPretty n <> "]"
-  showPretty (Cloned n) = "Cloned[" <> showPretty n <> "]"
 
 
 -- instance Eq (DMTypeOf NormKind) where
@@ -488,7 +482,6 @@ recDMTypeM typemap sensmap (NoFun x) = NoFun <$> typemap x
 recDMTypeM typemap sensmap (Fun xs) = Fun <$> mapM (\(a :@ b) -> (:@) <$> typemap a <*> pure b) xs
 recDMTypeM typemap sensmap (x :∧: y) = (:∧:) <$> typemap x <*> typemap y
 recDMTypeM typemap sensmap (BlackBox n) = pure (BlackBox n)
-recDMTypeM typemap sensmap (Cloned n) = Cloned <$> typemap n
 
 ---------------------------------------------------------
 -- Sensitivity and Privacy

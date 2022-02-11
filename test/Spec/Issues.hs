@@ -4,16 +4,42 @@ module Spec.Issues where
 import Spec.Base
 
 testIssues pp = do
+  test21 pp
   test25 pp
   test53 pp
   test58 pp
   test59 pp
   test60 pp
   test67 pp
-  test21 pp
   test123 pp
   test125 pp
   test127 pp
+
+
+test21 pp = describe "issue 21 (FLet collection)" $ do
+  let ex_1 =
+         "  function test()     \n\
+         \      f(a) = 1        \n\
+         \      x = f(0,0)      \n\
+         \      f(a,b) = 2      \n\
+         \      x               \n\
+         \  end                 "
+
+      intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
+      ty = Fun([([] :->: intc (Fin 2)) :@ Just []])
+
+  parseEval pp "example variant 1" ex_1 (pure ty)
+
+  let ex_2 =
+         "  function test()     \n\
+         \      x = f(0,0)      \n\
+         \      f(a) = 1        \n\
+         \      f(a,b) = 2      \n\
+         \      x               \n\
+         \  end                 "
+
+  parseEvalFail pp "example variant 2 (needs to fail)" ex_2 (DemutationDefinitionOrderError "f")
+
 
 test25 pp = describe "issue 25" $ do
   let ex = " function test() \n\
@@ -210,40 +236,16 @@ test67 pp = describe "issue 67 (same juliatype choice overwriting)" $ do
 
   parseEvalFail pp "example variant 3" ex_3 (FLetReorderError "")
 
-test21 pp = describe "issue 21 (FLet collection)" $ do
-  let ex_1 =
-         "  function test()     \n\
-         \      f(a) = 1        \n\
-         \      x = f(0,0)      \n\
-         \      f(a,b) = 2      \n\
-         \      x               \n\
-         \  end                 "
-
-      intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
-      ty = Fun([([] :->: intc (Fin 2)) :@ Just []])
-
-  parseEval pp "example variant 1" ex_1 (pure ty)
-
-  let ex_2 =
-         "  function test()     \n\
-         \      x = f(0,0)      \n\
-         \      f(a) = 1        \n\
-         \      f(a,b) = 2      \n\
-         \      x               \n\
-         \  end                 "
-
-  parseEvalFail pp "example variant 2 (needs to fail)" ex_2 (DemutationDefinitionOrderError "f")
-
 test123 pp = describe "issue 123 (Rewind side effects of quick-path-check in supremum search)" $ do
-  let ex_1 = "   function ifelse(x,y::Integer)   \n\
+  let ex_1 = "   function ifelse(x,y::Integer)    \n\
               \             if y == 1             \n\
-              \                 x                 \n\
+              \                 clone(x)          \n\
               \             elseif y==2           \n\
-              \                 x                 \n\
+              \                 clone(x)          \n\
               \             else                  \n\
-              \                 y                 \n\
+              \                 clone(y)          \n\
               \             end                   \n\
-              \          end                     "
+              \          end                      "
 
       intnc = NoFun(Numeric (NonConst DMInt))
       ty = Fun([([intnc :@ (constCoeff (Fin 2)) , intnc :@ inftyS] :->: intnc) :@ Just [JTAny, JTInt]])

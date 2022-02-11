@@ -387,6 +387,8 @@ instance Solve MonadDMTC IsLess (Sensitivity, Sensitivity) where
          Nothing -> return ()
 
 
+
+{-
 -------------------------------------------------------------------
 -- functions that return DMGrads or DMModel must deepcopy the return value.
 
@@ -412,7 +414,7 @@ instance Solve MonadDMTC IsClone (DMMain, DMMain) where
   solve_ Dict _ name (IsClone (NoFun (DMContainer _ _ _ _ _), _)) = failConstraint name
   solve_ Dict _ name (IsClone (NoFun (Cloned v), t)) = unify (NoFun v) t >> dischargeConstraint name
   solve_ Dict _ name (IsClone (ti, tv)) = unify ti tv >> dischargeConstraint name
-
+-}
 
 
 

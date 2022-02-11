@@ -156,11 +156,11 @@ checkSen' scope (Lam xτs body) =
     logForce $ "Checking Lam, outer scope: " <> show (getAllKeys scope) <> " | inner: " <> show (getAllKeys scope')
 
     -- functions can only return deepcopies of DMModel and DMGrads
-    restype <- newVar
-    addConstraint (Solvable (IsClone (btype, restype)))
+    -- restype <- newVar
+    -- addConstraint (Solvable (IsClone (btype, restype)))
 
     -- make an arrow type.
-    let τ = (xrτs' :->: restype)
+    let τ = (xrτs' :->: btype)
     return (Fun [τ :@ (Just sign)])
 
 
@@ -203,10 +203,10 @@ checkSen' scope (LamStar xτs body) =
     let xrτs' = [x :@ p | (x :@ PrivacyAnnotation p) <- xrτs]
 
     -- functions can only return deepcopies of DMModel and DMGrads
-    restype <- newVar
-    addConstraint (Solvable (IsClone (btype, restype)))
+    -- restype <- newVar
+    -- addConstraint (Solvable (IsClone (btype, restype)))
 
-    let τ = (xrτs' :->*: restype)
+    let τ = (xrτs' :->*: btype)
     return (Fun [τ :@ (Just sign)])
 
 
@@ -900,13 +900,13 @@ checkSen' scope term@(InternalExpectConst a) = do
 -- 
 -- The user can explicitly copy return values.
 --
-checkSen' scope term@(Clone t) = do
-  res <- checkSens scope t
+checkSen' scope term@(Clone t) = checkSen' scope t -- do
+  -- res <- checkSens scope t
 
-  ta <- newVar
-  res' <- unify res (NoFun (ta))
+  -- ta <- newVar
+  -- res' <- unify res (NoFun (ta))
 
-  return (NoFun (Cloned ta))
+  -- return (NoFun (ta))
 
 
 
