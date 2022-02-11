@@ -25,13 +25,13 @@ testAMS01 pp = do
 
   let exc = " function f(a)       \n\
            \   x = a              \n\
-           \   x                  \n\
+           \   x+1                \n\
            \ end                  "
 
   let exd = " function f(a)       \n\
            \   x = a              \n\
            \   a = x              \n\
-           \   a                  \n\
+           \   a+1                \n\
            \ end                  "
 
       intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
@@ -40,7 +40,7 @@ testAMS01 pp = do
 
   parseEvalFail pp "01a errors (mutation after move is not allowed)" exa (DemutationMovedVariableAccessError "")
   parseEvalFail pp "01b errors (value after move is not allowed)" exb (DemutationMovedVariableAccessError "")
-  parseEvalUnify pp "01c succeeds (correct value after move is allowed)" exc (pure ty)
+  parseEvalUnify pp "01c succeeds (using corect value after move is allowed)" exc (pure ty)
   parseEvalUnify pp "01d succeeds (double move is allowed)" exd (pure ty)
 
 
