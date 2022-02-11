@@ -83,6 +83,9 @@ elaborateValue scname te = do
     StatementWithoutDefault _ -> demutationError $ "Expected term to be a value, but it was a statement:\n" <> showPretty te
     Value it mt -> return (it , mt)
     MutatingFunctionEnd -> demutationError $ "Expected term to be a value, but it was a return."
+    -- PurePhiTermType cond tt1 tt2 -> case (tt1, tt2) of
+    --   ((Value Pure mt1,tt1), (Value Pure mt2,tt2)) -> pure $ (Pure, (PhiMove cond (mt1,tt1) (mt2,tt2)))
+    --   other -> demutationError $ "Expected a term to be a value, but found an if statement where the branches had term types: " <> show other
 
 elaboratePureValue :: ScopeVar -> ProcDMTerm -> MTC (MoveType)
 elaboratePureValue scname te = do
@@ -95,6 +98,9 @@ elaboratePureValue scname te = do
     Value _ mt    -> demutationError $ "Expected term to be a pure value, but it has type: " <> show mt
                                     <> "The term is:\n"
                                     <> showPretty te
+    -- PurePhiTermType cond tt1 tt2 -> case (tt1, tt2) of
+    --   ((Value Pure mt1,tt1), (Value Pure mt2,tt2)) -> pure $ (PhiMove cond (mt1,tt1) (mt2,tt2))
+    --   other -> demutationError $ "Expected a term to be a value, but found an if statement where the branches had term types: " <> show other
 
 
 
@@ -118,7 +124,9 @@ makeTermList (Statement term last : []) = do last' <- (moveTypeAsTerm last) ; re
 makeTermList (StatementWithoutDefault term : []) = demutationError $ "Encountered a statement which is not allowed to be the last one in a block.\n"
                                                                    <> "The statement is:\n"
                                                                    <> showPretty term
-makeTermList (MutatingFunctionEnd : []) = return (MutatingFunctionEndValue , Nothing, [])
+-- makeTermList (PurePhiTermType cond (Value Pure mt1,tt1) (Value Pure mt2,tt2) : []) = return (PureValue [mt1,mt2] , Nothing, [Extra (DemutPhi cond tt1 tt2)])
+-- makeTermList (PurePhiTermType cond _ _ : [])     = demutationError $ "Encountered a phi as last statement in a block, but the branches to do not have pure values as returns."
+makeTermList (MutatingFunctionEnd : [])          = return (MutatingFunctionEndValue , Nothing, [])
 
 -- more than one element left
 makeTermList (Value _ mt : ts)          = demutationError $ "Found a value term " <> show mt <> " inside a list of statements."
@@ -128,6 +136,7 @@ makeTermList (StatementWithoutDefault term : ts)
                                         = do (last, lastt, ts') <- makeTermList ts
                                              return (last, lastt, ts' <> [term])
 makeTermList (MutatingFunctionEnd : ts) = demutationError $ "Found a MutatingFunctionEnd inside a list of statements."
+-- makeTermList (PurePhiTermType cond v1 v2 : ts) = demutationError "Phis in the middle of a block are currently not implemented."
 
 --
 -- with actually appending
@@ -148,9 +157,7 @@ makeTermListAndCancelAppend :: [TermType] -> MTC (LastValue, [DemutDMTerm])
 makeTermListAndCancelAppend ts = do
   (last, lastt, ts') <- makeTermList ts
   case lastt of
-    Nothing -> demutationError $ "Found a block which has no default value to throw away. But such a block was expected here.\n"
-                              <> "Encountered block:\n"
-                              <> showPretty (Extra (DemutBlock ts'))
+    Nothing -> return (last, ts')
     Just lastt -> return (last, ts')
 
   
@@ -188,8 +195,9 @@ elaborateMut scname (Extra (Block ts)) = do
     PureValue mt -> return mt
     MutatingFunctionEndValue -> demutationError $ "Encountered a 'return' which is not the last statement of a function."
 
+
   case mt of
-    NoMove pdt -> pure ()
+    NoMove _  -> pure ()
     _ -> demutationError $ "Encountered a block which is not top level and not in a function, but has a move as return type. This is currently not allowed."
 
   return (Value Pure (NoMove (Extra (DemutBlock ts''))))
@@ -601,12 +609,13 @@ elaborateMut scname term@(Extra (ProcPhi cond tr fs)) = do
   -- Branch 1:
   --
   trTerms <- do
-    (trLast,trTerms) <- elaborateAsListAndCancelAppend scname tr
-    case trLast of
-      MutatingFunctionEndValue -> demutationError $ "Ifs cannot contain `return` statements.\n"
+    (trLastVal,trLast,trTerms) <- elaborateAsList scname tr
+    case (trLastVal,trLast) of
+      (MutatingFunctionEndValue,_) -> demutationError $ "Ifs cannot contain `return` statements.\n"
                                                   <> "In the term:\n"
                                                   <> showPretty term
-      PureValue _ -> pure trTerms
+      (PureValue mt, Just defaulval) -> pure (StatementBranch trTerms)
+      (PureValue mt, Nothing)        -> pure (ValueBranch trTerms mt)
   --
   -- save the mut and mem ctxs, since we need to know
   -- which assignments / mutations happened in either branch.
@@ -625,14 +634,15 @@ elaborateMut scname term@(Extra (ProcPhi cond tr fs)) = do
   -- Now do the actual elaboration of this branch
   fsTerms <- do
     case fs of
-      Nothing  -> return []
+      Nothing  -> pure (StatementBranch [])
       Just fs -> do 
-        (fsLast,fsTerms) <- elaborateAsListAndCancelAppend scname fs
-        case fsLast of
-          MutatingFunctionEndValue -> demutationError $ "Ifs cannot contain `return` statements.\n"
+        (fsLastVal,fsLast,fsTerms) <- elaborateAsList scname fs
+        case (fsLastVal,fsLast) of
+          (MutatingFunctionEndValue,_) -> demutationError $ "Ifs cannot contain `return` statements.\n"
                                                       <> "In the term:\n"
                                                       <> showPretty term
-          PureValue _ -> pure fsTerms
+          (PureValue mt, Just defaulval) -> pure (StatementBranch fsTerms)
+          (PureValue mt, Nothing)        -> pure (ValueBranch fsTerms mt)
   --
   -- Again save mem / mut after second branch
   mutCtxAfter2 <- use mutCtx
@@ -651,53 +661,30 @@ elaborateMut scname term@(Extra (ProcPhi cond tr fs)) = do
   ---------------------------------
   --
   -- Return the resulting term type
-  let trTerms' = (Extra (DemutBlock (trTerms <> proj1)))
-  let fsTerms' = (Extra (DemutBlock (fsTerms <> proj2)))
+  case (trTerms, fsTerms) of
+    --
+    -- case 1: statement branches
+    --
+    (StatementBranch trTerms, StatementBranch fsTerms) -> do
+      let trTerms' = (Extra (DemutBlock (trTerms <> proj1)))
+      let fsTerms' = (Extra (DemutBlock (fsTerms <> proj2)))
+      
+      return (StatementWithoutDefault (Extra (DemutPhi cond' trTerms' fsTerms')))
+
+    --
+    -- case 2: value branches
+    --
+    (ValueBranch trTerms trMoves, ValueBranch fsTerms fsMoves) -> case (proj1,proj2) of
+      ([],[]) -> return (Value Pure (PhiMove cond' (trMoves, Extra (DemutBlock trTerms)) (fsMoves, Extra (DemutBlock fsTerms))))
+      (proj1,proj2) -> demutationError $ "Found an if with branches of value-type, in such ifs mutation is not allowed."
+
+    --
+    -- error case: mixed branches
+    --
+    branchTypes -> demutationError $ "Found an if where the branch types differ: " <> show branchTypes
+
+
   
-  return (StatementWithoutDefault (Extra (DemutPhi cond' trTerms' fsTerms')))
-
-  
-  {-
-  let
-    -- set memctx to startM, then demutate the term input
-    -- append the result term to tts and unify the result memctx with unifiedM
-    -- used with fold, this will demutate all branches with the same starting state,
-    -- then in unification if the same name is used in both branches, they will
-    --    - be set to "moved" if they were moved in one branch
-    --    - be set to the concatenation of the memory locations they were given in the branches
-    elaborateBranch :: MemCtx -> ProcDMTerm -> MTC (DemutDMTerm, MemCtx)
-    elaborateBranch startM t = do
-        memCtx .= startM
-        td <- elaborateMut scname t
-        resM <- use memCtx
-        undefined
-        -- return (termTypeAsTerm td, resM)
-        
-  in do
-      --
-      -- Begin actual function
-      --
-      --
-
-
-
-
-
-      startM <- use memCtx
-      c <- moveTypeAsTerm <$> elaboratePureValue scname cond
-
-      -- elaborate all branches using the same start memctx
-      -- collect the result terms, unify the resulting memctxs with emptyM
-      (dt, mt) <- elaborateBranch startM tr
-      df <- case fs of
-                 Nothing ->  memCtx .= mt >> return Nothing
-                 Just tfs -> do
-                             (df, mf) <- elaborateBranch startM tfs
-                             memCtx .= (mt ⋆! mf)
-                             return (Just df)
-      undefined
-      -- return (StatementWithoutDefault (Extra (DemutPhi c dt df)))
--}
 
 
 
@@ -971,6 +958,13 @@ elaborateHelper4 scname ctr t1 t2 t3 t4 = do
 ---------------------------------------------------
 -- list elaboration
 
+elaborateAsList :: ScopeVar -> ProcDMTerm -> MTC (LastValue, Maybe DemutDMTerm, [DemutDMTerm])
+elaborateAsList scname (Extra (Block ts)) = do
+  ts' <- mapM (elaborateMut scname) ts
+  makeTermList ts'
+elaborateAsList scname t = do
+  t' <- elaborateMut scname t
+  makeTermList [t']
 
 elaborateAsListAndAppend :: ScopeVar -> ProcDMTerm -> MTC (LastValue, [DemutDMTerm])
 elaborateAsListAndAppend scname (Extra (Block ts)) = do
@@ -1068,16 +1062,16 @@ elaborateLambda scname args body = do
     --
     -- case I: a pure function
     --
-    (PureValue a, []) -> do
+    (PureValue as, []) -> do
       --
       -- We lookup the proc vars of the move,
       -- and check that they do not contain memory
       -- locations which are function inputs.
       --
-      debug $ "[elaborateLambda] pure function. move type: " <> show a
-      debug $ "   movedVars: " <> show (movedVarsOfMoveType a) <> ", mutated_argmvs: " <> show mutated_argmvs
+      debug $ "[elaborateLambda] pure function. move type: " <> show as
+      debug $ "   movedVars: " <> show (movedVarsOfMoveType as) <> ", mutated_argmvs: " <> show mutated_argmvs
       --
-      memTypesOfMove <- mapM expectNotMoved (movedVarsOfMoveType a)
+      memTypesOfMove <- mapM expectNotMoved (movedVarsOfMoveType as)
       let memVarsOfMove = join memTypesOfMove >>= getAllMemVars
       -- 
       case memVarsOfMove `intersect` argmvs of
@@ -1092,7 +1086,7 @@ elaborateLambda scname args body = do
     --
     -- case II: not allowed
     --
-    (PureValue a, xs) -> demutationError $ "Found a function which is mutating, but does not have a 'return'. This is not allowed."
+    (PureValue as, xs) -> demutationError $ "Found a function which is mutating, but does not have a 'return'. This is not allowed."
                                         <> "\nThe function body is:\n" <> showPretty body
     --
     -- case III: not allowed

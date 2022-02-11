@@ -85,7 +85,7 @@ data ImmutType = Pure | Mutating [IsMutated] | PureBlackBox
 -- These types describe which variable names
 -- are in the RHS and must be moved on tlet/slet assignment
 -- See #171 #172
-data MoveType = TupleMove [MoveType] | SingleMove ProcVar | RefMove DemutDMTerm | NoMove DemutDMTerm
+data MoveType = TupleMove [MoveType] | SingleMove ProcVar | RefMove DemutDMTerm | NoMove DemutDMTerm | PhiMove DemutDMTerm (MoveType,DemutDMTerm) (MoveType,DemutDMTerm)
   deriving (Eq, Show)
 
 -- singleMoveMaybe :: Maybe ProcVar -> MoveType
@@ -96,12 +96,15 @@ data TermType =
   Value ImmutType MoveType
   | Statement DemutDMTerm MoveType
   | StatementWithoutDefault DemutDMTerm
+  -- | PurePhiTermType DemutDMTerm ([MoveType],DemutDMTerm) (TermType,DemutDMTerm)
   | MutatingFunctionEnd
 
 data LastValue =
    PureValue MoveType
    | MutatingFunctionEndValue
 
+data PhiBranchType = ValueBranch [DemutDMTerm] MoveType | StatementBranch [DemutDMTerm]
+  deriving (Show)
 
 --------------------------------------------------
 -- memory state
@@ -533,6 +536,10 @@ moveGetMem scname pv (SingleMove a) = do
   memstate <- expectNotMoved a
   memCtx %= (setValue a MemMoved)
   return (memstate)
+moveGetMem scname pv (PhiMove _ (mt1,_) (mt2,_)) = do
+  memt1 <- moveGetMem scname Nothing mt1
+  memt2 <- moveGetMem scname Nothing mt2
+  return (memt1 <> memt2)
 moveGetMem scname pv (TupleMove as) = do
   mems <- mapM (moveGetMem scname Nothing) as
   return (TupleMem <$> oneOfEach mems)
@@ -760,6 +767,7 @@ moveTypeAsTerm = \case
     terms <- mapM moveTypeAsTerm mts
     pure $ Tup $ terms
   SingleMove pv -> do tv <- procVarAsTeVar pv ; pure $ Var $ (tv :- JTAny)
+  PhiMove cond (_,tt1) (_,tt2) -> return (Extra (DemutPhi cond tt1 tt2))
   RefMove pdt   -> pure pdt
   NoMove pdt    -> pure pdt
 
@@ -767,6 +775,7 @@ movedVarsOfMoveType :: MoveType -> [ProcVar]
 movedVarsOfMoveType = \case
   TupleMove mts -> mts >>= movedVarsOfMoveType 
   SingleMove pv -> return pv
+  PhiMove cond (mt1,_) (mt2,_) -> movedVarsOfMoveType mt1 <> movedVarsOfMoveType mt2
   RefMove pdt -> []
   NoMove pdt -> []
 
