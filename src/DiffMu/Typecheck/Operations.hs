@@ -190,14 +190,10 @@ makeNonConstType myConstrName (Numeric (TVar a)) = do
 makeNonConstType name (Numeric (NonConst t)) = pure $ Numeric (NonConst t)
 makeNonConstType name (Numeric (Const s t)) = pure $ Numeric (Const s t)
 makeNonConstType name (Numeric DMData) = pure $ (Numeric DMData) -- TODO: Check, we do nothing with DMData?
-makeNonConstType name (DMVec a b c e) = do
+makeNonConstType name (DMContainer k a b c e) = do
     en <- makeNoFunNumeric e
     enc <- makeNonConstType name (Numeric en)
-    return $ DMVec a b c (NoFun enc)
-makeNonConstType name (DMMat a b c d e) = do
-    en <- makeNoFunNumeric e
-    enc <- makeNonConstType name (Numeric en)
-    return $ DMMat a b c d (NoFun enc)
+    return $ DMContainer k a b c (NoFun enc)
 makeNonConstType name (TVar a)  = pure $ (TVar a) -- TODO: Check, we do nothing with TVar?
 makeNonConstType name a = internalError ("makeNonConstType called on " <> show a <> " which is not a type for which operations are well-defined.")
 
