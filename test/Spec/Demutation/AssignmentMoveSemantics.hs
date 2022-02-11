@@ -25,13 +25,13 @@ testAMS01 pp = do
 
   let exc = " function f(a)       \n\
            \   x = a              \n\
-           \   x+1                \n\
+           \   clone(x)           \n\
            \ end                  "
 
   let exd = " function f(a)       \n\
            \   x = a              \n\
            \   a = x              \n\
-           \   a+1                \n\
+           \   clone(a)           \n\
            \ end                  "
 
       intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
