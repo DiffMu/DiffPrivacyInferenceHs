@@ -15,9 +15,11 @@ testNAMA01 pp = do
             \   function g!(a,b)      \n\
             \     norm_convert!(a)    \n\
             \     norm_convert!(b)    \n\
+            \     return nothing      \n\
             \   end                   \n\
             \   function f!(a)        \n\
             \     g!(a,a)             \n\
+            \     return              \n\
             \   end                   \n\
             \ end                     "
 
@@ -27,9 +29,11 @@ testNAMA01 pp = do
             \     norm_convert!(a)         \n\
             \     (x,y) = b                \n\
             \     scale_gradient!(x,a)     \n\
+            \     return                   \n\
             \   end                        \n\
             \   function f!(a)             \n\
             \     g!(a,a)                  \n\
+            \     return                   \n\
             \   end                        \n\
             \   f!(z)                      \n\
             \   5                          \n\
@@ -42,9 +46,11 @@ testNAMA01 pp = do
             \     norm_convert!(a)         \n\
             \     (x,y) = b                \n\
             \     scale_gradient!(x,a)     \n\
+            \     return                   \n\
             \   end                        \n\
             \   function f!(a)             \n\
             \     g!(a,((a,a),0))          \n\
+            \     return                   \n\
             \   end                        \n\
             \   f!(z)                      \n\
             \   5                          \n\

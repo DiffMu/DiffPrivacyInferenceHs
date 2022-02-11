@@ -1021,6 +1021,7 @@ elaborateLambda scname args body = do
   -- ## Then, mark all function arguments as "SingleRead" and "Pure"
   -- ## for the current scope.
   oldVaCtx <- use vaCtx
+  oldMemCtx <- use memCtx
   mapM (\x -> setImmutTypeOverwritePrevious scname x Pure) [a | (a ::- _) <- args]
   -- ##
   -- END NO.
@@ -1051,7 +1052,6 @@ elaborateLambda scname args body = do
 
   --
   --------------------
-
 
 
   ------------------------------
@@ -1133,6 +1133,7 @@ elaborateLambda scname args body = do
   --
   -----------
 
+  memCtx .= oldMemCtx
 
   return (full_body, itype)
 
