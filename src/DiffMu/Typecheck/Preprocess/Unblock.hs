@@ -24,9 +24,10 @@ unblock = unblockValue
 
 unblockValue :: DemutDMTerm -> BlockTC DMTerm
 unblockValue (Extra e) = case e of
-  DemutBlock []     -> unblockingError $ "Found an empty block where a value was expected."
-  DemutBlock (x:xs) -> unblockStatementsM (unblockValue x) xs
-  _                 -> unblockingError $ "Found a statement without return value. This is not allowed.\n" <> "Statement:\n" <> showPretty e
+  DemutBlock []       -> unblockingError $ "Found an empty block where a value was expected."
+  DemutBlock (x:xs)   -> unblockStatementsM (unblockValue x) xs
+  DemutPhi cond tr fs -> Phi <$> (unblock cond) <*> (unblock tr) <*> (unblock fs) -- a phi that has no tail
+  _                   -> unblockingError $ "Found a statement without return value. This is not allowed.\n" <> "Statement:\n" <> showPretty e
 unblockValue t = recDMTermM unblockValue (\x -> unblock (Extra x)) t
 
 
