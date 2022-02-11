@@ -47,17 +47,17 @@ testOps pp = describe "Ops" $ do
                  \     w1 + x \n\
                  \  end \n\
                  \ end"
-        ex_mat_no = "function foo(x::Matrix{Integer}, y::Matrix{Integer}, z::Matrix{Integer}) \n\
-                 \ 2.0*x + y - z \n\
-                 \ end"
-        ex_vec_no = "function foo(x::Vector{Integer}, y::Vector{Integer}, z::Vector{Integer}) \n\
-                 \ 2.0*x + y - z \n\
-                 \ end"
         ex_mat = "function foo(x::Matrix{Integer}, y::Matrix{Integer}, z::Matrix{Integer}) \n\
                  \ clone(2.0*x + y - z) \n\
                  \ end"
         ex_vec = "function foo(x::Vector{Integer}, y::Vector{Integer}, z::Vector{Integer}) \n\
                  \ clone(2.0*x + y - z) \n\
+                 \ end"
+        ex_mat_no = "function foo(x::Matrix{Integer}, y::Matrix{Integer}, z::Matrix{Integer}) \n\
+                 \ 2.0*x + y - z \n\
+                 \ end"
+        ex_vec_no = "function foo(x::Vector{Integer}, y::Vector{Integer}, z::Vector{Integer}) \n\
+                 \ 2.0*x + y - z \n\
                  \ end"
         int = NoFun(Numeric (NonConst DMInt))
         real = NoFun(Numeric (NonConst DMReal))
@@ -76,8 +76,8 @@ testOps pp = describe "Ops" $ do
     parseEval pp "numeric ops sensitivity" ex_num (pure ty_num)
     parseEvalUnify pp "matrix ops sensitivity" ex_mat (ty_mat)
     parseEvalUnify pp "vector ops sensitivity" ex_vec (ty_vec)
-    parseEvalFail pp "matrix ops no copy" ex_mat_no (UnsatisfiableConstraint "")
-    parseEvalFail pp "vec ops no copy" ex_vec_no (UnsatisfiableConstraint "")
+    parseEvalUnify pp "matrix ops no copy" ex_mat_no (ty_mat)
+    parseEvalUnify pp "vec ops no copy" ex_vec_no (ty_vec)
 
 testPriv pp = describe "privacies" $ do
     let ret = "function f(x :: Integer) :: Priv() \n\
