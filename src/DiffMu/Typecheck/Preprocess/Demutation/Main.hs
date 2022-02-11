@@ -121,9 +121,7 @@ makeTermList (Value it mt : [])         = case it of
                                                                     <> "The value is:\n"
                                                                     <> show mt
 makeTermList (Statement term last : []) = do last' <- (moveTypeAsTerm last) ; return (PureValue last, Just last', [term])
-makeTermList (StatementWithoutDefault term : []) = demutationError $ "Encountered a statement which is not allowed to be the last one in a block.\n"
-                                                                   <> "The statement is:\n"
-                                                                   <> showPretty term
+makeTermList (StatementWithoutDefault term : []) = return (NoLastValue , Nothing, [term])
 -- makeTermList (PurePhiTermType cond (Value Pure mt1,tt1) (Value Pure mt2,tt2) : []) = return (PureValue [mt1,mt2] , Nothing, [Extra (DemutPhi cond tt1 tt2)])
 -- makeTermList (PurePhiTermType cond _ _ : [])     = demutationError $ "Encountered a phi as last statement in a block, but the branches to do not have pure values as returns."
 makeTermList (MutatingFunctionEnd : [])          = return (MutatingFunctionEndValue , Nothing, [])
@@ -172,6 +170,7 @@ elaborateTopLevel scname (Extra (Block ts)) = do
   mt <- case last_val of
     PureValue mt -> return mt
     MutatingFunctionEndValue -> demutationError $ "Encountered a 'return' which is not the last statement of a function."
+    NoLastValue              -> demutationError $ "Encountered a statement without last value in top level."
 
   -- case mt of
   --   NoMove pdt -> pure ()
@@ -187,13 +186,16 @@ elaborateTopLevel scname t = elaborateMut scname t
 --
 elaborateMut :: ScopeVar -> ProcDMTerm -> MTC (TermType)
 
-elaborateMut scname (Extra (Block ts)) = do
+elaborateMut scname term@(Extra (Block ts)) = do
   ts' <- mapM (elaborateMut scname) ts
   (last_val, ts'') <- makeTermListAndAppend ts'
 
   mt <- case last_val of
     PureValue mt -> return mt
     MutatingFunctionEndValue -> demutationError $ "Encountered a 'return' which is not the last statement of a function."
+    NoLastValue -> demutationError $ "Encountered a statement which is not allowed to be the last one in a block.\n"
+                                    <> "The statement is:\n"
+                                    <> showPretty term
 
 
   case mt of
@@ -615,6 +617,7 @@ elaborateMut scname term@(Extra (ProcPhi cond tr fs)) = do
                                                   <> "In the term:\n"
                                                   <> showPretty term
       (PureValue mt, Just defaulval) -> pure (StatementBranch trTerms)
+      (NoLastValue, _)               -> pure (StatementBranch trTerms)
       (PureValue mt, Nothing)        -> pure (ValueBranch trTerms mt)
   --
   -- save the mut and mem ctxs, since we need to know
@@ -642,6 +645,7 @@ elaborateMut scname term@(Extra (ProcPhi cond tr fs)) = do
                                                       <> "In the term:\n"
                                                       <> showPretty term
           (PureValue mt, Just defaulval) -> pure (StatementBranch fsTerms)
+          (NoLastValue, _)               -> pure (StatementBranch fsTerms)
           (PureValue mt, Nothing)        -> pure (ValueBranch fsTerms mt)
   --
   -- Again save mem / mut after second branch
@@ -1014,8 +1018,8 @@ elaborateLambda scname args body = do
   -- ##
   -- ## Then, mark all function arguments as "SingleRead" and "Pure"
   -- ## for the current scope.
-  oldVaCtx <- use vaCtx
   oldMemCtx <- use memCtx
+  oldVaCtx <- use vaCtx
   mapM (\x -> setImmutTypeOverwritePrevious scname x Pure) [a | (a ::- _) <- args]
   -- ##
   -- END NO.
@@ -1037,12 +1041,42 @@ elaborateLambda scname args body = do
   --
   -- find out which mem vars have been mutated
   --
+  () <- do
+    memctx <- use memCtx
+    mutctx <- use mutCtx
+    logForce $ ""
+    logForce $ "[elaborateLambda]"
+    logForce $ "memCtx:\n" <> show memctx
+    logForce $ ""
+    logForce $ "mutCtx:\n" <> show mutctx
+    logForce $ ""
+    return ()
+  --
   (mutated_argmvs, mut_states) <- do
     muts <- mapM getMemVarMutationStatus argmvs
-    let toMutState [] = NotMutated
-        toMutState _  = Mutated
-    -- let amvs = zip args muts
-    return ([t | ((t:ts)) <- muts], toMutState <$> muts)
+    let toMutRes [] = NotMutated
+        toMutRes _  = Mutated
+
+    let mutStates = [(s,t) | (s,(t:ts)) <- muts]
+
+    let toTeVar (NotSplit, (t:ts)) = pure (Just t)
+        toTeVar (NotSplit, [])     = pure Nothing
+        toTeVar (Split as, (t:ts)) = throwError $ DemutationSplitMutatingArgumentError $ "While demutating a function definition, encountered the case that an argument memory location was split. This is not allowed"
+        toTeVar (Split as, []) = do
+          -- if a var was split, we check recursively if
+          -- its parts have been mutated.
+          let f a = do
+                      partTerms <- toTeVar =<< getMemVarMutationStatus a
+                      case partTerms of
+                        Just _ -> throwError $ DemutationSplitMutatingArgumentError "Part of a split function argument was mutated. This is currently not allowed"
+                        Nothing  -> pure ()
+
+          mapM f as
+          return Nothing
+
+    mutTeVars <- mapM toTeVar muts
+    let mutTeVars' = [v | Just v <- mutTeVars]
+    return (mutTeVars', toMutRes <$> snd <$> muts)
 
   --
   --------------------
@@ -1103,14 +1137,25 @@ elaborateLambda scname args body = do
               vs -> Clone $ Tup [Var (v :- JTAny) | v <- mvs] -- TODO cloning for now even though we don't like it, see #198
       return (Mutating mut_states, Extra (DemutBlock (last_tuple : new_body_terms)))
 
+    (NoLastValue, _) -> demutationError $ "Found a function which has no last value, that is not allowed."
+                                          <> "\nThe function body is:\n" <> showPretty body
+
 
 
   ------------------------------
   -- Restoration of state
   --
 
+  --
+  -- restore memctx,
+  --   we simply take the old one,
+  --   as all memory allocations which happened
+  --   in the lambda should have no effect on outside.
+  --
+  memCtx .= oldMemCtx
+
   --  
-  -- delete all memory variables for this scope
+  -- delete all memory variables for this scope from the mutctx
   --
   cleanupMem scname
 
@@ -1127,7 +1172,6 @@ elaborateLambda scname args body = do
   --
   -----------
 
-  memCtx .= oldMemCtx
 
   return (full_body, itype)
 

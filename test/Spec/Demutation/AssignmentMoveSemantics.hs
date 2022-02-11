@@ -65,6 +65,6 @@ testAMS02 pp = do
             \ end                 "
 
   parseEvalFail pp "02a errors (mutation after tuple move is not allowed)" exa (DemutationMovedVariableAccessError "")
-  parseEvalFail pp "02b errors (mutation of tuple part is not allowed)" exb (DemutationError "")
-  parseEvalFail pp "02c errors (mutation of tuple part is not allowed)" exc (DemutationError "")
+  parseEvalFail pp "02b errors (mutation of tuple part is not allowed)" exb (DemutationSplitMutatingArgumentError "")
+  parseEvalFail pp "02c errors (mutation of tuple part is not allowed)" exc (DemutationSplitMutatingArgumentError "")
 

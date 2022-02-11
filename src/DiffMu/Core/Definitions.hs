@@ -1112,6 +1112,7 @@ data DMException where
   ParseError              :: String -> String -> Int -> DMException -- error message, filename, line number
   DemutationMovedVariableAccessError :: Show a => a -> DMException
   DemutationNonAliasedMutatingArgumentError :: String -> DMException
+  DemutationSplitMutatingArgumentError :: String -> DMException
 
 instance Show DMException where
   show (UnsupportedError t) = "The term '" <> t <> "' is currently not supported."
@@ -1145,6 +1146,7 @@ instance Show DMException where
   show (DemutationVariableAccessTypeError e) = "An error regarding variable access types occured:\n" <> e
   show (DemutationMovedVariableAccessError a) = "Tried to access the variable " <> show a <> ". But this variable is not valid anymore, because it was assigned to something else."
   show (DemutationNonAliasedMutatingArgumentError a) = "An error regarding non-aliasing of mutating arguments occured:\n" <> a
+  show (DemutationSplitMutatingArgumentError a) = "An error regarding mutating arguments occured:\n" <> a
 
 instance Eq DMException where
   UnsupportedTermError    a        == UnsupportedTermError    b       = True
@@ -1166,6 +1168,7 @@ instance Eq DMException where
   DemutationVariableAccessTypeError a == DemutationVariableAccessTypeError b = True
   DemutationMovedVariableAccessError a       == DemutationMovedVariableAccessError b = True
   DemutationNonAliasedMutatingArgumentError a       == DemutationNonAliasedMutatingArgumentError b = True
+  DemutationSplitMutatingArgumentError a       == DemutationSplitMutatingArgumentError b = True
   _ == _ = False
 
 

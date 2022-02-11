@@ -102,6 +102,7 @@ data TermType =
 data LastValue =
    PureValue MoveType
    | MutatingFunctionEndValue
+   | NoLastValue
 
 data PhiBranchType = ValueBranch [DemutDMTerm] MoveType | StatementBranch [DemutDMTerm]
   deriving (Show)
@@ -126,7 +127,15 @@ data MemAssignmentType = AllocNecessary | PreexistingMem
 
 type MemCtx = Ctx ProcVar MemState
 
-data TeVarMutTrace = TeVarMutTrace (Maybe ProcVar) [TeVar]
+
+data IsSplit = Split [MemVar] | NotSplit
+  deriving (Show,Eq)
+
+-- instance Semigroup IsSplit where
+--   (<>) Split a = Split
+--   (<>) NotSplit b = b
+
+data TeVarMutTrace = TeVarMutTrace (Maybe ProcVar) IsSplit [TeVar]
   deriving (Show,Eq)
 
 type MutCtx = Ctx MemVar (ScopeVar, TeVarMutTrace)
@@ -258,7 +267,7 @@ allocateMem scopename procvar = do
               Just a -> Left a
               Nothing -> Right "anon"
   mv <- newMemVar hint
-  mutCtx %= (setValue mv (scopename, TeVarMutTrace Nothing []))
+  mutCtx %= (setValue mv (scopename, TeVarMutTrace Nothing NotSplit []))
   return mv
 
 cleanupMem :: ScopeVar -> MTC ()
@@ -411,7 +420,7 @@ markMutated pv = do
   let f ctx = do
         case getValue mv ctx of
           Nothing -> impossible $ "Wanted to mark the memvar " <> show mv <> " as mutated, but it was not in the mutctx."
-          Just (scvar, TeVarMutTrace pv tevars) -> return $ setValue mv (scvar, TeVarMutTrace pv (tevar:tevars)) ctx
+          Just (scvar, TeVarMutTrace pv split tevars) -> return $ setValue mv (scvar, TeVarMutTrace pv split (tevar:tevars)) ctx
 
   mutCtx %=~ f
   return tevar
@@ -565,7 +574,7 @@ setMem x mt = do
   let setOwner s = do
         sv <- getValue s <$> use mutCtx
         case sv of
-          Just (scopeVar, TeVarMutTrace oldOwner trace) -> mutCtx %= (setValue s (scopeVar, TeVarMutTrace (Just x) trace))
+          Just (scopeVar, TeVarMutTrace oldOwner split trace) -> mutCtx %= (setValue s (scopeVar, TeVarMutTrace (Just x) split trace))
           Nothing -> pure ()
 
   mapM_ setOwner smt
@@ -585,7 +594,15 @@ setMemTuple scname xs (SingleMem a) = do
   let f (x) = do
         mx <- allocateMem scname (Just x)
         setMem x [SingleMem mx]
-  mapM_ f xs
+        return mx
+  memvars <- mapM f xs
+
+  -- furthermore we mark the rhs mem location as split
+  rhs_mut <- getValue a <$> use mutCtx
+
+  case rhs_mut of
+    Nothing -> demutationError $ "Expected the memory location " <> show a <> " to have a mutation status."
+    Just (scvar,TeVarMutTrace pv _ ts) -> mutCtx %= (setValue a (scvar, TeVarMutTrace pv (Split memvars) ts))
 
 setMemTuple scname xs (RefMem a) = internalError  $ "setMemTuple not implemented for references"
   -- undefined -- do
@@ -653,17 +670,17 @@ expectSingleMem mts = do
 --     xs -> demutationError $ "When doing a reverse memory lookup for memory variable " <> show wantedMem <> ", multiple tevars were found: " <> show xs
 
 
-getMemVarMutationStatus :: MemVar -> MTC [TeVar]
+getMemVarMutationStatus :: MemVar -> MTC (IsSplit, [TeVar])
 getMemVarMutationStatus mv = do
   mctx <- use mutCtx
   case getValue mv mctx of
     Nothing -> internalError $ "Expected memory location to have a mutation status, but it didn't. MemVar: " <> show mv
-    Just (_, TeVarMutTrace _ tvars) -> return tvars
+    Just (_, TeVarMutTrace _ split tvars) -> return (split,tvars)
 
 
 coequalizeTeVarMutTrace :: TeVarMutTrace -> TeVarMutTrace -> WriterT ([DemutDMTerm],[DemutDMTerm]) MTC TeVarMutTrace
-coequalizeTeVarMutTrace (TeVarMutTrace pv1 ts1) (TeVarMutTrace pv2 ts2) | and [ts1 == ts2, pv1 == pv2] = pure $ TeVarMutTrace pv1 ts1
-coequalizeTeVarMutTrace (TeVarMutTrace pv1 ts1) (TeVarMutTrace pv2 ts2) | pv1 == pv2  = do
+coequalizeTeVarMutTrace (TeVarMutTrace pv1 split1 ts1) (TeVarMutTrace pv2 split2 ts2) | and [ts1 == ts2, pv1 == pv2, split1 == split2] = pure $ TeVarMutTrace pv1 split1 ts1
+coequalizeTeVarMutTrace (TeVarMutTrace pv1 split1 ts1) (TeVarMutTrace pv2 split2 ts2) | pv1 == pv2  = do
   t3 <- newTeVarOfMut "phi"
   let makeProj (Just pv) []     = pure $ Extra (DemutSLetBase PureLet (t3 :- JTAny) (Var (UserTeVar pv :- JTAny))) 
       makeProj Nothing   []     = lift $ demutationError $ "While demutating phi encountered a branch where a proc-var-less memory location is mutated. This cannot be done."
@@ -674,15 +691,21 @@ coequalizeTeVarMutTrace (TeVarMutTrace pv1 ts1) (TeVarMutTrace pv2 ts2) | pv1 ==
 
   tell ([proj1],[proj2])
 
-  pure $ TeVarMutTrace pv1 (t3 : ts1 <> ts2)
+  split3 <- case (split1,split2) of
+              (NotSplit, NotSplit) -> pure NotSplit
+              (NotSplit, Split a) -> pure (Split a)
+              (Split a, NotSplit) -> pure (Split a)
+              (Split a, Split b) -> pure (Split (a <> b))
 
-coequalizeTeVarMutTrace (TeVarMutTrace pv1 ts1) (TeVarMutTrace pv2 ts2) | otherwise   = lift $ demutationError $ "While demutating phi, encountered two branches where the owners of a tvar differ. This is not allowed."
+  pure $ TeVarMutTrace pv1 split3 (t3 : ts1 <> ts2)
+
+coequalizeTeVarMutTrace (TeVarMutTrace pv1 _ ts1) (TeVarMutTrace pv2 _ ts2) | otherwise   = lift $ demutationError $ "While demutating phi, encountered two branches where the owners of a tvar differ. This is not allowed."
 
 
 instance SemigroupM (WriterT ([DemutDMTerm],[DemutDMTerm]) MTC) TeVarMutTrace where
   (⋆) = coequalizeTeVarMutTrace
 instance MonoidM (WriterT ([DemutDMTerm],[DemutDMTerm]) MTC) TeVarMutTrace where
-  neutral = pure $ TeVarMutTrace Nothing []
+  neutral = pure $ TeVarMutTrace Nothing NotSplit []
 instance CheckNeutral (WriterT ([DemutDMTerm],[DemutDMTerm]) MTC) TeVarMutTrace where
   checkNeutral _ = pure False
 
@@ -730,7 +753,7 @@ procVarAsTeVar pv = do
   --
   -- all memory types which contain mutated vars
   let getMutatedName x = do
-        mmut <- getMemVarMutationStatus x
+        (_,mmut) <- getMemVarMutationStatus x
         case mmut of
           []     -> return []
           (x:xs) -> return [x]
@@ -747,7 +770,7 @@ procVarAsTeVar pv = do
                                 <> "This is not allowed.\n"
                                 <> "Tevars: " <> show (x:xs)
 
-      True  -> return x
+      True  -> pure x 
 
 procVarAsTeVarInMutCtx :: MemCtx -> MutCtx -> ProcVar -> MTC TeVar
 procVarAsTeVarInMutCtx tempMemCtx tempMutCtx pv = do
