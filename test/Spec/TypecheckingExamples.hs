@@ -240,7 +240,7 @@ testMMap pp = describe "Matrix map" $ do
             let gradin = NoFun (DMVec nr c n (NoFun (Numeric (NonConst DMInt))))
             let gradout = NoFun (DMVec nr U n (NoFun (Numeric (NonConst DMInt))))
             return (Fun ([([gradin :@ (constCoeff (Fin 2)), NoFun (Numeric (NonConst DMInt)) :@ n] :->: gradout) :@ Just [JTVector JTInt, JTInt]]))
-    parseEval pp "good" ex ty
+    parseEvalUnify pp "good" ex ty
     parseEvalFail pp "dispatch (bad)" ex_fail (UnificationError "" "")
 
 testPrivFunc pp = describe "PrivacyFunction annotations" $ do
