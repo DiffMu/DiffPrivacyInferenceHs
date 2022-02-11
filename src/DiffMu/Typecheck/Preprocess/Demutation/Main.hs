@@ -527,8 +527,8 @@ elaborateMut scname (Extra (ProcPreLoop iters iterVar body)) = do -- demutationE
         Just v1 | otherwise -> return True
 
   captureMems <- filterM isChanged (getAllKeyElemPairs memsBefore)
-  capturesBefore <- mapM (procVarAsTeVarInMutCtx mutsBefore) $ fst <$> captureMems
-  capturesAfter  <- mapM (procVarAsTeVarInMutCtx mutsAfter)  $ fst <$> captureMems
+  capturesBefore <- mapM (procVarAsTeVarInMutCtx memsBefore mutsBefore) $ fst <$> captureMems
+  capturesAfter  <- mapM (procVarAsTeVarInMutCtx memsAfter mutsAfter)  $ fst <$> captureMems
   --
   -- We have to add the capture assignment and the capture return
   -- to the body. Note that the order of `bodyTerms` is already

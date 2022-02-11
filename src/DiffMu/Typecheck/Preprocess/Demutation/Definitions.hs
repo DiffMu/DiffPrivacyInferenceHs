@@ -124,7 +124,7 @@ data MemAssignmentType = AllocNecessary | PreexistingMem
 type MemCtx = Ctx ProcVar MemState
 
 data TeVarMutTrace = TeVarMutTrace (Maybe ProcVar) [TeVar]
-  deriving (Eq)
+  deriving (Show,Eq)
 
 type MutCtx = Ctx MemVar (ScopeVar, TeVarMutTrace)
 
@@ -742,12 +742,15 @@ procVarAsTeVar pv = do
 
       True  -> return x
 
-procVarAsTeVarInMutCtx :: MutCtx -> ProcVar -> MTC TeVar
-procVarAsTeVarInMutCtx tempctx pv = do
-  oldctx <- use mutCtx
-  mutCtx .= tempctx
+procVarAsTeVarInMutCtx :: MemCtx -> MutCtx -> ProcVar -> MTC TeVar
+procVarAsTeVarInMutCtx tempMemCtx tempMutCtx pv = do
+  oldMutCtx <- use mutCtx
+  oldMemCtx <- use memCtx
+  mutCtx .= tempMutCtx
+  memCtx .= tempMemCtx
   val <- procVarAsTeVar pv
-  mutCtx .= oldctx
+  mutCtx .= oldMutCtx
+  memCtx .= oldMemCtx
   return val
 
 
