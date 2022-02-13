@@ -815,22 +815,6 @@ data DemutatedExtension a =
   | DemutBlock [a]
   deriving (Show, Eq, Functor, Foldable, Traversable)
 
-
-----
--- mutability extension
-data MutabilityExtension a =
-  MutLet LetKind a a
-  -- MutLoop (a : "Number of iterations") (TeVar : "name of iteration var") (a : "body")
-  | MutLoop a (Maybe TeVar) a
-  | MutPhi a [a] a
-  | DNothing
-  | MutRet -- we return all mutated variables
-  | LoopRet [TeVar] -- we return all mutated, and all capture variables in the list
-  | DefaultRet a
-  deriving (Show, Eq, Functor, Foldable, Traversable)
-
-type MutDMTerm = PreDMTerm MutabilityExtension
-
 ----
 -- sum of extensions
 data SumExtension e f a = SELeft (e a) | SERight (f a)
@@ -1034,15 +1018,6 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (Sample a b c)     = "Sample (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ")"
   showPretty (Clone a)  = "(Clone " <> showPretty a <> ")"
   showPretty (InternalExpectConst a) = "InternalExpectConst " <> (showPretty a)
-
-instance ShowPretty a => ShowPretty (MutabilityExtension a) where
-  showPretty (DNothing)      = "Nothing"
-  showPretty (MutPhi a b c)    = "MutPhi (" <> showPretty a <> " ? " <> showPretty b <> " in " <> showPretty c <> ")"
-  showPretty (MutLet t a b)  = "MutLet{" <> show t <> "} " <> indent (showPretty a) <> indent (showPretty b)
-  showPretty (MutLoop a x d) = "MutLoop (" <> (showPretty a) <> ", " <> show x <> ")" <> parenIndent (showPretty d)
-  showPretty (MutRet)        = "MutRet"
-  showPretty (LoopRet as)    = "LoopRet " <> showPretty as
-  showPretty (DefaultRet x)  = "DefaultRet (" <> showPretty x <> ")"
 
 instance ShowPretty a => ShowPretty (ProceduralExtension a) where
   showPretty = \case
