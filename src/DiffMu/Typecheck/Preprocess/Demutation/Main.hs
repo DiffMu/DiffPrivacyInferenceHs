@@ -600,12 +600,6 @@ elaborateMut scname (Extra (ProcPreLoop iters iterVar body)) = do -- demutationE
 
 elaborateMut scname (Extra (ProcReturn)) = return MutatingFunctionEnd 
 
-
-elaborateMut scname (LastTerm t) = demutationError "not implemented: last term" -- do
-  -- (newTerm, newType, moveType) <- elaborateMut scname t
-  -- return (LastTerm (newTerm), newType, moveType)
-
-
 elaborateMut scname term@(Extra (ProcPhi cond tr fs)) = do
   ---------------------------------
   --

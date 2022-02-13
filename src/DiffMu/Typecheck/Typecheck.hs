@@ -824,12 +824,6 @@ checkSen' scope (TProject i t) = do
   addConstraint (Solvable (IsTProject ((i , τ) :=: ρ)))
   return ρ
 
-checkSen' scope (LastTerm t) = do
-  -- typecheck the term t, and apply the current scope to it
-  -- applyAllDelayedLayers scope (checkSens t scope)
-  (checkSens scope t)
-
-
 checkSen' scope (ZeroGrad m) = do
    -- check model
    tm <- checkSens scope m

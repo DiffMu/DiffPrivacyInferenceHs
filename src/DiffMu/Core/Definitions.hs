@@ -740,8 +740,6 @@ data PreDMTerm (t :: * -> *) =
 -- Special Tuple terms
   | Reorder [Int] (PreDMTerm t)
   | TProject Int (PreDMTerm t)
--- Special Scope terms
-  | LastTerm (PreDMTerm t)
   | ZeroGrad (PreDMTerm t)
   | SumGrads (PreDMTerm t) (PreDMTerm t)
   | Sample (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
@@ -759,8 +757,8 @@ pattern SmpLet a b c = TLetBase SampleLet a b c
 
 {-# COMPLETE Extra, Ret, Sng, Var, Arg, Op, Phi, Lam, LamStar, BBLet, BBApply,
  Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, Gauss, Laplace, MutGauss, MutLaplace, AboveThresh, MMap, ConvertM, MCreate, Transpose,
- Size, Length, Index, VIndex, Row, ClipN, ClipM, MutClipM, Loop, SubGrad, ScaleGrad, Reorder, TProject, LastTerm,
- ZeroGrad, SumGrads, SmpLet, Sample, InternalExpectConst #-}
+ Size, Length, Index, VIndex, Row, ClipN, ClipM, MutClipM, Loop, SubGrad, ScaleGrad, Reorder, TProject, ZeroGrad, SumGrads, SmpLet,
+ Sample, InternalExpectConst #-}
 
 
 deriving instance (forall a. Show a => Show (t a)) => Show (PreDMTerm t)
@@ -901,7 +899,6 @@ recDMTermM f h (SubGrad a b)      = SubGrad <$> (f a) <*> (f b)
 recDMTermM f h (ScaleGrad a b)    = ScaleGrad <$> (f a) <*> (f b)
 recDMTermM f h (Reorder x a)      = Reorder x <$> (f a)
 recDMTermM f h (TProject x a)     = TProject x <$> f a
-recDMTermM f h (LastTerm x)       = LastTerm <$> (f x)
 recDMTermM f h (ZeroGrad a)       = ZeroGrad <$> (f a)
 recDMTermM f h (SumGrads a b)     = SumGrads <$> (f a) <*> (f b)
 recDMTermM f h (Sample a b c)     = Sample <$> (f a) <*> (f b) <*> (f c)
@@ -1031,7 +1028,6 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (TProject x a)     = "Proj" <> show x <> " " <>  (showPretty a)
   showPretty (Loop a b x d )    = "Loop (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> show x <> ")" <> parenIndent (showPretty d)
   showPretty (SBind x a b)      = "SBind " <> showPretty x <> " <- " <> newlineIndentIfLong (showPretty a) <> "\n" <> (showPretty b)
-  showPretty (LastTerm a)       = "LastTerm " <> (showPretty a)
   showPretty (ZeroGrad a)       = "ZeroGrad " <> (showPretty a)
   showPretty (SumGrads a b)     = "SumGrads (" <> (showPretty a) <> ", " <> (showPretty b) <> ")"
   showPretty (SmpLet v a b)     = "SmpLet " <> showPretty v <> " <- " <> (showPretty a) <> "\n" <> (showPretty b)
