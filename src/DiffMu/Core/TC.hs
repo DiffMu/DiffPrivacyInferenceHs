@@ -244,7 +244,6 @@ instance Typeable k => FreeVars TVarOf (DMTypeOf k) where
   freeVars (DMContainer k nrm clp n τ) = freeVars k <> freeVars nrm <> freeVars clp <> freeVars τ
   freeVars (DMMat nrm clp n m τ) = freeVars nrm <> freeVars clp <> freeVars τ
   freeVars (DMModel m τ) = freeVars τ
-  freeVars (DMGrads nrm clp m τ) = freeVars nrm <> freeVars clp <> freeVars τ
   freeVars (NoFun x) = freeVars x
   freeVars (Fun xs) = freeVars xs
   freeVars (x :∧: y) = freeVars x <> freeVars y

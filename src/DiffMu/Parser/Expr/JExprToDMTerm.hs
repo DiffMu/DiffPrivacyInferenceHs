@@ -83,11 +83,13 @@ pSingle e = case e of
                  JETypeAnnotation _ _ -> parseError "Type annotations are only supported on function arguments."
                  JENotRelevant _ _ -> parseError "Type annotations are only supported on function arguments."
                  JELineNumber _ _ -> throwOriginalError (InternalError "What now?") -- TODO
+                 JEImport -> parseError "import statement is not allowed here."
 
 
 pList :: [JExpr] -> ParseTC [ProcDMTerm]
 pList [] = pure []
 pList (JEBlock stmts : tail) = pList (stmts ++ tail) -- handle nested blocks
+pList (JEImport : tail) = pList tail -- ignore imports
 pList (s : tail) = do
     ps <- case s of
                JELineNumber file line -> location .= (file, line) >> return Nothing

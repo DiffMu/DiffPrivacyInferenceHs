@@ -12,7 +12,7 @@ import Text.Megaparsec.Char.Lexer
 import Data.Either
 
 import qualified Data.Text as T
-import Debug.Trace(trace)
+import Debug.Trace(trace, traceM)
 
 --------------------------------------------------------------------------------
 -- a straightforward representation of julia Expr.
@@ -39,6 +39,7 @@ data JTree =
    | JTup [JTree]
    | JNothing
    | JReturn [JTree]
+   | JImport [String]
    | JUnsupported String
    deriving Show
 
@@ -79,6 +80,10 @@ pAny :: Parser String
 pAny = let noParen = (some (noneOf @[] "()"))
        in (join <$> some (noParen <|> between (wskipc '(') (wskipc ')') pAny))
 
+pAnymo :: Parser String
+pAnymo = let noParen = (some (noneOf @[] "()"))
+       in (join <$> some (noParen <|> between (wskipc '(') (wskipc ')') pAny))
+
 pWithCtor :: String -> ([JTree] -> JTree) -> Parser JTree
 pWithCtor name ctor = name `with` (ctor <$> (pTree `sepBy` sep))
 
@@ -91,6 +96,8 @@ pTree =     try pTLineNumber
         <|> try (JSym <$> pSymbolString)
         <|> try (JReal <$> (wskip float))
         <|> try ((JInteger . fromIntegral) <$> (wskip decimal))
+        <|> try (":import"   `with` (JImport <$> between (wskipc '(') (wskipc ')') (some (noneOf @[] "()\n,") `sepBy` sep)))
+        <|> try (":import"   `with` (JImport <$> some pAny))
         <|> try (":return"   `pWithCtor` JReturn)
         <|> try (":call"     `pWithCtor` JCall)
         <|> try (":curly"    `pWithCtor` JCurly)
@@ -158,6 +165,7 @@ data JExpr =
    | JETupAssignment [JExpr] JExpr
    | JEIfElse JExpr JExpr (Maybe JExpr)
    | JERef JExpr [JExpr]
+   | JEImport
    | JEReturn
    deriving Show
 
@@ -267,6 +275,9 @@ pTreeToJExpr tree = case tree of
      JReturn v -> case v of
          [JNothing] -> pure JEReturn
          v -> jParseError ("Returning of values (like " <> show v <> ") is not permitted. You may only return \'nothing\'.")
+     JImport v -> case v of
+         [":.",s] -> pure JEImport -- just ignore imports
+         v -> jParseError ("Only standalone imports are allowed. You tried to import specific names: " <> show v)
      JLoop as        -> case as of
          [(JAssign [ivar, JCall (JColon: iter)]), body] -> JELoop <$> pTreeToJExpr ivar <*> pIter iter <*> pTreeToJExpr body
          [(JAssign [_, iter]), _] -> jParseError ("Iterator has to be a range! Not like " <> show iter)
