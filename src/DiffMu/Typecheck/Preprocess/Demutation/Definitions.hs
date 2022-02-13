@@ -85,7 +85,12 @@ data ImmutType = Pure | Mutating [IsMutated] | PureBlackBox
 -- These types describe which variable names
 -- are in the RHS and must be moved on tlet/slet assignment
 -- See #171 #172
-data MoveType = TupleMove [MoveType] | SingleMove ProcVar | RefMove DemutDMTerm | NoMove DemutDMTerm | PhiMove DemutDMTerm (MoveType,DemutDMTerm) (MoveType,DemutDMTerm)
+data MoveType =
+  TupleMove [MoveType]
+  | SingleMove ProcVar
+  | RefMove DemutDMTerm
+  | NoMove DemutDMTerm
+  | PhiMove DemutDMTerm (MoveType,DemutDMTerm) (MoveType,DemutDMTerm)
   deriving (Eq, Show)
 
 -- singleMoveMaybe :: Maybe ProcVar -> MoveType
@@ -118,10 +123,10 @@ data PhiBranchType = ValueBranch [DemutDMTerm] MoveType | StatementBranch [Demut
 --
 
 data MemType = TupleMem [MemType] | SingleMem MemVar | RefMem MemVar
-  deriving (Eq, Show)
+  deriving (Eq, Show, Ord)
 
 data MemState = MemExists [MemType] | MemMoved
-  deriving (Show, Eq)
+  deriving (Show)
 
 data MemAssignmentType = AllocNecessary | PreexistingMem
 
@@ -139,6 +144,11 @@ data TeVarMutTrace = TeVarMutTrace (Maybe ProcVar) IsSplit [TeVar]
   deriving (Show,Eq)
 
 type MutCtx = Ctx MemVar (ScopeVar, TeVarMutTrace)
+
+instance Eq MemState where
+  (==) MemMoved MemMoved = True
+  (==) (MemExists as) (MemExists bs) = sort (nub as) == sort (nub bs)
+  (==) _ _ = False
 
 
 -- type MemRedirectionCtx = Ctx MemVar [MemVar]
@@ -289,7 +299,7 @@ instance Monad m => CheckNeutral m MemState where
 instance Monad m => SemigroupM m MemState where
     (⋆) MemMoved _ = pure MemMoved
     (⋆) _ MemMoved = pure MemMoved
-    (⋆) (MemExists l1) (MemExists l2) = pure $ MemExists (l1 ++ l2)
+    (⋆) (MemExists l1) (MemExists l2) = pure $ MemExists (nub (l1 ++ l2))
 
 mergeMemCtx = (⋆!)
 
@@ -552,15 +562,11 @@ moveGetMem scname pv (PhiMove _ (mt1,_) (mt2,_)) = do
 moveGetMem scname pv (TupleMove as) = do
   mems <- mapM (moveGetMem scname Nothing) as
   return (TupleMem <$> oneOfEach mems)
-
-
 moveGetMem scname pv (RefMove te) = do
-  demutationError $ "Moving of references is not implemented."
   -- if we had a reference,
   -- allocate new memory for it
-  -- memvar <- lift $ allocateMem scname (Right "ref")
-  -- tell [(memvar,te)]
-  -- pure $ RefMem memvar
+  memvar <- allocateMem scname pv
+  pure $ [RefMem memvar]
 
 
 
@@ -604,9 +610,8 @@ setMemTuple scname xs (SingleMem a) = do
     Nothing -> demutationError $ "Expected the memory location " <> show a <> " to have a mutation status."
     Just (scvar,TeVarMutTrace pv _ ts) -> mutCtx %= (setValue a (scvar, TeVarMutTrace pv (Split memvars) ts))
 
-setMemTuple scname xs (RefMem a) = internalError  $ "setMemTuple not implemented for references"
-  -- undefined -- do
-  -- mapM_ (\(x) -> setMemMaybe x (RefMem)) xs
+setMemTuple scname xs (RefMem a) = do
+  mapM_ (\(x) -> setMemMaybe x ([RefMem a])) (Just <$> xs)
 
 setMemTuple scname xs (TupleMem as) | length xs == length as = do
   let xas = zip xs as

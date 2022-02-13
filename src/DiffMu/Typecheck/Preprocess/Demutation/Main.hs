@@ -447,6 +447,9 @@ elaborateMut scname (Apply f args) = do
 
 
 elaborateMut scname (Extra (ProcPreLoop iters iterVar body)) = do -- demutationError $ "Not implemented: loop." -- do
+  debug $ "[elaborateMut/Loop] BEGIN ---------------------"
+
+
   -- first, elaborate the iters
   (newIters) <- elaboratePureValue scname iters
   newIters' <- moveTypeAsTerm newIters
@@ -483,6 +486,15 @@ elaborateMut scname (Extra (ProcPreLoop iters iterVar body)) = do -- demutationE
   memsAfter <- use memCtx
   mutsAfter <- use mutCtx
   --
+  --
+  debug $ "----"
+  debug $ "memctx before:\n"
+  debug $ show memsBefore
+  debug $ "----"
+  debug $ "memctx after:\n"
+  debug $ show memsAfter
+  --
+  --
   -- get all procvars in `memsAfter` which are different from `memsBefore` (or new).
   let isChangedOrNew (k,v0) = case getValue k memsBefore of
         Nothing -> True
@@ -497,6 +509,7 @@ elaborateMut scname (Extra (ProcPreLoop iters iterVar body)) = do -- demutationE
   case newMemVars `intersect` oldMemVars of
     [] -> pure ()
     xs -> demutationError $ "Found a loop body which moves variables around.\n"
+                          <> "The following variables are changed and contain memory locations from before: " <> show xs <> "\n"
                           <> "Since this means that we cannot track what actually happens in the case of an unknown number of iterations,\n"
                           <> "this is not allowed.\n"
                           <> "\n"
@@ -553,6 +566,10 @@ elaborateMut scname (Extra (ProcPreLoop iters iterVar body)) = do -- demutationE
   --
   ------------------------------------------------
 
+  debug $ "----"
+  debug $ "capture mems:\n"
+  debug $ show captureMems
+
 
   ------------------------------------------------
   -- Restore the backups / apply appropriate diffs
@@ -574,6 +591,9 @@ elaborateMut scname (Extra (ProcPreLoop iters iterVar body)) = do -- demutationE
     (Just a) -> memCtx %= (setValue iterVar a)
     _ -> pure ()
 
+
+  debug $ "[elaborateMut/Loop] END -----------------------"
+  --
   -- Note: We do not build the tlet which belongs to a loop here
   --       This is done later in unblocking.
   return (StatementWithoutDefault demutated_loop)
@@ -659,7 +679,9 @@ elaborateMut scname term@(Extra (ProcPhi cond tr fs)) = do
   -- Compute the resulting contexts
   --
   let memCtxAfter = memCtxAfter1 ⋆! memCtxAfter2
+  memCtx .= memCtxAfter
   (mutCtxAfter, (proj1, proj2)) <- coequalizeMutCtx mutCtxAfter1 mutCtxAfter2
+  mutCtx .= mutCtxAfter
   cleanupVACtxAfterScopeEnd vaCtxBefore
 
   ---------------------------------
