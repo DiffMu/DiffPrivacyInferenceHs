@@ -294,7 +294,7 @@ test127 pp = describe "issue 127 (TLet in loop)" $ do
 
 test188 pp = describe "issue 188 (holes)" $ do
   let ex_1 = "function testScale(_, x, xs)  \n\
-             \    _ = x                     \n\
+             \    _ = clone(x)              \n\
              \   (dim, _) = size(xs)        \n\
              \   dim + x                    \n\
              \end                           "
