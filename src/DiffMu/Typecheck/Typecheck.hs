@@ -472,12 +472,12 @@ checkSen' scope (Loop niter cs' (xi, xc) body) = do
   -- τb = inferred type of the body
   -- τbit = type of the iterator variable xi inferred in the body
   -- τbcs = type of the capture variable xc inferred in the body
-  (τit, τcs, (τb, (τbit, sbit), (τbcs, sbcs))) <- msum3Tup (cniter <* mscale sit, ccs <* mscale scs, cbody' <* mscale sb)
+  (τit, τloop_in, (τbody_out, (τbit, sbit), (τbody_in, sbcs))) <- msum3Tup (cniter <* mscale sit, ccs <* mscale scs, cbody' <* mscale sb)
 
   unify (NoFun (Numeric (NonConst DMInt))) τbit -- number of iterations must match type requested by body
 
   τcsnf <- newVar
-  unify (NoFun τcsnf) τcs -- functions cannot be captured.
+  unify (NoFun τcsnf) τloop_in -- functions cannot be captured.
 
   addConstraint (Solvable (IsLoopResult ((sit, scs, sb), sbcs, τit))) -- compute the right scalars once we know if τ_iter is const or not.
 
@@ -495,10 +495,14 @@ checkSen' scope (Loop niter cs' (xi, xc) body) = do
 
       -- the types of body, input captures and captures as used in the body must all be equal
       -- (except Const-ness, actually. we'll figure that out at some point)
-  unify τb τbcs
-  unify τcs τbcs
+  -- unify τb τbcs
+  -- unify τcs τbcs
 
-  return τbcs
+  addConstraint (Solvable (IsNonConst (τbody_in, τbody_out)))
+  addConstraint (Solvable (UnifyWithConstSubtype (τloop_in, τbody_out)))
+  addConstraint (Solvable (IsLoopResult ((sit, scs, sb), sbcs, τit))) -- compute the right scalars once we know if τ_iter is const or not.
+
+  return τbody_in
 
 
 checkSen' scope (MCreate n m (x1, x2) body) =
@@ -1288,13 +1292,13 @@ checkPri' scope (Loop niter cs' (xi, xc) body) =
       -- n = number of iterations as assumed in the loop body
       -- τbit = type of the iterator variable xi inferred in the body
       -- τbcs = type of the capture variable xc inferred in the body
-      (τit, τcs, (τb, n, τbit, τbcs)) <- msum3Tup (cniter, mcaps, cbody')
+      (τit, τloop_in, (τbody_out, n, τbit, τbody_in)) <- msum3Tup (cniter, mcaps, cbody')
 
       unify τit (NoFun (Numeric (Const n DMInt))) -- number of iterations must be constant integer
       unify (NoFun (Numeric (NonConst DMInt))) τbit -- number of iterations must match type requested by body
 
       τcsnf <- newVar
-      unify (NoFun τcsnf) τcs -- functions cannot be captured.
+      unify (NoFun τcsnf) τloop_in -- functions cannot be captured.
 
 {-
       -- TODO loops with Const captures/output don't work yet.
@@ -1310,10 +1314,11 @@ checkPri' scope (Loop niter cs' (xi, xc) body) =
 
       -- the types of body, input captures and captures as used in the body must all be equal
       -- (except Const-ness, actually. we'll figure that out at some point)
-      unify τb τbcs
-      unify τcs τbcs
 
-      return τbcs
+      addConstraint (Solvable (IsNonConst (τbody_in, τbody_out)))
+      addConstraint (Solvable (UnifyWithConstSubtype (τloop_in, τbody_out)))
+
+      return τbody_in
 
 
 
