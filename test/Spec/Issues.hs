@@ -14,6 +14,7 @@ testIssues pp = do
   test123 pp
   test125 pp
   test127 pp
+  test188 pp
 
 
 test21 pp = describe "issue 21 (FLet collection)" $ do
@@ -289,4 +290,14 @@ test127 pp = describe "issue 127 (TLet in loop)" $ do
       ty = Fun([([intnc :@ (constCoeff oneId) , intnc :@ (inftyS)] :->: intnc) :@ Just [JTInt,JTInt]])
 
   parseEval pp "example variant 1" ex_1 (pure ty)
+
+
+test188 pp = describe "issue 188 (holes)" $ do
+  let ex_1 = "function testScale(_, x, xs)  \n\
+             \    _ = x                     \n\
+             \   (dim, _) = size(xs)        \n\
+             \   dim + x                    \n\
+             \end                           "
+
+  parseEvalUnify pp "holes can be used in assignments and function arguments " ex_1 newVar
 
