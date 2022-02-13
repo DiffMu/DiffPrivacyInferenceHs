@@ -208,6 +208,7 @@ pArgs args = let pArg arg = case arg of
                      JTypeAssign [s, JCall [JSym "NoData"]] -> JENotRelevant <$> pTreeToJExpr s <*> pure JTAny
                      JTypeAssign [s, JCall [JSym "NoData", t]] -> JENotRelevant <$> pTreeToJExpr s <*> pJuliaType t
                      JTypeAssign [s, t] -> JETypeAnnotation <$> pTreeToJExpr s <*> pJuliaType t
+                     JHole -> pure JEHole
                      _ -> jParseError ("Invalid function argument " <> show arg)
              in mapM pArg args
 
