@@ -153,6 +153,7 @@ data JExpr =
    | JECall JExpr [JExpr]
    | JEBlock [JExpr]
    | JEBlackBox JExpr [JExpr]
+   | JEBBCall JExpr [JExpr] JuliaType [JExpr]
    | JETypeAnnotation JExpr JuliaType
    | JENotRelevant JExpr JuliaType
    | JEIter JExpr JExpr JExpr
@@ -239,6 +240,11 @@ pIter as = case as of
     [start, step, end] -> JEIter <$> pTreeToJExpr start <*> pTreeToJExpr step <*> pTreeToJExpr end
     _ -> jParseError ("Unsupported iteration statement " <> show (JCall (JColon : as)))
 
+
+pUnbox :: [JTree] -> JEParseState JExpr
+pUnbox (JCall (box : box_args) : rt : args) = JEBBCall <$> pTreeToJExpr box <*> mapM pTreeToJExpr box_args <*> pJuliaType rt <*> mapM pTreeToJExpr args
+pUnbox a = jParseError $ "Invalid call of `unbox`. Expected a call of a black box function as first argument, but got " <> show a <> "."
+
 pTreeToJExpr :: JTree -> JEParseState JExpr
 pTreeToJExpr tree = case tree of
      JLineNumber f l -> do -- put line number in the state for exquisit error messages
@@ -251,6 +257,7 @@ pTreeToJExpr tree = case tree of
      JTup ts         -> JETup <$> (mapM pTreeToJExpr ts)
      JUnsupported s  -> pure $ JEUnsupported s
      JCall as        -> case as of
+         (JSym "unbox" : args) -> pUnbox args
          (callee : args) -> JECall <$> pTreeToJExpr callee <*> mapM pTreeToJExpr args
          []              -> error "empty call"
      JArrow as       -> case as of

@@ -74,6 +74,7 @@ pSingle e = case e of
                  JETupAssignment aee amt -> pJTLet aee amt
                  JEFunction name term -> pJFLet name term
                  JEBlackBox name args -> pJBlackBox name args
+                 JEBBCall name args rt size -> pJBBCall name args rt size
                  JEReturn -> pure $ Extra ProcReturn
 
                  JEHole -> parseError "Holes (_) are only allowed in assignments."
@@ -246,6 +247,18 @@ pClip (JESymbol (Symbol "LInf")) = pure (Clip LInf)
 pClip term = parseError $ "The term " <> show term <> "is not a valid clip value."
 
 
+pJBBCall :: JExpr -> [JExpr] -> JuliaType -> [JExpr] -> ParseTC (ProcDMTerm)
+pJBBCall name args rt size = do
+    let kind = case size of
+                 [] -> pure $ (BBSimple rt)
+                 [JETup [s1, s2]] -> BBMatrix <$> pure rt <*> pSingle s1 <*> pSingle s2
+                 [s] -> BBVecLike <$> pure rt <*> pSingle s
+                 a -> parseError $ "Invalid call of `unbox`, expected one argument for the return container's dimension but got " <> show a
+    (Extra <$> (ProcBBApply <$> pSingle name <*> mapM pSingle args <*> kind))
+
+    --      | ProcBBApply a [a] (BBKind ProceduralExtension))
+
+
 pJCall :: JExpr -> [JExpr] -> ParseTC ProcDMTerm
 -- if the term is a symbol, we check if it
 -- is a builtin/op, if so, we construct the appropriate DMTerm
@@ -286,6 +299,7 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
   (t@"mcreate", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 3 arguments, but has been given " <> show (length args)
 
 -}
+
   ------------
   -- the non binding builtins
 

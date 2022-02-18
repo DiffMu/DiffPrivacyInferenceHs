@@ -815,7 +815,6 @@ data DemutatedExtension a =
   | DemutSLetBase LetKind (Asgmt JuliaType) a
   | DemutFLet TeVar a
   | DemutBBLet TeVar [JuliaType] -- name, arguments
-  | DemutBBApply a [a] (BBKind DemutatedExtension)
   | DemutPhi a a a
   | DemutLoop a [TeVar] [TeVar] (TeVar, TeVar) a -- number of iters, captures before, captures after, iter-var, capture-var
   | DemutBlock [a]
@@ -1036,6 +1035,7 @@ instance ShowPretty a => ShowPretty (ProceduralExtension a) where
     ProcSLetBase lk v a -> "PSLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty a)
     ProcFLet v a        -> "PFLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty a)
     ProcBBLet v jts     -> "PBBLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty jts)
+    ProcBBApply a t s   -> "PBBApply " <> newlineIndentIfLong (showPretty a) <> "(" <> showPretty t  <> ")[returns " <> showPretty s <> "]"
     ProcPhi a b c        -> "PPhi " <> showPretty a <> "\n" <> braceIndent (showPretty b) <> "\n" <> braceIndent (showPretty c)
     ProcPreLoop a x d   -> "PLoop (" <> (showPretty a) <> ", " <> show x <> ")" <> parenIndent (showPretty d)
     ProcReturn          -> "PReturn"
