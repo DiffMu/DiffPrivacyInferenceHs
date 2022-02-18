@@ -1399,3 +1399,62 @@ checkPri' scope (SmpLet xs (Sample n m1_in m2_in) tail) =
       return ttail
     
 checkPri' scope t = throwError (TermColorError PrivacyK t)
+
+
+
+
+
+---------------------------------------------------------
+-- julia type conversion for black boxes
+
+dmTypeFromBBKind :: DMScope -> BBKind EmptyExtension -> TC DMMain
+dmTypeFromBBKind scope = \case
+  BBSimple jt -> case jt of
+    JTInt  -> return $ NoFun $ Numeric $ NonConst DMInt
+    JTReal -> return $ NoFun $ Numeric $ NonConst DMReal
+    _      -> throwError $ TypeMismatchError $ "The type " <> show jt <> " is not allowed as return type of black boxes.\n"
+                                              <> "You can only have annotations of the following form:\n"
+                                              <> "[redacted]"
+  BBVecLike jt pdt -> do
+    -- typecheck the term 
+    pdt_actual_ty <- checkSens scope pdt <* mscale zeroId
+
+    -- make sure that it is const
+    pdt_val <- newVar
+    pdt_ty <- newVar
+    unify pdt_actual_ty (NoFun $ Numeric $ Const pdt_val pdt_ty)
+
+
+    -- look what type was requested in form of a julia type
+    case jt of
+      JTVector jt | or [jt == JTInt, jt == JTReal] -> do n <- newVar ; return $ NoFun $ DMVec n U pdt_val (NoFun $ Numeric $ DMData)
+      JTModel -> return $ NoFun $ DMModel pdt_val (NonConst DMReal)
+      JTGrads -> do n <- newVar ; return $ NoFun $ DMGrads n U pdt_val (NoFun $ Numeric $ NonConst DMReal)
+      _ -> throwError $ TypeMismatchError $ "The type " <> show jt <> " is not allowed as return type of black boxes.\n"
+                                              <> "You can only have annotations of the following form:\n"
+                                              <> "[redacted]"
+
+    return pdt_actual_ty
+
+  BBMatrix jt pdt1 pdt2 -> do
+    -- typecheck the terms
+    pdt1_actual_ty <- checkSens scope pdt1 <* mscale zeroId
+    pdt2_actual_ty <- checkSens scope pdt2 <* mscale zeroId
+
+    -- make sure they are is const
+    pdt1_val <- newVar
+    pdt1_ty <- newVar
+    unify pdt1_actual_ty (NoFun $ Numeric $ Const pdt1_val pdt1_ty)
+
+    pdt2_val <- newVar
+    pdt2_ty <- newVar
+    unify pdt2_actual_ty (NoFun $ Numeric $ Const pdt2_val pdt2_ty)
+
+    -- look what type was requested in form of a julia type
+    case jt of
+      JTMatrix jt | or [jt == JTInt, jt == JTReal] -> do n <- newVar ; return $ NoFun $ DMMat n U pdt1_val pdt2_val (NoFun $ Numeric $ DMData)
+      _ -> throwError $ TypeMismatchError $ "The type " <> show jt <> " is not allowed as return type of black boxes.\n"
+                                              <> "You can only have annotations of the following form:\n"
+                                              <> "[redacted]"
+
+
