@@ -1020,7 +1020,18 @@ elaborateAsListAndCancelAppend scname t = do
 
 ---------------------------------------------------
 -- bbkind elaboration
--- elaborateBBKind :: 
+
+elaborateBBKind :: ScopeVar -> BBKind ProceduralExtension -> MTC (BBKind DemutatedExtension)
+elaborateBBKind scname = \case
+  BBSimple jt -> return $ BBSimple jt
+  BBVecLike jt pdt -> do
+    pdt' <- moveTypeAsTerm =<< elaboratePureValue scname pdt
+    return $ BBVecLike jt pdt'
+  BBMatrix jt pdt1 pdt2 -> do
+    pdt1' <- moveTypeAsTerm =<< elaboratePureValue scname pdt1
+    pdt2' <- moveTypeAsTerm =<< elaboratePureValue scname pdt2
+    return $ BBMatrix jt pdt1' pdt2'
+
 
 ---------------------------------------------------
 -- recurring utilities
