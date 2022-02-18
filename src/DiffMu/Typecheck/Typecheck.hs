@@ -266,9 +266,9 @@ checkSen' scope (BBApply app args cs k) =
   in do
     -- we merge the different TC's into a single result TC
     let caps = checkCap <$> cs
-    (τ_box :: DMMain, argτs, _) <- msum3Tup (mf , msumS margs, msumS caps) -- sum args and f's context
+    (τ_box :: DMMain, argτs, _, τ_ret) <- msum4Tup (mf , msumS margs, msumS caps, checkBBKind scope k) -- sum args and f's context
     -- the return type is constructed from the bbkind
-    τ_ret <- checkBBKind scope k
+    -- τ_ret <- checkBBKind scope k
 
     addConstraint (Solvable (IsBlackBox (τ_box, fst <$> argτs))) -- constraint makes sure the signature matches the args
     mapM (\s -> addConstraint (Solvable (IsBlackBoxReturn (τ_ret, s)))) argτs -- constraint sets the sensitivity to the right thing

@@ -186,6 +186,33 @@ msum3Tup (ma, mb, mc) = do
   return (a, b, c)
 
 
+msum4Tup :: (IsT MonadDMTC t) => (t a, t b, t c, t d) -> t (a,b,c,d)
+msum4Tup (ma, mb, mc, md) = do
+  tΣ <- use types
+  types .= tΣ
+  a <- ma
+  aΣ <- use types
+
+  types .= tΣ
+  b <- mb
+  bΣ <- use types
+
+  types .= tΣ
+  c <- mc
+  cΣ <- use types
+
+  types .= tΣ
+  d <- md
+  dΣ <- use types
+
+  m_acc_Σ <- (aΣ ⋆ bΣ)
+  m_acc_Σ' <- (m_acc_Σ ⋆ cΣ)
+  resΣ <- (m_acc_Σ' ⋆ dΣ)
+  types .= resΣ
+
+  return (a, b, c, d)
+
+
 
 setVarS :: MonadDMTC t => TeVar -> WithRelev SensitivityK -> t ()
 setVarS k v = types %=~ setValueM k (Left v :: Either (WithRelev SensitivityK) (WithRelev PrivacyK))
