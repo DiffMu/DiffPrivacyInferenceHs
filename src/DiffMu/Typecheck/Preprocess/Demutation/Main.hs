@@ -426,7 +426,8 @@ elaborateMut scname (Apply f args) = do
     --
     -- case III: A call to a pure black box
     --
-    PureBlackBox -> do
+    
+    PureBlackBox -> undefined {-do
         
         -- the global variables which are implicitly applied
         -- and need to be added to the `BBApply`
@@ -441,7 +442,7 @@ elaborateMut scname (Apply f args) = do
         movetype' <- (moveTypeAsTerm movetype)
         let glvars' = map UserTeVar glvars
         return $ Value Pure (NoMove (BBApply movetype' newArgs glvars'))
-
+-}
 
 
 
@@ -912,7 +913,7 @@ elaborateMut scname term@(Loop t1 t2 t3 t4) = throwError (UnsupportedError ("Whe
 elaborateMut scname term@(Reorder t1 t2)    = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
 elaborateMut scname term@(TProject t1 t2)   = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
 elaborateMut scname term@(Arg x a b)        = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
-elaborateMut scname term@(BBApply x a b)    = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
+elaborateMut scname term@(BBApply x a b k)    = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
 elaborateMut scname term@(Ret t1)           = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
 
 elaborateMut scname term@_    = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))

@@ -241,7 +241,8 @@ checkSen' scope (BBLet name jτs tail) = do
 
 
 
-checkSen' scope (BBApply app args cs) =
+checkSen' scope (BBApply app args cs k) = undefined
+{-
   let
     checkArg arg = do
       let τ = checkSens scope arg
@@ -269,9 +270,11 @@ checkSen' scope (BBApply app args cs) =
     (τ_box :: DMMain, argτs, _) <- msum3Tup (mf , msumS margs, msumS caps) -- sum args and f's context
     τ_ret <- newVar -- a type var for the function return type
     addConstraint (Solvable (IsBlackBox (τ_box, fst <$> argτs))) -- constraint makes sure the signature matches the args
+    tn <- newVar
     mapM (\s -> addConstraint (Solvable (IsBlackBoxReturn (τ_ret, s)))) argτs -- constraint sets the sensitivity to the right thing
     return τ_ret
-
+-}
+    
 
 checkSen' scope (Apply f args) =
   let

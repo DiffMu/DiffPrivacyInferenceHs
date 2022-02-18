@@ -694,6 +694,9 @@ sndA (x :- τ) = τ
 data LetKind = PureLet | BindLet | SampleLet
   deriving (Eq, Show)
 
+data BBKind = BBSimple JuliaType | BBVecLike JuliaType DMTerm | BBMatrix JuliaType DMTerm DMTerm
+  deriving (Eq, Show)
+
 
 data PreDMTerm (t :: * -> *) =
     Extra (t (PreDMTerm t))
@@ -707,7 +710,7 @@ data PreDMTerm (t :: * -> *) =
   | Lam     [Asgmt JuliaType] (PreDMTerm t)
   | LamStar [(Asgmt (JuliaType, Relevance))] (PreDMTerm t)
   | BBLet TeVar [JuliaType] (PreDMTerm t) -- name, arguments, tail
-  | BBApply (PreDMTerm t) [(PreDMTerm t)] [TeVar] -- term containing the application, list of captured variables.
+  | BBApply (PreDMTerm t) [(PreDMTerm t)] [TeVar] BBKind -- term containing the application, list of captured variables, return type.
   | Apply (PreDMTerm t) [(PreDMTerm t)]
   | FLet TeVar (PreDMTerm t) (PreDMTerm t)
   | Choice (HashMap [JuliaType] (PreDMTerm t))
@@ -854,7 +857,7 @@ recDMTermM f h (Phi a b c)        = Phi <$> (f a) <*> (f b) <*> (f c)
 recDMTermM f h (Lam     jts a)    = Lam jts <$> (f a)
 recDMTermM f h (LamStar jts a)    = LamStar jts <$> (f a)
 recDMTermM f h (BBLet n jts b)    = (BBLet n jts <$> f b)
-recDMTermM f h (BBApply a as bs)  = BBApply <$> (f a) <*> (mapM (f) as) <*> pure bs
+recDMTermM f h (BBApply a as bs k)  = BBApply <$> (f a) <*> (mapM (f) as) <*> pure bs <*> pure k
 recDMTermM f h (Apply a bs)       = Apply <$> (f a) <*> (mapM (f) bs)
 recDMTermM f h (FLet v a b)       = FLet v <$> (f a) <*> (f b)
 recDMTermM f h (Choice chs)       = Choice <$> (mapM (f) chs)
@@ -981,7 +984,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (Lam     jts a)    = "Lam (" <> showPretty jts <> ")" <> parenIndent (showPretty a)
   showPretty (LamStar jts a)    = "LamStar (" <> showPretty jts <> ")" <> parenIndent (showPretty a)
   showPretty (BBLet n jts b)    = "BBLet " <> showPretty n <> " = (" <> show jts <> " -> ?)\n" <> showPretty b
-  showPretty (BBApply t as cs)  = "BBApply (" <> showPretty t <> ")[" <> showPretty cs <> "](" <> showPretty as <> ")"
+  showPretty (BBApply t as cs k)  = "BBApply (" <> showPretty t <> ")[" <> showPretty cs <> "](" <> showPretty as <> ") -> " <> show k
   showPretty (Apply a bs)       = (showPretty a) <> (showPretty bs)
   showPretty (FLet v a b)       = "FLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty a) <> "\n" <> (showPretty b)
   showPretty (Choice chs)       = "Choice <..>"
