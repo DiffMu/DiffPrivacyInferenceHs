@@ -846,11 +846,11 @@ recDMTermMSameExtension f t = recDMTermM f g t
           x'' = sequence x'
       in fmap Extra x''
 
-recKindM :: forall t m s. (Monad m) => (PreDMTerm t -> m (PreDMTerm s)) -> (t (PreDMTerm t) -> m (PreDMTerm s)) -> BBKind t -> m (BBKind s)
-recKindM f h = \case
+recKindM :: forall t m s. (Monad m) => (PreDMTerm t -> m (PreDMTerm s)) -> BBKind t -> m (BBKind s)
+recKindM f = \case
   BBSimple jt -> return $ BBSimple jt
-  BBVecLike jt pdt -> BBVecLike jt <$> recDMTermM f h pdt
-  BBMatrix jt pdt pdt' -> BBMatrix jt <$> recDMTermM f h pdt <*> recDMTermM f h pdt'
+  BBVecLike jt pdt -> BBVecLike jt <$> f pdt
+  BBMatrix jt pdt pdt' -> BBMatrix jt <$> f pdt <*> f pdt'
 
 recDMTermM :: forall t m s. (Monad m) => (PreDMTerm t -> m (PreDMTerm s)) -> (t (PreDMTerm t) -> m (PreDMTerm s)) -> PreDMTerm t -> m (PreDMTerm s)
 recDMTermM f h (Extra e)          = h e
@@ -864,7 +864,7 @@ recDMTermM f h (Phi a b c)        = Phi <$> (f a) <*> (f b) <*> (f c)
 recDMTermM f h (Lam     jts a)    = Lam jts <$> (f a)
 recDMTermM f h (LamStar jts a)    = LamStar jts <$> (f a)
 recDMTermM f h (BBLet n jts b)    = (BBLet n jts <$> f b)
-recDMTermM f h (BBApply a as bs k)  = BBApply <$> (f a) <*> (mapM (f) as) <*> pure bs <*> recKindM f h k
+recDMTermM f h (BBApply a as bs k)  = BBApply <$> (f a) <*> (mapM (f) as) <*> pure bs <*> recKindM f k
 recDMTermM f h (Apply a bs)       = Apply <$> (f a) <*> (mapM (f) bs)
 recDMTermM f h (FLet v a b)       = FLet v <$> (f a) <*> (f b)
 recDMTermM f h (Choice chs)       = Choice <$> (mapM (f) chs)
