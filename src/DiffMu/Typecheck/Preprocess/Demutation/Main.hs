@@ -433,7 +433,7 @@ elaborateMut scname term@(Apply f args) = do
 
 
 
-elaborateMut scname term@(BBApply f args captures_vars bbkind) = do
+elaborateMut scname term@(Extra (ProcBBApply f args bbkind)) = do
   -- typecheck the function f
   (itype , movetype) <- elaborateValue scname f
 

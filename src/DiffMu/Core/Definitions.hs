@@ -815,7 +815,6 @@ data DemutatedExtension a =
   | DemutSLetBase LetKind (Asgmt JuliaType) a
   | DemutFLet TeVar a
   | DemutBBLet TeVar [JuliaType] -- name, arguments
-  | DemutBBApply a [a] (BBKind DemutatedExtension)
   | DemutPhi a a a
   | DemutLoop a [TeVar] [TeVar] (TeVar, TeVar) a -- number of iters, captures before, captures after, iter-var, capture-var
   | DemutBlock [a]
@@ -1042,6 +1041,7 @@ instance ShowPretty a => ShowPretty (ProceduralExtension a) where
     ProcVarTerm (pa ::- _)  -> showPretty pa
     ProcLam jts a       -> "PLam (" <> showPretty jts <> ")" <> parenIndent (showPretty a)
     ProcLamStar jts a   -> "PLamStar (" <> showPretty jts <> ")" <> parenIndent (showPretty a)
+    ProcBBApply t as k  -> "PBBApply (" <> showPretty t <> ") (" <> showPretty as <> ") -> " <> showPretty k
     Block as -> braceIndent $ intercalate "\n" $ showPretty <$> as
 
 instance ShowPretty a => ShowPretty (DemutatedExtension a) where
