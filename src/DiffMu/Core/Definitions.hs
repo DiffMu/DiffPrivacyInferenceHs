@@ -797,6 +797,7 @@ data ProceduralExtension a =
   | ProcSLetBase LetKind (ProcAsgmt JuliaType) a
   | ProcFLet ProcVar a
   | ProcBBLet ProcVar [JuliaType] -- name, arguments
+  | ProcBBApply a [a] (BBKind ProceduralExtension)
   | ProcPhi a a (Maybe a)
   | ProcPreLoop a (ProcVar) a
   | ProcReturn
@@ -814,6 +815,7 @@ data DemutatedExtension a =
   | DemutSLetBase LetKind (Asgmt JuliaType) a
   | DemutFLet TeVar a
   | DemutBBLet TeVar [JuliaType] -- name, arguments
+  | DemutBBApply a [a] (BBKind DemutatedExtension)
   | DemutPhi a a a
   | DemutLoop a [TeVar] [TeVar] (TeVar, TeVar) a -- number of iters, captures before, captures after, iter-var, capture-var
   | DemutBlock [a]
