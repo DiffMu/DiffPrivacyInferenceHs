@@ -1437,8 +1437,7 @@ checkBBKind scope = \case
 
   BBMatrix jt pdt1 pdt2 -> do
     -- typecheck the terms
-    pdt1_actual_ty <- checkSens scope pdt1 <* mscale zeroId
-    pdt2_actual_ty <- checkSens scope pdt2 <* mscale zeroId
+    (pdt1_actual_ty,pdt2_actual_ty) <- msumTup (checkSens scope pdt1, checkSens scope pdt2) <* mscale zeroId
 
     -- make sure they are is const
     pdt1_val <- newVar
