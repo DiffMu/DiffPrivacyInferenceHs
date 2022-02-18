@@ -77,7 +77,7 @@ substituteNames names term = let
    BBLet x ts tail -> case H.lookup x names of
        Just _ -> internalError "black boxes should have unique names..."
        Nothing ->         BBLet x ts <$> subSame tail
-   BBApply t args caps k -> undefined -- BBApply <$> subSame t <*> (mapM subSame args) <*> (return (map subIf caps))
+   BBApply t args caps k -> BBApply <$> subSame t <*> (mapM subSame args) <*> (return (map subIf caps)) <*> recKindM (substituteNames names) (\_->undefined) k
    FLet f t tail ->       FLet (subIf f) <$> subSame t <*> subSame tail
    -- the following 2 are only ok bc i cannot modify names from outer scope
    SLetBase k (x :- t) body tail -> SLetBase k ((subIf x) :- t) <$> subSame body <*> subSame tail

@@ -438,7 +438,7 @@ elaborateMut scname term@(Extra (ProcBBApply f args bbkind)) = do
   (itype , movetype) <- elaborateValue scname f
 
   -- elaborate the bbkind
-  bbkind' <- undefined
+  bbkind' <- elaborateBBKind scname bbkind
 
   --------
   -- 2 cases
