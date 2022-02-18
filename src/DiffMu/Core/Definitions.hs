@@ -694,9 +694,10 @@ sndA (x :- τ) = τ
 data LetKind = PureLet | BindLet | SampleLet
   deriving (Eq, Show)
 
-data BBKind = BBSimple JuliaType | BBVecLike JuliaType DMTerm | BBMatrix JuliaType DMTerm DMTerm
-  deriving (Eq, Show)
+data BBKind (t :: * -> *) = BBSimple JuliaType | BBVecLike JuliaType (PreDMTerm t) | BBMatrix JuliaType (PreDMTerm t) (PreDMTerm t)
 
+deriving instance (forall a. Show a => Show (t a)) => Show (BBKind t)
+deriving instance (forall a. Eq a => Eq (t a)) => Eq (BBKind t)
 
 data PreDMTerm (t :: * -> *) =
     Extra (t (PreDMTerm t))
@@ -710,7 +711,7 @@ data PreDMTerm (t :: * -> *) =
   | Lam     [Asgmt JuliaType] (PreDMTerm t)
   | LamStar [(Asgmt (JuliaType, Relevance))] (PreDMTerm t)
   | BBLet TeVar [JuliaType] (PreDMTerm t) -- name, arguments, tail
-  | BBApply (PreDMTerm t) [(PreDMTerm t)] [TeVar] BBKind -- term containing the application, list of captured variables, return type.
+  | BBApply (PreDMTerm t) [(PreDMTerm t)] [TeVar] (BBKind t) -- term containing the application, list of captured variables, return type.
   | Apply (PreDMTerm t) [(PreDMTerm t)]
   | FLet TeVar (PreDMTerm t) (PreDMTerm t)
   | Choice (HashMap [JuliaType] (PreDMTerm t))
@@ -844,6 +845,11 @@ recDMTermMSameExtension f t = recDMTermM f g t
           x'' = sequence x'
       in fmap Extra x''
 
+recKindM :: forall t m s. (Monad m) => (PreDMTerm t -> m (PreDMTerm s)) -> (t (PreDMTerm t) -> m (PreDMTerm s)) -> BBKind t -> m (BBKind s)
+recKindM f h = \case
+  BBSimple jt -> return $ BBSimple jt
+  BBVecLike jt pdt -> BBVecLike jt <$> recDMTermM f h pdt
+  BBMatrix jt pdt pdt' -> BBMatrix jt <$> recDMTermM f h pdt <*> recDMTermM f h pdt'
 
 recDMTermM :: forall t m s. (Monad m) => (PreDMTerm t -> m (PreDMTerm s)) -> (t (PreDMTerm t) -> m (PreDMTerm s)) -> PreDMTerm t -> m (PreDMTerm s)
 recDMTermM f h (Extra e)          = h e
@@ -857,7 +863,7 @@ recDMTermM f h (Phi a b c)        = Phi <$> (f a) <*> (f b) <*> (f c)
 recDMTermM f h (Lam     jts a)    = Lam jts <$> (f a)
 recDMTermM f h (LamStar jts a)    = LamStar jts <$> (f a)
 recDMTermM f h (BBLet n jts b)    = (BBLet n jts <$> f b)
-recDMTermM f h (BBApply a as bs k)  = BBApply <$> (f a) <*> (mapM (f) as) <*> pure bs <*> pure k
+recDMTermM f h (BBApply a as bs k)  = BBApply <$> (f a) <*> (mapM (f) as) <*> pure bs <*> undefined -- pure k
 recDMTermM f h (Apply a bs)       = Apply <$> (f a) <*> (mapM (f) bs)
 recDMTermM f h (FLet v a b)       = FLet v <$> (f a) <*> (f b)
 recDMTermM f h (Choice chs)       = Choice <$> (mapM (f) chs)
@@ -984,7 +990,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (Lam     jts a)    = "Lam (" <> showPretty jts <> ")" <> parenIndent (showPretty a)
   showPretty (LamStar jts a)    = "LamStar (" <> showPretty jts <> ")" <> parenIndent (showPretty a)
   showPretty (BBLet n jts b)    = "BBLet " <> showPretty n <> " = (" <> show jts <> " -> ?)\n" <> showPretty b
-  showPretty (BBApply t as cs k)  = "BBApply (" <> showPretty t <> ")[" <> showPretty cs <> "](" <> showPretty as <> ") -> " <> show k
+  showPretty (BBApply t as cs k)  = "BBApply (" <> showPretty t <> ")[" <> showPretty cs <> "](" <> showPretty as <> ") -> " <> showPretty k
   showPretty (Apply a bs)       = (showPretty a) <> (showPretty bs)
   showPretty (FLet v a b)       = "FLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty a) <> "\n" <> (showPretty b)
   showPretty (Choice chs)       = "Choice <..>"
@@ -1045,6 +1051,13 @@ instance ShowPretty a => ShowPretty (DemutatedExtension a) where
     DemutPhi a b c       -> "DPhi " <> showPretty a <> "\n" <> braceIndent (showPretty b) <> "\n" <> braceIndent (showPretty c)
     DemutLoop a b c x d    -> "Loop (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> (showPretty c)  <> ", " <> show x <> ")" <> parenIndent (showPretty d)
     DemutBlock as        -> braceIndent $ intercalate "\n" $ showPretty <$> reverse as
+
+
+instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (BBKind t) where
+  showPretty = \case
+    BBSimple jt          -> "BBSimple " <> showPretty jt
+    BBVecLike jt pdt     -> "BBVecLike " <> showPretty jt <> " (" <> showPretty pdt <> ")"
+    BBMatrix jt pdt pdt' -> "BBMatrix " <> showPretty jt <> " (" <> showPretty pdt <> ", " <> showPretty pdt' <> ")"
 
 instance ShowPretty (EmptyExtension a) where
   showPretty a = undefined

@@ -372,7 +372,7 @@ elaborateMut scname (Extra (ProcFLet name term)) = do
 
   
 
-elaborateMut scname (Apply f args) = do
+elaborateMut scname term@(Apply f args) = do
   --
   -- The MoveType of function applications is always `NoMove`,
   -- because we make sure in typechecking that functions can
@@ -426,14 +426,29 @@ elaborateMut scname (Apply f args) = do
     --
     -- case III: A call to a pure black box
     --
+    --   since #202 this is handled in the case for `BBApply`.
+    --
     
-    PureBlackBox -> undefined {-do
+    PureBlackBox -> demutationError $ "Trying to call a black box without `unbox_call` wrapper. In the term: " <> showPretty term
+
+
+
+elaborateMut scname term@(BBApply f args captures_vars bbkind) = do
+  -- typecheck the function f
+  (itype , movetype) <- elaborateValue scname f
+
+  -- elaborate the bbkind
+  bbkind' <- undefined
+
+  --------
+  -- 2 cases
+  --
+  case itype of
+    PureBlackBox -> do
         
         -- the global variables which are implicitly applied
         -- and need to be added to the `BBApply`
         glvars <- globalNames <$> (use topLevelInfo)
-
-
 
         -- since the box is pure, we say so to `elaborateMutList`
         let mutargs = zip (repeat NotMutated) args
@@ -441,9 +456,9 @@ elaborateMut scname (Apply f args) = do
 
         movetype' <- (moveTypeAsTerm movetype)
         let glvars' = map UserTeVar glvars
-        return $ Value Pure (NoMove (BBApply movetype' newArgs glvars'))
--}
+        return $ Value Pure (NoMove (BBApply movetype' newArgs glvars' bbkind'))
 
+    otherType -> demutationError $ "Trying to call a function of type " <> show otherType <> " with `unbox_call`. In the term " <> showPretty term
 
 
 
@@ -913,7 +928,6 @@ elaborateMut scname term@(Loop t1 t2 t3 t4) = throwError (UnsupportedError ("Whe
 elaborateMut scname term@(Reorder t1 t2)    = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
 elaborateMut scname term@(TProject t1 t2)   = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
 elaborateMut scname term@(Arg x a b)        = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
-elaborateMut scname term@(BBApply x a b k)    = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
 elaborateMut scname term@(Ret t1)           = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
 
 elaborateMut scname term@_    = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
@@ -1004,6 +1018,9 @@ elaborateAsListAndCancelAppend scname t = do
   t' <- elaborateMut scname t
   makeTermListAndCancelAppend [t']
 
+---------------------------------------------------
+-- bbkind elaboration
+-- elaborateBBKind :: 
 
 ---------------------------------------------------
 -- recurring utilities
