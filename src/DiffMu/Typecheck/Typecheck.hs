@@ -241,8 +241,7 @@ checkSen' scope (BBLet name jτs tail) = do
 
 
 
-checkSen' scope (BBApply app args cs k) = undefined
-{-
+checkSen' scope (BBApply app args cs k) =
   let
     checkArg arg = do
       let τ = checkSens scope arg
@@ -268,12 +267,12 @@ checkSen' scope (BBApply app args cs k) = undefined
     -- we merge the different TC's into a single result TC
     let caps = checkCap <$> cs
     (τ_box :: DMMain, argτs, _) <- msum3Tup (mf , msumS margs, msumS caps) -- sum args and f's context
-    τ_ret <- newVar -- a type var for the function return type
+    -- the return type is constructed from the bbkind
+    τ_ret <- checkBBKind scope k
+
     addConstraint (Solvable (IsBlackBox (τ_box, fst <$> argτs))) -- constraint makes sure the signature matches the args
-    tn <- newVar
     mapM (\s -> addConstraint (Solvable (IsBlackBoxReturn (τ_ret, s)))) argτs -- constraint sets the sensitivity to the right thing
     return τ_ret
--}
     
 
 checkSen' scope (Apply f args) =
@@ -1407,8 +1406,8 @@ checkPri' scope t = throwError (TermColorError PrivacyK t)
 ---------------------------------------------------------
 -- julia type conversion for black boxes
 
-dmTypeFromBBKind :: DMScope -> BBKind EmptyExtension -> TC DMMain
-dmTypeFromBBKind scope = \case
+checkBBKind :: DMScope -> BBKind EmptyExtension -> TC DMMain
+checkBBKind scope = \case
   BBSimple jt -> case jt of
     JTInt  -> return $ NoFun $ Numeric $ NonConst DMInt
     JTReal -> return $ NoFun $ Numeric $ NonConst DMReal
