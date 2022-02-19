@@ -267,7 +267,7 @@ instance TCConstraint IsBlackBox where
   runConstr (IsBlackBox c) = c
 
 instance Solve MonadDMTC IsBlackBox (DMMain, [DMMain]) where
-    solve_ Dict _ name (IsBlackBox (box, args)) = 
+    solve_ Dict _ name (IsBlackBox (box, args)) =
      case box of
         TVar x -> pure () -- we don't know yet.
         BlackBox jts -> do -- its a box!
@@ -459,3 +459,29 @@ instance Solve MonadDMTC IsVecLike VecKind where
         Vector -> dischargeConstraint name
         Gradient -> dischargeConstraint name
         Matrix r -> unify r oneId >> dischargeConstraint name
+
+
+
+--------------------------------------------------
+-- real or data
+--
+
+newtype IsFloat a = IsFloat a deriving Show
+
+instance FixedVars TVarOf (IsFloat DMMain) where
+    fixedVars (IsFloat _) = []
+
+instance TCConstraint IsFloat where
+    constr = IsFloat
+    runConstr (IsFloat a) = a
+
+instance Solve MonadDMTC IsFloat DMMain where
+    solve_ Dict _ name (IsFloat a) =
+        case a of
+             TVar _ -> pure ()
+             NoFun (TVar _) -> pure ()
+             NoFun (Numeric (TVar _)) -> pure ()
+             (NoFun (Numeric (NonConst DMReal))) -> dischargeConstraint name
+             (NoFun (Numeric (Const _ DMReal))) -> dischargeConstraint name
+             (NoFun (Numeric DMData)) -> dischargeConstraint name
+             _ -> failConstraint name

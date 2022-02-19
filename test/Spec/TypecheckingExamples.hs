@@ -135,7 +135,7 @@ testBlackBox pp = describe "black box" $ do
              \   100 \n\
              \ end   \n\
              \ function j(x::Integer, y) \n\
-             \    z = bb(y)     \n\
+             \    z = unbox(bb(y), Integer)     \n\
              \    x / z  \n\
              \ end"
         int = NoFun(Numeric (NonConst DMInt))
@@ -191,7 +191,7 @@ testSample pp = describe "Sample" $ do
     let ex = "foo(d::Vector) :: BlackBox() = d \n\
               \function bar(data, b, x::Integer) :: Priv() \n\
               \  D, L = sample(b, data, data) \n\
-              \  gs = foo(D[1,:]) \n\
+              \  gs = unbox(foo(D[1,:]), DMGrads, length(D[1,:])) \n\
               \  clip!(L2,gs) \n\
               \  norm_convert!(gs) \n\
               \  gaussian_mechanism!(2, 0.2, 0.3, gs)  \n\
@@ -310,7 +310,7 @@ testDPGD pp = describe "DPGD" $ do
           \    for i in 1:dim \n\
           \           d = data[i,:] \n\
           \           l = labels[i,:] \n\
-          \           gs = unbounded_gradient(model, d, l) \n\
+          \           gs = unbox(unbounded_gradient(model, d, l), length(model)) \n\
           \           gsc = norm_convert(clip(L2,gs)) \n\
           \           gsg = gaussian_mechanism(2/dim, eps, del, scale_gradient(1/dim,gsc)) \n\
           \           model = subtract_gradient(model, scale_gradient(eta * dim, gsg)) \n\

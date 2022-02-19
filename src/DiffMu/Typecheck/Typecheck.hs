@@ -269,6 +269,7 @@ checkSen' scope (BBApply app args cs k) =
     (τ_box :: DMMain, argτs, _, τ_ret) <- msum4Tup (mf , msumS margs, msumS caps, checkBBKind scope k) -- sum args and f's context
     -- the return type is constructed from the bbkind
     -- τ_ret <- checkBBKind scope k
+    logForce $ "blackbox return tyoe is " <> show τ_ret
 
     addConstraint (Solvable (IsBlackBox (τ_box, fst <$> argτs))) -- constraint makes sure the signature matches the args
     mapM (\s -> addConstraint (Solvable (IsBlackBoxReturn (τ_ret, s)))) argτs -- constraint sets the sensitivity to the right thing
@@ -1407,10 +1408,16 @@ checkPri' scope t = throwError (TermColorError PrivacyK t)
 -- julia type conversion for black boxes
 
 checkBBKind :: DMScope -> BBKind EmptyExtension -> TC DMMain
-checkBBKind scope = \case
+checkBBKind scope a = let
+ getFloat :: TC (DMTypeOf NumKind)
+ getFloat = do
+                v <- newVar
+                addConstraint (Solvable (IsFloat $ NoFun (Numeric v)))
+                return v
+ in case a of
   BBSimple jt -> case jt of
     JTInt  -> return $ NoFun $ Numeric $ NonConst DMInt
-    JTReal -> return $ NoFun $ Numeric $ NonConst DMReal
+    JTReal -> do v <- getFloat; return $ NoFun $ Numeric $ v
     _      -> throwError $ TypeMismatchError $ "The type " <> show jt <> " is not allowed as return type of black boxes.\n"
                                               <> "You can only have annotations of the following form:\n"
                                               <> "[redacted]"
@@ -1423,17 +1430,16 @@ checkBBKind scope = \case
     pdt_ty <- newVar
     unify pdt_actual_ty (NoFun $ Numeric $ Const pdt_val pdt_ty)
 
-
     -- look what type was requested in form of a julia type
     case jt of
-      JTVector jt | or [jt == JTInt, jt == JTReal] -> do n <- newVar ; return $ NoFun $ DMVec n U pdt_val (NoFun $ Numeric $ DMData)
-      JTModel -> return $ NoFun $ DMModel pdt_val (NonConst DMReal)
-      JTGrads -> do n <- newVar ; return $ NoFun $ DMGrads n U pdt_val (NoFun $ Numeric $ NonConst DMReal)
+      JTVector JTInt -> do n <- newVar ; return $ NoFun $ DMVec n U pdt_val (NoFun $ Numeric $ NonConst DMInt)
+      JTVector JTReal -> do n <- newVar ; r <- getFloat; return $ NoFun $ DMVec n U pdt_val (NoFun $ Numeric r)
+      JTModel -> do r <- getFloat; return $ NoFun $ DMModel pdt_val r
+      JTGrads -> do n <- newVar; r <- getFloat;  return $ NoFun $ DMGrads n U pdt_val (NoFun $ Numeric $ r)
       _ -> throwError $ TypeMismatchError $ "The type " <> show jt <> " is not allowed as return type of black boxes.\n"
                                               <> "You can only have annotations of the following form:\n"
                                               <> "[redacted]"
 
-    return pdt_actual_ty
 
   BBMatrix jt pdt1 pdt2 -> do
     -- typecheck the terms
@@ -1450,7 +1456,7 @@ checkBBKind scope = \case
 
     -- look what type was requested in form of a julia type
     case jt of
-      JTMatrix jt | or [jt == JTInt, jt == JTReal] -> do n <- newVar ; return $ NoFun $ DMMat n U pdt1_val pdt2_val (NoFun $ Numeric $ DMData)
+      JTMatrix jt | or [jt == JTInt, jt == JTReal] -> do n <- newVar ; r <- getFloat; return $ NoFun $ DMMat n U pdt1_val pdt2_val (NoFun $ Numeric $ r)
       _ -> throwError $ TypeMismatchError $ "The type " <> show jt <> " is not allowed as return type of black boxes.\n"
                                               <> "You can only have annotations of the following form:\n"
                                               <> "[redacted]"
