@@ -197,9 +197,10 @@ testSample pp = describe "Sample" $ do
               \  gaussian_mechanism!(2, 0.2, 0.3, gs)  \n\
               \  clone(x * gs) \n\
               \end"
-        ty = "Fun([([NoFun(Matrix<n: L∞, c: τ_33>[s_11 × s_21](Num(Data))) @ (0.4⋅s_18⋅(1 / s_11),0.3⋅s_18⋅(1 / s_11)),NoFun(Num(Int[s_18])) @ (0,0),NoFun(Num(Int[--])) @ (∞,∞)] ->* NoFun(Grads<n: L∞, c: U>[s_16](Num(Real[--])))) @ Just [Any,Any,Integer]])"
-        cs = ""
-    parseEvalString_customCheck pp "" ex (ty, cs) (pure $ Right ())
+        -- ty = "Fun([([NoFun(Matrix<n: L∞, c: τ_33>[s_11 × s_21](Num(Data))) @ (0.4⋅s_18⋅(1 / s_11),0.3⋅s_18⋅(1 / s_11)),NoFun(Num(Int[s_18])) @ (0,0),NoFun(Num(Int[--])) @ (∞,∞)] ->* NoFun(Grads<n: L∞, c: U>[s_16](Num(Real[--])))) @ Just [Any,Any,Integer]])"
+        ty = "Fun([([NoFun(Matrix<n: L∞, c: τ_39>[s_11 × s_24](NoFun(Num(Data)))) @ (0.4⋅(1 / s_11)⋅s_21,0.3⋅(1 / s_11)⋅s_21),NoFun(Num(Int[s_21])) @ (∑∅,∑∅),NoFun(Num(Int[--])) @ (∞,∞)] ->* NoFun(τ_32)) @ Just [Any,Any,Integer]])"
+        cs = "constr_3 : [final,worst,global,exact,special] IsTypeOpResult (Binary * (Num(Int[--]) @ η_6,Grads<n: L∞, c: U>[s_24](NoFun(Num(Real[--]))) @ η_7) τ_32)"
+    parseEvalString_l_customCheck pp "" ex (ty, cs) (pure $ Right ())
 
 
 testAboveThresh pp = describe "Above threshold" $ do
