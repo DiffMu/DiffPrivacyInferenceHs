@@ -92,7 +92,7 @@ testSubtyping_MaxMinCases = do
             a ⊑! ty
             return a
       let correct :: (DMType) -> TC _
-          correct ((DMTup [Numeric (Num DMInt (Const s)), Numeric (TVar y)])) = pure $ Right s
+          correct ((DMTup [Numeric (Num DMInt (Const s)), Numeric (Num (TVar _) (TVar _))])) = pure $ Right s
           correct r                                                     = pure $ Left r
       (tc $ sn_EW test0 >>= correct) `shouldReturn` (Right (Right (constCoeff (Fin 2))))
 

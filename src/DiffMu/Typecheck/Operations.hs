@@ -187,6 +187,7 @@ makeNonConstType myConstrName (Numeric (TVar a)) = do
     -- otherwise we do nothing
     False -> return (Numeric (TVar a))
 
+makeNonConstType name (Numeric (Num t (TVar c))) = unify (TVar c) NonConst >> pure (Numeric (Num t NonConst))
 makeNonConstType name (Numeric (Num t NonConst)) = pure $ Numeric (Num t NonConst)
 makeNonConstType name (Numeric (Num t (Const s))) = pure $ Numeric (Num t (Const s))
 makeNonConstType name (Numeric DMData) = pure $ (Numeric DMData) -- TODO: Check, we do nothing with DMData?
