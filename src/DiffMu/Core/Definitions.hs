@@ -162,8 +162,6 @@ data DMTypeOf (k :: DMKind) where
   DMReal   :: DMTypeOf BaseNumKind
 
   -- a base numeric type can be either constant or non constant or data
-  -- Const    :: Sensitivity -> DMTypeOf BaseNumKind -> DMTypeOf NumKind
-  -- NonConst :: DMTypeOf BaseNumKind -> DMTypeOf NumKind
 
   MkConst :: Sensitivity -> DMTypeOf ConstnessKind
   MkNonConst :: DMTypeOf ConstnessKind
@@ -229,8 +227,9 @@ instance Hashable (DMTypeOf k) where
   hashWithSalt s (DMAny) = s +! 8
   hashWithSalt s (Vector) = s +! 9
   hashWithSalt s (Gradient) = s +! 10
-  hashWithSalt s (MkNum t (MkConst n)) = s `hashWithSalt` n `hashWithSalt` t
-  hashWithSalt s (MkNum t MkNonConst) = s `hashWithSalt` t
+  hashWithSalt s (MkNonConst) = s +! 11
+  hashWithSalt s (MkConst t) = s `hashWithSalt` t
+  hashWithSalt s (MkNum t n) = s `hashWithSalt` n `hashWithSalt` t
   hashWithSalt s (Numeric t) = s `hashWithSalt` t
   hashWithSalt s (TVar t) = s `hashWithSalt` t
   hashWithSalt s (n :->: t) = s `hashWithSalt` n `hashWithSalt` t
@@ -266,8 +265,9 @@ instance Show (DMTypeOf k) where
   show DMInt = "Int"
   show DMReal = "Real"
   show DMData = "Data"
-  show (MkNum t (MkConst s)) = show t <> "[" <> show s <> "]"
-  show (MkNum t MkNonConst) = show t <> "[--]"
+  show (MkNum t c) = show t <> "[" <> show c <> "]"
+  show (MkNonConst) = "--"
+  show (MkConst c) = show c
   show (Numeric t) = "Num(" <> show t <> ")"
   show (TVar t) = show t
   show (a :->: b) = "(" <> show a <> " -> " <> show b <> ")"
@@ -318,8 +318,9 @@ instance ShowPretty (DMTypeOf k) where
   showPretty DMInt = "Int"
   showPretty DMReal = "Real"
   showPretty DMData = "Data"
-  showPretty (MkNum t (MkConst s)) = showPretty t <> "[" <> showPretty s <> "]"
-  showPretty (MkNum t MkNonConst) = "NonConst " <> showPretty t
+  showPretty (MkNum t c) = showPretty t <> "[" <> showPretty c <> "]"
+  showPretty (MkNonConst) = "--"
+  showPretty (MkConst c) = showPretty c
   showPretty (Numeric t) = showPretty t
   showPretty (TVar t) = showPretty t
   showPretty (a :->: b) = showFunPretty "->" a b
