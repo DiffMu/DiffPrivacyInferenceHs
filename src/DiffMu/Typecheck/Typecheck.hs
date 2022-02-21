@@ -635,11 +635,10 @@ checkSen' scope (Count f m) = let
     
     cl <- newVar
     r <- newVar
-    c <- newVar
     s <- newVar
         
-    unify tm (NoFun (DMMat L1 cl r c (NoFun (Numeric DMData))))
-    unify tf (Fun [[(NoFun (DMVec L1 cl c (NoFun (Numeric DMData)))) :@ s] :->: (NoFun DMBool) :@ (Just [JTAny])])
+    unify tm (NoFun (DMVec L1 cl r (NoFun (Numeric DMData))))
+    unify tf (Fun [[(NoFun (Numeric DMData)) :@ s] :->: (NoFun DMBool) :@ (Just [JTAny])])
     
     return (NoFun (Numeric (NonConst DMInt)))
 
