@@ -191,15 +191,15 @@ testSample pp = describe "Sample" $ do
     let ex = "foo(d::Vector) :: BlackBox() = d \n\
               \function bar(data, b, x::Integer) :: Priv() \n\
               \  D, L = sample(b, data, data) \n\
-              \  gs = unbox(foo(D[1,:]), DMGrads, length(D[1,:])) \n\
+              \  gs = unbox(foo(D[1,:]), Vector{Real}, length(D[1,:])) \n\
               \  clip!(L2,gs) \n\
               \  norm_convert!(gs) \n\
               \  gaussian_mechanism!(2, 0.2, 0.3, gs)  \n\
               \  clone(x * gs) \n\
               \end"
-        -- ty = "Fun([([NoFun(Matrix<n: L∞, c: τ_33>[s_11 × s_21](Num(Data))) @ (0.4⋅s_18⋅(1 / s_11),0.3⋅s_18⋅(1 / s_11)),NoFun(Num(Int[s_18])) @ (0,0),NoFun(Num(Int[--])) @ (∞,∞)] ->* NoFun(Grads<n: L∞, c: U>[s_16](Num(Real[--])))) @ Just [Any,Any,Integer]])"
-        ty = "Fun([([NoFun(Matrix<n: L∞, c: τ_39>[s_11 × s_24](NoFun(Num(Data)))) @ (0.4⋅(1 / s_11)⋅s_21,0.3⋅(1 / s_11)⋅s_21),NoFun(Num(Int[s_21])) @ (∑∅,∑∅),NoFun(Num(Int[--])) @ (∞,∞)] ->* NoFun(τ_32)) @ Just [Any,Any,Integer]])"
-        cs = "constr_3 : [final,worst,global,exact,special] IsTypeOpResult (Binary * (Num(Int[--]) @ η_6,Grads<n: L∞, c: U>[s_24](NoFun(Num(Real[--]))) @ η_7) τ_32)"
+        ty = "Fun([([NoFun(Matrix<n: L∞, c: τ_39>[s_11 × s_24](NoFun(Num(Data)))) @ (0.4⋅(1 / s_11)⋅s_21,0.3⋅(1 / s_11)⋅s_21),NoFun(Num(Int[s_21])) @ (∑∅,∑∅),NoFun(Num(Int[--])) @ (∞,∞)] ->* NoFun(Vector<n: L∞, c: U>[s_24](NoFun(Num(Real[--]))))) @ Just [Any,Any,Integer]])"
+        --ty = "Fun([([NoFun(Matrix<n: L∞, c: τ_39>[s_11 × s_24](NoFun(Num(Data)))) @ (0.4⋅(1 / s_11)⋅s_21,0.3⋅(1 / s_11)⋅s_21),NoFun(Num(Int[s_21])) @ (∑∅,∑∅),NoFun(Num(Int[--])) @ (∞,∞)] ->* NoFun(τ_32)) @ Just [Any,Any,Integer]])"
+        cs = ""
     parseEvalString_l_customCheck pp "" ex (ty, cs) (pure $ Right ())
 
 
