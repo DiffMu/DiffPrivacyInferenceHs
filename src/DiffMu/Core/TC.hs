@@ -131,7 +131,7 @@ instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs (Numeric τ) = Numeric <$> substitute σs τ
   substitute σs (NonConst) = pure NonConst
   substitute σs (Const c) = Const <$> substitute σs c
-  substitute σs (MkNum τ c) = MkNum <$> substitute σs τ <*> substitute σs c
+  substitute σs (Num τ c) = Num <$> substitute σs τ <*> substitute σs c
   substitute σs (TVar x) = σs x
   substitute σs (τ1 :->: τ2) = (:->:) <$> substitute σs τ1 <*> substitute σs τ2
   substitute σs (τ1 :->*: τ2) = (:->*:) <$> substitute σs τ1 <*> substitute σs τ2
@@ -165,7 +165,7 @@ instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
   substitute σs (Numeric τ) = Numeric <$> substitute σs τ
   substitute σs (NonConst) = pure NonConst
   substitute σs (Const c) = Const <$> substitute σs c
-  substitute σs (MkNum τ c) = MkNum <$> substitute σs τ <*> substitute σs c
+  substitute σs (Num τ c) = Num <$> substitute σs τ <*> substitute σs c
   substitute σs (TVar x) = pure (TVar x)
   substitute σs (τ1 :->: τ2) = (:->:) <$> substitute σs τ1 <*> substitute σs τ2
   substitute σs (τ1 :->*: τ2) = (:->*:) <$> substitute σs τ1 <*> substitute σs τ2
@@ -239,7 +239,7 @@ instance Typeable k => FreeVars TVarOf (DMTypeOf k) where
   freeVars (Numeric τ) = freeVars τ
   freeVars (Const t) = freeVars t
   freeVars (NonConst) = []
-  freeVars (MkNum t c) = freeVars t <> freeVars c
+  freeVars (Num t c) = freeVars t <> freeVars c
   freeVars (TVar x) = [SomeK x]
   freeVars (τ1 :->: τ2) = freeVars (τ1) <> freeVars τ2
   freeVars (τ1 :->*: τ2) = freeVars (τ1) <> freeVars τ2

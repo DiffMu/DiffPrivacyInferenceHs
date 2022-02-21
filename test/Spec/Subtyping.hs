@@ -30,9 +30,9 @@ testSubtyping = do
     testsub False DMReal DMInt (Left (UnsatisfiableConstraint "[test]"))
 
   describe "subtyping of tuples" $ do
-    let nci1 = (Numeric (MkNum DMInt (Const oneId)))
-        nci2 = (Numeric (MkNum DMInt (Const (constCoeff (Fin 2)))))
-        nnr  = Numeric (MkNum DMReal NonConst)
+    let nci1 = (Numeric (Num DMInt (Const oneId)))
+        nci2 = (Numeric (Num DMInt (Const (constCoeff (Fin 2)))))
+        nnr  = Numeric (Num DMReal NonConst)
 
     testsub False (NoFun nci1) (NoFun nnr) (Right Nothing)
     testsub False (DMTup [nci1,nci2]) (DMTup [nci1,nnr]) (Right Nothing)
@@ -76,7 +76,7 @@ testSubtyping_MaxMinCases = do
       (tc $ (sn_EW test0) >>= isTVar) `shouldReturn` (Right (Right ()))
 
     it "resolves 'a ≤ Int[2]' inside NoFun" $ do
-      let ty = NoFun (Numeric (MkNum DMInt (Const (constCoeff (Fin 2)))))
+      let ty = NoFun (Numeric (Num DMInt (Const (constCoeff (Fin 2)))))
       let test0 = do
             a <- newVar
             a ⊑! ty
@@ -84,15 +84,15 @@ testSubtyping_MaxMinCases = do
       (tc $ sn_EW test0) `shouldReturn` (Right ty)
 
     it "partially resolves 'a ≤ (Int[2],Real[--])'" $ do
-      let ty1 = (Numeric (MkNum DMInt (Const (constCoeff (Fin 2)))))
-          ty2 = (Numeric (MkNum DMReal NonConst))
+      let ty1 = (Numeric (Num DMInt (Const (constCoeff (Fin 2)))))
+          ty2 = (Numeric (Num DMReal NonConst))
           ty = DMTup [ty1 , ty2]
       let test0 = do
             a <- newVar
             a ⊑! ty
             return a
       let correct :: (DMType) -> TC _
-          correct ((DMTup [Numeric (MkNum DMInt (Const s)), Numeric (TVar y)])) = pure $ Right s
+          correct ((DMTup [Numeric (Num DMInt (Const s)), Numeric (TVar y)])) = pure $ Right s
           correct r                                                     = pure $ Left r
       (tc $ sn_EW test0 >>= correct) `shouldReturn` (Right (Right (constCoeff (Fin 2))))
 
@@ -100,12 +100,12 @@ testSubtyping_MaxMinCases = do
       let test0 = do
             a <- newVar
             b <- newVar
-            let a'  = NoFun (Numeric (MkNum a NonConst))
+            let a'  = NoFun (Numeric (Num a NonConst))
 
             a' ⊑! b
             return (a', b)
       let correct :: (DMMain,DMMain) -> TC (Either (DMMain,DMMain) ())
-          correct (NoFun (Numeric (MkNum a NonConst)), NoFun (Numeric (MkNum b NonConst))) | (a /= b) = pure $ Right ()
+          correct (NoFun (Numeric (Num a NonConst)), NoFun (Numeric (Num b NonConst))) | (a /= b) = pure $ Right ()
           correct (x,y)                                                                   = pure $ Left (x,y)
       (tc $ sn_EW test0 >>= correct) `shouldReturn` (Right (Right ()))
 
@@ -367,8 +367,8 @@ testSubtyping_ContractEdge = do
       (tc $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right (True,True,True,True))
 
     it "does contract diamond even if lower/upper end are bound from below/above" $ do
-      let int = NoFun (Numeric (MkNum DMInt NonConst))
-          real = NoFun (Numeric (MkNum DMReal NonConst))
+      let int = NoFun (Numeric (Num DMInt NonConst))
+          real = NoFun (Numeric (Num DMReal NonConst))
       let test1 :: TC (DMMain,DMMain,DMMain,DMMain)
           test1 = do
             -- the interesting variables
@@ -389,13 +389,13 @@ testSubtyping_ContractEdge = do
 
             return (d,a,b,c)
       let checkres (d,a,b,c) = (a == c, b == c, a == d, b == d, isGood a)
-            where isGood (NoFun (Numeric (MkNum (TVar x) NonConst))) = True
+            where isGood (NoFun (Numeric (Num (TVar x) NonConst))) = True
                   isGood _ = False
       (tc $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right (True,True,True,True,True))
 
     it "does NOT contract diamond if inner vertices end are bound from outside" $ do
-      let int = NoFun (Numeric (MkNum DMInt NonConst))
-          real = NoFun (Numeric (MkNum DMReal NonConst))
+      let int = NoFun (Numeric (Num DMInt NonConst))
+          real = NoFun (Numeric (Num DMReal NonConst))
       let test1 :: TC (DMMain,DMMain,DMMain,DMMain)
           test1 = do
             -- the interesting variables
@@ -423,8 +423,8 @@ testSubtyping_ContractEdge = do
       (tc $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right (Right ()))
 
     it "does NOT contract diamond if any vertices appear in other constraints" $ do
-      let int = NoFun (Numeric (MkNum DMInt NonConst))
-          real = NoFun (Numeric (MkNum DMReal NonConst))
+      let int = NoFun (Numeric (Num DMInt NonConst))
+          real = NoFun (Numeric (Num DMReal NonConst))
       let test1 :: TC (DMMain,DMMain,DMMain,DMMain)
           test1 = do
             -- the interesting variables

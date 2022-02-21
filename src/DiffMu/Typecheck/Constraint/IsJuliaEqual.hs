@@ -34,8 +34,8 @@ instance TCConstraint IsJuliaEqual where
 
 makeNonConst_JuliaVersion ::  DMTypeOf k -> DMTypeOf k
 makeNonConst_JuliaVersion (TVar a) = TVar a
-makeNonConst_JuliaVersion (MkNum a (Const _)) = (MkNum a NonConst)
-makeNonConst_JuliaVersion (MkNum a NonConst) = (MkNum a NonConst)
+makeNonConst_JuliaVersion (Num a (Const _)) = (Num a NonConst)
+makeNonConst_JuliaVersion (Num a NonConst) = (Num a NonConst)
 makeNonConst_JuliaVersion (NoFun a) = NoFun (makeNonConst_JuliaVersion a)
 makeNonConst_JuliaVersion (DMTup as) = DMTup (makeNonConst_JuliaVersion <$> as)
 makeNonConst_JuliaVersion (Numeric a) = Numeric (makeNonConst_JuliaVersion a)
@@ -135,9 +135,9 @@ instance Typeable k => Solve MonadDMTC UnifyWithConstSubtype (DMTypeOf k, DMType
           ----------
           -- interesting const / non-const cases
           --
-          MkNum a0 c0 -> do
+          Num a0 c0 -> do
             c1 <- newVar
-            unify b (MkNum a0 c1)
+            unify b (Num a0 c1)
             c0 ⊑! c1
             dischargeConstraint name
 
@@ -198,9 +198,9 @@ instance Typeable k => Solve MonadDMTC UnifyWithConstSubtype (DMTypeOf k, DMType
           (:∧:) dto dto' -> pure ()
 
           TVar so -> case b of
-            MkNum b1 c1 -> do
+            Num b1 c1 -> do
               c0 <- newVar
-              unify a (MkNum b1 c0)
+              unify a (Num b1 c0)
               c0 ⊑! c1
               dischargeConstraint name
             {-
