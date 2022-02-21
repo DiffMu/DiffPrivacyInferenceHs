@@ -177,14 +177,15 @@ testSLoop pp = describe "Sensitivity loop" $ do
                  \   end \n\
                  \   x \n\
                  \end"
+        intc_nc c = NoFun(Numeric (Num DMInt c))
         int = NoFun(Numeric (Num DMInt NonConst))
-        ty_s = Fun([([int :@ (constCoeff (Fin 1024))] :->: int) :@ Just [JTInt]])
-        ty_v = Fun([([int :@ (constCoeff (Fin 1)), int :@ (constCoeff (Fin 2))] :->: int) :@ Just [JTInt, JTInt]])
-        ty_v2 = Fun([([int :@ (constCoeff (Fin 1)), int :@ (inftyS)] :->: int) :@ Just [JTInt, JTInt]])
-    parseEval pp "static" sloop (pure ty_s)
-    parseEval pp "overwriting" mloop (pure ty_s)
-    parseEval pp "variable" vloop (pure ty_v)
-    parseEval pp "variable2" vloop2 (pure ty_v2)
+        ty_s  = do c <- newVar ; pure $ Fun([([intc_nc c :@ (constCoeff (Fin 1024))] :->: int) :@ Just [JTInt]])
+        ty_v  = do c <- newVar ; pure $ Fun([([intc_nc c :@ (constCoeff (Fin 1)), int :@ (constCoeff (Fin 2))] :->: int) :@ Just [JTInt, JTInt]])
+        ty_v2 = do c <- newVar ; pure $ Fun([([intc_nc c :@ (constCoeff (Fin 1)), int :@ (inftyS)] :->: int) :@ Just [JTInt, JTInt]])
+    parseEvalUnify pp "static" sloop (ty_s)
+    parseEvalUnify pp "overwriting" mloop (ty_s)
+    parseEvalUnify pp "variable" vloop (ty_v)
+    parseEvalUnify pp "variable2" vloop2 (ty_v2)
     parseEvalFail pp "variable (bad)" uloop (UnsatisfiableConstraint "")
 
 testSample pp = describe "Sample" $ do

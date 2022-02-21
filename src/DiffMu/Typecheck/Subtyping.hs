@@ -281,12 +281,20 @@ subtypingGraph =
             ; IsReflexive IsLeftStructural
               -> [
                    SingleEdge $
-                   do return (NonConst, NonConst)
+                   do 
+                      return (NonConst, NonConst)
+                  -- , SingleEdge $
+                  --  do a <- newVar
+                  --     s <- newVar
+                  --     return (Const s, a)
                  ]
             ; IsReflexive IsRightStructural
                -> [SingleEdge $
                    do s₀ <- newVar
                       return (Const s₀, Const s₀)
+                  -- , SingleEdge $
+                  --   do a <- newVar
+                  --      return (a, NonConst)
                ]
             ; NotReflexive
               -> [ SingleEdge $
@@ -399,7 +407,9 @@ getTops :: forall k. (SingI k, Typeable k) => [DMTypeOf k]
 getTops =
   case testEquality (typeRep @k) (typeRep @BaseNumKind) of
      Just Refl -> [DMReal]
-     _ -> []
+     _ -> case testEquality (typeRep @k) (typeRep @ConstnessKind) of
+            Just Refl -> [NonConst]
+            _ -> []
 
 type TypeGraph k = H.HashMap (DMTypeOf k) [DMTypeOf k]
 

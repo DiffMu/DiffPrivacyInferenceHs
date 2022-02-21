@@ -272,10 +272,11 @@ test125 pp = describe "issue 125 (Unify in Non-constification)" $ do
               \             x                  \n\
               \         end                    "
 
-      intnc = NoFun(Numeric (Num DMInt NonConst))
-      ty = Fun([([intnc :@ (constCoeff (Fin 1024))] :->: intnc) :@ Just [JTInt]])
+      intc_nc c = NoFun(Numeric (Num DMInt c))
+      int = NoFun(Numeric (Num DMInt NonConst))
+      ty = do c <- newVar ; pure $ Fun([([intc_nc c :@ (constCoeff (Fin 1024))] :->: int) :@ Just [JTInt]])
 
-  parseEval pp "example variant 1" ex_1 (pure ty)
+  parseEvalUnify pp "example variant 1" ex_1 (ty)
 
 
 test127 pp = describe "issue 127 (TLet in loop)" $ do
@@ -286,10 +287,12 @@ test127 pp = describe "issue 127 (TLet in loop)" $ do
               \      x                                    \n\
               \  end                                      "
 
-      intnc = NoFun(Numeric (Num DMInt NonConst))
-      ty = Fun([([intnc :@ (constCoeff oneId) , intnc :@ (inftyS)] :->: intnc) :@ Just [JTInt,JTInt]])
+      intc_nc c = NoFun(Numeric (Num DMInt c))
+      int = NoFun(Numeric (Num DMInt NonConst))
 
-  parseEval pp "example variant 1" ex_1 (pure ty)
+      ty = do c <- newVar ; d <- newVar ; pure $ Fun([([intc_nc c :@ (constCoeff oneId) , intc_nc d :@ (inftyS)] :->: int) :@ Just [JTInt,JTInt]])
+
+  parseEval pp "example variant 1" ex_1 ty
 
 
 test188 pp = describe "issue 188 (holes)" $ do
