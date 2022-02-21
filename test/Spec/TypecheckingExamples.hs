@@ -24,8 +24,8 @@ testSens :: (String -> IO String) -> SpecWith ()
 testSens pp = do
   describe "checkSens" $ do
 
-    parseEvalSimple pp"3 + 7 * 9" (pure $ NoFun (Numeric (MkNum DMInt (MkConst (constCoeff (Fin 66))))))
-    parseEvalSimple pp"2.2 * 3"   (pure $ NoFun (Numeric (MkNum DMReal (MkConst (constCoeff (Fin 6.6000004))))))
+    parseEvalSimple pp"3 + 7 * 9" (pure $ NoFun (Numeric (MkNum DMInt (Const (constCoeff (Fin 66))))))
+    parseEvalSimple pp"2.2 * 3"   (pure $ NoFun (Numeric (MkNum DMReal (Const (constCoeff (Fin 6.6000004))))))
 
     let test = "function test(a)\n"
             <> "  clone(a)\n"
@@ -59,19 +59,19 @@ testOps pp = describe "Ops" $ do
         ex_vec_no = "function foo(x::Vector{Integer}, y::Vector{Integer}, z::Vector{Integer}) \n\
                  \ 2.0*x + y - z \n\
                  \ end"
-        int = NoFun(Numeric (MkNum DMInt MkNonConst))
-        real = NoFun(Numeric (MkNum DMReal MkNonConst))
+        int = NoFun(Numeric (MkNum DMInt NonConst))
+        real = NoFun(Numeric (MkNum DMReal NonConst))
         ty_num = Fun([([int :@ (constCoeff (Fin 1)), int :@ (constCoeff (Fin 11)), int :@ (constCoeff (Fin 5.5)), int :@ inftyS] :->: real) :@ Just [JTInt, JTInt, JTInt, JTInt]])
         ty_mat :: TC DMMain = do
             n <- newVar
             m <- newVar
-            let mat1 = NoFun (DMMat L1 U n m (NoFun (Numeric (MkNum DMInt MkNonConst))))
-            let mat2 = NoFun (DMMat L1 U n m (NoFun (Numeric (MkNum DMReal MkNonConst))))
+            let mat1 = NoFun (DMMat L1 U n m (NoFun (Numeric (MkNum DMInt NonConst))))
+            let mat2 = NoFun (DMMat L1 U n m (NoFun (Numeric (MkNum DMReal NonConst))))
             return (Fun [([mat1 :@ constCoeff (Fin 2), mat1 :@ constCoeff (Fin 1), mat1 :@ constCoeff (Fin 1)] :->: mat2) :@ Just [JTMatrix JTInt, JTMatrix JTInt, JTMatrix JTInt]])
         ty_vec :: TC DMMain = do
             n <- newVar
-            let vec1 = NoFun (DMVec L1 U n (NoFun (Numeric (MkNum DMInt MkNonConst))))
-            let vec2 = NoFun (DMVec L1 U n (NoFun (Numeric (MkNum DMReal MkNonConst))))
+            let vec1 = NoFun (DMVec L1 U n (NoFun (Numeric (MkNum DMInt NonConst))))
+            let vec2 = NoFun (DMVec L1 U n (NoFun (Numeric (MkNum DMReal NonConst))))
             return (Fun [([vec1 :@ constCoeff (Fin 2), vec1 :@ constCoeff (Fin 1), vec1 :@ constCoeff (Fin 1)] :->: vec2) :@ Just [JTVector JTInt, JTVector JTInt, JTVector JTInt]])
     parseEval pp "numeric ops sensitivity" ex_num (pure ty_num)
     parseEvalUnify pp "matrix ops sensitivity" ex_mat (ty_mat)
@@ -100,8 +100,8 @@ testPriv pp = describe "privacies" $ do
                \    scale_gradient!(100, x) \n\
                \    return \n\
                \ end"
-        int = NoFun(Numeric (MkNum DMInt MkNonConst))
-        real = MkNum DMReal MkNonConst 
+        int = NoFun(Numeric (MkNum DMInt NonConst))
+        real = MkNum DMReal NonConst 
         ty_r = Fun([([int :@ (inftyS, inftyS)] :->*: int) :@ Just [JTInt]])
         ty_i :: TC DMMain = do
             c <- newVar
@@ -121,7 +121,7 @@ testPriv pp = describe "privacies" $ do
             c <- newVar
             n <- newVar
             nt <- newVar
-            let gradin = NoFun (DMGrads L2 c n (NoFun (Numeric (MkNum nt MkNonConst))))
+            let gradin = NoFun (DMGrads L2 c n (NoFun (Numeric (MkNum nt NonConst))))
             let gradout = NoFun (DMGrads LInf U n (NoFun (Numeric real)))
             return (Fun ([([gradin :@ (constCoeff (Fin 0.1), constCoeff (Fin 0))] :->*: gradout) :@ Just [JTGrads]]))
     parseEval pp "return" ret (pure ty_r)
@@ -138,8 +138,8 @@ testBlackBox pp = describe "black box" $ do
              \    z = unbox(bb(y), Integer)     \n\
              \    x / z  \n\
              \ end"
-        int = NoFun(Numeric (MkNum DMInt MkNonConst))
-        real = NoFun(Numeric (MkNum DMReal MkNonConst))
+        int = NoFun(Numeric (MkNum DMInt NonConst))
+        real = NoFun(Numeric (MkNum DMReal NonConst))
         ty = Fun([([int :@ inftyS, real :@ inftyS] :->: real) :@ Just [JTInt, JTAny]])
     parseEvalUnify pp "numeric" bb (pure ty)
 
@@ -177,7 +177,7 @@ testSLoop pp = describe "Sensitivity loop" $ do
                  \   end \n\
                  \   x \n\
                  \end"
-        int = NoFun(Numeric (MkNum DMInt MkNonConst))
+        int = NoFun(Numeric (MkNum DMInt NonConst))
         ty_s = Fun([([int :@ (constCoeff (Fin 1024))] :->: int) :@ Just [JTInt]])
         ty_v = Fun([([int :@ (constCoeff (Fin 1)), int :@ (constCoeff (Fin 2))] :->: int) :@ Just [JTInt, JTInt]])
         ty_v2 = Fun([([int :@ (constCoeff (Fin 1)), int :@ (inftyS)] :->: int) :@ Just [JTInt, JTInt]])
@@ -216,7 +216,7 @@ testRet pp = describe "Color" $ do
               \    (theta, mu) = (100,x) \n\
               \    theta + mu \n\
               \ end"
-        int = NoFun(Numeric (MkNum DMInt MkNonConst))
+        int = NoFun(Numeric (MkNum DMInt NonConst))
         ty = Fun([([int :@ inftyP] :->*: int) :@ Just [JTInt]])
     parseEval pp "Ret" ex (pure ty)
                                  
@@ -238,9 +238,9 @@ testMMap pp = describe "Matrix map" $ do
             c <- newVar
             n <- newVar
             nr <- newVar
-            let gradin = NoFun (DMVec nr c n (NoFun (Numeric (MkNum DMInt MkNonConst))))
-            let gradout = NoFun (DMVec nr U n (NoFun (Numeric (MkNum DMInt MkNonConst))))
-            return (Fun ([([gradin :@ (constCoeff (Fin 2)), NoFun (Numeric (MkNum DMInt MkNonConst)) :@ n] :->: gradout) :@ Just [JTVector JTInt, JTInt]]))
+            let gradin = NoFun (DMVec nr c n (NoFun (Numeric (MkNum DMInt NonConst))))
+            let gradout = NoFun (DMVec nr U n (NoFun (Numeric (MkNum DMInt NonConst))))
+            return (Fun ([([gradin :@ (constCoeff (Fin 2)), NoFun (Numeric (MkNum DMInt NonConst)) :@ n] :->: gradout) :@ Just [JTVector JTInt, JTInt]]))
     parseEvalUnify pp "good" ex ty
     parseEvalFail pp "dispatch (bad)" ex_fail (UnificationError "" "")
 
@@ -281,7 +281,7 @@ testPrivFunc pp = describe "PrivacyFunction annotations" $ do
                    \function baz() :: Priv() \n\
                    \   foo(bar)\n\
                    \end"
-        cint =  NoFun (Numeric (MkNum DMInt (MkConst (constCoeff (Fin 1)))))
+        cint =  NoFun (Numeric (MkNum DMInt (Const (constCoeff (Fin 1)))))
         ty_good = Fun([([] :->*: cint) :@ Just []])
     parseEval pp "proper usage" ex_good (pure ty_good)
     parseEvalFail pp "not annotated" ex_bad (TermColorError PrivacyK (Sng 1 JTInt))

@@ -124,7 +124,7 @@ instance Show DMKind where
   show ConstnessKind = "Constness"
 
 -- so we don't get incomplete pattern warnings for them
-{-# COMPLETE DMInt, DMReal, MkNum, MkConst, MkNonConst, DMData, Numeric, TVar, (:->:), (:->*:), DMTup, L1, L2, LInf, U, Clip, Vector, Gradient, Matrix,
+{-# COMPLETE DMInt, DMReal, MkNum, Const, NonConst, DMData, Numeric, TVar, (:->:), (:->*:), DMTup, L1, L2, LInf, U, Clip, Vector, Gradient, Matrix,
  DMContainer, DMVec, DMGrads, DMMat, DMModel, NoFun, Fun, (:∧:), BlackBox #-}
 
 --------------------
@@ -163,8 +163,8 @@ data DMTypeOf (k :: DMKind) where
 
   -- a base numeric type can be either constant or non constant or data
 
-  MkConst :: Sensitivity -> DMTypeOf ConstnessKind
-  MkNonConst :: DMTypeOf ConstnessKind
+  Const :: Sensitivity -> DMTypeOf ConstnessKind
+  NonConst :: DMTypeOf ConstnessKind
 
   MkNum :: DMTypeOf BaseNumKind -> DMTypeOf ConstnessKind -> DMTypeOf NumKind
 
@@ -227,8 +227,8 @@ instance Hashable (DMTypeOf k) where
   hashWithSalt s (DMAny) = s +! 8
   hashWithSalt s (Vector) = s +! 9
   hashWithSalt s (Gradient) = s +! 10
-  hashWithSalt s (MkNonConst) = s +! 11
-  hashWithSalt s (MkConst t) = s `hashWithSalt` t
+  hashWithSalt s (NonConst) = s +! 11
+  hashWithSalt s (Const t) = s `hashWithSalt` t
   hashWithSalt s (MkNum t n) = s `hashWithSalt` n `hashWithSalt` t
   hashWithSalt s (Numeric t) = s `hashWithSalt` t
   hashWithSalt s (TVar t) = s `hashWithSalt` t
@@ -266,8 +266,8 @@ instance Show (DMTypeOf k) where
   show DMReal = "Real"
   show DMData = "Data"
   show (MkNum t c) = show t <> "[" <> show c <> "]"
-  show (MkNonConst) = "--"
-  show (MkConst c) = show c
+  show (NonConst) = "--"
+  show (Const c) = show c
   show (Numeric t) = "Num(" <> show t <> ")"
   show (TVar t) = show t
   show (a :->: b) = "(" <> show a <> " -> " <> show b <> ")"
@@ -319,8 +319,8 @@ instance ShowPretty (DMTypeOf k) where
   showPretty DMReal = "Real"
   showPretty DMData = "Data"
   showPretty (MkNum t c) = showPretty t <> "[" <> showPretty c <> "]"
-  showPretty (MkNonConst) = "--"
-  showPretty (MkConst c) = showPretty c
+  showPretty (NonConst) = "--"
+  showPretty (Const c) = showPretty c
   showPretty (Numeric t) = showPretty t
   showPretty (TVar t) = showPretty t
   showPretty (a :->: b) = showFunPretty "->" a b
@@ -374,8 +374,8 @@ instance Eq (DMTypeOf k) where
   DMReal   == DMReal = True
 
   -- a base numeric type can be either constant or non constant or data
-  MkConst s == MkConst s2 = s == s2
-  MkNonConst == MkNonConst = True
+  Const s == Const s2 = s == s2
+  NonConst == NonConst = True
   DMData   == DMData = True
   MkNum t1 c1 == MkNum t2 c2 = and [t1 == t2, c1 == c2]
 
@@ -478,8 +478,8 @@ recDMTypeM typemap sensmap DMInt = pure DMInt
 recDMTypeM typemap sensmap DMReal = pure DMReal
 recDMTypeM typemap sensmap DMData = pure DMData
 recDMTypeM typemap sensmap (Numeric τ) = Numeric <$> typemap τ
-recDMTypeM typemap sensmap (MkNonConst) = pure MkNonConst
-recDMTypeM typemap sensmap (MkConst t) = MkConst <$> sensmap t
+recDMTypeM typemap sensmap (NonConst) = pure NonConst
+recDMTypeM typemap sensmap (Const t) = Const <$> sensmap t
 recDMTypeM typemap sensmap (MkNum τ c) = MkNum <$> (typemap τ) <*> typemap c
 recDMTypeM typemap sensmap (TVar x) = pure (TVar x)
 recDMTypeM typemap sensmap (τ1 :->: τ2) = (:->:) <$> mapM (\(a :@ b) -> (:@) <$> typemap a <*> sensmap b) τ1 <*> typemap τ2

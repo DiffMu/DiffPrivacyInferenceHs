@@ -165,13 +165,13 @@ subtypingGraph =
                       clp <- newVar
                       n <- newVar
                       m <- newVar
-                      return ((DMMat nrm (Clip clp) n m (Numeric DMData)), (DMMat clp U n m (Numeric (MkNum DMReal MkNonConst))))
+                      return ((DMMat nrm (Clip clp) n m (Numeric DMData)), (DMMat clp U n m (Numeric (MkNum DMReal NonConst))))
                     -}
                  , SingleEdge $ -- this is the conv rule made implicit, for converting DMData to DMReal
                    do nrm <- newVar
                       clp <- newVar
                       m <- newVar
-                      return ((DMGrads nrm (Clip clp) m (Numeric DMData)), (DMGrads clp U m (Numeric (MkNum DMReal MkNonConst))))
+                      return ((DMGrads nrm (Clip clp) m (Numeric DMData)), (DMGrads clp U m (Numeric (MkNum DMReal NonConst))))
                  , SingleEdge $ -- this is the fr-sens rule made implicit, for converting from L1 norm to any other
                    do nrm <- newVar
                       clp <- newVar
@@ -281,17 +281,17 @@ subtypingGraph =
             ; IsReflexive IsLeftStructural
               -> [
                    SingleEdge $
-                   do return (MkNonConst, MkNonConst)
+                   do return (NonConst, NonConst)
                  ]
             ; IsReflexive IsRightStructural
                -> [SingleEdge $
                    do s₀ <- newVar
-                      return (MkConst s₀, MkConst s₀)
+                      return (Const s₀, Const s₀)
                ]
             ; NotReflexive
               -> [ SingleEdge $
                    do s₀ <- newVar
-                      return (MkConst s₀, MkNonConst)
+                      return (Const s₀, NonConst)
                  ]
             ; _ -> []
             }

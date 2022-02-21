@@ -34,7 +34,7 @@ testAMS01 pp = do
            \   clone(a)           \n\
            \ end                  "
 
-      intc c = NoFun(Numeric (MkNum DMInt (MkConst (constCoeff c))))
+      intc c = NoFun(Numeric (MkNum DMInt (Const (constCoeff c))))
       ty = Fun([([intc (Fin 3) :@ oneId] :->: intc (Fin 3)) :@ Just [JTAny]])
 
 

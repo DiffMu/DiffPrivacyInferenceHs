@@ -81,7 +81,7 @@ checkSen' :: DMScope -> DMTerm -> TC DMMain
 
 -- TODO: Here we assume that η really has type τ, and do not check it. Should maybe do that.
 checkSen' scope (Sng η τ) = do
-  res <- Numeric <$> (MkNum <$> (createDMTypeBaseNum τ) <*> pure (MkConst (constCoeff (Fin η))))
+  res <- Numeric <$> (MkNum <$> (createDMTypeBaseNum τ) <*> pure (Const (constCoeff (Fin η))))
   return (NoFun res)
 
 -- typechecking an op
@@ -477,7 +477,7 @@ checkSen' scope (Loop niter cs' (xi, xc) body) = do
   -- τbcs = type of the capture variable xc inferred in the body
   (τit, τloop_in, (τbody_out, (τbit, sbit), (τbody_in, sbcs))) <- msum3Tup (cniter <* mscale sit, ccs <* mscale scs, cbody' <* mscale sb)
 
-  unify (NoFun (Numeric (MkNum DMInt MkNonConst))) τbit -- number of iterations must match type requested by body
+  unify (NoFun (Numeric (MkNum DMInt NonConst))) τbit -- number of iterations must match type requested by body
 
   τcsnf <- newVar
   unify (NoFun τcsnf) τloop_in -- functions cannot be captured.
@@ -512,7 +512,7 @@ checkSen' scope (MCreate n m (x1, x2) body) =
    let setDim :: TC DMMain -> Sensitivity -> TC DMMain
        setDim tm s = do
           τ <- tm -- check dimension term
-          unify τ (NoFun (Numeric (MkNum DMInt (MkConst s)))) -- dimension must be const integral
+          unify τ (NoFun (Numeric (MkNum DMInt (Const s)))) -- dimension must be const integral
           mscale zeroId
           return τ
 
@@ -527,8 +527,8 @@ checkSen' scope (MCreate n m (x1, x2) body) =
           WithRelev _ (x2τ :@ _) <- removeVar @SensitivityK x2
 
           -- input vars must be integer
-          addConstraint (Solvable (IsLessEqual (x1τ, NoFun (Numeric (MkNum DMInt MkNonConst)))))
-          addConstraint (Solvable (IsLessEqual (x2τ, NoFun (Numeric (MkNum DMInt MkNonConst)))))
+          addConstraint (Solvable (IsLessEqual (x1τ, NoFun (Numeric (MkNum DMInt NonConst)))))
+          addConstraint (Solvable (IsLessEqual (x2τ, NoFun (Numeric (MkNum DMInt NonConst)))))
 
           return τ
    in do
@@ -562,7 +562,7 @@ checkSen' scope (Size m) = do
 
   mscale zeroId
 
-  return (NoFun (DMTup [Numeric (MkNum DMInt (MkConst nv)), Numeric (MkNum DMInt (MkConst mv))]))
+  return (NoFun (DMTup [Numeric (MkNum DMInt (Const nv)), Numeric (MkNum DMInt (Const mv))]))
 
 checkSen' scope (Length m) = do
   mt <- checkSens scope m
@@ -577,7 +577,7 @@ checkSen' scope (Length m) = do
 
   mscale zeroId
 
-  return (NoFun (Numeric (MkNum DMInt (MkConst nv))))
+  return (NoFun (Numeric (MkNum DMInt (Const nv))))
 
 
 checkSen' scope (MutClipM c m) = checkSens scope (ClipM c m)
@@ -609,16 +609,16 @@ checkSen' scope (ClipN value upper lower) = do
   tl <- newVar
   tr <- newVar
 
-  addConstraint (Solvable (IsLessEqual (τv, (NoFun (Numeric (MkNum tv MkNonConst))))))
-  unify τu (NoFun (Numeric (MkNum tv (MkConst tu))))
-  unify τl (NoFun (Numeric (MkNum tv (MkConst tl))))
+  addConstraint (Solvable (IsLessEqual (τv, (NoFun (Numeric (MkNum tv NonConst))))))
+  unify τu (NoFun (Numeric (MkNum tv (Const tu))))
+  unify τl (NoFun (Numeric (MkNum tv (Const tl))))
 
   addConstraint (Solvable (IsLessEqual (tr, tu)))
   addConstraint (Solvable (IsLessEqual (tl, tr)))
 
   mscale (minus tu tl)
 
-  return (NoFun (Numeric (MkNum tv (MkConst tr))))
+  return (NoFun (Numeric (MkNum tv (Const tr))))
 
 --------------------
 -- NOTE this is different from what is in the paper, as we scale the result context by 2 not by 1
@@ -645,8 +645,8 @@ checkSen' scope (ConvertM m) = do
   -- and forget about old `nrm
   -- technically the clipping parameter does not change, but we set it to U so it fits with the rest...
   -- see issue 
---  return (NoFun (DMGrads clp (Clip clp) n (Numeric (MkNum DMReal MkNonConst))))
-  return (NoFun (DMContainer k clp U n (NoFun (Numeric (MkNum DMReal MkNonConst)))))
+--  return (NoFun (DMGrads clp (Clip clp) n (Numeric (MkNum DMReal NonConst))))
+  return (NoFun (DMContainer k clp U n (NoFun (Numeric (MkNum DMReal NonConst)))))
 
 --------------------
 
@@ -894,7 +894,7 @@ checkSen' scope term@(InternalExpectConst a) = do
   res <- checkSens scope a
   sa <- newVar
   ta <- newVar
-  res' <- unify res (NoFun (Numeric (MkNum ta (MkConst sa))))
+  res' <- unify res (NoFun (Numeric (MkNum ta (Const sa))))
 
   return res'
 
@@ -1110,7 +1110,7 @@ checkPri' scope (Gauss rp εp δp f) =
    setParam dt v = do -- parameters must be const numbers.
       τ <- dt
       τv <- newVar
-      unify τ (NoFun (Numeric (MkNum τv (MkConst v))))
+      unify τ (NoFun (Numeric (MkNum τv (Const v))))
       mtruncateP zeroId
       return ()
 
@@ -1169,7 +1169,7 @@ checkPri' scope (Laplace rp εp f) =
    setParam dt v = do -- parameters must be const numbers.
       τ <- dt
       τv <- newVar
-      unify τ (NoFun (Numeric (MkNum τv (MkConst v))))
+      unify τ (NoFun (Numeric (MkNum τv (Const v))))
       mtruncateP zeroId
       return ()
 
@@ -1228,11 +1228,11 @@ checkPri' scope (AboveThresh qs e d t) = do
 
       (τqs, (τe, τd, τt)) <- msumTup (mqs, msum3Tup (me, md, mt))
 
-      unify τqs (NoFun (DMVec nrm clp n (Fun [([τd :@ (oneId :: Sensitivity)] :->: (NoFun (Numeric (MkNum DMReal MkNonConst)))) :@ Just [JTAny]])))
-      addConstraint (Solvable (IsLessEqual (τe, (NoFun (Numeric (MkNum DMReal (MkConst eps)))))))
-      addConstraint (Solvable (IsLessEqual (τt, (NoFun (Numeric (MkNum DMReal MkNonConst))))))
+      unify τqs (NoFun (DMVec nrm clp n (Fun [([τd :@ (oneId :: Sensitivity)] :->: (NoFun (Numeric (MkNum DMReal NonConst)))) :@ Just [JTAny]])))
+      addConstraint (Solvable (IsLessEqual (τe, (NoFun (Numeric (MkNum DMReal (Const eps)))))))
+      addConstraint (Solvable (IsLessEqual (τt, (NoFun (Numeric (MkNum DMReal NonConst))))))
 
-      return (NoFun (Numeric (MkNum DMInt MkNonConst)))
+      return (NoFun (Numeric (MkNum DMInt NonConst)))
 
 
 checkPri' scope (Loop niter cs' (xi, xc) body) =
@@ -1297,8 +1297,8 @@ checkPri' scope (Loop niter cs' (xi, xc) body) =
       -- τbcs = type of the capture variable xc inferred in the body
       (τit, τloop_in, (τbody_out, n, τbit, τbody_in)) <- msum3Tup (cniter, mcaps, cbody')
 
-      unify τit (NoFun (Numeric (MkNum DMInt (MkConst n)))) -- number of iterations must be constant integer
-      unify (NoFun (Numeric (MkNum DMInt MkNonConst))) τbit -- number of iterations must match type requested by body
+      unify τit (NoFun (Numeric (MkNum DMInt (Const n)))) -- number of iterations must be constant integer
+      unify (NoFun (Numeric (MkNum DMInt NonConst))) τbit -- number of iterations must match type requested by body
 
       τcsnf <- newVar
       unify (NoFun τcsnf) τloop_in -- functions cannot be captured.
@@ -1381,7 +1381,7 @@ checkPri' scope (SmpLet xs (Sample n m1_in m2_in) tail) =
       n2 <- newVar
     
       -- set number of samples to const m2 and truncate context with 0
-      unify tn (NoFun (Numeric (MkNum DMInt (MkConst m2))))
+      unify tn (NoFun (Numeric (MkNum DMInt (Const m2))))
       unify pn (zeroId, zeroId)
       
       -- set input matrix types and truncate contexts to what it says in the rule
@@ -1416,7 +1416,7 @@ checkBBKind scope a = let
                 return v
  in case a of
   BBSimple jt -> case jt of
-    JTInt  -> return $ NoFun $ Numeric $ MkNum DMInt MkNonConst
+    JTInt  -> return $ NoFun $ Numeric $ MkNum DMInt NonConst
     JTReal -> do v <- getFloat; return $ NoFun $ Numeric $ v
     _      -> throwError $ TypeMismatchError $ "The type " <> show jt <> " is not allowed as return type of black boxes.\n"
                                               <> "You can only have annotations of the following form:\n"
@@ -1428,11 +1428,11 @@ checkBBKind scope a = let
     -- make sure that it is const
     pdt_val <- newVar
     pdt_ty <- newVar
-    unify pdt_actual_ty (NoFun $ Numeric $ MkNum pdt_ty (MkConst pdt_val))
+    unify pdt_actual_ty (NoFun $ Numeric $ MkNum pdt_ty (Const pdt_val))
 
     -- look what type was requested in form of a julia type
     case jt of
-      JTVector JTInt -> do n <- newVar ; return $ NoFun $ DMVec n U pdt_val (NoFun $ Numeric $ MkNum DMInt MkNonConst)
+      JTVector JTInt -> do n <- newVar ; return $ NoFun $ DMVec n U pdt_val (NoFun $ Numeric $ MkNum DMInt NonConst)
       JTVector JTReal -> do n <- newVar ; r <- getFloat; return $ NoFun $ DMVec n U pdt_val (NoFun $ Numeric r)
       JTModel -> do r <- getFloat; return $ NoFun $ DMModel pdt_val r
       JTGrads -> do n <- newVar; r <- getFloat;  return $ NoFun $ DMGrads n U pdt_val (NoFun $ Numeric $ r)
@@ -1448,11 +1448,11 @@ checkBBKind scope a = let
     -- make sure they are is const
     pdt1_val <- newVar
     pdt1_ty <- newVar
-    unify pdt1_actual_ty (NoFun $ Numeric $ MkNum pdt1_ty (MkConst pdt1_val))
+    unify pdt1_actual_ty (NoFun $ Numeric $ MkNum pdt1_ty (Const pdt1_val))
 
     pdt2_val <- newVar
     pdt2_ty <- newVar
-    unify pdt2_actual_ty (NoFun $ Numeric $ MkNum pdt2_ty (MkConst pdt2_val))
+    unify pdt2_actual_ty (NoFun $ Numeric $ MkNum pdt2_ty (Const pdt2_val))
 
     -- look what type was requested in form of a julia type
     case jt of

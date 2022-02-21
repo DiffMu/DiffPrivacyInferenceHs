@@ -52,7 +52,7 @@ instance Typeable k => Solve MonadDMTC MakeConst (DMTypeOf k) where
      let makeVarConst v = do
                      k <- newVar
                      τv <- newVar
-                     unify (TVar v) (MkNum τv (MkConst k))
+                     unify (TVar v) (MkNum τv (Const k))
 
      mapM makeVarConst freev3
 
@@ -93,7 +93,7 @@ instance Typeable k => Solve MonadDMTC MakeNonConst (DMTypeOf k) where
      let makeVarNonConst v = do
                      -- k <- newVar
                      τv <- newVar
-                     unify (TVar v) (MkNum _ MkNonConst)
+                     unify (TVar v) (MkNum _ NonConst)
 
      mapM makeVarNonConst freev3
 
@@ -112,10 +112,10 @@ instance Typeable k => Solve MonadDMTC MakeNonConst (DMTypeOf k) where
 
 makeConst_JuliaVersion :: MonadDMTC t => DMTypeOf k -> t (DMTypeOf k)
 makeConst_JuliaVersion (TVar a) = return (TVar a)
-makeConst_JuliaVersion (MkNum a (MkConst k)) = return (MkNum a (MkConst k))
-makeConst_JuliaVersion (MkNum a MkNonConst) = do
+makeConst_JuliaVersion (MkNum a (Const k)) = return (MkNum a (Const k))
+makeConst_JuliaVersion (MkNum a NonConst) = do
                                          k <- newVar
-                                         return (MkNum a (MkConst k))
+                                         return (MkNum a (Const k))
 makeConst_JuliaVersion (NoFun a) = NoFun <$> (makeConst_JuliaVersion a)
 makeConst_JuliaVersion (DMTup as) = DMTup <$> (sequence (makeConst_JuliaVersion <$> as))
 makeConst_JuliaVersion (Numeric a) = Numeric <$> (makeConst_JuliaVersion a)
@@ -139,12 +139,12 @@ instance Solve MonadDMTC IsLoopResult ((Sensitivity, Sensitivity, Sensitivity), 
   solve_ Dict _ name (IsLoopResult ((s1, s2, s3), sa, τ_iter)) = do
      let SensitivityAnnotation s = sa
      case τ_iter of
-        NoFun (Numeric (MkNum _ (MkConst η))) -> do
+        NoFun (Numeric (MkNum _ (Const η))) -> do
            unify s1 zeroId
            unify s2 (exp s η)
            unify s3 η
            dischargeConstraint name
-        NoFun (Numeric (MkNum _ MkNonConst)) -> do
+        NoFun (Numeric (MkNum _ NonConst)) -> do
            unify s oneId
            unify s1 oneId
            unify s2 oneId
@@ -181,7 +181,7 @@ instance Solve MonadDMTC IsAdditiveNoiseResult (DMTypeOf MainKind, DMTypeOf Main
            -- input type gets a LessEqual so convert can happen implicitly if necessary
            -- (convert is implemented as a special subtyping rule, see there)
            addConstraint (Solvable(IsLessEqual(τin, (NoFun (DMContainer k L2 iclp n (NoFun (Numeric τv)))))))
-           unify τgauss (NoFun (DMContainer k LInf U n (NoFun (Numeric (MkNum DMReal MkNonConst)))))
+           unify τgauss (NoFun (DMContainer k LInf U n (NoFun (Numeric (MkNum DMReal NonConst)))))
 
            dischargeConstraint @MonadDMTC name
         _ -> do -- regular gauss or unification errpr later
@@ -189,7 +189,7 @@ instance Solve MonadDMTC IsAdditiveNoiseResult (DMTypeOf MainKind, DMTypeOf Main
 
            -- set in- and output types as given in the gauss rule
            unify τin (NoFun (Numeric τ))
-           unify τgauss (NoFun (Numeric (MkNum DMReal MkNonConst)))
+           unify τgauss (NoFun (Numeric (MkNum DMReal NonConst)))
 
            dischargeConstraint @MonadDMTC name
 
@@ -482,7 +482,7 @@ instance Solve MonadDMTC IsFloat DMMain where
              TVar _ -> pure ()
              NoFun (TVar _) -> pure ()
              NoFun (Numeric (TVar _)) -> pure ()
-             (NoFun (Numeric (MkNum DMReal MkNonConst))) -> dischargeConstraint name
-             (NoFun (Numeric (MkNum DMReal (MkConst _)))) -> dischargeConstraint name
+             (NoFun (Numeric (MkNum DMReal NonConst))) -> dischargeConstraint name
+             (NoFun (Numeric (MkNum DMReal (Const _)))) -> dischargeConstraint name
              (NoFun (Numeric DMData)) -> dischargeConstraint name
              _ -> failConstraint name

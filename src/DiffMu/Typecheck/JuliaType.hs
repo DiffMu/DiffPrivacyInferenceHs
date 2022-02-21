@@ -64,17 +64,17 @@ createDMTypeBaseNum (t) = pure DMAny
 
 -- get a NumKind DMType corresponding to the given JuliaType
 createDMTypeNum :: MonadDMTC t => JuliaType -> t DMMain
-createDMTypeNum (JTInt) = pure (NoFun (Numeric (MkNum DMInt MkNonConst)))
-createDMTypeNum (JTReal)  = pure (NoFun (Numeric (MkNum DMReal MkNonConst)))
+createDMTypeNum (JTInt) = pure (NoFun (Numeric (MkNum DMInt NonConst)))
+createDMTypeNum (JTReal)  = pure (NoFun (Numeric (MkNum DMReal NonConst)))
 createDMTypeNum (t) = pure DMAny
 
 -- get the DMType corresponding to a given JuliaType
 -- used to make DMType subtyping constraints for annotated things
 createDMType :: MonadDMTC t => JuliaType -> t DMType
 createDMType (JTInt) = do
-  return (Numeric (MkNum DMInt MkNonConst))
+  return (Numeric (MkNum DMInt NonConst))
 createDMType (JTReal) = do
-  return (Numeric (MkNum DMReal MkNonConst))
+  return (Numeric (MkNum DMReal NonConst))
 createDMType (JTTuple ts) = do
   dts <- mapM createDMType ts
   return (DMTup (dts))

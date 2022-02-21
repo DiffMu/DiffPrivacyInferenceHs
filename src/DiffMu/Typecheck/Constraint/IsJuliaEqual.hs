@@ -34,8 +34,8 @@ instance TCConstraint IsJuliaEqual where
 
 makeNonConst_JuliaVersion ::  DMTypeOf k -> DMTypeOf k
 makeNonConst_JuliaVersion (TVar a) = TVar a
-makeNonConst_JuliaVersion (MkNum a (MkConst _)) = (MkNum a MkNonConst)
-makeNonConst_JuliaVersion (MkNum a MkNonConst) = (MkNum a MkNonConst)
+makeNonConst_JuliaVersion (MkNum a (Const _)) = (MkNum a NonConst)
+makeNonConst_JuliaVersion (MkNum a NonConst) = (MkNum a NonConst)
 makeNonConst_JuliaVersion (NoFun a) = NoFun (makeNonConst_JuliaVersion a)
 makeNonConst_JuliaVersion (DMTup as) = DMTup (makeNonConst_JuliaVersion <$> as)
 makeNonConst_JuliaVersion (Numeric a) = Numeric (makeNonConst_JuliaVersion a)
