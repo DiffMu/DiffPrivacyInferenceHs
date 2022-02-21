@@ -373,9 +373,10 @@ instance Eq (DMTypeOf k) where
   DMReal   == DMReal = True
 
   -- a base numeric type can be either constant or non constant or data
-  Const s t == Const s2 t2 = and [s == s2, t == t2]
-  NonConst t == NonConst t2 = t == t2
+  MkConst s == MkConst s2 = s == s2
+  MkNonConst == MkNonConst = True
   DMData   == DMData = True
+  MkNum t1 c1 == MkNum t2 c2 = and [t1 == t2, c1 == c2]
 
   -- we include numeric types into main types using this constructor
   Numeric t1 == Numeric t2 = t1 == t2
@@ -476,8 +477,9 @@ recDMTypeM typemap sensmap DMInt = pure DMInt
 recDMTypeM typemap sensmap DMReal = pure DMReal
 recDMTypeM typemap sensmap DMData = pure DMData
 recDMTypeM typemap sensmap (Numeric τ) = Numeric <$> typemap τ
-recDMTypeM typemap sensmap (NonConst τ) = NonConst <$> typemap τ
-recDMTypeM typemap sensmap (MkNum τ (MkConst η)) = Const <$> sensmap η <*> typemap τ
+recDMTypeM typemap sensmap (MkNonConst) = pure MkNonConst
+recDMTypeM typemap sensmap (MkConst t) = MkConst <$> sensmap t
+recDMTypeM typemap sensmap (MkNum τ c) = MkNum <$> (typemap τ) <*> typemap c
 recDMTypeM typemap sensmap (TVar x) = pure (TVar x)
 recDMTypeM typemap sensmap (τ1 :->: τ2) = (:->:) <$> mapM (\(a :@ b) -> (:@) <$> typemap a <*> sensmap b) τ1 <*> typemap τ2
 recDMTypeM typemap sensmap (τ1 :->*: τ2) = (:->*:) <$> mapM (\(a :@ (b0, b1)) -> f <$> typemap a <*> sensmap b0 <*> sensmap b1) τ1 <*> typemap τ2

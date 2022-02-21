@@ -81,7 +81,7 @@ checkSen' :: DMScope -> DMTerm -> TC DMMain
 
 -- TODO: Here we assume that η really has type τ, and do not check it. Should maybe do that.
 checkSen' scope (Sng η τ) = do
-  res <- Numeric <$> (Const (constCoeff (Fin η)) <$> (createDMTypeBaseNum τ))
+  res <- Numeric <$> (MkNum <$> (createDMTypeBaseNum τ) <*> pure (MkConst (constCoeff (Fin η))))
   return (NoFun res)
 
 -- typechecking an op
@@ -1110,7 +1110,7 @@ checkPri' scope (Gauss rp εp δp f) =
    setParam dt v = do -- parameters must be const numbers.
       τ <- dt
       τv <- newVar
-      unify τ (NoFun (Numeric (MkNum $2 (MkConst $1))))
+      unify τ (NoFun (Numeric (MkNum τv (MkConst v))))
       mtruncateP zeroId
       return ()
 
@@ -1169,7 +1169,7 @@ checkPri' scope (Laplace rp εp f) =
    setParam dt v = do -- parameters must be const numbers.
       τ <- dt
       τv <- newVar
-      unify τ (NoFun (Numeric (MkNum $2 (MkConst $1))))
+      unify τ (NoFun (Numeric (MkNum τv (MkConst v))))
       mtruncateP zeroId
       return ()
 
@@ -1416,7 +1416,7 @@ checkBBKind scope a = let
                 return v
  in case a of
   BBSimple jt -> case jt of
-    JTInt  -> return $ NoFun $ Numeric $ NonConst DMInt
+    JTInt  -> return $ NoFun $ Numeric $ MkNum DMInt MkNonConst
     JTReal -> do v <- getFloat; return $ NoFun $ Numeric $ v
     _      -> throwError $ TypeMismatchError $ "The type " <> show jt <> " is not allowed as return type of black boxes.\n"
                                               <> "You can only have annotations of the following form:\n"
@@ -1432,7 +1432,7 @@ checkBBKind scope a = let
 
     -- look what type was requested in form of a julia type
     case jt of
-      JTVector JTInt -> do n <- newVar ; return $ NoFun $ DMVec n U pdt_val (NoFun $ Numeric $ NonConst DMInt)
+      JTVector JTInt -> do n <- newVar ; return $ NoFun $ DMVec n U pdt_val (NoFun $ Numeric $ MkNum DMInt MkNonConst)
       JTVector JTReal -> do n <- newVar ; r <- getFloat; return $ NoFun $ DMVec n U pdt_val (NoFun $ Numeric r)
       JTModel -> do r <- getFloat; return $ NoFun $ DMModel pdt_val r
       JTGrads -> do n <- newVar; r <- getFloat;  return $ NoFun $ DMGrads n U pdt_val (NoFun $ Numeric $ r)

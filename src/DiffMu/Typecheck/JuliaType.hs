@@ -33,16 +33,14 @@ import Debug.Trace
 -- type has not (yet) been inferred, we get a bottom julia type because they could
 -- potentially match any method.
 juliatypes :: DMTypeOf k -> [JuliaType]
-juliatypes (Numeric (MkNum $2 (MkConst $1))) = juliatypes τ
-juliatypes (Numeric (MkNum $1 MkNonConst)) = juliatypes τ
+juliatypes (Numeric (MkNum t c)) = juliatypes t
 juliatypes (Numeric (TVar x)) = [JTInt, JTReal]
 juliatypes DMInt = [JTInt]
 juliatypes DMReal = [JTReal]
 juliatypes (DMVec _ _ _ τ) = (map (\t -> (JTVector t)) (juliatypes τ))
 juliatypes (DMMat _ _ _ _ τ) = (map (\t -> (JTMatrix t)) (juliatypes τ))
-juliatypes (MkNum $2 (MkConst $1)) = juliatypes τ
-juliatypes (MkNum $1 MkNonConst) = juliatypes τ
 juliatypes (TVar x) = [JTBot] -- TVars fit everywhere
+juliatypes (MkNum t c) = juliatypes t
 juliatypes (_ :->: _) = [JTFunction]
 juliatypes (_ :->*: _) = [JTPFunction]
 juliatypes (DMTup xs) =

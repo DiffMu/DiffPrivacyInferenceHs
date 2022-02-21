@@ -389,7 +389,7 @@ testSubtyping_ContractEdge = do
 
             return (d,a,b,c)
       let checkres (d,a,b,c) = (a == c, b == c, a == d, b == d, isGood a)
-            where isGood (NoFun (Numeric (NonConst (TVar x)))) = True
+            where isGood (NoFun (Numeric (MkNum (TVar x) MkNonConst))) = True
                   isGood _ = False
       (tc $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right (True,True,True,True,True))
 

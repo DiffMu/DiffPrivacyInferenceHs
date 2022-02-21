@@ -52,7 +52,7 @@ instance Typeable k => Solve MonadDMTC MakeConst (DMTypeOf k) where
      let makeVarConst v = do
                      k <- newVar
                      τv <- newVar
-                     unify (TVar v) (MkNum $2 (MkConst $1))
+                     unify (TVar v) (MkNum τv (MkConst k))
 
      mapM makeVarConst freev3
 
@@ -67,6 +67,7 @@ instance Typeable k => Solve MonadDMTC MakeConst (DMTypeOf k) where
 
 
 
+{-
 
 ----------------------------------------------------------
 -- replacing all Numeric TVars by non-const
@@ -92,7 +93,7 @@ instance Typeable k => Solve MonadDMTC MakeNonConst (DMTypeOf k) where
      let makeVarNonConst v = do
                      -- k <- newVar
                      τv <- newVar
-                     unify (TVar v) (MkNum $1 MkNonConst)
+                     unify (TVar v) (MkNum _ MkNonConst)
 
      mapM makeVarNonConst freev3
 
@@ -105,7 +106,7 @@ instance Typeable k => Solve MonadDMTC MakeNonConst (DMTypeOf k) where
      case (m == n) of
         True -> dischargeConstraint name
         False -> pure ()
-
+-}
 
 {-
 
@@ -138,7 +139,7 @@ instance Solve MonadDMTC IsLoopResult ((Sensitivity, Sensitivity, Sensitivity), 
   solve_ Dict _ name (IsLoopResult ((s1, s2, s3), sa, τ_iter)) = do
      let SensitivityAnnotation s = sa
      case τ_iter of
-        NoFun (Numeric (MkNum $2 (MkConst $1))) -> do
+        NoFun (Numeric (MkNum _ (MkConst η))) -> do
            unify s1 zeroId
            unify s2 (exp s η)
            unify s3 η

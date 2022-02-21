@@ -19,11 +19,11 @@ testSupremum = do
     testsup (DMInt) (DMInt) (Right $ DMInt)
     testsup (DMReal) (DMReal) (Right $ DMReal)
 
-    testsup (MkNum DMInt MkNonConst) (MkNum DMInt MkNonConst) (Right $ NonConst DMInt)
-    testsup (MkNum DMInt MkNonConst) (MkNum DMReal MkNonConst) (Right $ NonConst DMReal)
+    testsup (MkNum DMInt MkNonConst) (MkNum DMInt MkNonConst)  (Right $ MkNum DMInt MkNonConst)
+    testsup (MkNum DMInt MkNonConst) (MkNum DMReal MkNonConst) (Right $ MkNum DMReal MkNonConst)
 
-    testsup (MkNum DMInt (MkConst (twoId) DMInt) (Const (twoId) DMInt) (Right $ Const (twoId)))
-    testsup (MkNum DMInt (MkConst (twoId) DMInt) (Const (oneId))) (Right $ NonConst DMInt)
+    testsup (MkNum DMInt (MkConst twoId)) (MkNum DMInt (MkConst twoId)) (Right $ MkNum DMInt (MkConst twoId)) -- (Right $ Const (twoId)))
+    testsup (MkNum DMInt (MkConst (twoId))) (MkNum DMInt (MkConst oneId)) (Right $ MkNum DMInt MkNonConst)
 
     testsup (NoFun (Numeric (MkNum DMInt MkNonConst)))
             (Fun [([NoFun (Numeric (MkNum DMInt MkNonConst)) :@ oneId] :->: (NoFun (Numeric (MkNum DMInt MkNonConst)))) :@ Nothing])

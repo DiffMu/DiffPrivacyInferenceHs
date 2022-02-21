@@ -8,6 +8,7 @@ import DiffMu.Core.Definitions
 import DiffMu.Core.Context
 import DiffMu.Core.TC
 import DiffMu.Core.Unification
+import DiffMu.Typecheck.Subtyping
 
 import Debug.Trace
 
@@ -33,8 +34,8 @@ instance TCConstraint IsJuliaEqual where
 
 makeNonConst_JuliaVersion ::  DMTypeOf k -> DMTypeOf k
 makeNonConst_JuliaVersion (TVar a) = TVar a
-makeNonConst_JuliaVersion (MkNum a (MkConst _)) = NonConst a
-makeNonConst_JuliaVersion (MkNum a MkNonConst) = NonConst a
+makeNonConst_JuliaVersion (MkNum a (MkConst _)) = (MkNum a MkNonConst)
+makeNonConst_JuliaVersion (MkNum a MkNonConst) = (MkNum a MkNonConst)
 makeNonConst_JuliaVersion (NoFun a) = NoFun (makeNonConst_JuliaVersion a)
 makeNonConst_JuliaVersion (DMTup as) = DMTup (makeNonConst_JuliaVersion <$> as)
 makeNonConst_JuliaVersion (Numeric a) = Numeric (makeNonConst_JuliaVersion a)
@@ -123,121 +124,142 @@ instance Typeable k => FixedVars TVarOf (UnifyWithConstSubtype (DMTypeOf k, DMTy
 
 
 instance Typeable k => Solve MonadDMTC UnifyWithConstSubtype (DMTypeOf k, DMTypeOf k) where
-  solve_ Dict _ name (UnifyWithConstSubtype (a, b)) = case a of
-    ----------
-    -- interesting const / non-const cases
-    --
-    --
-    -- "if a[--] <= x, then x needs to be a[n]"
-    NonConst dto -> unify a b >> dischargeConstraint name
-    --
-    --
-    -- "if a[n] <= x, then we do not know about x, it could be const or non-const"
-    Const sk dto -> case b of
-      -- if rhs is a variable, we keep our constraint
-      TVar so -> pure ()
+  solve_ Dict _ name (UnifyWithConstSubtype (a, b)) =
+    let case0 = testEquality (typeRep @k) (typeRep @ConstnessKind)
+    in case case0 of
+        Just Refl -> do
+            a ⊑! b
+            dischargeConstraint name
 
-      -- if const/nonconst, we can unify all components
-      Const sk' dto' -> unify sk sk' >> unify dto dto' >> dischargeConstraint name
-      NonConst dto' -> unify dto dto' >> dischargeConstraint name
+        _ -> case a of
+          ----------
+          -- interesting const / non-const cases
+          --
+          MkNum a0 c0 -> do
+            c1 <- newVar
+            unify b (MkNum a0 c1)
+            c0 ⊑! c1
+            dischargeConstraint name
 
-      -- rest
-      DMAny -> internalError "This case distinction was not fully thought out."
-      DMData -> unify a b >> dischargeConstraint name
+{-
+          --
+          -- "if a[--] <= x, then x needs to be a[n]"
+          NonConst dto -> unify a b >> dischargeConstraint name
+          --
+          --
+          -- "if a[n] <= x, then we do not know about x, it could be const or non-const"
+          Const sk dto -> case b of
+            -- if rhs is a variable, we keep our constraint
+            TVar so -> pure ()
 
-    ----------
-    -- induction step
-    Numeric dto -> do dto' <- newVar ; unify (Numeric dto') b ; dischargeConstraint name ; addConstraint (Solvable (UnifyWithConstSubtype (dto, dto'))) ; pure ()
-    (:->:) xs dto -> do
-      xs' <- mapM (\a -> (:@ a) <$> newVar) ((\(_ :@ a) -> a) <$> xs)
-      dto' <- newVar
-      unify (xs' :->: dto') b
-      dischargeConstraint name
-      mapM (addConstraint . Solvable . UnifyWithConstSubtype) (zip (fstAnn <$> xs) (fstAnn <$> xs'))
-      addConstraint (Solvable (UnifyWithConstSubtype (dto, dto')))
-      pure ()
-    (:->*:) xs dto -> do
-      xs' <- mapM (\a -> (:@ a) <$> newVar) ((\(_ :@ a) -> a) <$> xs)
-      dto' <- newVar
-      unify (xs' :->*: dto') b
-      dischargeConstraint name
-      mapM (addConstraint . Solvable . UnifyWithConstSubtype) (zip (fstAnn <$> xs) (fstAnn <$> xs'))
-      addConstraint (Solvable (UnifyWithConstSubtype (dto, dto')))
-      pure ()
-    DMTup dtos -> do
-      dtos' <- mapM (\() -> newVar) ((\_ -> ()) <$> dtos)
-      unify (DMTup dtos') b
-      dischargeConstraint name
-      mapM (addConstraint . Solvable . UnifyWithConstSubtype) (zip dtos dtos')
-      pure ()
-    DMContainer dto dto1 dto2 sk dto3 -> do dto3' <- newVar ; unify (DMContainer dto dto1 dto2 sk dto3') b ; dischargeConstraint name ; addConstraint (Solvable (UnifyWithConstSubtype (dto3, dto3'))) ; pure ()
-    DMModel sk dto -> do dto' <- newVar ; unify (DMModel sk dto') b ; dischargeConstraint name ; addConstraint (Solvable (UnifyWithConstSubtype (dto, dto'))) ; pure ()
-    NoFun dto -> do dto' <- newVar ; unify (NoFun dto') b ; dischargeConstraint name ; addConstraint (Solvable (UnifyWithConstSubtype (dto, dto'))) ; pure ()
-    Fun xs -> do
-      xs' <- mapM (\a -> (:@ a) <$> newVar) ((\(_ :@ a) -> a) <$> xs)
-      unify (Fun xs') b
-      dischargeConstraint name
-      mapM (addConstraint . Solvable . UnifyWithConstSubtype) (zip (fstAnn <$> xs) (fstAnn <$> xs'))
-      pure ()
-    (:∧:) dto dto' -> pure ()
+            -- if const/nonconst, we can unify all components
+            Const sk' dto' -> unify sk sk' >> unify dto dto' >> dischargeConstraint name
+            NonConst dto' -> unify dto dto' >> dischargeConstraint name
 
-    TVar so -> case b of
-      --------
-      --
-      -- interesting cases
-      --
-      -- "if x <= a[n], then x needs to be equal to a"
-      Const sk dto -> unify a b >> dischargeConstraint name
-      --
-      -- "if x <= a[--], then we do not know about x"
-      NonConst dto -> pure ()
+            -- rest
+            DMAny -> internalError "This case distinction was not fully thought out."
+            DMData -> unify a b >> dischargeConstraint name
+            -}
 
-      --------
-      --
-      -- induction cases
-      Numeric dto -> do dto' <- newVar ; unify (Numeric dto') a ; dischargeConstraint name ; addConstraint (Solvable (UnifyWithConstSubtype (dto, dto'))) ; pure ()
-      (:->:) xs dto -> do
-        xs' <- mapM (\a -> (:@ a) <$> newVar) ((\(_ :@ a) -> a) <$> xs)
-        dto' <- newVar
-        unify (xs' :->: dto') a
-        dischargeConstraint name
-        mapM (addConstraint . Solvable . UnifyWithConstSubtype) (zip (fstAnn <$> xs) (fstAnn <$> xs'))
-        addConstraint (Solvable (UnifyWithConstSubtype (dto, dto')))
-        pure ()
-      (:->*:) xs dto -> do
-        xs' <- mapM (\a -> (:@ a) <$> newVar) ((\(_ :@ a) -> a) <$> xs)
-        dto' <- newVar
-        unify (xs' :->*: dto') a
-        dischargeConstraint name
-        mapM (addConstraint . Solvable . UnifyWithConstSubtype) (zip (fstAnn <$> xs) (fstAnn <$> xs'))
-        addConstraint (Solvable (UnifyWithConstSubtype (dto, dto')))
-        pure ()
-      DMTup dtos -> do
-        dtos' <- mapM (\() -> newVar) ((\_ -> ()) <$> dtos)
-        unify (DMTup dtos') a
-        dischargeConstraint name
-        mapM (addConstraint . Solvable . UnifyWithConstSubtype) (zip dtos dtos')
-        pure ()
-      DMContainer dto dto1 dto2 sk dto3 -> do dto3' <- newVar ; unify (DMContainer dto dto1 dto2 sk dto3') a ; dischargeConstraint name ; addConstraint (Solvable (UnifyWithConstSubtype (dto3, dto3'))) ; pure ()
-      DMModel sk dto -> do dto' <- newVar ; unify (DMModel sk dto') a ; dischargeConstraint name ; addConstraint (Solvable (UnifyWithConstSubtype (dto, dto'))) ; pure ()
-      NoFun dto -> do dto' <- newVar ; unify (NoFun dto') a ; dischargeConstraint name ; addConstraint (Solvable (UnifyWithConstSubtype (dto, dto'))) ; pure ()
-      Fun xs -> do
-        xs' <- mapM (\a -> (:@ a) <$> newVar) ((\(_ :@ a) -> a) <$> xs)
-        unify (Fun xs') a
-        dischargeConstraint name
-        mapM (addConstraint . Solvable . UnifyWithConstSubtype) (zip (fstAnn <$> xs) (fstAnn <$> xs'))
-        pure ()
+          ----------
+          -- induction step
+          Numeric dto -> do dto' <- newVar ; unify (Numeric dto') b ; dischargeConstraint name ; addConstraint (Solvable (UnifyWithConstSubtype (dto, dto'))) ; pure ()
+          (:->:) xs dto -> do
+            xs' <- mapM (\a -> (:@ a) <$> newVar) ((\(_ :@ a) -> a) <$> xs)
+            dto' <- newVar
+            unify (xs' :->: dto') b
+            dischargeConstraint name
+            mapM (addConstraint . Solvable . UnifyWithConstSubtype) (zip (fstAnn <$> xs) (fstAnn <$> xs'))
+            addConstraint (Solvable (UnifyWithConstSubtype (dto, dto')))
+            pure ()
+          (:->*:) xs dto -> do
+            xs' <- mapM (\a -> (:@ a) <$> newVar) ((\(_ :@ a) -> a) <$> xs)
+            dto' <- newVar
+            unify (xs' :->*: dto') b
+            dischargeConstraint name
+            mapM (addConstraint . Solvable . UnifyWithConstSubtype) (zip (fstAnn <$> xs) (fstAnn <$> xs'))
+            addConstraint (Solvable (UnifyWithConstSubtype (dto, dto')))
+            pure ()
+          DMTup dtos -> do
+            dtos' <- mapM (\() -> newVar) ((\_ -> ()) <$> dtos)
+            unify (DMTup dtos') b
+            dischargeConstraint name
+            mapM (addConstraint . Solvable . UnifyWithConstSubtype) (zip dtos dtos')
+            pure ()
+          DMContainer dto dto1 dto2 sk dto3 -> do dto3' <- newVar ; unify (DMContainer dto dto1 dto2 sk dto3') b ; dischargeConstraint name ; addConstraint (Solvable (UnifyWithConstSubtype (dto3, dto3'))) ; pure ()
+          DMModel sk dto -> do dto' <- newVar ; unify (DMModel sk dto') b ; dischargeConstraint name ; addConstraint (Solvable (UnifyWithConstSubtype (dto, dto'))) ; pure ()
+          NoFun dto -> do dto' <- newVar ; unify (NoFun dto') b ; dischargeConstraint name ; addConstraint (Solvable (UnifyWithConstSubtype (dto, dto'))) ; pure ()
+          Fun xs -> do
+            xs' <- mapM (\a -> (:@ a) <$> newVar) ((\(_ :@ a) -> a) <$> xs)
+            unify (Fun xs') b
+            dischargeConstraint name
+            mapM (addConstraint . Solvable . UnifyWithConstSubtype) (zip (fstAnn <$> xs) (fstAnn <$> xs'))
+            pure ()
+          (:∧:) dto dto' -> pure ()
 
-      TVar so' -> pure ()
+          TVar so -> case b of
+            MkNum b1 c1 -> do
+              c0 <- newVar
+              unify a (MkNum b1 c0)
+              c0 ⊑! c1
+              dischargeConstraint name
+            {-
+            --------
+            --
+            -- interesting cases
+            --
+            -- "if x <= a[n], then x needs to be equal to a"
+            Const sk dto -> unify a b >> dischargeConstraint name
+            --
+            -- "if x <= a[--], then we do not know about x"
+            NonConst dto -> pure ()
+            -}
 
-      -- the rest are induction base cases, we directly unify lhs with rhs
-      -- { DMAny DMInt DMReal DMData L1 L2 LInf U (Clip dto) Vector Gradient Matrix (BlackBox jts )}
-      b -> unify a b >> dischargeConstraint name
+            --------
+            --
+            -- induction cases
+            Numeric dto -> do dto' <- newVar ; unify (Numeric dto') a ; dischargeConstraint name ; addConstraint (Solvable (UnifyWithConstSubtype (dto, dto'))) ; pure ()
+            (:->:) xs dto -> do
+              xs' <- mapM (\a -> (:@ a) <$> newVar) ((\(_ :@ a) -> a) <$> xs)
+              dto' <- newVar
+              unify (xs' :->: dto') a
+              dischargeConstraint name
+              mapM (addConstraint . Solvable . UnifyWithConstSubtype) (zip (fstAnn <$> xs) (fstAnn <$> xs'))
+              addConstraint (Solvable (UnifyWithConstSubtype (dto, dto')))
+              pure ()
+            (:->*:) xs dto -> do
+              xs' <- mapM (\a -> (:@ a) <$> newVar) ((\(_ :@ a) -> a) <$> xs)
+              dto' <- newVar
+              unify (xs' :->*: dto') a
+              dischargeConstraint name
+              mapM (addConstraint . Solvable . UnifyWithConstSubtype) (zip (fstAnn <$> xs) (fstAnn <$> xs'))
+              addConstraint (Solvable (UnifyWithConstSubtype (dto, dto')))
+              pure ()
+            DMTup dtos -> do
+              dtos' <- mapM (\() -> newVar) ((\_ -> ()) <$> dtos)
+              unify (DMTup dtos') a
+              dischargeConstraint name
+              mapM (addConstraint . Solvable . UnifyWithConstSubtype) (zip dtos dtos')
+              pure ()
+            DMContainer dto dto1 dto2 sk dto3 -> do dto3' <- newVar ; unify (DMContainer dto dto1 dto2 sk dto3') a ; dischargeConstraint name ; addConstraint (Solvable (UnifyWithConstSubtype (dto3, dto3'))) ; pure ()
+            DMModel sk dto -> do dto' <- newVar ; unify (DMModel sk dto') a ; dischargeConstraint name ; addConstraint (Solvable (UnifyWithConstSubtype (dto, dto'))) ; pure ()
+            NoFun dto -> do dto' <- newVar ; unify (NoFun dto') a ; dischargeConstraint name ; addConstraint (Solvable (UnifyWithConstSubtype (dto, dto'))) ; pure ()
+            Fun xs -> do
+              xs' <- mapM (\a -> (:@ a) <$> newVar) ((\(_ :@ a) -> a) <$> xs)
+              unify (Fun xs') a
+              dischargeConstraint name
+              mapM (addConstraint . Solvable . UnifyWithConstSubtype) (zip (fstAnn <$> xs) (fstAnn <$> xs'))
+              pure ()
 
-    -- the rest are induction base cases, we directly unify lhs with rhs
-    -- { DMAny DMInt DMReal DMData L1 L2 LInf U (Clip dto) Vector Gradient Matrix (BlackBox jts )}
-    a -> unify a b >> dischargeConstraint name
+            TVar so' -> pure ()
 
+            -- the rest are induction base cases, we directly unify lhs with rhs
+            -- { DMAny DMInt DMReal DMData L1 L2 LInf U (Clip dto) Vector Gradient Matrix (BlackBox jts )}
+            b -> unify a b >> dischargeConstraint name
+
+          -- the rest are induction base cases, we directly unify lhs with rhs
+          -- { DMAny DMInt DMReal DMData L1 L2 LInf U (Clip dto) Vector Gradient Matrix (BlackBox jts )}
+          a -> unify a b >> dischargeConstraint name
 
 
 

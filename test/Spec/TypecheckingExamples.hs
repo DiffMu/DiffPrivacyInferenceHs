@@ -101,7 +101,7 @@ testPriv pp = describe "privacies" $ do
                \    return \n\
                \ end"
         int = NoFun(Numeric (MkNum DMInt MkNonConst))
-        real = NonConst DMReal
+        real = MkNum DMReal MkNonConst 
         ty_r = Fun([([int :@ (inftyS, inftyS)] :->*: int) :@ Just [JTInt]])
         ty_i :: TC DMMain = do
             c <- newVar
