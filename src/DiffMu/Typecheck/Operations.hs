@@ -158,9 +158,12 @@ solveBinary op (τ1, τ2) = traceM ("solving " <> show op <> show (τ1, τ2)) >>
     f DMOpMod (TVar a) (Numeric t)                            = matchType a (Numeric t)
 
     f DMOpEq (Numeric (Const s1 t1)) (Numeric (Const s2 t2)) = ret zeroId zeroId (pure $ DMBool)
---    f DMOpEq (Numeric (Const s1 t1)) (Numeric (NonConst t2)) = ret zeroId oneId  (pure $ DMBool) TODO #206
---    f DMOpEq (Numeric (NonConst t1)) (Numeric (Const s2 t2)) = ret oneId  zeroId (pure $ DMBool)
---    f DMOpEq (Numeric (NonConst t1)) (Numeric (NonConst t2)) = ret oneId  oneId  (pure $ DMBool)
+    f DMOpEq (Numeric (Const s1 t1)) (Numeric (NonConst DMInt)) = ret zeroId oneId  (pure $ DMBool)
+    f DMOpEq (Numeric (NonConst DMInt)) (Numeric (Const s2 t1)) = ret oneId  zeroId (pure $ DMBool)
+    f DMOpEq (Numeric (NonConst DMInt)) (Numeric (NonConst DMInt)) = ret oneId  oneId  (pure $ DMBool)
+    f DMOpEq (Numeric (Const s1 t1)) (Numeric (NonConst DMReal)) = ret zeroId (constCoeff Infty)  (pure $ DMBool)
+    f DMOpEq (Numeric (NonConst DMReal)) (Numeric (Const s2 t2)) = ret (constCoeff Infty)  zeroId (pure $ DMBool)
+    f DMOpEq (Numeric (NonConst DMReal)) (Numeric (NonConst DMReal)) = ret (constCoeff Infty) (constCoeff Infty) (pure $ DMBool)
     f DMOpEq (Numeric DMData) (Numeric DMData)               = ret oneId  oneId  (pure $ DMBool)
     f DMOpEq (Numeric (Const _ _)) (Numeric DMData)          = ret zeroId  oneId (pure $ DMBool)
     f DMOpEq (Numeric DMData) (Numeric (Const _ _))          = ret oneId  zeroId (pure $ DMBool)

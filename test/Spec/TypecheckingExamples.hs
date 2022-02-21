@@ -15,6 +15,7 @@ testTypecheckingExamples pp = do
   testSample pp
   testMMap pp
   testRet pp
+  testCount pp
   testAboveThresh pp
   testPrivFunc pp
 --   testDPGD pp
@@ -219,7 +220,20 @@ testRet pp = describe "Color" $ do
         int = NoFun(Numeric (NonConst DMInt))
         ty = Fun([([int :@ inftyP] :->*: int) :@ Just [JTInt]])
     parseEval pp "Ret" ex (pure ty)
-                                 
+                 
+testCount pp = describe "Count" $ do
+  let ex = "test(x) = if x == 100 \n\
+             \                  True \n\
+             \               else \n\
+             \                  False \n\
+             \               end \n\
+             \f(x) = count(test, x)"
+      ty :: TC DMMain = do
+            c <- newVar
+            n <- newVar
+            let vec = NoFun (DMVec L1 c n (NoFun (Numeric DMData)))
+            return (Fun ([([vec :@ oneId] :->: (NoFun (Numeric (NonConst DMInt)))) :@ Just [JTAny]]))
+  parseEvalUnify pp "" ex ty
 
 
 testMMap pp = describe "Matrix map" $ do
