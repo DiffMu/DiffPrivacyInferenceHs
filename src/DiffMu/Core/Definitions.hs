@@ -125,7 +125,7 @@ instance Show DMKind where
 
 -- so we don't get incomplete pattern warnings for them
 {-# COMPLETE DMInt, DMReal, Num, Const, NonConst, DMData, Numeric, TVar, (:->:), (:->*:), DMTup, L1, L2, LInf, U, Clip, Vector, Gradient, Matrix,
- DMContainer, DMVec, DMGrads, DMMat, DMModel, NoFun, Fun, (:∧:), BlackBox #-}
+ DMContainer, DMVec, DMGrads, DMMat, DMModel, NoFun, Fun, (:∧:), BlackBox, DMBool #-}
 
 --------------------
 -- 2. DMTypes
@@ -156,6 +156,8 @@ data DMTypeOf (k :: DMKind) where
   -- be subtype of some julia type, and do not need
   -- additional information about possible refinements
   DMAny :: DMTypeOf k
+
+  DMBool :: DMType
 
   -- the base numeric constructors
   DMInt    :: DMTypeOf BaseNumKind
@@ -216,6 +218,7 @@ data DMTypeOf (k :: DMKind) where
 
 
 instance Hashable (DMTypeOf k) where
+  hashWithSalt s (DMBool) = s +! 11
   hashWithSalt s (DMInt) = s +! 1
   hashWithSalt s (DMReal) = s +! 2
   hashWithSalt s (DMData) = s +! 3
@@ -261,6 +264,7 @@ instance Show (Annotation a) where
 -- Types are pretty printed as follows.
 instance Show (DMTypeOf k) where
   show DMAny = "DMAny"
+  show DMBool = "Bool"
   show DMInt = "Int"
   show DMReal = "Real"
   show DMData = "Data"
@@ -314,6 +318,7 @@ instance (ShowPretty a, ShowPretty b) => ShowPretty (a :@ b) where
 
 instance ShowPretty (DMTypeOf k) where
   showPretty DMAny = "DMAny"
+  showPretty DMBool = "Bool"
   showPretty DMInt = "Int"
   showPretty DMReal = "Real"
   showPretty DMData = "Data"
@@ -367,6 +372,8 @@ instance Eq (DMTypeOf k) where
   Vector == Vector = True
   Gradient == Gradient = True
   Matrix r1 == Matrix r2 = r1 == r2
+
+  DMBool == DMBool = True
 
   -- the base numeric constructors
   DMInt    == DMInt = True
@@ -473,6 +480,7 @@ recDMTypeM typemap sensmap Vector = pure Vector
 recDMTypeM typemap sensmap Gradient = pure Gradient
 recDMTypeM typemap sensmap (Matrix n) = Matrix <$> sensmap n
 recDMTypeM typemap sensmap (Clip n) = Clip <$> typemap n
+recDMTypeM typemap sensmap DMBool = pure DMBool
 recDMTypeM typemap sensmap DMInt = pure DMInt
 recDMTypeM typemap sensmap DMReal = pure DMReal
 recDMTypeM typemap sensmap DMData = pure DMData
@@ -523,6 +531,7 @@ type Privacy = PrivacyOf MainSensKind
 data JuliaType =
     JTAny
     | JTBot
+    | JTBool
     | JTInt
     | JTReal
     | JTFunction
@@ -539,6 +548,7 @@ instance Hashable JuliaType where
 -- this is used for callbacks to actual julia, so the string representation matches julia exactly.
 instance Show JuliaType where
   show JTAny = "Any"
+  show JTBool = "Bool"
   show JTInt = "Integer"
   show JTReal = "Real"
   show JTFunction = "Function"
@@ -714,6 +724,8 @@ data PreDMTerm (t :: * -> *) =
     Extra (t (PreDMTerm t))
   | Ret ((PreDMTerm t))
   | Sng Float JuliaType
+  | DMTrue
+  | DMFalse
   | Var (Asgmt JuliaType)
 --  | Rnd JuliaType
   | Arg TeVar JuliaType Relevance
@@ -735,6 +747,7 @@ data PreDMTerm (t :: * -> *) =
   | MutGauss (PreDMTerm t) (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
   | MutLaplace (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
 -- matrix related things
+  | Count (PreDMTerm t) (PreDMTerm t)
   | MMap (PreDMTerm t) (PreDMTerm t)
   | ConvertM (PreDMTerm t)
   | MCreate (PreDMTerm t) (PreDMTerm t) (TeVar, TeVar) (PreDMTerm t)
@@ -770,8 +783,8 @@ pattern TLet a b c = TLetBase PureLet a b c
 pattern TBind a b c = TLetBase BindLet a b c
 pattern SmpLet a b c = TLetBase SampleLet a b c
 
-{-# COMPLETE Extra, Ret, Sng, Var, Arg, Op, Phi, Lam, LamStar, BBLet, BBApply,
- Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, Gauss, Laplace, MutGauss, MutLaplace, AboveThresh, MMap, ConvertM, MCreate, Transpose,
+{-# COMPLETE Extra, Ret, DMTrue, DMFalse, Sng, Var, Arg, Op, Phi, Lam, LamStar, BBLet, BBApply,
+ Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, Gauss, Laplace, MutGauss, MutLaplace, AboveThresh, Count, MMap, ConvertM, MCreate, Transpose,
  Size, Length, Index, VIndex, Row, ClipN, ClipM, MutClipM, Loop, SubGrad, ScaleGrad, Reorder, TProject, ZeroGrad, SumGrads, SmpLet,
  Sample, InternalExpectConst #-}
 
@@ -867,6 +880,8 @@ recDMTermM :: forall t m s. (Monad m) => (PreDMTerm t -> m (PreDMTerm s)) -> (t 
 recDMTermM f h (Extra e)          = h e
 recDMTermM f h (Ret (r))          = Ret <$> (f r)
 recDMTermM f h (Sng g jt)         = pure $ Sng g jt
+recDMTermM f h DMTrue             = pure $ DMTrue
+recDMTermM f h DMFalse            = pure $ DMFalse
 recDMTermM f h (Var (v :- jt))    = pure $ Var (v :- jt)
 -- recDMTermM f h (Rnd jt)           = pure $ Rnd jt
 recDMTermM f h (Arg v jt r)       = pure $ Arg v jt r
@@ -887,6 +902,7 @@ recDMTermM f h (AboveThresh a b c d)    = AboveThresh <$> (f a) <*> (f b) <*> (f
 recDMTermM f h (Laplace a b c)    = Laplace <$> (f a) <*> (f b) <*> (f c)
 recDMTermM f h (MutGauss a b c d) = MutGauss <$> (f a) <*> (f b) <*> (f c) <*> (f d)
 recDMTermM f h (MutLaplace a b c) = MutLaplace <$> (f a) <*> (f b) <*> (f c)
+recDMTermM f h (Count a b)         = Count <$> (f a) <*> (f b)
 recDMTermM f h (MMap a b)         = MMap <$> (f a) <*> (f b)
 recDMTermM f h (ConvertM a)       = ConvertM <$> (f a)
 recDMTermM f h (MCreate a b x c ) = MCreate <$> (f a) <*> (f b) <*> pure x <*> (f c)
@@ -993,6 +1009,8 @@ instance ShowPretty Relevance where
 instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t) where
   showPretty (Extra e)          = showPretty e
   showPretty (Ret (r))          = "Ret (" <>  showPretty r <> ")"
+  showPretty (DMFalse)          = "DMFalse"
+  showPretty (DMTrue)           = "DMTrue"
   showPretty (Sng g jt)         = show g
   showPretty (Var (v :- jt))    = show v
 --  showPretty (Rnd jt)           = "Rnd"
@@ -1015,6 +1033,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (MutLaplace a b c) = "MutLaplace (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ")"
   showPretty (MutGauss a b c d) = "MutGauss (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ", " <> (showPretty d) <> ")"
   showPretty (Laplace a b c)    = "Laplace (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ")"
+  showPretty (Count a b)         = "Count (" <> (showPretty a) <> " to " <> (showPretty b)  <> ")"
   showPretty (MMap a b)         = "MMap (" <> (showPretty a) <> " to " <> (showPretty b)  <> ")"
   showPretty (ConvertM a)       = "ConvertM (" <> (showPretty a) <> ")"
   showPretty (MCreate a b x c ) = "MCreate (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> show x <> ", " <> (showPretty c) <> ")"

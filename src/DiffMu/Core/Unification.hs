@@ -98,6 +98,7 @@ instance (HasUnificationError e (Maybe a), MonadLog t, MonadError e t, Show a, U
 instance MonadDMTC t => Unifyᵢ (INCResT DMException t) (DMTypeOf k) where
   unifyᵢ_ DMAny DMAny                   = pure DMAny
   unifyᵢ_ DMReal DMReal                 = pure DMReal
+  unifyᵢ_ DMBool DMBool                 = pure DMBool
   unifyᵢ_ DMInt DMInt                   = pure DMInt
   unifyᵢ_ DMData DMData                 = pure DMData
   unifyᵢ_ (Numeric t) (Numeric s)       = Numeric <$> unifyᵢ t s

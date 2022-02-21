@@ -125,6 +125,7 @@ instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs Gradient = pure Gradient
   substitute σs (Matrix r) = Matrix <$> substitute σs r
   substitute σs (Clip n) = Clip <$> substitute σs n
+  substitute σs DMBool = pure DMBool
   substitute σs DMInt = pure DMInt
   substitute σs DMReal = pure DMReal
   substitute σs DMData = pure DMData
@@ -159,6 +160,7 @@ instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
   substitute σs Gradient = pure Gradient
   substitute σs (Matrix n) = Matrix <$> substitute σs n
   substitute σs (Clip n) = Clip <$> substitute σs n
+  substitute σs DMBool = pure DMBool
   substitute σs DMInt = pure DMInt
   substitute σs DMReal = pure DMReal
   substitute σs DMData = pure DMData
@@ -225,6 +227,7 @@ instance Typeable a => FreeVars TVarOf (Annotation a) where
 
 instance Typeable k => FreeVars TVarOf (DMTypeOf k) where
   freeVars DMAny = []
+  freeVars DMBool = []
   freeVars DMInt = []
   freeVars DMReal = []
   freeVars DMData = []

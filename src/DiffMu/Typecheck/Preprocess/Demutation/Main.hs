@@ -212,6 +212,12 @@ elaborateMut scname (Op op args) = do
 elaborateMut scname (Sng η τ) = do
   return (Value Pure (NoMove $ Sng η τ))
 
+elaborateMut scname (DMTrue) = do
+  return (Value Pure (NoMove $ DMTrue))
+
+elaborateMut scname (DMFalse) = do
+  return (Value Pure (NoMove $ DMFalse))
+
 elaborateMut scname term@(Var _) = demutationError $ "Unsupported term: " <> showPretty term
 
 elaborateMut scname (Extra (ProcVarTerm (x ::- j))) = do
@@ -919,6 +925,7 @@ elaborateMut scname (Gauss t1 t2 t3 t4) = elaborateNonMut4 scname Gauss t1 t2 t3
 elaborateMut scname (Laplace t1 t2 t3) = elaborateNonMut3 scname Laplace t1 t2 t3
 elaborateMut scname (AboveThresh t1 t2 t3 t4) = elaborateNonMut4 scname AboveThresh t1 t2 t3 t4
 elaborateMut scname (ClipN t1 t2 t3) = elaborateNonMut3 scname ClipN t1 t2 t3
+elaborateMut scname (Count t1 t2) = elaborateNonMut2 scname Count t1 t2
 elaborateMut scname (MMap t1 t2) = elaborateNonMut2 scname MMap t1 t2
 
 
