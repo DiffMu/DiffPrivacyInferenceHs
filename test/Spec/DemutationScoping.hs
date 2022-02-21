@@ -21,7 +21,7 @@ testDScope01 pp = do
            \   f(0)             \n\
            \ end               "
 
-      intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
+      intc c = NoFun(Numeric (MkNum DMInt (MkConst (constCoeff c))))
       ty = Fun([([] :->: intc (Fin 3)) :@ Just []])
 
   parseEval pp "01 works (capturing variables is allowed)" ex (pure ty)
@@ -82,7 +82,7 @@ testDScope03 pp = do
            \   f(1) + a         \n\
            \ end                "
 
-      intc c = NoFun(Numeric (Const (constCoeff c) DMInt))
+      intc c = NoFun(Numeric (MkNum DMInt (MkConst (constCoeff c))))
       ty = Fun([([] :->: intc (Fin 10)) :@ Just []])
 
   parseEval pp "03 works (mutation of function arguments is allowed, even if they are same-named)" ex (pure ty)

@@ -33,15 +33,15 @@ import Debug.Trace
 -- type has not (yet) been inferred, we get a bottom julia type because they could
 -- potentially match any method.
 juliatypes :: DMTypeOf k -> [JuliaType]
-juliatypes (Numeric (Const _ τ)) = juliatypes τ
-juliatypes (Numeric (NonConst τ)) = juliatypes τ
+juliatypes (Numeric (MkNum $2 (MkConst $1))) = juliatypes τ
+juliatypes (Numeric (MkNum $1 MkNonConst)) = juliatypes τ
 juliatypes (Numeric (TVar x)) = [JTInt, JTReal]
 juliatypes DMInt = [JTInt]
 juliatypes DMReal = [JTReal]
 juliatypes (DMVec _ _ _ τ) = (map (\t -> (JTVector t)) (juliatypes τ))
 juliatypes (DMMat _ _ _ _ τ) = (map (\t -> (JTMatrix t)) (juliatypes τ))
-juliatypes (Const _ τ) = juliatypes τ
-juliatypes (NonConst τ) = juliatypes τ
+juliatypes (MkNum $2 (MkConst $1)) = juliatypes τ
+juliatypes (MkNum $1 MkNonConst) = juliatypes τ
 juliatypes (TVar x) = [JTBot] -- TVars fit everywhere
 juliatypes (_ :->: _) = [JTFunction]
 juliatypes (_ :->*: _) = [JTPFunction]
@@ -66,17 +66,17 @@ createDMTypeBaseNum (t) = pure DMAny
 
 -- get a NumKind DMType corresponding to the given JuliaType
 createDMTypeNum :: MonadDMTC t => JuliaType -> t DMMain
-createDMTypeNum (JTInt) = pure (NoFun (Numeric (NonConst DMInt)))
-createDMTypeNum (JTReal)  = pure (NoFun (Numeric (NonConst DMReal)))
+createDMTypeNum (JTInt) = pure (NoFun (Numeric (MkNum DMInt MkNonConst)))
+createDMTypeNum (JTReal)  = pure (NoFun (Numeric (MkNum DMReal MkNonConst)))
 createDMTypeNum (t) = pure DMAny
 
 -- get the DMType corresponding to a given JuliaType
 -- used to make DMType subtyping constraints for annotated things
 createDMType :: MonadDMTC t => JuliaType -> t DMType
 createDMType (JTInt) = do
-  return (Numeric (NonConst DMInt))
+  return (Numeric (MkNum DMInt MkNonConst))
 createDMType (JTReal) = do
-  return (Numeric (NonConst DMReal))
+  return (Numeric (MkNum DMReal MkNonConst))
 createDMType (JTTuple ts) = do
   dts <- mapM createDMType ts
   return (DMTup (dts))

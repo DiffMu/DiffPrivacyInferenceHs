@@ -30,9 +30,9 @@ testSubtyping = do
     testsub False DMReal DMInt (Left (UnsatisfiableConstraint "[test]"))
 
   describe "subtyping of tuples" $ do
-    let nci1 = (Numeric (Const oneId DMInt))
-        nci2 = (Numeric (Const (constCoeff (Fin 2)) DMInt))
-        nnr  = Numeric (NonConst DMReal)
+    let nci1 = (Numeric (MkNum DMInt (MkConst oneId)))
+        nci2 = (Numeric (MkNum DMInt (MkConst (constCoeff (Fin 2)))))
+        nnr  = Numeric (MkNum DMReal MkNonConst)
 
     testsub False (NoFun nci1) (NoFun nnr) (Right Nothing)
     testsub False (DMTup [nci1,nci2]) (DMTup [nci1,nnr]) (Right Nothing)
@@ -76,7 +76,7 @@ testSubtyping_MaxMinCases = do
       (tc $ (sn_EW test0) >>= isTVar) `shouldReturn` (Right (Right ()))
 
     it "resolves 'a ≤ Int[2]' inside NoFun" $ do
-      let ty = NoFun (Numeric (Const (constCoeff (Fin 2)) DMInt))
+      let ty = NoFun (Numeric (MkNum DMInt (MkConst (constCoeff (Fin 2)))))
       let test0 = do
             a <- newVar
             a ⊑! ty
@@ -84,15 +84,15 @@ testSubtyping_MaxMinCases = do
       (tc $ sn_EW test0) `shouldReturn` (Right ty)
 
     it "partially resolves 'a ≤ (Int[2],Real[--])'" $ do
-      let ty1 = (Numeric (Const (constCoeff (Fin 2)) DMInt))
-          ty2 = (Numeric (NonConst DMReal))
+      let ty1 = (Numeric (MkNum DMInt (MkConst (constCoeff (Fin 2)))))
+          ty2 = (Numeric (MkNum DMReal MkNonConst))
           ty = DMTup [ty1 , ty2]
       let test0 = do
             a <- newVar
             a ⊑! ty
             return a
       let correct :: (DMType) -> TC _
-          correct ((DMTup [Numeric (Const s DMInt), Numeric (TVar y)])) = pure $ Right s
+          correct ((DMTup [Numeric (MkNum DMInt (MkConst s)), Numeric (TVar y)])) = pure $ Right s
           correct r                                                     = pure $ Left r
       (tc $ sn_EW test0 >>= correct) `shouldReturn` (Right (Right (constCoeff (Fin 2))))
 
@@ -100,12 +100,12 @@ testSubtyping_MaxMinCases = do
       let test0 = do
             a <- newVar
             b <- newVar
-            let a'  = NoFun (Numeric (NonConst a))
+            let a'  = NoFun (Numeric (MkNum a MkNonConst))
 
             a' ⊑! b
             return (a', b)
       let correct :: (DMMain,DMMain) -> TC (Either (DMMain,DMMain) ())
-          correct (NoFun (Numeric (NonConst a)), NoFun (Numeric (NonConst b))) | (a /= b) = pure $ Right ()
+          correct (NoFun (Numeric (MkNum a MkNonConst)), NoFun (Numeric (MkNum b MkNonConst))) | (a /= b) = pure $ Right ()
           correct (x,y)                                                                   = pure $ Left (x,y)
       (tc $ sn_EW test0 >>= correct) `shouldReturn` (Right (Right ()))
 
@@ -367,8 +367,8 @@ testSubtyping_ContractEdge = do
       (tc $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right (True,True,True,True))
 
     it "does contract diamond even if lower/upper end are bound from below/above" $ do
-      let int = NoFun (Numeric (NonConst DMInt))
-          real = NoFun (Numeric (NonConst DMReal))
+      let int = NoFun (Numeric (MkNum DMInt MkNonConst))
+          real = NoFun (Numeric (MkNum DMReal MkNonConst))
       let test1 :: TC (DMMain,DMMain,DMMain,DMMain)
           test1 = do
             -- the interesting variables
@@ -394,8 +394,8 @@ testSubtyping_ContractEdge = do
       (tc $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right (True,True,True,True,True))
 
     it "does NOT contract diamond if inner vertices end are bound from outside" $ do
-      let int = NoFun (Numeric (NonConst DMInt))
-          real = NoFun (Numeric (NonConst DMReal))
+      let int = NoFun (Numeric (MkNum DMInt MkNonConst))
+          real = NoFun (Numeric (MkNum DMReal MkNonConst))
       let test1 :: TC (DMMain,DMMain,DMMain,DMMain)
           test1 = do
             -- the interesting variables
@@ -423,8 +423,8 @@ testSubtyping_ContractEdge = do
       (tc $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right (Right ()))
 
     it "does NOT contract diamond if any vertices appear in other constraints" $ do
-      let int = NoFun (Numeric (NonConst DMInt))
-          real = NoFun (Numeric (NonConst DMReal))
+      let int = NoFun (Numeric (MkNum DMInt MkNonConst))
+          real = NoFun (Numeric (MkNum DMReal MkNonConst))
       let test1 :: TC (DMMain,DMMain,DMMain,DMMain)
           test1 = do
             -- the interesting variables

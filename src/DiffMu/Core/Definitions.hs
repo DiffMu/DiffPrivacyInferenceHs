@@ -103,6 +103,7 @@ data DMKind =
   | FunKind
   | NoFunKind
   | VecKindKind
+  | ConstnessKind
   deriving (Typeable)
 
 -- Using the "TemplateHaskell" ghc-extension, and the following function from the singletons library,
@@ -119,10 +120,11 @@ instance Show DMKind where
   show NormKind = "Norm"
   show FunKind = "Fun"
   show NoFunKind = "NoFun"
-  show VecKindKind = "VecKindKind"
+  show VecKindKind = "VecKind"
+  show ConstnessKind = "Constness"
 
 -- so we don't get incomplete pattern warnings for them
-{-# COMPLETE DMInt, DMReal, Const, NonConst, DMData, Numeric, TVar, (:->:), (:->*:), DMTup, L1, L2, LInf, U, Clip, Vector, Gradient, Matrix,
+{-# COMPLETE DMInt, DMReal, MkNum, MkConst, MkNonConst, DMData, Numeric, TVar, (:->:), (:->*:), DMTup, L1, L2, LInf, U, Clip, Vector, Gradient, Matrix,
  DMContainer, DMVec, DMGrads, DMMat, DMModel, NoFun, Fun, (:∧:), BlackBox #-}
 
 --------------------
@@ -160,8 +162,15 @@ data DMTypeOf (k :: DMKind) where
   DMReal   :: DMTypeOf BaseNumKind
 
   -- a base numeric type can be either constant or non constant or data
-  Const    :: Sensitivity -> DMTypeOf BaseNumKind -> DMTypeOf NumKind
-  NonConst :: DMTypeOf BaseNumKind -> DMTypeOf NumKind
+  -- Const    :: Sensitivity -> DMTypeOf BaseNumKind -> DMTypeOf NumKind
+  -- NonConst :: DMTypeOf BaseNumKind -> DMTypeOf NumKind
+
+  MkConst :: Sensitivity -> DMTypeOf ConstnessKind
+  MkNonConst :: DMTypeOf ConstnessKind
+
+  MkNum :: DMTypeOf BaseNumKind -> DMTypeOf ConstnessKind -> DMTypeOf NumKind
+
+
   DMData   :: DMTypeOf NumKind
 
   -- we include numeric types into main types using this constructor
@@ -220,8 +229,8 @@ instance Hashable (DMTypeOf k) where
   hashWithSalt s (DMAny) = s +! 8
   hashWithSalt s (Vector) = s +! 9
   hashWithSalt s (Gradient) = s +! 10
-  hashWithSalt s (Const n t) = s `hashWithSalt` n `hashWithSalt` t
-  hashWithSalt s (NonConst t) = s `hashWithSalt` t
+  hashWithSalt s (MkNum t (MkConst n)) = s `hashWithSalt` n `hashWithSalt` t
+  hashWithSalt s (MkNum t MkNonConst) = s `hashWithSalt` t
   hashWithSalt s (Numeric t) = s `hashWithSalt` t
   hashWithSalt s (TVar t) = s `hashWithSalt` t
   hashWithSalt s (n :->: t) = s `hashWithSalt` n `hashWithSalt` t
@@ -257,8 +266,8 @@ instance Show (DMTypeOf k) where
   show DMInt = "Int"
   show DMReal = "Real"
   show DMData = "Data"
-  show (Const s t) = show t <> "[" <> show s <> "]"
-  show (NonConst t) = show t <> "[--]"
+  show (MkNum t (MkConst s)) = show t <> "[" <> show s <> "]"
+  show (MkNum t MkNonConst) = show t <> "[--]"
   show (Numeric t) = "Num(" <> show t <> ")"
   show (TVar t) = show t
   show (a :->: b) = "(" <> show a <> " -> " <> show b <> ")"
@@ -309,8 +318,8 @@ instance ShowPretty (DMTypeOf k) where
   showPretty DMInt = "Int"
   showPretty DMReal = "Real"
   showPretty DMData = "Data"
-  showPretty (Const s t) = showPretty t <> "[" <> showPretty s <> "]"
-  showPretty (NonConst t) = "NonConst " <> showPretty t
+  showPretty (MkNum t (MkConst s)) = showPretty t <> "[" <> showPretty s <> "]"
+  showPretty (MkNum t MkNonConst) = "NonConst " <> showPretty t
   showPretty (Numeric t) = showPretty t
   showPretty (TVar t) = showPretty t
   showPretty (a :->: b) = showFunPretty "->" a b
@@ -468,7 +477,7 @@ recDMTypeM typemap sensmap DMReal = pure DMReal
 recDMTypeM typemap sensmap DMData = pure DMData
 recDMTypeM typemap sensmap (Numeric τ) = Numeric <$> typemap τ
 recDMTypeM typemap sensmap (NonConst τ) = NonConst <$> typemap τ
-recDMTypeM typemap sensmap (Const η τ) = Const <$> sensmap η <*> typemap τ
+recDMTypeM typemap sensmap (MkNum τ (MkConst η)) = Const <$> sensmap η <*> typemap τ
 recDMTypeM typemap sensmap (TVar x) = pure (TVar x)
 recDMTypeM typemap sensmap (τ1 :->: τ2) = (:->:) <$> mapM (\(a :@ b) -> (:@) <$> typemap a <*> sensmap b) τ1 <*> typemap τ2
 recDMTypeM typemap sensmap (τ1 :->*: τ2) = (:->*:) <$> mapM (\(a :@ (b0, b1)) -> f <$> typemap a <*> sensmap b0 <*> sensmap b1) τ1 <*> typemap τ2
