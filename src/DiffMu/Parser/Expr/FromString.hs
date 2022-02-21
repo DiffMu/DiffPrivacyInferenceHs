@@ -22,6 +22,8 @@ import Debug.Trace(trace, traceM)
 data JTree =
      JLineNumber String Int
    | JHole
+   | JTrue
+   | JFalse
    | JSym String
    | JInteger Float
    | JReal Float
@@ -90,6 +92,8 @@ pWithCtor name ctor = name `with` (ctor <$> (pTree `sepBy` sep))
 pTree :: Parser JTree
 pTree =     try pTLineNumber
         <|> try (string ":_" >> return JHole)
+        <|> try ((wskip (string ":True")) >> return JTrue)
+        <|> try ((wskip (string ":False")) >> return JFalse)
         <|> try (string ":(==)" >> return (JSym "=="))
         <|> try (wskip (string ":nothing") >> return JNothing)
         <|> try (wskip (string "nothing") >> return JNothing)
@@ -147,6 +151,8 @@ data JExpr =
    | JEReal Float
    | JESymbol Symbol
    | JEHole
+   | JETrue
+   | JEFalse
    | JEColon
    | JELineNumber String Int
    | JEUnsupported String
@@ -175,6 +181,7 @@ data JExpr =
 pJuliaType :: JTree -> JEParseState JuliaType
 pJuliaType (JSym name) = case name of
     "Any"             -> pure JTAny
+    "Bool"            -> pure JTBool
     "Integer"         -> pure JTInt
     "Real"            -> pure JTReal
     "Function"        -> pure JTFunction
@@ -278,6 +285,8 @@ pTreeToJExpr tree = case tree of
          (name:refs) -> JERef <$> pTreeToJExpr name <*> mapM pTreeToJExpr refs
          _ -> error ("unsupported reference " <> show tree)
      JHole           -> pure JEHole
+     JTrue           -> pure JETrue
+     JFalse          -> pure JEFalse
      JNothing        -> jParseError ("Found nothing outside of a return statement. That's not supported.")
      JColon          -> pure JEColon
      JReturn v -> case v of

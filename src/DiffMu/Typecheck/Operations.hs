@@ -158,10 +158,10 @@ solveBinary op (τ1, τ2) = traceM ("solving " <> show op <> show (τ1, τ2)) >>
     f DMOpMod (TVar a) (Numeric t)                            = matchType a (Numeric t)
 
     -- TODO: Don't we need to return a "Bool" type?
-    f DMOpEq (Numeric (Const s1 t1)) (Numeric (Const s2 t2)) = ret zeroId zeroId (pure $ Numeric (NonConst DMInt))
-    f DMOpEq (Numeric (Const s1 t1)) (Numeric (NonConst t2)) = ret zeroId oneId  (pure $ Numeric (NonConst DMInt))
-    f DMOpEq (Numeric (NonConst t1)) (Numeric (Const s2 t2)) = ret oneId  zeroId (pure $ Numeric (NonConst DMInt))
-    f DMOpEq (Numeric (NonConst t1)) (Numeric (NonConst t2)) = ret oneId  oneId  (pure $ Numeric (NonConst DMInt))
+    f DMOpEq (Numeric (Const s1 t1)) (Numeric (Const s2 t2)) = ret zeroId zeroId (pure $ DMBool)
+    f DMOpEq (Numeric (Const s1 t1)) (Numeric (NonConst t2)) = ret zeroId oneId  (pure $ DMBool)
+    f DMOpEq (Numeric (NonConst t1)) (Numeric (Const s2 t2)) = ret oneId  zeroId (pure $ DMBool)
+    f DMOpEq (Numeric (NonConst t1)) (Numeric (NonConst t2)) = ret oneId  oneId  (pure $ DMBool)
     f DMOpEq (DMContainer k1 n1 cl1 c1 (NoFun t1)) (DMContainer k2 n2 cl2 c2 (NoFun t2)) = solveBinary DMOpEq (t1, t2)
 
     f _ _ _                            = return Nothing

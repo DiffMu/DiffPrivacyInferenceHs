@@ -157,6 +157,7 @@ subtypingGraph =
                       nrm₀ ⊑! nrm₁
                       clp₀ ⊑! clp₁
                       return ((DMGrads nrm₀ clp₀ m a₀), (DMGrads nrm₁ clp₁ m a₁))
+                 , SingleEdge $ return (DMBool, DMBool)
                       {-
                       {-
                  , SingleEdge $ -- this is the conv rule made implicit, for converting DMData to DMReal

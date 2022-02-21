@@ -79,6 +79,9 @@ checkSens scope t = do
 
 checkSen' :: DMScope -> DMTerm -> TC DMMain
 
+checkSen' scope DMTrue = return (NoFun DMBool)
+checkSen' scope DMFalse = return (NoFun DMBool)
+
 -- TODO: Here we assume that η really has type τ, and do not check it. Should maybe do that.
 checkSen' scope (Sng η τ) = do
   res <- Numeric <$> (Const (constCoeff (Fin η)) <$> (createDMTypeBaseNum τ))
@@ -350,14 +353,16 @@ checkSen' scope (Phi cond ifbr elsebr) = do
   let condd = checkSens scope cond <* mscale inftyS
 
   τ_sum <- msumS [ifd, elsed, condd]
-  (τif, τelse) <- case τ_sum of
-                       (τ1 : τ2 : _) -> return (τ1, τ2)
+  (τif, τelse, τcond) <- case τ_sum of
+                       [τ1 , τ2 , τ3]  -> return (τ1, τ2, τ3)
                        _ -> throwError (ImpossibleError "Sum cannot return empty.")
 
   -- the branches need to return types that are indistinguishable by julia dispatch,
   -- otherwise we cannot resolve dispatch because we don't know which branch is going
   -- to be chosen at runtime.
   addConstraint (Solvable (IsJuliaEqual (τif, τelse)))
+
+  unify τcond (NoFun DMBool)
 
   -- once we know they are julia-equal, we can safely make the Phi return their supremum.
   τ <- newVar
@@ -619,6 +624,27 @@ checkSen' scope (ClipN value upper lower) = do
   mscale (minus tu tl)
 
   return (NoFun (Numeric (Const tr tv)))
+
+
+checkSen' scope (Count f m) = let
+    mf = checkSens scope f <* mscale inftyS -- inf-sensitive in the function
+    mm = checkSens scope m -- 1-sensitive in the matrix
+  in do
+    (tf, tm) <- msumTup (mf, mm)
+
+    
+    cl <- newVar
+    r <- newVar
+    c <- newVar
+    s <- newVar
+        
+    unify tm (NoFun (DMMat L1 cl r c (NoFun (Numeric DMData))))
+    unify tf (Fun [[(NoFun (DMVec L1 cl c (NoFun (Numeric DMData)))) :@ s] :->: (NoFun DMBool) :@ (Just [JTAny])])
+    
+    return (NoFun (Numeric (NonConst DMInt)))
+
+  
+  
 
 --------------------
 -- NOTE this is different from what is in the paper, as we scale the result context by 2 not by 1
