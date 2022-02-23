@@ -301,11 +301,17 @@ instance Solve MonadDMTC IsBlackBoxReturn (DMMain, (DMMain, Sensitivity)) where
                           dischargeConstraint @MonadDMTC name
      in case ret of
           TVar _ -> pure ()
+          NoFun (TVar _) -> pure ()
+          NoFun (DMContainer _ _ _ _ (TVar _)) -> pure ()
+          NoFun (DMContainer _ _ _ _ (NoFun (TVar _))) -> pure ()
           
           NoFun (DMContainer kind nret cret dret (NoFun (Numeric tret))) -> do
               unify ret (NoFun (DMContainer kind LInf U dret (NoFun (Numeric DMData))))
               case argt of
                    TVar _ -> pure ()
+                   NoFun (TVar _) -> pure ()
+                   NoFun (DMContainer _ _ _ _ (TVar _)) -> pure ()
+                   NoFun (DMContainer _ _ _ _ (NoFun (TVar _))) -> pure ()
                    NoFun (DMContainer _ _ _ _ (NoFun (Numeric targ))) -> do
                        unify targ DMData
                        discharge oneId
@@ -461,28 +467,3 @@ instance Solve MonadDMTC IsVecLike VecKind where
         Gradient -> dischargeConstraint name
         Matrix r -> unify r oneId >> dischargeConstraint name
 
-
-
---------------------------------------------------
--- real or data
---
-
-newtype IsFloat a = IsFloat a deriving Show
-
-instance FixedVars TVarOf (IsFloat DMMain) where
-    fixedVars (IsFloat _) = []
-
-instance TCConstraint IsFloat where
-    constr = IsFloat
-    runConstr (IsFloat a) = a
-
-instance Solve MonadDMTC IsFloat DMMain where
-    solve_ Dict _ name (IsFloat a) =
-        case a of
-             TVar _ -> pure ()
-             NoFun (TVar _) -> pure ()
-             NoFun (Numeric (TVar _)) -> pure ()
-             (NoFun (Numeric (Num DMReal NonConst))) -> dischargeConstraint name
-             (NoFun (Numeric (Num DMReal (Const _)))) -> dischargeConstraint name
-             (NoFun (Numeric DMData)) -> dischargeConstraint name
-             _ -> failConstraint name

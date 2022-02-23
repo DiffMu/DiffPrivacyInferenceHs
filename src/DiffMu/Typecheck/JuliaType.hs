@@ -59,13 +59,16 @@ juliatypes τ = error $ "juliatypes(" <> show τ <> ") not implemented."
 -- get a BaseNumKind DMType corresponding to the given JuliaType
 createDMTypeBaseNum :: MonadDMTC t => JuliaType -> t (DMTypeOf BaseNumKind)
 createDMTypeBaseNum (JTInt) = pure DMInt
-createDMTypeBaseNum (JTReal)  = pure DMReal
+createDMTypeBaseNum (JTReal) = pure DMReal
 createDMTypeBaseNum (t) = pure DMAny
 
 -- get a NumKind DMType corresponding to the given JuliaType
 createDMTypeNum :: MonadDMTC t => JuliaType -> t DMMain
 createDMTypeNum (JTInt) = pure (NoFun (Numeric (Num DMInt NonConst)))
-createDMTypeNum (JTReal)  = pure (NoFun (Numeric (Num DMReal NonConst)))
+createDMTypeNum (JTReal)  = do
+    v <- newVar -- could be data!
+    addConstraint (Solvable (IsFloat $ NoFun (Numeric v)))
+    return (NoFun (Numeric v))
 createDMTypeNum (t) = pure DMAny
 
 -- get the DMType corresponding to a given JuliaType
@@ -74,7 +77,9 @@ createDMType :: MonadDMTC t => JuliaType -> t DMType
 createDMType (JTInt) = do
   return (Numeric (Num DMInt NonConst))
 createDMType (JTReal) = do
-  return (Numeric (Num DMReal NonConst))
+  v <- newVar
+  addConstraint (Solvable (IsFloat $ NoFun (Numeric v)))
+  return (Numeric v)
 createDMType (JTTuple ts) = do
   dts <- mapM createDMType ts
   return (DMTup (dts))
@@ -149,6 +154,31 @@ instance PartialOrd JuliaSignature where
   leq (JuliaSignature a) (JuliaSignature b) = and (zipWith leq a b)
 
 
+
+
+--------------------------------------------------
+-- real or data
+--
+
+newtype IsFloat a = IsFloat a deriving Show
+
+instance FixedVars TVarOf (IsFloat DMMain) where
+    fixedVars (IsFloat _) = []
+
+instance TCConstraint IsFloat where
+    constr = IsFloat
+    runConstr (IsFloat a) = a
+
+instance Solve MonadDMTC IsFloat DMMain where
+    solve_ Dict _ name (IsFloat a) =
+        case a of
+             TVar _ -> pure ()
+             NoFun (TVar _) -> pure ()
+             NoFun (Numeric (TVar _)) -> pure ()
+             (NoFun (Numeric (Num (TVar _) _))) -> pure ()
+             (NoFun (Numeric (Num DMReal _))) -> dischargeConstraint name
+             (NoFun (Numeric DMData)) -> dischargeConstraint name
+             _ -> failConstraint name
 
 --------------------------------------------------
 -- Things that should be functions

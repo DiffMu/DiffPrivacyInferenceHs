@@ -634,10 +634,11 @@ checkSen' scope (Count f m) = let
 
     
     cl <- newVar
+    n <- newVar
     r <- newVar
     s <- newVar
         
-    unify tm (NoFun (DMVec L1 cl r (NoFun (Numeric DMData))))
+    unify tm (NoFun (DMVec n cl r (NoFun (Numeric DMData))))
     unify tf (Fun [[(NoFun (Numeric DMData)) :@ s] :->: (NoFun DMBool) :@ (Just [JTAny])])
     
     return (NoFun (Numeric (Num DMInt NonConst)))
@@ -1442,6 +1443,7 @@ checkBBKind scope a = let
  in case a of
   BBSimple jt -> case jt of
     JTInt  -> return $ NoFun $ Numeric $ Num DMInt NonConst
+    JTBool -> return $ NoFun $ DMBool
     JTReal -> do v <- getFloat; return $ NoFun $ Numeric $ v
     _      -> throwError $ TypeMismatchError $ "The type " <> show jt <> " is not allowed as return type of black boxes.\n"
                                               <> "You can only have annotations of the following form:\n"
@@ -1458,6 +1460,7 @@ checkBBKind scope a = let
     -- look what type was requested in form of a julia type
     case jt of
       JTVector JTInt -> do n <- newVar ; return $ NoFun $ DMVec n U pdt_val (NoFun $ Numeric $ Num DMInt NonConst)
+      JTVector JTBool -> do n <- newVar ; return $ NoFun $ DMVec n U pdt_val (NoFun $ DMBool)
       JTVector JTReal -> do n <- newVar ; r <- getFloat; return $ NoFun $ DMVec n U pdt_val (NoFun $ Numeric r)
       JTModel -> do r <- getFloat; return $ NoFun $ DMModel pdt_val r
       JTGrads -> do n <- newVar; r <- getFloat;  return $ NoFun $ DMGrads n U pdt_val (NoFun $ Numeric $ r)
@@ -1481,7 +1484,9 @@ checkBBKind scope a = let
 
     -- look what type was requested in form of a julia type
     case jt of
-      JTMatrix jt | or [jt == JTInt, jt == JTReal] -> do n <- newVar ; r <- getFloat; return $ NoFun $ DMMat n U pdt1_val pdt2_val (NoFun $ Numeric $ r)
+      JTMatrix JTBool -> do n <- newVar ; return $ NoFun $ DMMat n U pdt1_val pdt2_val (NoFun $ DMBool)
+      JTMatrix JTInt -> do n <- newVar ; return $ NoFun $ DMMat n U pdt1_val pdt2_val (NoFun $ Numeric $ Num DMInt NonConst)
+      JTMatrix JTReal -> do n <- newVar ; r <- getFloat; return $ NoFun $ DMMat n U pdt1_val pdt2_val (NoFun $ Numeric $ r)
       _ -> throwError $ TypeMismatchError $ "The type " <> show jt <> " is not allowed as return type of black boxes.\n"
                                               <> "You can only have annotations of the following form:\n"
                                               <> "[redacted]"
