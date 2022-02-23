@@ -368,6 +368,9 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
   (t@"internal_expect_const", [a1]) -> InternalExpectConst <$> pSingle a1
   (t@"internal_expect_const", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
 
+  (t@"internal_mutate!", [a1]) -> InternalMutate <$> pSingle a1
+  (t@"internal_mutate!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
+
   (t@"clone", [a]) -> Clone <$> pSingle a
   (t@"clone", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
 

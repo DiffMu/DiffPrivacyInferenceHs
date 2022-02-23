@@ -918,6 +918,11 @@ checkSen' scope term@(InternalExpectConst a) = do
 
   return res'
 
+
+checkSen' scope term@(InternalMutate a) = do
+  res <- checkSens scope a <* mscale (constCoeff $ Fin 2)
+  return res
+
 -- 
 -- The user can explicitly copy return values.
 --

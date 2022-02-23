@@ -866,8 +866,6 @@ elaborateMut scname (Row t1 t2) = elaborateRefMove2 scname Row t1 t2
 ----
 -- the mutating builtin cases
 
--- TODO: Reimplement for #190
---
 elaborateMut scname (SubGrad t1 t2) = do
   (argTerms, mutVars) <- elaborateMutList "subgrad" scname [(Mutated , t1), (NotMutated , t2)]
   case argTerms of
@@ -904,6 +902,12 @@ elaborateMut scname (ConvertM t1) = do
     [newT1] -> demutTLetStatement PureLet mutVars (ConvertM newT1)
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
+
+elaborateMut scname (InternalMutate t1) = do
+  (argTerms, mutVars) <- elaborateMutList "internal_mutate" scname [(Mutated , t1)]
+  case argTerms of
+    [newT1] -> demutTLetStatement PureLet mutVars (InternalMutate newT1)
+    _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 --
 --
