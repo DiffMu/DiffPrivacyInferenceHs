@@ -11,6 +11,7 @@ testIssues pp = do
   test59 pp
   test60 pp
   test67 pp
+  test116 pp
   test123 pp
   test125 pp
   test127 pp
@@ -236,6 +237,20 @@ test67 pp = describe "issue 67 (same juliatype choice overwriting)" $ do
          \ end                  "
 
   parseEvalFail pp "example variant 3" ex_3 (FLetReorderError "")
+
+
+test116 pp = describe "issue 116 (constant assignment in loop)" $ do
+  let ex_1 = "   function sloop(x::Integer)   \n\
+              \             for _ in 1:10      \n\
+              \                 x = 100        \n\
+              \             end                \n\
+              \             x                  \n\
+              \         end                    "
+
+      int = NoFun(Numeric (Num DMInt NonConst))
+      ty = do pure $ Fun([([int :@ (constCoeff (Fin 0))] :->: int) :@ Just [JTInt]])
+
+  parseEvalUnify pp "gives non-const input and output" ex_1 (ty)
 
 test123 pp = describe "issue 123 (Rewind side effects of quick-path-check in supremum search)" $ do
   let ex_1 = "   function ifelse(x,y::Integer)    \n\
