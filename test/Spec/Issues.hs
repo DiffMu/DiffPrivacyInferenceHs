@@ -15,6 +15,7 @@ testIssues pp = do
   test123 pp
   test125 pp
   test127 pp
+  test174 pp
   test188 pp
 
 
@@ -308,6 +309,45 @@ test127 pp = describe "issue 127 (TLet in loop)" $ do
       ty = do pure $ Fun([([int :@ (constCoeff oneId) , int :@ (inftyS)] :->: int) :@ Just [JTInt,JTInt]])
 
   parseEval pp "example variant 1" ex_1 ty
+
+
+test174 pp = describe "issue 174 (count function)" $ do
+  let ex_1 = " function count(f:: Function, d::Matrix) :: Priv() \n\
+             \   (dim, _) = size(d)                              \n\
+             \   counter = 0                                     \n\
+             \   for i in 1:dim                                  \n\
+             \     dd = d[i,:]                                   \n\
+             \     if f(dd) == 1                                 \n\
+             \       counter = counter + 1                       \n\
+             \     else                                          \n\
+             \       counter = clone(counter)                    \n\
+             \     end                                           \n\
+             \   end                                             \n\
+             \   counter                                         \n\
+             \ end "
+
+      -- intc_nc c = NoFun(Numeric (Num DMInt c))
+      int = NoFun(Numeric (Num DMInt NonConst))
+
+      ty = do
+        τ_31 <- newVar
+        τ_10 <- newVar 
+        s_8  <- newVar 
+        τ_82 <- newVar
+        s_23 <- newVar
+        τa_26 <- newVar
+        s_9 <- newVar
+        return $ Fun([([Fun([([NoFun(DMVec τ_31 τ_10 s_8 τ_82) :@ s_23] :->: NoFun(τa_26)) :@ Nothing]) :@ (inftyS,inftyS),NoFun(DMMat τ_31 τ_10 s_9 s_8 τ_82) :@ (inftyS,inftyS)] :->*: int) :@ Just [JTFunction ,JTMatrix JTAny]])
+
+
+  parseEvalUnify_customCheck pp "typechecks" ex_1 (ty) $
+    do 
+      c <- getConstraintsByType (Proxy @(IsTypeOpResult DMTypeOp))
+      cs <- getAllConstraints 
+      case (length c, length cs) of
+        (1,1) -> return (Right ())
+        _     -> return $ Left (show cs)
+
 
 
 test188 pp = describe "issue 188 (holes)" $ do
