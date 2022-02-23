@@ -286,7 +286,7 @@ instance Solve MonadDMTC (IsTypeOpResult) DMTypeOp where
   solve_ Dict SolveExact name constr = solveop name constr
 
   -- If we are "losing generality" / "assuming worst case", then we make all operands in the op into `NonConst`s.
-  solve_ Dict SolveAssumeWorst name (IsTypeOpResult op) = makeNonConstTypeOp name op >> return ()
+  solve_ Dict SolveAssumeWorst name (IsTypeOpResult op) = return () -- makeNonConstTypeOp name op >> return ()
   solve_ Dict _ name (IsTypeOpResult op)                = return ()
 
 

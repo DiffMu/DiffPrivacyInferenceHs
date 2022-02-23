@@ -255,6 +255,17 @@ instance Typeable k => FreeVars TVarOf (DMTypeOf k) where
   freeVars (x :∧: y) = freeVars x <> freeVars y
   freeVars (BlackBox n) = []
 
+instance FreeVars TVarOf SolvingMode where
+  freeVars _ = []
+
+instance FreeVars SVarOf SolvingMode where
+  freeVars _ = []
+
+instance Substitute SVarOf SensitivityOf SolvingMode where
+  substitute _ x = pure x
+
+instance Substitute TVarOf DMTypeOf SolvingMode where
+  substitute _ x = pure x
 
 -- Given a list of "multi substitutions", i.e. substitutions of the form
 -- [a := ListK [a1, a2, a3], b := ListK [b1, b2, b3], ...] and type τ,

@@ -136,10 +136,7 @@ checkSen' scope (Var (x :- dτ)) =  -- get the term that corresponds to this var
                      addJuliaSubtypeConstraint τ dτ
                      return τ
 
-checkSen' scope (Lam xτs body) =
-  -- the body is checked in the toplevel scope, not the current variable scope.
-  -- this reflects the julia behaviour
-  do
+checkSen' scope (Lam xτs body) = do
 
     -- put a special term to mark x as a function argument. those get special treatment
     -- because we're interested in their privacy. put the relevance given in the function signature, too.
@@ -158,19 +155,17 @@ checkSen' scope (Lam xτs body) =
     let xrτs' = [x :@ s | (x :@ SensitivityAnnotation s) <- xrτs]
     logForce $ "Checking Lam, outer scope: " <> show (getAllKeys scope) <> " | inner: " <> show (getAllKeys scope')
 
-    -- functions can only return deepcopies of DMModel and DMGrads
-    -- restype <- newVar
-    -- addConstraint (Solvable (IsClone (btype, restype)))
+    -- add constraints for making non-const if not resolvable
+    let addC :: (DMMain :@ b, a) -> TCT Identity ()
+        addC ((τ :@ _), _) = addConstraint (Solvable (MakeNonConst (τ, SolveAssumeWorst))) >> pure ()
+    mapM addC (zip xrτs (sndA <$> xτs))
 
     -- make an arrow type.
     let τ = (xrτs' :->: btype)
     return (Fun [τ :@ (Just sign)])
 
 
-checkSen' scope (LamStar xτs body) =
-  -- the body is checked in the toplevel scope, not the current variable scope.
-  -- this reflects the julia behaviour
-  do
+checkSen' scope (LamStar xτs body) = do
     -- put a special term to mark x as a function argument. those get special treatment
     -- because we're interested in their sensitivity
     let f s sc (x :- (τ , rel)) = setValue x (checkSens s (Arg x τ rel)) sc
@@ -192,7 +187,7 @@ checkSen' scope (LamStar xτs body) =
     let addC :: (DMMain :@ b, (a, Relevance)) -> TCT Identity ()
         addC ((τ :@ _), (_, i)) = do
                _ <- case i of
-                     IsRelevant -> pure ()
+                     IsRelevant -> addConstraint (Solvable (MakeNonConst (τ, SolveAssumeWorst))) >> pure ()
                      NotRelevant -> do
                                       addConstraint (Solvable (MakeConst τ))
                                       return ()
@@ -506,7 +501,7 @@ checkSen' scope (Loop niter cs' (xi, xc) body) = do
   -- unify τb τbcs
   -- unify τcs τbcs
 
-  addConstraint (Solvable (IsNonConst (τbody_in, τbody_out)))
+  addConstraint (Solvable (IsNonConst (τbody_out, τbody_in)))
   addConstraint (Solvable (UnifyWithConstSubtype (τloop_in, τbody_out)))
   addConstraint (Solvable (IsLoopResult ((sit, scs, sb), sbcs, τit))) -- compute the right scalars once we know if τ_iter is const or not.
 
@@ -1343,7 +1338,7 @@ checkPri' scope (Loop niter cs' (xi, xc) body) =
       -- the types of body, input captures and captures as used in the body must all be equal
       -- (except Const-ness, actually. we'll figure that out at some point)
 
-      addConstraint (Solvable (IsNonConst (τbody_in, τbody_out)))
+      addConstraint (Solvable (IsNonConst (τbody_out, τbody_in)))
       addConstraint (Solvable (UnifyWithConstSubtype (τloop_in, τbody_out)))
 
       return τbody_in

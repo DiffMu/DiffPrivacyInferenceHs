@@ -21,6 +21,12 @@ instance Show SolvingMode where
   show SolveFinal = "final"
   show SolveSpecial = "special"
 
+instance Monad m => Normalize m SolvingMode where
+  normalize _ = pure
+
+
+-- instance FreeVars SVarOf SolvingMode where
+
 -- instance Ord SolvingMode where
 --   SolveExact <= a = True
 --   SolveAssumeWorst <= SolveExact = False

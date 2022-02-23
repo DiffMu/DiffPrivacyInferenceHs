@@ -287,10 +287,10 @@ test127 pp = describe "issue 127 (TLet in loop)" $ do
               \      x                                    \n\
               \  end                                      "
 
-      intc_nc c = NoFun(Numeric (Num DMInt c))
+      -- intc_nc c = NoFun(Numeric (Num DMInt c))
       int = NoFun(Numeric (Num DMInt NonConst))
 
-      ty = do c <- newVar ; d <- newVar ; pure $ Fun([([intc_nc c :@ (constCoeff oneId) , intc_nc d :@ (inftyS)] :->: int) :@ Just [JTInt,JTInt]])
+      ty = do pure $ Fun([([int :@ (constCoeff oneId) , int :@ (inftyS)] :->: int) :@ Just [JTInt,JTInt]])
 
   parseEval pp "example variant 1" ex_1 ty
 
