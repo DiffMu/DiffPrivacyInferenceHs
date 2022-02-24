@@ -708,8 +708,8 @@ elaborateMut scname term@(Extra (ProcPhi cond tr fs)) = do
     -- case 1: statement branches
     --
     (StatementBranch trTerms, StatementBranch fsTerms) -> do
-      let trTerms' = (Extra (DemutBlock (trTerms <> proj1)))
-      let fsTerms' = (Extra (DemutBlock (fsTerms <> proj2)))
+      let trTerms' = (Extra (DemutBlock (proj1 <> trTerms)))
+      let fsTerms' = (Extra (DemutBlock (proj2 <> fsTerms)))
       
       return (StatementWithoutDefault (Extra (DemutPhi cond' trTerms' fsTerms')))
 

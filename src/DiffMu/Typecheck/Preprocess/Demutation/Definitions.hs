@@ -694,6 +694,10 @@ coequalizeTeVarMutTrace (TeVarMutTrace pv1 split1 ts1) (TeVarMutTrace pv2 split2
   proj1 <- makeProj pv1 ts1 
   proj2 <- makeProj pv2 ts2
 
+  lift $ debug $ "Coequalizing MutTraces:\n"
+  lift $ debug $ "  proj1: " <> show proj1
+  lift $ debug $ "  proj2: " <> show proj2
+
   tell ([proj1],[proj2])
 
   split3 <- case (split1,split2) of
