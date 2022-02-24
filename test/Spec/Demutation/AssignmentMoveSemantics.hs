@@ -10,6 +10,9 @@ testScoping_AssignmentMoveSemantics pp = do
     testAMS01 pp
     testAMS02 pp
 
+  describe "Loops have special move checking for captures" $ do
+    testAMS03 pp
+
 testAMS01 pp = do
   let exa = " function f(a,b)      \n\
            \   x = a              \n\
@@ -48,23 +51,58 @@ testAMS01 pp = do
 testAMS02 pp = do
   let exa = " function f(a,b)      \n\
            \   (x,y) = (a,b)       \n\
-           \   norm_convert!(a)   \n\
+           \   internal_mutate!(a)   \n\
            \ end                  "
 
   let exb = " function f(a,b)     \n\
             \   (y,z) = (a,b)     \n\
             \   (v,w) = y         \n\
-            \   norm_convert!(v)  \n\
+            \   internal_mutate!(v)  \n\
             \ end                 "
 
 
   let exc = " function f(a,b)     \n\
             \   y = a             \n\
             \   (v,w) = y         \n\
-            \   norm_convert!(v)  \n\
+            \   internal_mutate!(v)  \n\
             \ end                 "
 
   parseEvalFail pp "02a errors (mutation after tuple move is not allowed)" exa (DemutationMovedVariableAccessError "")
   parseEvalFail pp "02b errors (mutation of tuple part is not allowed)" exb (DemutationSplitMutatingArgumentError "")
   parseEvalFail pp "02c errors (mutation of tuple part is not allowed)" exc (DemutationSplitMutatingArgumentError "")
 
+
+testAMS03 pp = do
+  let exa = "function test(a,b)  \n\
+            \   c = 1            \n\
+            \   for i in 1:10    \n\
+            \     a = c          \n\
+            \   end              \n\
+            \   a                \n\
+            \ end                "
+
+  let exb = " function test(a,b)  \n\
+            \   c = 1             \n\
+            \   for i in 1:10     \n\
+            \     a = c           \n\
+            \     c = a           \n\
+            \   end               \n\
+            \   c                 \n\
+            \ end                 "
+
+  let exc = " function test(a,b)             \n\
+            \    x = 0                       \n\
+            \    for i in 1:10               \n\
+            \      if i == 0                 \n\
+            \        x = a                   \n\
+            \      else                      \n\
+            \        internal_mutate!(a)     \n\
+            \      end                       \n\
+            \    end                         \n\
+            \    x                           \n\
+            \ end                            "
+
+
+  parseEvalFail pp "01a errors (moving a pre-existing variable into a capture is not allowed)" exa (DemutationMovedVariableAccessError "")
+  parseEvalFail pp "01b errors (double moving is not allowed)" exb (DemutationMovedVariableAccessError "")
+  parseEvalFail pp "01c errors (moving in if-branches is not allowed)" exc (DemutationError "")

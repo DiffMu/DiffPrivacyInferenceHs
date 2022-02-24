@@ -530,7 +530,7 @@ elaborateMut scname (Extra (ProcPreLoop iters iterVar body)) = do -- demutationE
   let newMemVars = (snd <$> newMems) >>= getAllMemVarsOfMemState
   case newMemVars `intersect` oldMemVars of
     [] -> pure ()
-    xs -> demutationError $ "Found a loop body which moves variables around.\n"
+    xs -> throwError $ DemutationMovedVariableAccessError $ "Found a loop body which moves variables around.\n"
                           <> "The following variables are changed and contain memory locations from before: " <> show xs <> "\n"
                           <> "Since this means that we cannot track what actually happens in the case of an unknown number of iterations,\n"
                           <> "this is not allowed.\n"
