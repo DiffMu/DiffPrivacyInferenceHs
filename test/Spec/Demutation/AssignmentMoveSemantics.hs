@@ -87,13 +87,22 @@ testAMS03 pp = do
   let exb = " function test(a,b)  \n\
             \   c = 1             \n\
             \   for i in 1:10     \n\
-            \     a = c           \n\
-            \     c = a           \n\
+            \     (a,c) = (c,a)   \n\
             \   end               \n\
             \   c                 \n\
             \ end                 "
 
-  let exc = " function test(a,b)             \n\
+
+  let exc = " function test(a,b)  \n\
+            \   c = 1             \n\
+            \   for i in 1:10     \n\
+            \     (a,c) = (c,a)   \n\
+            \     (a,c) = (c,a)   \n\
+            \   end               \n\
+            \   c                 \n\
+            \ end                 "
+
+  let exd = " function test(a,b)             \n\
             \    x = 0                       \n\
             \    for i in 1:10               \n\
             \      if i == 0                 \n\
@@ -105,10 +114,19 @@ testAMS03 pp = do
             \    x                           \n\
             \ end                            "
 
+      intc c = NoFun(Numeric (Num DMInt (Const (constCoeff c))))
+      intnc = NoFun(Numeric (Num DMInt NonConst))
+      intnc' = (Numeric (Num DMInt NonConst))
+      intc' c = Numeric (Num DMInt (Const (constCoeff c)))
+      bool = NoFun DMBool
+
+      tyc = Fun([([intnc :@ zeroId, intnc :@ zeroId] :->: (NoFun $ intc' (Fin 1))) :@ Just [JTAny, JTAny]])
+
 
   parseEvalFail pp "01a errors (moving a pre-existing variable into a capture is not allowed)" exa (DemutationMovedVariableAccessError "")
-  parseEvalFail pp "01b errors (double moving is not allowed)" exb (DemutationMovedVariableAccessError "")
-  parseEvalFail pp "01c errors (moving in if-branches is not allowed)" exc (DemutationError "")
+  parseEvalFail pp "01b errors (switching is not allowed)" exb (DemutationMovedVariableAccessError "")
+  parseEvalUnify pp "01c succeeds (double switching is allowed)" exc (pure tyc)
+  parseEvalFail pp "01d errors (moving in if-branches is not allowed)" exd (DemutationMovedVariableAccessError "")
 
 
 testAMS04 pp = do
@@ -134,6 +152,18 @@ testAMS04 pp = do
             \  clone(y)            \n\
             \end                   "
 
+
+  let exc = " function test(a,b,c) \n\
+            \  y = 0               \n\
+            \  if c                \n\
+            \    y = a             \n\
+            \  else                \n\
+            \    y = b             \n\
+            \  end                 \n\
+            \  internal_mutate!(y) \n\
+            \  0                   \n\
+            \ end                  "
+
       intnc = NoFun(Numeric (Num DMInt NonConst))
       bool = NoFun(DMBool)
       intnc' = (Numeric (Num DMInt NonConst))
@@ -142,4 +172,5 @@ testAMS04 pp = do
 
   parseEvalUnify pp "same move in the branches is allowed" exa (pure tya)
   parseEvalFail pp "different moves in the branches is not allowed" exb (DemutationError "")
+  parseEvalFail pp "mutation after different moves in the branches is not allowed" exc (DemutationError "")
   return ()
