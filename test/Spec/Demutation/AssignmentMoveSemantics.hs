@@ -13,6 +13,9 @@ testScoping_AssignmentMoveSemantics pp = do
   describe "Loops have special move checking for captures" $ do
     testAMS03 pp
 
+  describe "If branches do not allow different moves to happen in the two branches" $ do
+    testAMS04 pp
+
 testAMS01 pp = do
   let exa = " function f(a,b)      \n\
            \   x = a              \n\
@@ -106,3 +109,37 @@ testAMS03 pp = do
   parseEvalFail pp "01a errors (moving a pre-existing variable into a capture is not allowed)" exa (DemutationMovedVariableAccessError "")
   parseEvalFail pp "01b errors (double moving is not allowed)" exb (DemutationMovedVariableAccessError "")
   parseEvalFail pp "01c errors (moving in if-branches is not allowed)" exc (DemutationError "")
+
+
+testAMS04 pp = do
+
+  let exa = " function test(a,b,c) \n\
+            \  y = 0               \n\
+            \  if c                \n\
+            \    y = a             \n\
+            \  else                \n\
+            \    y = a             \n\
+            \  end                 \n\
+            \  clone(y)            \n\
+            \end                   "
+
+
+  let exb = " function test(a,b,c) \n\
+            \  y = 0               \n\
+            \  if c                \n\
+            \    y = a             \n\
+            \  else                \n\
+            \    y = b             \n\
+            \  end                 \n\
+            \  clone(y)            \n\
+            \end                   "
+
+      intnc = NoFun(Numeric (Num DMInt NonConst))
+      bool = NoFun(DMBool)
+      intnc' = (Numeric (Num DMInt NonConst))
+
+      tya = Fun([([intnc :@ (constCoeff $ Fin 2), intnc :@ (zeroId), bool :@ (constCoeff $ Infty)] :->: (NoFun $ intnc')) :@ Just [JTAny, JTAny, JTAny]])
+
+  parseEvalUnify pp "same move in the branches is allowed" exa (pure tya)
+  parseEvalFail pp "different moves in the branches is not allowed" exb (DemutationError "")
+  return ()
