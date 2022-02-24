@@ -13,6 +13,9 @@ testDemutation pp = do
   describe "Demutation Semi SSA (new names for mutated variables)" $ do
     testDemutation_SemiSSA pp
 
+  describe "Demutation Semi SSA - Phi branches" $ do
+    testDemutation_SemiSSA_Phi pp
+
 
 testDemutation_SemiSSA pp = do
 
@@ -48,3 +51,36 @@ testDemutation_SemiSSA pp = do
 
 
 
+testDemutation_SemiSSA_Phi pp = do
+
+  let exa = " function test(a,b,c)    \n\
+            \   if c                  \n\
+            \     internal_mutate!(a) \n\
+            \   end                   \n\
+            \   return                \n\
+            \ end                     "
+
+
+  let exb = " function test(a,b,c)     \n\
+            \   if c                   \n\
+            \     internal_mutate!(a)  \n\
+            \   else                   \n\
+            \     internal_mutate!(a)  \n\
+            \     internal_mutate!(a)  \n\
+            \     internal_mutate!(b)  \n\
+            \   end                    \n\
+            \   return                 \n\
+            \ end                      "
+
+
+      intc c = NoFun(Numeric (Num DMInt (Const (constCoeff c))))
+      intnc = NoFun(Numeric (Num DMInt NonConst))
+      intnc' = (Numeric (Num DMInt NonConst))
+      bool = NoFun DMBool
+
+      tya = Fun([([intnc :@ (constCoeff $ Fin 3), intnc :@ zeroId, bool :@ (constCoeff $ Infty)] :->: (NoFun $ intnc')) :@ Just [JTAny, JTAny, JTAny]])
+      tyb = Fun([([intnc :@ (constCoeff $ Fin 6), intnc :@ (constCoeff $ Fin 3), bool :@ (constCoeff $ Infty)] :->: (NoFun $ DMTup [intnc',intnc'])) :@ Just [JTAny, JTAny, JTAny]])
+
+  parseEvalUnify pp "mutation in a single branch is possible" exa (pure tya)
+  parseEvalUnify pp "multiple different mutations in both branches is possible" exb (pure tyb)
+  return ()

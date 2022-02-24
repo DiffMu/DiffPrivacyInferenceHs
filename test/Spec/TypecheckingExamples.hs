@@ -199,8 +199,7 @@ testSample pp = describe "Sample" $ do
               \  gaussian_mechanism!(2, 0.2, 0.3, gs)  \n\
               \  clone(x * gs) \n\
               \end"
-        ty = "Fun([([NoFun(Matrix<n: L∞, c: τ_39>[s_11 × s_24](NoFun(Num(Data)))) @ (0.4⋅(1 / s_11)⋅s_21,0.3⋅(1 / s_11)⋅s_21),NoFun(Num(Int[s_21])) @ (∑∅,∑∅),NoFun(Num(Int[--])) @ (∞,∞)] ->* NoFun(Vector<n: L∞, c: U>[s_24](NoFun(Num(Real[--]))))) @ Just [Any,Any,Integer]])"
-        --ty = "Fun([([NoFun(Matrix<n: L∞, c: τ_39>[s_11 × s_24](NoFun(Num(Data)))) @ (0.4⋅(1 / s_11)⋅s_21,0.3⋅(1 / s_11)⋅s_21),NoFun(Num(Int[s_21])) @ (∑∅,∑∅),NoFun(Num(Int[--])) @ (∞,∞)] ->* NoFun(τ_32)) @ Just [Any,Any,Integer]])"
+        ty = "Fun([([NoFun(Matrix<n: L∞, c: τ_39>[s_14 × s_23](NoFun(Num(Data)))) @ (0.4⋅(1 / s_14)⋅s_21,0.3⋅(1 / s_14)⋅s_21),NoFun(Num(Int[s_21])) @ (∑∅,∑∅),NoFun(Num(Int[--])) @ (∞,∞)] ->* NoFun(Vector<n: L∞, c: U>[s_23](NoFun(Num(Real[--]))))) @ Just [Any,Any,Integer]])"
         cs = ""
     parseEvalString_l_customCheck pp "" ex (ty, cs) (pure $ Right ())
 
