@@ -27,7 +27,7 @@ instance (HasMonCom t m v) => SemigroupM t (MonCom m v) where
     where f mm x a = do
             mm' <- mm
             case H.lookup x mm' of
-              Just a' -> do a'' <- a ⋆ a'
+              Just a' -> do a'' <- a' ⋆ a
                             return (H.insert x a'' mm')
               Nothing -> return (H.insert x a mm')
 
