@@ -48,16 +48,16 @@ testOps pp = describe "Ops" $ do
                  \     w1 + x \n\
                  \  end \n\
                  \ end"
-        ex_mat = "function foo(x::Matrix{Integer}, y::Matrix{Integer}, z::Matrix{Integer}) \n\
+        ex_mat = "function foo(x::Matrix{<:Integer}, y::Matrix{<:Integer}, z::Matrix{<:Integer}) \n\
                  \ clone(2.0*x + y - z) \n\
                  \ end"
-        ex_vec = "function foo(x::Vector{Integer}, y::Vector{Integer}, z::Vector{Integer}) \n\
+        ex_vec = "function foo(x::Vector{<:Integer}, y::Vector{<:Integer}, z::Vector{<:Integer}) \n\
                  \ clone(2.0*x + y - z) \n\
                  \ end"
-        ex_mat_no = "function foo(x::Matrix{Integer}, y::Matrix{Integer}, z::Matrix{Integer}) \n\
+        ex_mat_no = "function foo(x::Matrix{<:Integer}, y::Matrix{<:Integer}, z::Matrix{<:Integer}) \n\
                  \ 2.0*x + y - z \n\
                  \ end"
-        ex_vec_no = "function foo(x::Vector{Integer}, y::Vector{Integer}, z::Vector{Integer}) \n\
+        ex_vec_no = "function foo(x::Vector{<:Integer}, y::Vector{<:Integer}, z::Vector{<:Integer}) \n\
                  \ 2.0*x + y - z \n\
                  \ end"
         int = NoFun(Numeric (Num DMInt NonConst))
@@ -193,7 +193,7 @@ testSample pp = describe "Sample" $ do
     let ex = "foo(d::Vector) :: BlackBox() = d \n\
               \function bar(data, b, x::Integer) :: Priv() \n\
               \  D, L = sample(b, data, data) \n\
-              \  gs = unbox(foo(D[1,:]), Vector{Real}, length(D[1,:])) \n\
+              \  gs = unbox(foo(D[1,:]), Vector{<:Real}, length(D[1,:])) \n\
               \  clip!(L2,gs) \n\
               \  norm_convert!(gs) \n\
               \  gaussian_mechanism!(2, 0.2, 0.3, gs)  \n\
@@ -237,7 +237,7 @@ testCount pp = describe "Count" $ do
 
 
 testMMap pp = describe "Matrix map" $ do
-    let ex = "function foo(m::Vector{Integer}, y::Integer) \n\
+    let ex = "function foo(m::Vector{<:Integer}, y::Integer) \n\
               \   f(x) = 2*x + y\n\
               \   m = map(f,m) \n\
               \   clone(m) \n\

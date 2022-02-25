@@ -554,11 +554,11 @@ instance Show JuliaType where
   show JTFunction = "Function"
   show JTPFunction = "PrivacyFunction"
   show (JTTuple as) = "Tuple{" ++ (intercalate "," (show <$> as)) ++ "}"
-  show (JTVector t) = "Vector{" ++ show t ++ "}"
-  show (JTMatrix t) = "Matrix{" ++ show t ++ "}"
+  show (JTVector t) = "Vector{<:" ++ show t ++ "}"
+  show (JTMatrix t) = "Matrix{<:" ++ show t ++ "}"
   show (JTModel) = "DMModel"
   show (JTGrads) = "DMGrads"
-  show (JTBot) = "Bot"
+  show (JTBot) = "Union{}"
 
 
 --------------------------------------------------------------------------

@@ -28,6 +28,7 @@ data JTree =
    | JInteger Float
    | JReal Float
    | JColon
+   | JSubtype [JTree]
    | JCall [JTree]
    | JCurly [JTree]
    | JArrow [JTree]
@@ -105,6 +106,7 @@ pTree =     try pTLineNumber
         <|> try (":return"   `pWithCtor` JReturn)
         <|> try (":call"     `pWithCtor` JCall)
         <|> try (":curly"    `pWithCtor` JCurly)
+        <|> try (":<:"       `pWithCtor` JSubtype)
         <|> try (":->"       `pWithCtor` JArrow)
         <|> try (":function" `pWithCtor` JFunction)
         <|> try (":(=)"      `pWithCtor` JAssign)
@@ -177,7 +179,6 @@ data JExpr =
    deriving Show
 
 
-
 pJuliaType :: JTree -> JEParseState JuliaType
 pJuliaType (JSym name) = case name of
     "Any"             -> pure JTAny
@@ -191,18 +192,24 @@ pJuliaType (JSym name) = case name of
     "DMModel"         -> pure JTModel
     "DMGrads"         -> pure JTGrads
     _                 -> jParseError ("Unsupported julia type " <> show name)
-pJuliaType (JCurly (name : args)) = case name of
+pJuliaType (JCurly (name : args)) = pJuliaCurly (name:args)
+pJuliaType t = jParseError ("Expected a julia type, got " <> show t)
+
+pJuliaSubtype (JSubtype [t]) = pJuliaType t
+pJuliaSubtype (JSubtype t) = jParseError ("Invalid subtype statement " <> show t)
+pJuliaSubtype t = jParseError ("Expected a subtype statement, but found " <> show t)
+
+pJuliaCurly (name : args) = case name of
     JSym "Tuple"  -> (JTTuple <$> (mapM pJuliaType args))
     JSym "Matrix" -> case args of
         []  -> pure(JTMatrix JTAny)
-        [a] -> (JTMatrix <$> (pJuliaType a))
+        [a] -> (JTMatrix <$> (pJuliaSubtype a))
         _   -> jParseError ("Too many type parameters for matrix type in Matrix{" <> show name <> "}")
     JSym "Vector" -> case args of
         []  -> pure(JTVector JTAny)
-        [a] -> (JTVector <$> (pJuliaType a))
+        [a] -> (JTVector <$> (pJuliaSubtype a))
         _   -> jParseError ("Too many type parameters for vector type in Vector{" <> show name <> "}")
     _             -> jParseError ("Unsupported parametrised julia type" <> show name)
-pJuliaType t = jParseError ("Expected a julia type, got " <> show t)
 
 
 
