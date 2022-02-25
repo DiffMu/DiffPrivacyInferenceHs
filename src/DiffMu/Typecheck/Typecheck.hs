@@ -600,9 +600,7 @@ checkSen' scope (ClipM c m) = do
   -- change clip parameter to input
   return (NoFun (DMContainer k LInf c n (NoFun (Numeric DMData))))
 checkSen' scope (ClipN value upper lower) = do
-  τv <- checkSens scope value
-  τu <- checkSens scope upper
-  τl <- checkSens scope lower
+  (τv,τu,τl) <- msum3Tup (checkSens scope value, checkSens scope upper, checkSens scope lower)
 
   tv <- newVar
   tu <- newVar
