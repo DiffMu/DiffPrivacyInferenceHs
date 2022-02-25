@@ -34,8 +34,7 @@ instance TCConstraint IsJuliaEqual where
 
 makeNonConst_JuliaVersion ::  DMTypeOf k -> DMTypeOf k
 makeNonConst_JuliaVersion (TVar a) = TVar a
-makeNonConst_JuliaVersion (Num a (Const _)) = (Num a NonConst)
-makeNonConst_JuliaVersion (Num a NonConst) = (Num a NonConst)
+makeNonConst_JuliaVersion (Num a _) = (Num a NonConst)
 makeNonConst_JuliaVersion (NoFun a) = NoFun (makeNonConst_JuliaVersion a)
 makeNonConst_JuliaVersion (DMTup as) = DMTup (makeNonConst_JuliaVersion <$> as)
 makeNonConst_JuliaVersion (Numeric a) = Numeric (makeNonConst_JuliaVersion a)
@@ -97,14 +96,17 @@ instance Typeable k => FixedVars TVarOf (IsNonConst (DMTypeOf k, DMTypeOf k)) wh
 instance Typeable k => Solve MonadDMTC IsNonConst (DMTypeOf k, DMTypeOf k) where
   solve_ Dict _ name (IsNonConst (τ, τ_nonconst)) = do
      let freev = freeVars @_ @TVarOf τ
-         freev' = filterSomeK @TVarOf @BaseNumKind freev
+         freev1 = filterSomeK @TVarOf @BaseNumKind freev
+         freev2 = filterSomeK @TVarOf @ConstnessKind freev
 
-     case (length freev == length freev') of
+         m = length freev
+         n = length freev1 P.+ length freev2
+
+     case (m == n) of
        True -> do let a = makeNonConst_JuliaVersion τ
                   unify τ_nonconst a
                   dischargeConstraint name
        False -> return ()
-
 
 
 

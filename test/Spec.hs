@@ -45,6 +45,7 @@ runAllTests parse = defaultspec $ do
   testSupremum
   testCheck_Rules
   testScoping parse
+  testDemutation parse
   testDemutationScoping parse
   testOriginalScoping parse
   testScoping_AssignmentMoveSemantics parse
@@ -54,7 +55,6 @@ runAllTests parse = defaultspec $ do
   testTypecheckingExamples parse
   testIssues parse
   -- testParsing parse
-  -- testDemutation
 
 
 

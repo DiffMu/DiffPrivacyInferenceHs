@@ -67,7 +67,6 @@ instance Typeable k => Solve MonadDMTC MakeConst (DMTypeOf k) where
 
 
 
-{-
 
 ----------------------------------------------------------
 -- replacing all Numeric TVars by non-const
@@ -79,34 +78,40 @@ instance TCConstraint MakeNonConst where
   constr = MakeNonConst
   runConstr (MakeNonConst c) = c
 
-instance Typeable k => FixedVars TVarOf (MakeNonConst (DMTypeOf k)) where
+instance Typeable k => FixedVars TVarOf (MakeNonConst (DMTypeOf k, SolvingMode)) where
   fixedVars (MakeNonConst _) = []
 
-instance Typeable k => Solve MonadDMTC MakeNonConst (DMTypeOf k) where
-  solve_ Dict _ name (MakeNonConst τ) = do
+instance Typeable k => Solve MonadDMTC MakeNonConst (DMTypeOf k, SolvingMode) where
+  solve_ Dict currentMode name (MakeNonConst (τ, targetMode)) | currentMode == targetMode = do
      let freev = freeVars @_ @TVarOf τ
          freev0 = filterSomeK @TVarOf @BaseNumKind freev
          freev1 = filterSomeK @TVarOf @NormKind freev
          freev2 = filterSomeK @TVarOf @ClipKind freev
          freev3 = filterSomeK @TVarOf @NumKind freev
+         freev4 = filterSomeK @TVarOf @ConstnessKind freev
 
      let makeVarNonConst v = do
-                     -- k <- newVar
+                    --  k <- newVar
                      τv <- newVar
-                     unify (TVar v) (Num _ NonConst)
+                     unify (TVar v) (Num τv NonConst)
 
      mapM makeVarNonConst freev3
+
+     let makeCVarNonConst v = do unify (TVar v) (NonConst)
+     mapM makeCVarNonConst freev4
 
 
      -- compare the length of `m` and `n`, that is, if all free variables
      -- have the aforementioned kinds
      let m = length freev
-         n = length freev0 P.+ length freev1 P.+ length freev2 P.+ length freev3
+         n = length freev0 P.+ length freev1 P.+ length freev2 P.+ length freev3 P.+ length freev4
 
      case (m == n) of
         True -> dischargeConstraint name
-        False -> pure ()
--}
+        False -> dischargeConstraint name -- pure ()
+
+  solve_ Dict currentMode name (MakeNonConst (τ, targetMode)) | otherwise = pure ()
+
 
 {-
 

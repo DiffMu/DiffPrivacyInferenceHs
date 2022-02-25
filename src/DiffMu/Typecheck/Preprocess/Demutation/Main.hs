@@ -530,7 +530,7 @@ elaborateMut scname (Extra (ProcPreLoop iters iterVar body)) = do -- demutationE
   let newMemVars = (snd <$> newMems) >>= getAllMemVarsOfMemState
   case newMemVars `intersect` oldMemVars of
     [] -> pure ()
-    xs -> demutationError $ "Found a loop body which moves variables around.\n"
+    xs -> throwError $ DemutationMovedVariableAccessError $ "Found a loop body which moves variables around.\n"
                           <> "The following variables are changed and contain memory locations from before: " <> show xs <> "\n"
                           <> "Since this means that we cannot track what actually happens in the case of an unknown number of iterations,\n"
                           <> "this is not allowed.\n"
@@ -708,8 +708,8 @@ elaborateMut scname term@(Extra (ProcPhi cond tr fs)) = do
     -- case 1: statement branches
     --
     (StatementBranch trTerms, StatementBranch fsTerms) -> do
-      let trTerms' = (Extra (DemutBlock (trTerms <> proj1)))
-      let fsTerms' = (Extra (DemutBlock (fsTerms <> proj2)))
+      let trTerms' = (Extra (DemutBlock (proj1 <> trTerms)))
+      let fsTerms' = (Extra (DemutBlock (proj2 <> fsTerms)))
       
       return (StatementWithoutDefault (Extra (DemutPhi cond' trTerms' fsTerms')))
 
@@ -866,8 +866,6 @@ elaborateMut scname (Row t1 t2) = elaborateRefMove2 scname Row t1 t2
 ----
 -- the mutating builtin cases
 
--- TODO: Reimplement for #190
---
 elaborateMut scname (SubGrad t1 t2) = do
   (argTerms, mutVars) <- elaborateMutList "subgrad" scname [(Mutated , t1), (NotMutated , t2)]
   case argTerms of
@@ -904,6 +902,12 @@ elaborateMut scname (ConvertM t1) = do
     [newT1] -> demutTLetStatement PureLet mutVars (ConvertM newT1)
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
+
+elaborateMut scname (InternalMutate t1) = do
+  (argTerms, mutVars) <- elaborateMutList "internal_mutate" scname [(Mutated , t1)]
+  case argTerms of
+    [newT1] -> demutTLetStatement PureLet mutVars (InternalMutate newT1)
+    _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 --
 --

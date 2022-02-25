@@ -685,7 +685,7 @@ getMemVarMutationStatus mv = do
 
 coequalizeTeVarMutTrace :: TeVarMutTrace -> TeVarMutTrace -> WriterT ([DemutDMTerm],[DemutDMTerm]) MTC TeVarMutTrace
 coequalizeTeVarMutTrace (TeVarMutTrace pv1 split1 ts1) (TeVarMutTrace pv2 split2 ts2) | and [ts1 == ts2, pv1 == pv2, split1 == split2] = pure $ TeVarMutTrace pv1 split1 ts1
-coequalizeTeVarMutTrace (TeVarMutTrace pv1 split1 ts1) (TeVarMutTrace pv2 split2 ts2) | pv1 == pv2  = do
+coequalizeTeVarMutTrace (TeVarMutTrace pv1 split1 ts1) (TeVarMutTrace pv2 split2 ts2)  = do
   t3 <- newTeVarOfMut "phi"
   let makeProj (Just pv) []     = pure $ Extra (DemutSLetBase PureLet (t3 :- JTAny) (Var (UserTeVar pv :- JTAny))) 
       makeProj Nothing   []     = lift $ demutationError $ "While demutating phi encountered a branch where a proc-var-less memory location is mutated. This cannot be done."
@@ -693,6 +693,10 @@ coequalizeTeVarMutTrace (TeVarMutTrace pv1 split1 ts1) (TeVarMutTrace pv2 split2
 
   proj1 <- makeProj pv1 ts1 
   proj2 <- makeProj pv2 ts2
+
+  lift $ debug $ "Coequalizing MutTraces:\n"
+  lift $ debug $ "  proj1: " <> show proj1
+  lift $ debug $ "  proj2: " <> show proj2
 
   tell ([proj1],[proj2])
 
@@ -702,9 +706,13 @@ coequalizeTeVarMutTrace (TeVarMutTrace pv1 split1 ts1) (TeVarMutTrace pv2 split2
               (Split a, NotSplit) -> pure (Split a)
               (Split a, Split b) -> pure (Split (a <> b))
 
-  pure $ TeVarMutTrace pv1 split3 (t3 : ts1 <> ts2)
+  let pv3 = case pv1 == pv2 of
+              True -> pv1
+              False -> Nothing
 
-coequalizeTeVarMutTrace (TeVarMutTrace pv1 _ ts1) (TeVarMutTrace pv2 _ ts2) | otherwise   = lift $ demutationError $ "While demutating phi, encountered two branches where the owners of a tvar differ. This is not allowed."
+  pure $ TeVarMutTrace pv3 split3 (t3 : ts1 <> ts2)
+
+-- coequalizeTeVarMutTrace (TeVarMutTrace pv1 _ ts1) (TeVarMutTrace pv2 _ ts2)  = lift $ demutationError $ "While demutating phi, encountered two branches where the owners of a tvar differ. This is not allowed."
 
 
 instance SemigroupM (WriterT ([DemutDMTerm],[DemutDMTerm]) MTC) TeVarMutTrace where

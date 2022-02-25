@@ -773,6 +773,7 @@ data PreDMTerm (t :: * -> *) =
   | Sample (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
 -- Internal terms
   | InternalExpectConst (PreDMTerm t)
+  | InternalMutate (PreDMTerm t)
 -- Demutation related, but user specified
   | Clone (PreDMTerm t)
   deriving (Generic)
@@ -786,7 +787,7 @@ pattern SmpLet a b c = TLetBase SampleLet a b c
 {-# COMPLETE Extra, Ret, DMTrue, DMFalse, Sng, Var, Arg, Op, Phi, Lam, LamStar, BBLet, BBApply,
  Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, Gauss, Laplace, MutGauss, MutLaplace, AboveThresh, Count, MMap, ConvertM, MCreate, Transpose,
  Size, Length, Index, VIndex, Row, ClipN, ClipM, MutClipM, Loop, SubGrad, ScaleGrad, Reorder, TProject, ZeroGrad, SumGrads, SmpLet,
- Sample, InternalExpectConst #-}
+ Sample, InternalExpectConst, InternalMutate #-}
 
 
 deriving instance (forall a. Show a => Show (t a)) => Show (PreDMTerm t)
@@ -925,6 +926,7 @@ recDMTermM f h (SumGrads a b)     = SumGrads <$> (f a) <*> (f b)
 recDMTermM f h (Sample a b c)     = Sample <$> (f a) <*> (f b) <*> (f c)
 recDMTermM f h (Clone t) = Clone <$> (f t)
 recDMTermM f h (InternalExpectConst a) = InternalExpectConst <$> (f a)
+recDMTermM f h (InternalMutate a) = InternalMutate <$> (f a)
 
 --------------------------------------------------------------------------
 -- Free variables for terms
@@ -1058,6 +1060,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (Sample a b c)     = "Sample (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ")"
   showPretty (Clone a)  = "(Clone " <> showPretty a <> ")"
   showPretty (InternalExpectConst a) = "InternalExpectConst " <> (showPretty a)
+  showPretty (InternalMutate a) = "InternalMutate " <> (showPretty a)
 
 instance ShowPretty a => ShowPretty (ProceduralExtension a) where
   showPretty = \case
