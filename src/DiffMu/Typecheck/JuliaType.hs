@@ -34,13 +34,13 @@ import Debug.Trace
 -- potentially match any method.
 juliatypes :: DMTypeOf k -> [JuliaType]
 juliatypes (Numeric (Num t c)) = juliatypes t
-juliatypes (Numeric (TVar x)) = [JTInt, JTReal]
+juliatypes (Numeric (TVar _)) = [JTInt, JTReal]
 juliatypes DMInt = [JTInt]
 juliatypes DMReal = [JTReal]
-juliatypes (DMVec _ _ _ τ) = (map (\t -> (JTVector t)) (juliatypes τ))
-juliatypes (DMMat _ _ _ _ τ) = (map (\t -> (JTMatrix t)) (juliatypes τ))
+juliatypes (DMVec _ _ _ τ) = (juliatypesInContainer JTVector τ)
+juliatypes (DMMat _ _ _ _ τ) = (juliatypesInContainer JTMatrix τ)
 juliatypes (DMGrads _ _ _ _) = [JTGrads]
-juliatypes (DMContainer _ _ _ _ τ) = JTGrads : ((map (\t -> (JTVector t)) (juliatypes τ)) ++ (map (\t -> (JTMatrix t)) (juliatypes τ)))
+juliatypes (DMContainer _ _ _ _ τ) = JTGrads : ((juliatypesInContainer JTVector τ) ++ (juliatypesInContainer JTMatrix τ))
 juliatypes (TVar x) = [JTBot] -- TVars fit everywhere
 juliatypes (Num t c) = juliatypes t
 juliatypes (_ :->: _) = [JTFunction]
@@ -54,6 +54,7 @@ juliatypes (Fun ((τ :@ _):_)) = juliatypes τ -- TODO i am lazy and assume that
 juliatypes (NoFun τ) = juliatypes τ
 juliatypes τ = error $ "juliatypes(" <> show τ <> ") not implemented."
 
+juliatypesInContainer constr t = map constr (juliatypes t)
 
 ----------------------------------------------------------------------------
 -- Creating DMTypes from JuliaTypes
@@ -141,14 +142,10 @@ foreign import ccall "dynamic" call_StringStringBool :: FunPtr (CString -> CStri
 
 -- make a call to julia subtyping, using the string representation of the JuliaTypes.
 instance PartialOrd JuliaType where
-  leq a b = case a of
-    JTBot -> True -- Bottom type is subtype of all.
-    _ -> case b of
-              JTBot -> False
-              _ -> let callback = (askJuliaSubtypeOf $ unsafePerformIO (readIORef global_callback_issubtype))
-                   in case (callback) of
-                     Nothing -> error "Julia callback (issubtype) is not set."
-                     Just fun  -> unsafeLocalState (withCString (show a) (\ca -> withCString (show b) (\cb -> return $ call_StringStringBool fun ca cb)))
+  leq a b = let callback = (askJuliaSubtypeOf $ unsafePerformIO (readIORef global_callback_issubtype))
+            in case (callback) of
+                    Nothing -> error "Julia callback (issubtype) is not set."
+                    Just fun  -> unsafeLocalState (withCString (show a) (\ca -> withCString (show b) (\cb -> return $ call_StringStringBool fun ca cb)))
 
 -- `leq` on lists is defined weirdly, so we make our own for signatures.
 newtype JuliaSignature = JuliaSignature [JuliaType]
