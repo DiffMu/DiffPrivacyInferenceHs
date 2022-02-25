@@ -39,6 +39,8 @@ juliatypes DMInt = [JTInt]
 juliatypes DMReal = [JTReal]
 juliatypes (DMVec _ _ _ τ) = (map (\t -> (JTVector t)) (juliatypes τ))
 juliatypes (DMMat _ _ _ _ τ) = (map (\t -> (JTMatrix t)) (juliatypes τ))
+juliatypes (DMGrads _ _ _ _) = [JTGrads]
+juliatypes (DMContainer _ _ _ _ τ) = JTGrads : ((map (\t -> (JTVector t)) (juliatypes τ)) ++ (map (\t -> (JTMatrix t)) (juliatypes τ)))
 juliatypes (TVar x) = [JTBot] -- TVars fit everywhere
 juliatypes (Num t c) = juliatypes t
 juliatypes (_ :->: _) = [JTFunction]
@@ -141,10 +143,12 @@ foreign import ccall "dynamic" call_StringStringBool :: FunPtr (CString -> CStri
 instance PartialOrd JuliaType where
   leq a b = case a of
     JTBot -> True -- Bottom type is subtype of all.
-    _ -> let callback = (askJuliaSubtypeOf $ unsafePerformIO (readIORef global_callback_issubtype))
-         in case (callback) of
-           Nothing -> error "Julia callback (issubtype) is not set."
-           Just fun  -> unsafeLocalState (withCString (show a) (\ca -> withCString (show b) (\cb -> return $ call_StringStringBool fun ca cb)))
+    _ -> case b of
+              JTBot -> False
+              _ -> let callback = (askJuliaSubtypeOf $ unsafePerformIO (readIORef global_callback_issubtype))
+                   in case (callback) of
+                     Nothing -> error "Julia callback (issubtype) is not set."
+                     Just fun  -> unsafeLocalState (withCString (show a) (\ca -> withCString (show b) (\cb -> return $ call_StringStringBool fun ca cb)))
 
 -- `leq` on lists is defined weirdly, so we make our own for signatures.
 newtype JuliaSignature = JuliaSignature [JuliaType]
