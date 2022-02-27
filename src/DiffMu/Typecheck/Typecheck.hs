@@ -1288,7 +1288,7 @@ checkPri' scope (Exponential rp εp xs f) = do
       --  so we simply use a var and allow any sensitivity.
       --
       s_input <- newVar
-      let t_f_required = Fun ([([t_x :@ s_input] :->: (NoFun (Numeric (Num DMInt NonConst)))) :@ Just [JTAny]])
+      let t_f_required = Fun ([([t_x :@ s_input] :->: (NoFun (Numeric (Num DMReal NonConst)))) :@ Just [JTAny]])
       unify t_f_actual t_f_required
 
       -- interesting input variables must have sensitivity <= r
