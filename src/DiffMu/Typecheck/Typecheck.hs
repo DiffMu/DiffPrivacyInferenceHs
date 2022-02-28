@@ -607,9 +607,12 @@ checkSen' scope (ClipN value upper lower) = do
   (τv,τu,τl) <- msum3Tup (checkSens scope value <* mscale (minus tu tl), checkSens scope upper, checkSens scope lower)
 
   tv <- newVar
-  addConstraint (Solvable (IsLessEqual (τv, (NoFun (Numeric (Num tv NonConst))))))
-  unify τu (NoFun (Numeric (Num tv (Const tu))))
-  unify τl (NoFun (Numeric (Num tv (Const tl))))
+  tk <- newVar
+  tku <- newVar
+  tkl <- newVar
+  unify τv (NoFun (Numeric (Num tv tk)))
+  unify τu (NoFun (Numeric (Num tv tku)))
+  unify τl (NoFun (Numeric (Num tv tkl)))
 
   return (NoFun (Numeric (Num tv NonConst)))
 
