@@ -153,9 +153,9 @@ transformLets reqc term = case term of
                 ttail <- handlePrivTerm tail
                 return (TLetBase BindLet ns tbody ttail)
              
-   Reorder σ t -> do
-       tt <- handleAnyTerm t
-       return (Reorder σ tt)
+--    Reorder σ t -> do
+--        tt <- handleAnyTerm t
+--        return (Reorder σ tt)
 
    Lam args body -> do
        pushFunctionArgs args

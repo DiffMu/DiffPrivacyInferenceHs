@@ -937,7 +937,6 @@ elaborateMut scname (MMap t1 t2) = elaborateNonMut2 scname MMap t1 t2
 -- the unsupported terms
 elaborateMut scname term@(Choice t1)        = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
 elaborateMut scname term@(Loop t1 t2 t3 t4) = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
-elaborateMut scname term@(Reorder t1 t2)    = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
 elaborateMut scname term@(TProject t1 t2)   = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
 elaborateMut scname term@(Arg x a b)        = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
 elaborateMut scname term@(Ret t1)           = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))

@@ -838,11 +838,11 @@ checkSen' scope term@(ScaleGrad scalar grad) = do
   unify (Numeric τresnum) τres
   return (NoFun (DMGrads nrm U m (NoFun τres)))
 
-checkSen' scope (Reorder σ t) = do
-  τ <- checkSens scope t
-  ρ <- newVar
-  addConstraint (Solvable (IsReorderedTuple ((σ , τ) :=: ρ)))
-  return ρ
+-- checkSen' scope (Reorder σ t) = do
+--   τ <- checkSens scope t
+--   ρ <- newVar
+--   addConstraint (Solvable (IsReorderedTuple ((σ , τ) :=: ρ)))
+--   return ρ
 
 checkSen' scope (TProject i t) = do
   τ <- checkSens scope t
@@ -1421,11 +1421,11 @@ checkPri' scope (Loop niter cs' (xi, xc) body) =
 
 
 
-checkPri' scope (Reorder σ t) = do
-  τ <- checkPriv scope t
-  ρ <- newVar
-  addConstraint (Solvable (IsReorderedTuple ((σ , τ) :=: ρ)))
-  return ρ
+-- checkPri' scope (Reorder σ t) = do
+--   τ <- checkPriv scope t
+--   ρ <- newVar
+--   addConstraint (Solvable (IsReorderedTuple ((σ , τ) :=: ρ)))
+--   return ρ
 
 
 checkPri' scope (SmpLet xs (Sample n m1_in m2_in) tail) =

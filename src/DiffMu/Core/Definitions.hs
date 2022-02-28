@@ -767,7 +767,6 @@ data PreDMTerm (t :: * -> *) =
   | SubGrad (PreDMTerm t) (PreDMTerm t)
   | ScaleGrad (PreDMTerm t) (PreDMTerm t) -- scale (a : Scalar) (g : Mutating Gradient)
 -- Special Tuple terms
-  | Reorder [Int] (PreDMTerm t)
   | TProject Int (PreDMTerm t)
   | ZeroGrad (PreDMTerm t)
   | SumGrads (PreDMTerm t) (PreDMTerm t)
@@ -787,7 +786,7 @@ pattern SmpLet a b c = TLetBase SampleLet a b c
 
 {-# COMPLETE Extra, Ret, DMTrue, DMFalse, Sng, Var, Arg, Op, Phi, Lam, LamStar, BBLet, BBApply,
  Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, Gauss, Laplace, Exponential, MutGauss, MutLaplace, AboveThresh, Count, MMap, ConvertM, MCreate, Transpose,
- Size, Length, Index, VIndex, Row, ClipN, ClipM, MutClipM, Loop, SubGrad, ScaleGrad, Reorder, TProject, ZeroGrad, SumGrads, SmpLet,
+ Size, Length, Index, VIndex, Row, ClipN, ClipM, MutClipM, Loop, SubGrad, ScaleGrad, TProject, ZeroGrad, SumGrads, SmpLet,
  Sample, InternalExpectConst, InternalMutate #-}
 
 
@@ -921,7 +920,6 @@ recDMTermM f h (MutClipM c a)     = MutClipM c <$> (f a)
 recDMTermM f h (Loop a b x d )    = Loop <$> (f a) <*> pure b <*> pure x <*> (f d)
 recDMTermM f h (SubGrad a b)      = SubGrad <$> (f a) <*> (f b)
 recDMTermM f h (ScaleGrad a b)    = ScaleGrad <$> (f a) <*> (f b)
-recDMTermM f h (Reorder x a)      = Reorder x <$> (f a)
 recDMTermM f h (TProject x a)     = TProject x <$> f a
 recDMTermM f h (ZeroGrad a)       = ZeroGrad <$> (f a)
 recDMTermM f h (SumGrads a b)     = SumGrads <$> (f a) <*> (f b)
@@ -1053,7 +1051,6 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (MutClipM c a)     = "MutClipM (" <> show c <> ", " <> (showPretty a) <> ")"
   showPretty (SubGrad a b)      = "SubGrad (" <> (showPretty a) <> ", " <> (showPretty b) <>  ")"
   showPretty (ScaleGrad a b)    = "ScaleGrad (" <> (showPretty a) <> ", " <> (showPretty b) <>  ")"
-  showPretty (Reorder x a)      = "Reorder " <> show x <> parenIndent (showPretty a)
   showPretty (TProject x a)     = "Proj" <> show x <> " " <>  (showPretty a)
   showPretty (Loop a b x d )    = "Loop (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> show x <> ")" <> parenIndent (showPretty d)
   showPretty (SBind x a b)      = "SBind " <> showPretty x <> " <- " <> newlineIndentIfLong (showPretty a) <> "\n" <> (showPretty b)
