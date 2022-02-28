@@ -928,6 +928,7 @@ elaborateMut scname (ClipM c t1) = elaborateNonMut1 scname (ClipM c) t1
 elaborateMut scname (Gauss t1 t2 t3 t4) = elaborateNonMut4 scname Gauss t1 t2 t3 t4
 elaborateMut scname (Laplace t1 t2 t3) = elaborateNonMut3 scname Laplace t1 t2 t3
 elaborateMut scname (AboveThresh t1 t2 t3 t4) = elaborateNonMut4 scname AboveThresh t1 t2 t3 t4
+elaborateMut scname (Exponential t1 t2 t3 t4) = elaborateNonMut4 scname Exponential t1 t2 t3 t4
 elaborateMut scname (ClipN t1 t2 t3) = elaborateNonMut3 scname ClipN t1 t2 t3
 elaborateMut scname (Count t1 t2) = elaborateNonMut2 scname Count t1 t2
 elaborateMut scname (MMap t1 t2) = elaborateNonMut2 scname MMap t1 t2

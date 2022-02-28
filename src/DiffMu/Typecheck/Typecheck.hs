@@ -1140,10 +1140,10 @@ checkPri' scope (Gauss rp εp δp f) =
       restrictInteresting r
       -- interesting output variables are set to (ε, δ), the rest is truncated to ∞
       ctxBeforeTrunc <- use types
-      logForce $ "[Gauss] Before truncation, context is:\n" <> show ctxBeforeTrunc
+      debug $ "[Gauss] Before truncation, context is:\n" <> show ctxBeforeTrunc
       mtruncateP inftyP
       ctxAfterTrunc <- use types
-      logForce $ "[Gauss] After truncation, context is:\n" <> show ctxAfterTrunc
+      debug $ "[Gauss] After truncation, context is:\n" <> show ctxAfterTrunc
       (ivars, itypes) <- getInteresting
       mapM (\(x, (τ :@ _)) -> setVarP x (WithRelev IsRelevant (τ :@ PrivacyAnnotation (ε, δ)))) (zip ivars itypes)
       -- return type is a privacy type.
@@ -1253,6 +1253,78 @@ checkPri' scope (AboveThresh qs e d t) = do
 
       return (NoFun (Numeric (Num DMInt NonConst)))
 
+checkPri' scope (Exponential rp εp xs f) = do
+
+  let
+   setParamConst :: TC DMMain -> Sensitivity -> TC ()
+   setParamConst dt v = do -- parameters must be const numbers.
+      τ <- dt
+      τv <- newVar
+      unify τ (NoFun (Numeric (Num τv (Const v))))
+      return ()
+
+   setParamVecLike :: TC DMMain -> DMMain -> TC ()
+   setParamVecLike dt v = do
+      t_actual <- dt
+      t_required <- NoFun <$> (DMVec <$> newVar <*> newVar <*> newVar <*> pure v)
+      unify t_actual t_required
+      return ()
+
+   -- the function (given as "body") needs to take the content type of the vector
+   -- and return real.
+   setBody df ε r t_x = do
+
+      -- extract f's type from the TC monad
+      --
+      t_f_actual <- df
+
+      -- unify with expected
+      --  the sensitivity of the function can be \infty,
+      --  so we simply use a var and allow any sensitivity.
+      --
+      s_input <- newVar
+      let t_f_required = Fun ([([t_x :@ s_input] :->: (NoFun (Numeric (Num DMReal NonConst)))) :@ Just [JTAny]])
+      unify t_f_actual t_f_required
+
+      -- interesting input variables must have sensitivity <= r
+      --
+      restrictInteresting r
+
+      -- interesting output variables are set to (ε, 0), the rest is truncated to ∞
+      --
+      ctxBeforeTrunc <- use types
+      debug $ "[Exponential] Before truncation, context is:\n" <> show ctxBeforeTrunc
+      mtruncateP inftyP
+      ctxAfterTrunc <- use types
+      debug $ "[Exponential] After truncation, context is:\n" <> show ctxAfterTrunc
+      (ivars, itypes) <- getInteresting
+      mapM (\(x, (τ :@ _)) -> setVarP x (WithRelev IsRelevant (τ :@ PrivacyAnnotation (ε, zeroId)))) (zip ivars itypes)
+
+      return ()
+
+
+   in do
+      -- check all the parameters and f, extract the TC monad from the Delayed monad.
+      let drp = checkSens scope rp
+      let dεp = checkSens scope εp
+      let dxs = checkSens scope xs
+      let df  = checkSens scope f
+
+      -- create variables for the parameters
+      v_ε :: Sensitivity <- newVar
+      v_r :: Sensitivity <- newVar
+      v_t_x :: DMMain   <- newVar
+
+      -- restrict interesting variables in f's context to v_r
+      let mf = setBody df v_ε v_r v_t_x
+
+      let mr  = setParamConst drp v_r  <* mtruncateP zeroId
+      let mε  = setParamConst dεp v_ε  <* mtruncateP zeroId
+      let mxs = setParamVecLike dxs v_t_x <* mtruncateP inftyP
+
+      (τf, _) <- msumTup (mf, msum3Tup (mr, mε, mxs))
+
+      return (v_t_x)
 
 checkPri' scope (Loop niter cs' (xi, xc) body) =
    --let setInteresting :: ([Symbol],[DMMain :@ PrivacyAnnotation]) -> Sensitivity -> TC ()

@@ -315,6 +315,9 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
   (t@"above_threshold", [a1, a2, a3, a4]) -> AboveThresh <$> pSingle a1 <*> pSingle a2 <*> pSingle a3 <*> pSingle a4
   (t@"above_threshold", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 4 arguments, but has been given " <> show (length args)
 
+  (t@"exponential", [a1, a2, a3, a4]) -> Exponential <$> pSingle a1 <*> pSingle a2 <*> pSingle a3 <*> pSingle a4
+  (t@"exponential", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 4 arguments, but has been given " <> show (length args)
+
   -- 3 arguments
   (t@"index", [a1, a2, a3]) -> Index <$> pSingle a1 <*> pSingle a2 <*> pSingle a3
   (t@"index", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 3 arguments, but has been given " <> show (length args)

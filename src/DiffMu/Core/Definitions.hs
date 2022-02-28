@@ -743,6 +743,7 @@ data PreDMTerm (t :: * -> *) =
   | TLetBase LetKind [(Asgmt JuliaType)] (PreDMTerm t) (PreDMTerm t)
   | Gauss (PreDMTerm t) (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
   | Laplace (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
+  | Exponential (PreDMTerm t) (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
   | AboveThresh (PreDMTerm t) (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
   | MutGauss (PreDMTerm t) (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
   | MutLaplace (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
@@ -785,7 +786,7 @@ pattern TBind a b c = TLetBase BindLet a b c
 pattern SmpLet a b c = TLetBase SampleLet a b c
 
 {-# COMPLETE Extra, Ret, DMTrue, DMFalse, Sng, Var, Arg, Op, Phi, Lam, LamStar, BBLet, BBApply,
- Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, Gauss, Laplace, MutGauss, MutLaplace, AboveThresh, Count, MMap, ConvertM, MCreate, Transpose,
+ Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, Gauss, Laplace, Exponential, MutGauss, MutLaplace, AboveThresh, Count, MMap, ConvertM, MCreate, Transpose,
  Size, Length, Index, VIndex, Row, ClipN, ClipM, MutClipM, Loop, SubGrad, ScaleGrad, Reorder, TProject, ZeroGrad, SumGrads, SmpLet,
  Sample, InternalExpectConst, InternalMutate #-}
 
@@ -903,6 +904,7 @@ recDMTermM f h (AboveThresh a b c d)    = AboveThresh <$> (f a) <*> (f b) <*> (f
 recDMTermM f h (Laplace a b c)    = Laplace <$> (f a) <*> (f b) <*> (f c)
 recDMTermM f h (MutGauss a b c d) = MutGauss <$> (f a) <*> (f b) <*> (f c) <*> (f d)
 recDMTermM f h (MutLaplace a b c) = MutLaplace <$> (f a) <*> (f b) <*> (f c)
+recDMTermM f h (Exponential a b c d) = Exponential <$> (f a) <*> (f b) <*> (f c) <*> (f d)
 recDMTermM f h (Count a b)         = Count <$> (f a) <*> (f b)
 recDMTermM f h (MMap a b)         = MMap <$> (f a) <*> (f b)
 recDMTermM f h (ConvertM a)       = ConvertM <$> (f a)
@@ -1035,6 +1037,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (MutLaplace a b c) = "MutLaplace (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ")"
   showPretty (MutGauss a b c d) = "MutGauss (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ", " <> (showPretty d) <> ")"
   showPretty (Laplace a b c)    = "Laplace (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ")"
+  showPretty (Exponential a b c d) = "Exponential (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ", " <> (showPretty d) <> ")"
   showPretty (Count a b)         = "Count (" <> (showPretty a) <> " to " <> (showPretty b)  <> ")"
   showPretty (MMap a b)         = "MMap (" <> (showPretty a) <> " to " <> (showPretty b)  <> ")"
   showPretty (ConvertM a)       = "ConvertM (" <> (showPretty a) <> ")"
