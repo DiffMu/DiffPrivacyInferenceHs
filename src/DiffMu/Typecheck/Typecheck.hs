@@ -599,24 +599,19 @@ checkSen' scope (ClipM c m) = do
 
   -- change clip parameter to input
   return (NoFun (DMContainer k LInf c n (NoFun (Numeric DMData))))
-checkSen' scope (ClipN value upper lower) = do
-  (τv,τu,τl) <- msum3Tup (checkSens scope value, checkSens scope upper, checkSens scope lower)
 
-  tv <- newVar
+
+checkSen' scope (ClipN value upper lower) = do
   tu <- newVar
   tl <- newVar
-  tr <- newVar
+  (τv,τu,τl) <- msum3Tup (checkSens scope value <* mscale (minus tu tl), checkSens scope upper, checkSens scope lower)
 
+  tv <- newVar
   addConstraint (Solvable (IsLessEqual (τv, (NoFun (Numeric (Num tv NonConst))))))
   unify τu (NoFun (Numeric (Num tv (Const tu))))
   unify τl (NoFun (Numeric (Num tv (Const tl))))
 
-  addConstraint (Solvable (IsLessEqual (tr, tu)))
-  addConstraint (Solvable (IsLessEqual (tl, tr)))
-
-  mscale (minus tu tl)
-
-  return (NoFun (Numeric (Num tv (Const tr))))
+  return (NoFun (Numeric (Num tv NonConst)))
 
 
 checkSen' scope (Count f m) = let
