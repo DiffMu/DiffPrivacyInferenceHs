@@ -216,7 +216,9 @@ transformLets reqc term = case term of
                                    tterm <- recDMTermMSameExtension handleAnyTerm term
                                    case term of
                                        Gauss _ _ _ _ -> retPriv tterm
+                                       MutGauss _ _ _ _ -> retPriv tterm
                                        Laplace _ _ _ -> retPriv tterm
+                                       MutLaplace _ _ _ -> retPriv tterm
                                        AboveThresh _ _ _ _ -> retPriv tterm
                                        Exponential _ _ _ _ -> retPriv tterm
                                        _ ->  retPriv (Ret tterm)
@@ -224,7 +226,9 @@ transformLets reqc term = case term of
                              tterm <- recDMTermMSameExtension handleSensTerm term
                              case term of
                                  Gauss _ _ _ _ -> retPriv tterm
+                                 MutGauss _ _ _ _ -> retPriv tterm
                                  Laplace _ _ _ -> retPriv tterm
+                                 MutLaplace _ _ _ -> retPriv tterm
                                  AboveThresh _ _ _ _ -> retPriv tterm
                                  Exponential _ _ _ _ -> retPriv tterm
                                  _ ->  retSens tterm
