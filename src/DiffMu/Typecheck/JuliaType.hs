@@ -101,7 +101,7 @@ createDMType (JTMatrix t) = do
   return (DMMat nrm clp m n dt)
 createDMType (JTModel) = do
   n <- newVar
-  return (DMModel n DMAny)
+  return (DMModel n)
 createDMType (JTGrads) = do
   nrm <- newVar
   clp <- newVar

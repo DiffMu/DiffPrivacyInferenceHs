@@ -121,8 +121,8 @@ instance MonadDMTC t => Unifyᵢ (INCResT DMException t) (DMTypeOf k) where
   unifyᵢ_ (Clip k) (Clip s)             = Clip <$> unifyᵢ k s
   unifyᵢ_ (DMContainer k1 nrm1 clp1 n1 τ1) (DMContainer k2 nrm2 clp2 n2 τ2) =
       DMContainer <$> unifyᵢ k1 k2 <*> unifyᵢ nrm1 nrm2 <*> unifyᵢ clp1 clp2 <*> unifyᵢ n1 n2 <*> unifyᵢ τ1 τ2
-  unifyᵢ_ (DMModel m1 τ1) (DMModel m2 τ2) =
-      DMModel <$> unifyᵢ m1 m2 <*> unifyᵢ τ1 τ2
+  unifyᵢ_ (DMModel m1) (DMModel m2) =
+      DMModel <$> unifyᵢ m1 m2
   unifyᵢ_ (NoFun a) (v :∧: w)              = do
     res0 <- unifyᵢ (NoFun a) v
     res1 <- unifyᵢ res0 w

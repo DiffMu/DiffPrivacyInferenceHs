@@ -770,27 +770,19 @@ checkSen' scope (SubGrad ps gs) = do
       -- check model and gradient
       let dps = checkSens scope ps
       let dgs = checkSens scope gs
-
-      s1 <- newSVar "s1"
-      s2 <- newSVar "s2"
-
-      (ps, gs) <- msumTup ((dps <* mscale (svar s1)), (dgs <* mscale (svar s2)))
+      (ps, gs) <- msumTup (dps, dgs)
 
       -- variables for element types, norm and clip parameters and dimension
-      τps <- newVar
       τgs <- newVar
       nrm <- newVar
       clp <- newVar
       m <- newVar
 
       -- set argument types
-      unify ps (NoFun (DMModel m τps))
+      unify ps (NoFun (DMModel m))
       unify gs (NoFun (DMGrads nrm clp m (NoFun (Numeric τgs))))
 
-      res <- TVar <$> newTVar "τr"
-      addConstraint (Solvable (IsTypeOpResult (Binary DMOpSub ((Numeric τps):@s1, (Numeric τgs):@s2) (Numeric res))))
-
-      return (NoFun (DMModel m res))
+      return (NoFun (DMModel m))
 
 checkSen' scope term@(ScaleGrad scalar grad) = do
 
@@ -853,15 +845,15 @@ checkSen' scope (ZeroGrad m) = do
    tm <- checkSens scope m
 
    -- variables for element type, dimension, result norm and clip parameters
-   τps <- newVar
    n <- newVar
    nrm <- newVar
    clp <- newVar -- actually variable, as all entries are zero
 
    -- input must be a model
-   unify tm (NoFun (DMModel n τps))
+   unify tm (NoFun (DMModel n))
 
-   return (NoFun (DMGrads nrm clp n (NoFun (Numeric τps))))
+   -- we could return const here but it'll probably be trouble
+   return (NoFun (DMGrads nrm clp n (NoFun (Numeric (Num DMReal NonConst)))))
 
 
 checkSen' scope term@(SumGrads g1 g2) = do
@@ -1530,7 +1522,7 @@ checkBBKind scope a = let
       JTVector JTInt -> do n <- newVar ; return $ NoFun $ DMVec n U pdt_val (NoFun $ Numeric $ Num DMInt NonConst)
       JTVector JTBool -> do n <- newVar ; return $ NoFun $ DMVec n U pdt_val (NoFun $ DMBool)
       JTVector JTReal -> do n <- newVar ; r <- getFloat; return $ NoFun $ DMVec n U pdt_val (NoFun $ Numeric r)
-      JTModel -> do r <- getFloat; return $ NoFun $ DMModel pdt_val r
+      JTModel -> return $ NoFun $ DMModel pdt_val
       JTGrads -> do n <- newVar; r <- getFloat;  return $ NoFun $ DMGrads n U pdt_val (NoFun $ Numeric $ r)
       _ -> throwError $ TypeMismatchError $ "The type " <> show jt <> " is not allowed as return type of black boxes.\n"
                                               <> "You can only have annotations of the following form:\n"

@@ -139,7 +139,7 @@ instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs (DMTup τs) = DMTup <$> substitute σs τs
   substitute σs (DMContainer k nrm clp n τ) = DMContainer <$> substitute σs k <*> substitute σs nrm <*> substitute σs clp <*> substitute σs n <*> substitute σs τ
   substitute σs (DMMat nrm clp n m τ) = DMMat <$> substitute σs nrm <*> substitute σs clp <*> substitute σs n <*> substitute σs m <*> substitute σs τ
-  substitute σs (DMModel m τ) = DMModel <$> substitute σs m <*> substitute σs τ
+  substitute σs (DMModel m) = DMModel <$> substitute σs m
   substitute σs (NoFun (x)) = NoFun <$> substitute σs x
   substitute σs (Fun xs) = Fun <$> substitute σs xs
   substitute σs (x :∧: y) = (:∧:) <$> substitute σs x <*> substitute σs y
@@ -174,7 +174,7 @@ instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
   substitute σs (DMTup τs) = DMTup <$> substitute σs τs
   substitute σs (DMContainer k nrm clp n τ) = DMContainer <$> substitute σs k <*> substitute σs nrm <*> substitute σs clp <*> substitute σs n <*> substitute σs τ
   substitute σs (DMMat nrm clp n m τ) = DMMat nrm clp <$> substitute σs n <*> substitute σs m <*> substitute σs τ
-  substitute σs (DMModel m τ) = DMModel <$> substitute σs m <*> substitute σs τ
+  substitute σs (DMModel m) = DMModel <$> substitute σs m
   substitute σs (NoFun x) = NoFun <$> substitute σs x
   substitute σs (Fun xs) = Fun <$> substitute σs xs
   substitute σs (x :∧: y) = (:∧:) <$> substitute σs x <*> substitute σs y
@@ -249,7 +249,7 @@ instance Typeable k => FreeVars TVarOf (DMTypeOf k) where
   freeVars (DMTup τs) = freeVars τs
   freeVars (DMContainer k nrm clp n τ) = freeVars k <> freeVars nrm <> freeVars clp <> freeVars τ
   freeVars (DMMat nrm clp n m τ) = freeVars nrm <> freeVars clp <> freeVars τ
-  freeVars (DMModel m τ) = freeVars τ
+  freeVars (DMModel m) = []
   freeVars (NoFun x) = freeVars x
   freeVars (Fun xs) = freeVars xs
   freeVars (x :∧: y) = freeVars x <> freeVars y

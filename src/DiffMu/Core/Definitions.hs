@@ -204,8 +204,7 @@ data DMTypeOf (k :: DMKind) where
 
   -- matrices
   DMContainer :: VecKind -> (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> DMMain -> DMType
-  --DMMat :: (DMTypeOf NormKind) -> (DMTypeOf ClipKind) -> Sensitivity -> Sensitivity -> DMMain -> DMType
-  DMModel :: Sensitivity -> DMNum -> DMType -- number of parameters and element type
+  DMModel :: Sensitivity -> DMType -- number of parameters
 
   -- annotations
   NoFun :: DMType -> DMTypeOf MainKind
@@ -241,7 +240,7 @@ instance Hashable (DMTypeOf k) where
   hashWithSalt s (Clip t) = s `hashWithSalt` t
   hashWithSalt s (DMContainer k n t u v) = s `hashWithSalt` k `hashWithSalt` n `hashWithSalt` t `hashWithSalt` u `hashWithSalt` v
 --  hashWithSalt s (DMMat n t u v w) = s `hashWithSalt` n `hashWithSalt` t `hashWithSalt` u `hashWithSalt` v `hashWithSalt` w
-  hashWithSalt s (DMModel u v) = s `hashWithSalt` u `hashWithSalt` v
+  hashWithSalt s (DMModel u) = s `hashWithSalt` u
   hashWithSalt s (Fun t) = s `hashWithSalt` t
   hashWithSalt s (NoFun t) = s `hashWithSalt` t
   hashWithSalt s (n :∧: t) = s `hashWithSalt` n `hashWithSalt` t
@@ -286,7 +285,7 @@ instance Show (DMTypeOf k) where
   show (Clip n) = "Clip(" <> show n <> ")"
   show (DMVec nrm clp n τ) = "Vector<n: "<> show nrm <> ", c: " <> show clp <> ">[" <> show n <> "](" <> show τ <> ")"
   show (DMMat nrm clp n m τ) = "Matrix<n: "<> show nrm <> ", c: " <> show clp <> ">[" <> show n <> " × " <> show m <> "](" <> show τ <> ")"
-  show (DMModel m τ) = "Model[" <> show m <> "](" <> show τ <> ")"
+  show (DMModel m) = "Model[" <> show m <> "]"
   show (DMGrads nrm clp m τ) = "Grads<n: "<> show nrm <> ", c: " <> show clp <> ">[" <> show m <> "](" <> show τ <> ")"
   show (DMContainer k nrm clp m τ) = "Container("<> show k <> ")<n: "<> show nrm <> ", c: " <> show clp <> ">[" <> show m <> "](" <> show τ <> ")"
   show (NoFun x) = "NoFun(" <> show x <> ")"
@@ -340,7 +339,7 @@ instance ShowPretty (DMTypeOf k) where
   showPretty (Clip n) = showPretty n
   showPretty (DMVec nrm clp n τ) = "Vector<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty n <> "](" <> showPretty τ <> ")"
   showPretty (DMMat nrm clp n m τ) = "Matrix<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty n <> " × " <> showPretty m <> "](" <> showPretty τ <> ")"
-  showPretty (DMModel m τ) = "DMModel[" <> showPretty m <> "](" <> showPretty τ <> ")"
+  showPretty (DMModel m) = "DMModel[" <> showPretty m <> "]"
   showPretty (DMGrads nrm clp m τ) = "DMGrads<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty m <> "](" <> showPretty τ <> ")"
   showPretty (DMContainer k nrm clp m τ) = "DMContainer{" <> show k <> "}<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty m <> "](" <> showPretty τ <> ")"
   showPretty (NoFun x) = showPretty x
@@ -495,8 +494,7 @@ recDMTypeM typemap sensmap (τ1 :->*: τ2) = (:->*:) <$> mapM (\(a :@ (b0, b1)) 
     f a b0 b1 = a :@ (b0, b1)
 recDMTypeM typemap sensmap (DMTup τs) = DMTup <$> mapM typemap τs
 recDMTypeM typemap sensmap (DMContainer k nrm clp n τ) = DMContainer <$> typemap k <*> typemap nrm <*> typemap clp <*> sensmap n <*> typemap τ
---recDMTypeM typemap sensmap (DMMat nrm clp n m τ) = DMMat <$> typemap nrm <*> typemap clp <*> sensmap n <*> sensmap m <*> typemap τ
-recDMTypeM typemap sensmap (DMModel m τ) = DMModel <$> sensmap m <*> typemap τ
+recDMTypeM typemap sensmap (DMModel m) = DMModel <$> sensmap m
 recDMTypeM typemap sensmap (NoFun x) = NoFun <$> typemap x
 recDMTypeM typemap sensmap (Fun xs) = Fun <$> mapM (\(a :@ b) -> (:@) <$> typemap a <*> pure b) xs
 recDMTypeM typemap sensmap (x :∧: y) = (:∧:) <$> typemap x <*> typemap y

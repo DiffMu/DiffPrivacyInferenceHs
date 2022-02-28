@@ -142,10 +142,7 @@ subtypingGraph =
                       return ((DMVec nrm₀ clp₀ n a₀), (DMVec nrm₁ clp₁ n a₁))
                  , SingleEdge $
                    do m <- newVar
-                      a₀ <- newVar
-                      a₁ <- newVar
-                      a₀ ⊑! a₁
-                      return ((DMModel m a₀), (DMModel m a₁)) -- TODO maybe we need conv rule for params?
+                      return ((DMModel m), (DMModel m))
                  , SingleEdge $
                    do nrm₀ <- newVar
                       clp₀ <- newVar
