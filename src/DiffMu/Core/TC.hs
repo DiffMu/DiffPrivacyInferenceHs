@@ -322,6 +322,34 @@ instance Substitute SVarOf SensitivityOf (SensitivityOf k) where
 instance (Substitute v a x, Substitute v a y) => Substitute v a (x,y) where
   substitute σs (x,y) = (,) <$> substitute σs x <*> substitute σs y
 
+
+
+instance FreeVars SVarOf (SymVal) where
+  freeVars _ = []
+
+instance FreeVars SVarOf (SymVar 'MainSensKind) where
+  freeVars = \case
+    HonestVar so -> [SomeK so]
+    Ln sk -> freeVars sk
+    Exp x0 -> freeVars x0
+    Ceil sk -> freeVars sk
+    Sqrt sk -> freeVars sk
+    Max sks -> freeVars sks
+    Minus x0 -> freeVars x0
+    Div sk -> freeVars sk
+    TruncateSym sk sk' -> freeVars sk <> freeVars sk'
+    TruncateDoubleSym x0 sk -> freeVars x0 <> freeVars sk
+
+instance Typeable k => FreeVars SVarOf (SensitivityOf k) where
+  freeVars (SingleKinded (LinCom (MonCom as))) = H.toList as >>= f
+    where
+      f :: (MonCom Int (SymVar 'MainSensKind), SymVal) -> [SomeK SVarOf]
+      f (MonCom bs, val) = (H.toList bs >>= g) <> freeVars val
+
+      g :: (SymVar 'MainSensKind, Int) -> [SomeK SVarOf]
+      g (x, _) = freeVars x
+
+
 -- TODO: implement isVar and freeVars
 instance Term SVarOf SensitivityOf where
   var (v) = var (HonestVar v)
@@ -851,6 +879,12 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
   logPrintConstraints = do
     ctrs <- use (meta.constraints.anncontent)
     log $ "## Constraints ##"
+    log $ show ctrs
+    log $ ""
+
+  logPrintSubstitutions = do
+    ctrs <- use (meta.sensSubs)
+    log $ "## Substitutions ##"
     log $ show ctrs
     log $ ""
 

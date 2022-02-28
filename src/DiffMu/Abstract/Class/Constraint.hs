@@ -76,6 +76,7 @@ class (Monad t) => MonadConstraint isT t | t -> isT where
   openNewConstraintSet :: t ()
   mergeTopConstraintSet :: t CloseConstraintSetResult
   logPrintConstraints :: t ()
+  logPrintSubstitutions :: t ()
   getConstraintsByType :: (Typeable c, Typeable a) => Proxy (c a) -> t [(Symbol, c a)]
   getAllConstraints :: t [(Symbol, Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT)]
   clearSolvingEvents :: t [String]
@@ -173,7 +174,9 @@ solveAllConstraints nt modes = withLogLocation "Constr" $ do
     Just (name, constr, mode) -> do
       -- debug $ "[Solver]: Notice: BEFORE solving (" <> show mode <> ") " <> show name <> " : " <> show constr
       -- logPrintConstraints
+      -- logPrintSubstitutions
       solve mode name constr
+      -- debug $ "[Solver]: Notice: AFTER solving (" <> show mode <> ") " <> show name <> " : " <> show constr
 
       -- check whether constraint disappeared
       allCs <- getAllConstraints

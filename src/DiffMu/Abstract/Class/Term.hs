@@ -167,11 +167,18 @@ substituteSingle ((x :: v k) := (a :: a k)) b = runIdentity (substitute f b)
 
 
 
-wellkindedSub :: (Typeable k, Typeable j, Term v a, MonadImpossible t) => Sub' v a k j -> t (Sub v a k)
+wellkindedSub :: (Typeable k, Typeable j, Term v a, Typeable k => FreeVars v (a k), MonadImpossible t) => Sub' v a k j -> t (Sub v a k)
 wellkindedSub ((x :: v k) :=~ (a :: a j)) =
     case testEquality (typeRep @k) (typeRep @j) of
       Nothing -> impossible $ "Encountered a wrongly kinded substitution: " <> show (typeRep @k) <> " ≠ " <> show (typeRep @j)
-      Just Refl -> return (x := a)
+      Just Refl -> do
+        -- occur check
+        let varsInA = freeVars a
+        case x `elem` filterSomeK varsInA of
+          False -> pure ()
+          True -> impossible $ "Tried to add a substitution where RHS contains the variable (" <> show (x := a) <> ")"
+
+        return (x := a)
 
 
 substituteSingle' :: (Typeable k, Term v a) => Sub v a k -> SomeK a -> SomeK a
@@ -180,9 +187,9 @@ substituteSingle' ((x :: v k) := (a :: a k)) (SomeK (a0 :: a j)) = SomeK (substi
 
 
 
-instance (MonadImpossible t, Term v a) => SemigroupM t (Subs v a) where
+instance (MonadImpossible t, Term v a, forall k. Typeable k => FreeVars v (a k)) => SemigroupM t (Subs v a) where
   (⋆) (Subs m) (Subs n) = Subs <$> H.foldlWithKey f (pure m) n
-    where f mm (SomeK x) (SomeK a) = do
+    where f mm (SomeK (x :: v k)) (SomeK a) = do
             mm' <- mm
             case H.lookup (SomeK x) mm' of
               Just (SomeK a') -> impossible $ "Tried to extend a set of substitutions which already contains " <> show (x :=~ a') <> " with a new substitution of the same variable, " <> show (x :=~ a) <> "."
@@ -191,7 +198,7 @@ instance (MonadImpossible t, Term v a) => SemigroupM t (Subs v a) where
                             return (H.insert (SomeK x) (SomeK a) mm1)
 
 
-instance (MonadImpossible t, Term v a) => MonoidM t (Subs v a) where
+instance (MonadImpossible t, Term v a, forall k. FreeVars v (a k)) => MonoidM t (Subs v a) where
   neutral = pure (Subs H.empty)
 
 instance (MonadImpossible t, MonadWatch t, Term v a, Substitute v a x) => ModuleM t (Subs v a) x where

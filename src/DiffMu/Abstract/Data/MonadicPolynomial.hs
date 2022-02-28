@@ -178,10 +178,15 @@ newtype SingleKinded a (k :: j) = SingleKinded a
 instance Show a => Show (SingleKinded a k) where
   show (SingleKinded a) = show a
 
+-- instance (Typeable j, Typeable v, Typeable (k :: j), FreeVars v a) => FreeVars v (SingleKinded a k) where
+--   freeVars (SingleKinded a) = freeVars a
+
 type CPolyM r e v = SingleKinded (LinCom r (MonCom e v))
 
 constCoeff :: (HasMonCom Identity e v, Hashable e, SemiringM Identity e, SemiringM Identity r) => r -> CPolyM r e v k
 constCoeff r = SingleKinded $ LinCom (MonCom (H.singleton neutralId r))
+
+-- instance FreeVars
 
 
 -- deriving via (LinCom r (MonCom e v)) instance (Coercible a b => Coercible (t a) (t v), SemiringM t r) => SemiringM t (CPolyM r e v k)
@@ -239,7 +244,12 @@ instance (Hashable v, Show v, Show m, Eq v, Eq m, MonoidM Identity m, CheckNeutr
   -- type Var (MonCom m v) = v
   var v = MonCom (H.singleton v neutralId) -- [(neutralId, v)]
 -}
-
+-- instance (Typeable j, Typeable r, Typeable (v :: j1 -> *), IsKind (k :: j), KEq v, Eq r
+--           --  KHashable v, CheckNeutral Identity r,
+--           --  SemiringM Identity r, forall k2. Substitute v (CPolyM r Int (v k)) (v k2)))
+--           )
+--       => FreeVars v (LinCom r (MonCom Int (v k))) where -- (CPolyM r Int (v k) k1)
+--   freeVars x = undefined
 
 
 instance (Typeable j, Typeable r, Typeable v, IsKind (k :: j), KEq v, Eq r, KHashable v, CheckNeutral Identity r, SemiringM Identity r, forall k2. Substitute v (CPolyM r Int (v k)) (v k2)) => Substitute v (CPolyM r Int (v k)) (CPolyM r Int (v k) k1) where
