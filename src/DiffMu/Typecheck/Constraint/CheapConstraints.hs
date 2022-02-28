@@ -202,6 +202,7 @@ instance Solve MonadDMTC IsAdditiveNoiseResult (DMTypeOf MainKind, DMTypeOf Main
 --------------------------------------------------
 -- reordering of tuples
 
+{-
 newtype IsReorderedTuple a = IsReorderedTuple a deriving Show
 
 instance FixedVars TVarOf (IsReorderedTuple (([Int], DMTypeOf MainKind) :=: DMTypeOf MainKind)) where
@@ -216,6 +217,7 @@ instance Solve MonadDMTC IsReorderedTuple (([Int], DMTypeOf MainKind) :=: DMType
     where
       f :: MonadDMTC t => DMTypeOf MainKind -> t ()
       f (TVar _) = pure ()
+      f (_ :∧: _) = pure ()
       f (NoFun (TVar _)) = pure ()
       f (NoFun (DMTup τs)) = do
         --
@@ -230,6 +232,7 @@ instance Solve MonadDMTC IsReorderedTuple (([Int], DMTypeOf MainKind) :=: DMType
         pure ()
       f (τs) = throwError (TypeMismatchError $ "Expected the type " <> show τ <> " to be a tuple type.")
 
+-}
 
 --------------------------------------------------
 -- projecting of tuples
@@ -248,6 +251,7 @@ instance Solve MonadDMTC IsTProject ((Int, DMTypeOf MainKind) :=: DMTypeOf MainK
     where
       f :: MonadDMTC t => DMTypeOf MainKind -> t ()
       f (TVar _) = pure ()
+      f (_ :∧: _) = pure ()
       f (NoFun (TVar _)) = pure ()
       f (NoFun (DMTup ρs)) = do
         let ρ' = ρs ^? element i
