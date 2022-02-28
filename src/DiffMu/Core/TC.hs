@@ -1077,6 +1077,7 @@ normalizeAnn nt (Fun as) = do
   let normalizeInside (f :@ annot) = (:@) <$> normalizeAnn nt f <*> pure annot
   Fun <$> mapM normalizeInside as
 normalizeAnn nt (NoFun fs) = pure $ NoFun fs
+normalizeAnn nt (a :∧: b) | a == b = return a
 normalizeAnn nt (a :∧: b) = do
   a' <- normalizeAnn nt a
   b' <- normalizeAnn nt b

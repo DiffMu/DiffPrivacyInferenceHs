@@ -321,6 +321,7 @@ instance ShowPretty (DMTypeOf k) where
   showPretty DMInt = "Int"
   showPretty DMReal = "Real"
   showPretty DMData = "Data"
+  showPretty (Num t (TVar a)) = showPretty t <> "[" <> showPretty a <> "?]"
   showPretty (Num t c) = showPretty t <> "[" <> showPretty c <> "]"
   showPretty (NonConst) = "--"
   showPretty (Const c) = showPretty c

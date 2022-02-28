@@ -251,7 +251,7 @@ instance Solve MonadDMTC IsTProject ((Int, DMTypeOf MainKind) :=: DMTypeOf MainK
     where
       f :: MonadDMTC t => DMTypeOf MainKind -> t ()
       f (TVar _) = pure ()
-      f (_ :∧: _) = pure ()
+      f (a :∧: b) = unify a b >> pure () -- since we know that the lhs is going to be a tuple (and thus NoFun) eventually, we can merge the values
       f (NoFun (TVar _)) = pure ()
       f (NoFun (DMTup ρs)) = do
         let ρ' = ρs ^? element i
