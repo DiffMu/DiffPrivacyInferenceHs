@@ -199,10 +199,11 @@ pJuliaSubtype (JSubtype [t]) = pJuliaType t
 pJuliaSubtype (JSubtype t) = jParseError ("Invalid subtype statement " <> show t)
 pJuliaSubtype t = jParseError ("Expected a subtype statement, but found " <> show t)
 
+pJuliaCurly [] = jParseError ("Invalid empty type")
 pJuliaCurly (name : args) = case name of
     JSym "Tuple"  -> (JTTuple <$> (mapM pJuliaType args))
     JSym "Matrix" -> case args of
-        []  -> pure(JTMatrix JTAny)
+        []  -> pure (JTMatrix JTAny)
         [a] -> (JTMatrix <$> (pJuliaSubtype a))
         _   -> jParseError ("Too many type parameters for matrix type in Matrix{" <> show name <> "}")
     JSym "Vector" -> case args of
@@ -307,6 +308,7 @@ pTreeToJExpr tree = case tree of
          [(JAssign [_, iter]), _] -> jParseError ("Iterator has to be a range! Not like " <> show iter)
          _ -> jParseError ("unsupported loop statement " <> show tree)
      JCurly _        -> jParseError ("Did not expect a julia type but got " <> show tree)
+     JSubtype _        -> jParseError ("Did not expect a julia type but got " <> show tree)
      JTypeAssign _   -> jParseError ("Type annotations are not supported here: " <> show tree)
 
      
