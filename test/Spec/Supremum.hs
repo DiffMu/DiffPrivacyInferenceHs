@@ -29,6 +29,23 @@ testSupremum = do
             (Fun [([NoFun (Numeric (Num DMInt NonConst)) :@ oneId] :->: (NoFun (Numeric (Num DMInt NonConst)))) :@ Nothing])
             (Left (UnsatisfiableConstraint "[test]"))
 
+
+  describe "infimum" $ do
+    let testinf (a :: DMTypeOf k) b c = do
+          it ("computes inf{" <> show a <> ", " <> show b <> "} = " <> show c) $ do
+            (tc $ sn_EW $ infimum a b) `shouldReturn` (c)
+
+    let twoId = oneId ⋆! oneId
+
+    testinf (DMInt) (DMInt) (Right $ DMInt)
+    testinf (DMReal) (DMReal) (Right $ DMReal)
+    testinf (DMInt) (DMReal) (Right $ DMInt)
+
+    testinf (Num DMInt (Const twoId)) (Num DMInt (Const twoId)) (Right $ Num DMInt (Const twoId)) -- (Right $ Const (twoId)))
+    testinf (Num DMInt (Const (twoId))) (Num DMInt (Const oneId)) (Left $ UnsatisfiableConstraint "")
+
+
+
   describe "advanced supremum" $ do
     it "breaks down Num wrapped sups" $ do
       let term :: TC _
