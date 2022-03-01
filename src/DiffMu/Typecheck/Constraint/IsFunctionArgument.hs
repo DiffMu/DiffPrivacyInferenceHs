@@ -72,14 +72,12 @@ solveIsFunctionArgument name (TVar a, Fun xs) = addSub (a := Fun xs) >> discharg
 
 -- if we expect a non-function, the given argument must be a non-function.
 solveIsFunctionArgument name (NoFun a1, b) = do
-  --addConstraint (Solvable (UnifyWithConstSubtype (b,(NoFun a1))))
-  unify b (NoFun a1)
+  unify (NoFun a1) b
   dischargeConstraint name
 
 -- if the given argument is a non-function, we must expect some non-function type.
 solveIsFunctionArgument name (b, NoFun a1) = do
-  --addConstraint (Solvable (UnifyWithConstSubtype ((NoFun a1),b)))
-  unify (NoFun a1) b
+  unify b (NoFun a1)
   dischargeConstraint name
 
 -- if both sides are variables or ∧ terms of variables
