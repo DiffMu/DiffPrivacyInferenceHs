@@ -380,6 +380,7 @@ class (MonadImpossible (t), MonadWatch (t), MonadLog t,
        MonadWriter DMLogMessages (t),
        MonadError DMException (t),
        MonadInternalError t,
+       MonadUnificationError t,
        -- MonadConstraint' Symbol (TC) (t),
        -- MonadConstraint Symbol (MonadDMTC) (t),
        MonadConstraint (MonadDMTC) (t),
@@ -802,6 +803,9 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
       -- log this as event
       tcstate.solvingEvents %= (Event_ConstraintCreated name (show c) :)
 
+      -- temp, also log this directly
+      logForce $ "!! Got constraint: " <> show name <> ": " <> show c
+
       return name
 
 
@@ -949,7 +953,8 @@ infimum x y = do
 instance Monad m => MonadInternalError (TCT m) where
   internalError = throwError . InternalError
 
-
+instance Monad m => MonadUnificationError (TCT m) where
+  unificationError x y = throwError $ UnificationError x y
 
 
 -- Normalizes all contexts in our typechecking monad, i.e., applies all available substitutions.
@@ -973,6 +978,7 @@ instance Monad m => LiftTC (TCT m) where
   liftTC (TCT v) = -- TCT (v >>= (lift . lift . return))
     let x = StateT (\s -> ExceptT (WriterT (return $ runWriter $ runExceptT $ runStateT v s)))
     in TCT x
+
 
 instance Monad m => MonadImpossible (TCT m) where
   impossible err = throwError (ImpossibleError err)

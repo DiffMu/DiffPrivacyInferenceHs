@@ -15,6 +15,7 @@ module DiffMu.Prelude
   , composeFunM
   , MonadImpossible (..)
   , MonadInternalError (..)
+  , MonadUnificationError (..)
   , ProcVar (..)
   , TeVar (..)
   , ScopeVar (..)
@@ -152,6 +153,9 @@ class Monad t => MonadImpossible t where
 
 class Monad t => MonadInternalError t where
   internalError :: String -> t a
+
+class Monad t => MonadUnificationError t where
+  unificationError :: Show a => a -> a -> t b
 
 
 throwOriginalError :: (MonadError e m) => e -> m a

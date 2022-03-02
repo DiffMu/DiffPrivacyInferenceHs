@@ -167,7 +167,7 @@ substituteSingle ((x :: v k) := (a :: a k)) b = runIdentity (substitute f b)
 
 
 
-wellkindedSub :: (Typeable k, Typeable j, Term v a, Typeable k => FreeVars v (a k), MonadImpossible t) => Sub' v a k j -> t (Sub v a k)
+wellkindedSub :: (IsKind k, Typeable j, Term v a, Typeable k => FreeVars v (a k), MonadImpossible t, MonadUnificationError t) => Sub' v a k j -> t (Sub v a k)
 wellkindedSub ((x :: v k) :=~ (a :: a j)) =
     case testEquality (typeRep @k) (typeRep @j) of
       Nothing -> impossible $ "Encountered a wrongly kinded substitution: " <> show (typeRep @k) <> " ≠ " <> show (typeRep @j)
@@ -176,7 +176,7 @@ wellkindedSub ((x :: v k) :=~ (a :: a j)) =
         let varsInA = freeVars a
         case x `elem` filterSomeK varsInA of
           False -> pure ()
-          True -> impossible $ "Tried to add a substitution where RHS contains the variable (" <> show (x := a) <> ")"
+          True -> unificationError (var x) a
 
         return (x := a)
 
@@ -187,7 +187,7 @@ substituteSingle' ((x :: v k) := (a :: a k)) (SomeK (a0 :: a j)) = SomeK (substi
 
 
 
-instance (MonadImpossible t, Term v a, forall k. Typeable k => FreeVars v (a k)) => SemigroupM t (Subs v a) where
+instance (MonadImpossible t, MonadUnificationError t, Term v a, forall k. Typeable k => FreeVars v (a k)) => SemigroupM t (Subs v a) where
   (⋆) (Subs m) (Subs n) = Subs <$> H.foldlWithKey f (pure m) n
     where f mm (SomeK (x :: v k)) (SomeK a) = do
             mm' <- mm
@@ -198,7 +198,7 @@ instance (MonadImpossible t, Term v a, forall k. Typeable k => FreeVars v (a k))
                             return (H.insert (SomeK x) (SomeK a) mm1)
 
 
-instance (MonadImpossible t, Term v a, forall k. FreeVars v (a k)) => MonoidM t (Subs v a) where
+instance (MonadImpossible t, MonadUnificationError t, Term v a, forall k. FreeVars v (a k)) => MonoidM t (Subs v a) where
   neutral = pure (Subs H.empty)
 
 instance (MonadImpossible t, MonadWatch t, Term v a, Substitute v a x) => ModuleM t (Subs v a) x where

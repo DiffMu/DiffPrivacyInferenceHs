@@ -216,7 +216,7 @@ solvingAllNewConstraints nt modes f = withLogLocation "Constr" $ do
   return (closeRes, res)
 
 
-solveAndNormalize :: forall a isT t eC. (MonadImpossible t, MonadLog t, MonadConstraint isT t, MonadNormalize t, IsT isT t, Normalize t a) => NormalizationType -> [SolvingMode] -> a -> t a
+solveAndNormalize :: forall a isT t eC. (MonadImpossible t, MonadLog t, MonadConstraint isT t, MonadNormalize t, IsT isT t, Normalize t a, Show a) => NormalizationType -> [SolvingMode] -> a -> t a
 solveAndNormalize nt modes value = f 4 value
   where
     f :: Int -> a -> t a
@@ -228,7 +228,12 @@ solveAndNormalize nt modes value = f 4 value
       let allNames0 = fst <$> allCs0
 
       solveAllConstraints nt modes
+      debug $ "================================================"
+      debug $ "Solved constraints as far as possible."
+      debug $ "Now normalizing type."
       a1 <- normalize nt a0
+      debug $ "Old type: " <> show a0
+      debug $ "New type: " <> show a1
 
       allCs1 <- getAllConstraints
       let allNames1 = fst <$> allCs1

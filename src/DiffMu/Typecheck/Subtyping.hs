@@ -311,43 +311,46 @@ subtypingGraph =
 -- subtyping constraints. 
 convertSubtypingToSupremum :: forall k t. (SingI k, Typeable k, IsT MonadDMTC t) => Symbol -> (DMTypeOf k, DMTypeOf k) -> t ()
 convertSubtypingToSupremum name (lower, TVar upper) = do
-                              
-  -- all (subtyping) constraints that contain upper
-  allCsWithUpper <- filterWithSomeVars [(SomeK upper)] <$> getAllConstraints
-  allSubWithUpper <- filterWithSomeVars [(SomeK upper)] <$> fmap (second runConstr) <$> getConstraintsByType (Proxy @(IsLessEqual (DMTypeOf k, DMTypeOf k)))
-  
-  case ((length allSubWithUpper) == (length allCsWithUpper)) of
-     False -> return () -- upper is involved in other constraints that are not LessEqual constraints, so this simplification is not allowed
-     True -> do
-         allSubtypings <- getConstraintsByType (Proxy @(IsLessEqual (DMTypeOf k, DMTypeOf k)))
-         -- TODO: We are actually not allowed to do this always, but only if there is nothing which could be broken...
-         -- all subtyping constraints δ ≤ upper for some δ
-         let (names, lowers) = unzip [(name', lower') | (name', IsLessEqual (lower', TVar upper')) <- allSubtypings,
-                                     name' /= name,
-                                     upper' == upper]
+  -- case testEquality (typeRep @k) (typeRep @ConstnessKind) of
+  --   Just Refl -> pure ()
+  --   _ -> do
 
-         -- for the list [β, γ, δ] create supremum constraints sup{β,γ} = u and sup{u,δ} = upper for a new TVar u
-         -- as we only have two-argument sup constraints. also discharge the involved subtyping constraints.
-         let makeChain lowers = case lowers of
-                 [] -> return ()
-                 (l:[]) -> do
-                             dischargeConstraint name
-                             mapM dischargeConstraint names
-                             addConstraint (Solvable (IsSupremum ((lower, l) :=: TVar upper)))
-                             logForce "Something very suspicious is happening, at least make sure that this is really the correct approach."
-                             logForce ("What happens is that we convert the subtyping constraint of " <> show (lower, TVar upper) <> " into the supremum " <> show ((lower, l) :=: TVar upper))
-                             logForce "Whyever that is supposed to be correct..."
-                             return ()
-                 (l1:l2:ls) -> do
-                             u <- newVar
-                             addConstraint (Solvable (IsSupremum ((l1, l2) :=: u)))
-                             makeChain (u:ls)
-                             return ()
-                             
-         makeChain lowers
-         return ()
+      -- all (subtyping) constraints that contain upper
+      allCsWithUpper <- filterWithSomeVars [(SomeK upper)] <$> getAllConstraints
+      allSubWithUpper <- filterWithSomeVars [(SomeK upper)] <$> fmap (second runConstr) <$> getConstraintsByType (Proxy @(IsLessEqual (DMTypeOf k, DMTypeOf k)))
+
+      case ((length allSubWithUpper) == (length allCsWithUpper)) of
+        False -> return () -- upper is involved in other constraints that are not LessEqual constraints, so this simplification is not allowed
+        True -> do
+            allSubtypings <- getConstraintsByType (Proxy @(IsLessEqual (DMTypeOf k, DMTypeOf k)))
+            -- TODO: We are actually not allowed to do this always, but only if there is nothing which could be broken...
+            -- all subtyping constraints δ ≤ upper for some δ
+            let (names, lowers) = unzip [(name', lower') | (name', IsLessEqual (lower', TVar upper')) <- allSubtypings,
+                                        name' /= name,
+                                        upper' == upper]
+
+            -- for the list [β, γ, δ] create supremum constraints sup{β,γ} = u and sup{u,δ} = upper for a new TVar u
+            -- as we only have two-argument sup constraints. also discharge the involved subtyping constraints.
+            let makeChain lowers = case lowers of
+                    [] -> return ()
+                    (l:[]) -> do
+                                dischargeConstraint name
+                                mapM dischargeConstraint names
+                                addConstraint (Solvable (IsSupremum ((lower, l) :=: TVar upper)))
+                                logForce "Something very suspicious is happening, at least make sure that this is really the correct approach."
+                                logForce ("What happens is that we convert the subtyping constraint of " <> show (lower, TVar upper) <> " into the supremum " <> show ((lower, l) :=: TVar upper))
+                                logForce "Whyever that is supposed to be correct..."
+                                return ()
+                    (l1:l2:ls) -> do
+                                u <- newVar
+                                addConstraint (Solvable (IsSupremum ((l1, l2) :=: u)))
+                                makeChain (u:ls)
+                                return ()
+
+            makeChain lowers
+            return ()
 convertSubtypingToSupremum name _                   = pure ()
-  
+
 -- The actual solving is done here.
 -- this simply uses the `findPathM` function from Abstract.Computation.MonadicGraph
 -- We return True if we could do something about the constraint
