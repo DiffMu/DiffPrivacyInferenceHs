@@ -145,7 +145,6 @@ solveIsChoice name (provided, required) = do
                                    -- as it was encoded in the Arr type of the choice, so its arg types can only be refinements.
                                   [(sign, (cτ, matches))] -> do
                                      -- append the match to the list of calls that matched this method.
-                                     traceM $ "found one match for " <> show curReq <> " namely " <> show τs <> " for sign " <> show cτ
                                      let resP = H.insert sign (cτ, (τs : matches)) curProv -- append match to match list
                                      res <- matchArgs resP restReq -- discard entry by recursing without τs
                                      return res
@@ -159,7 +158,6 @@ solveIsChoice name (provided, required) = do
    -- discard or update constraint.
    case newcs of
         [] -> do -- complete resolution! set counters, discard.
-                traceM $ "complete! " <> show newdict <> " from " <> show (provided, required)
                 mapM resolveChoiceHash (H.toList newdict)
                 dischargeConstraint name
         cs | (length required > length newcs) -> do
@@ -173,36 +171,17 @@ solveIsChoice name (provided, required) = do
 
 
 resolveChoiceHash :: forall t. IsT MonadDMTC t => ([JuliaType], (DMTypeOf FunKind, [DMTypeOf FunKind])) -> t ()
+resolveChoiceHash (sign, (method, [])) = pure () -- no matches were found for this method.
 resolveChoiceHash (sign, (method, matches)) = do
-                    
-{-   let addC :: (Normalize t s, Unify t s) => (JuliaType, (DMTypeOf MainKind :@ s), (DMTypeOf MainKind :@ s)) -> t ()
-       addC (annotation, (τ1 :@ s1), (τ2 :@ s2)) = do
-                       unify s1 s2
-                       addConstraint (Solvable (IsFunctionArgument (τ1, τ2)))
-                       addJuliaSubtypeConstraint τ1 annotation
-
--}
-   let addC :: forall t. IsT MonadDMTC t => ([DMMain], DMMain, JuliaType) -> t ()
-       addC ([], _, _) = pure ()
-       addC ((a:as), m, ann) = do
-           s <- foldM supremum a as -- get supremum of all things the current argument was applied to
-           addConstraint (Solvable (IsFunctionArgument (s, m)))
-           addJuliaSubtypeConstraint s ann
-   let resolveChoice :: (DMTypeOf FunKind) -> (DMTypeOf FunKind) -> t (DMMain, [DMMain])
-       resolveChoice match mmethod = do
+   let resolveAnn :: (DMTypeOf FunKind) -> (DMTypeOf FunKind) -> t (DMMain, [DMMain])
+       resolveAnn match mmethod = do
                                        case (match, mmethod) of
-                                          -- in the regular cases the arrows can just be unified.
                                           (matchxs :->: τmatch, methxs :->: τmeth) -> do
                                              mapM (\(x, y) -> unify (sndAnn x) (sndAnn y)) (zip matchxs methxs) -- unify sensitivities
                                              return (τmatch, [t | (t :@ _) <- matchxs])
---                                             mapM addC (zip3 sign matchxs methxs)
---                                             addC (JTAny, (τmeth :@ ()), (τmatch :@ ()))
---                                             return ()
                                           (matchxs :->*: τmatch, methxs :->*: τmeth) -> do
                                              mapM (\((_:@(x,_)), (_:@(y,_))) -> unify x y) (zip matchxs methxs) -- unify privacies
                                              return (τmatch, [t | (t :@ _) <- matchxs])
-                                             --addC (JTAny, (τmeth :@ ()), (τmatch :@ ()))
-                                             --return ()
                                           -- this is the case where checkPriv was called on the application of a -> arrow.
                                           (matchxs :->*: τmatch, methxs :->: τmeth) -> do
                                               impossible $ "Found application of a sensitivity function " <> show mmethod <> " where a\
@@ -214,18 +193,28 @@ resolveChoiceHash (sign, (method, matches)) = do
                                                                                 \have prevented this."
                                           _ -> impossible $ "reached impossible case in resolving choices: " <> show (match, mmethod)
 
-   methsigs <- mapM (\match -> resolveChoice match method) matches
+   methsigs <- mapM (\match -> resolveAnn match method) matches -- set sensitivities of all matches and get their dmtype signatures
    let argtypes = transpose (map snd methsigs) -- get per-argument list instead of per-match list
    let (methxs, methr) = case method of
            (xs :->: r) ->  ([t | (t :@ _) <- xs], r)
            (xs :->*: r) -> ([t | (t :@ _) <- xs], r)
-   mapM addC (zip3 argtypes methxs sign)
-   let rr = map fst methsigs
-   (r,rs) <- case rr of
-       [] -> impossible $ "foo" <> show (method, matches)
-       (r:rs) -> pure (r,rs)
-   s <- foldM supremum r rs -- get supremum of all things the current argument was applied to
+   -- given the list of all types that the matches tried to input into an argument of the method,
+   -- creates the necessary constraints to make sure they fit and also fit the julia type annotation.
+   -- we use the supremum of all input types, so we can input terms of const types with different values
+   -- without getting contradicting constraints as long as the number types match
+   let addC :: forall t. IsT MonadDMTC t => ([DMMain], DMMain, JuliaType) -> t ()
+       addC ([], _, _) = pure ()
+       addC ((a:as), m, ann) = do
+           s <- foldM supremum a as -- get supremum of all things the current argument was applied to
+           addConstraint (Solvable (IsFunctionArgument (s, m))) -- make sure it fits the type requred by the method
+           addJuliaSubtypeConstraint s ann -- make sure it fits the given julia signature
+           
+   mapM addC (zip3 argtypes methxs sign) -- do it for the arguments
+
+   let (r:rs) = map fst methsigs -- do the same for the return type
+   s <- foldM supremum r rs
    addConstraint (Solvable (IsFunctionArgument (methr, s)))
+
    return ()
 
 
