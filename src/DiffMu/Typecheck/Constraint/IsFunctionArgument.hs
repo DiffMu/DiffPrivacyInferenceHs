@@ -173,27 +173,26 @@ solveIsChoice name (provided, required) = do
 resolveChoiceHash :: forall t. IsT MonadDMTC t => ([JuliaType], (DMTypeOf FunKind, [DMTypeOf FunKind])) -> t ()
 resolveChoiceHash (sign, (method, [])) = pure () -- no matches were found for this method.
 resolveChoiceHash (sign, (method, matches)) = do
-   let resolveAnn :: (DMTypeOf FunKind) -> (DMTypeOf FunKind) -> t (DMMain, [DMMain])
-       resolveAnn match mmethod = do
-                                       case (match, mmethod) of
-                                          (matchxs :->: τmatch, methxs :->: τmeth) -> do
-                                             mapM (\(x, y) -> unify (sndAnn x) (sndAnn y)) (zip matchxs methxs) -- unify sensitivities
-                                             return (τmatch, [t | (t :@ _) <- matchxs])
-                                          (matchxs :->*: τmatch, methxs :->*: τmeth) -> do
-                                             mapM (\((_:@(x,_)), (_:@(y,_))) -> unify x y) (zip matchxs methxs) -- unify privacies
-                                             return (τmatch, [t | (t :@ _) <- matchxs])
-                                          -- this is the case where checkPriv was called on the application of a -> arrow.
-                                          (matchxs :->*: τmatch, methxs :->: τmeth) -> do
-                                              impossible $ "Found application of a sensitivity function " <> show mmethod <> " where a\
-                                                                                \private value was expected. Color preprocessing should\
-                                                                                \have prevented this."
-                                          (matchxs :->: τmatch, methxs :->*: τmeth) -> do
-                                              impossible $ "Found application of a privacy function " <> show mmethod <> " where a\
-                                                                                \sensitivity value was expected. Color preprocessing should\
-                                                                                \have prevented this."
-                                          _ -> impossible $ "reached impossible case in resolving choices: " <> show (match, mmethod)
+   let resolveAnn :: (DMTypeOf FunKind) -> t (DMMain, [DMMain])
+       resolveAnn match = case (match, method) of
+                                 (matchxs :->: τmatch, methxs :->: τmeth) -> do
+                                    mapM (\(x, y) -> unify (sndAnn x) (sndAnn y)) (zip matchxs methxs) -- unify sensitivities
+                                    return (τmatch, [t | (t :@ _) <- matchxs])
+                                 (matchxs :->*: τmatch, methxs :->*: τmeth) -> do
+                                    mapM (\((_:@x), (_:@y)) -> unify x y) (zip matchxs methxs) -- unify privacies
+                                    return (τmatch, [t | (t :@ _) <- matchxs])
+                                 -- this is the case where checkPriv was called on the application of a -> arrow.
+                                 (matchxs :->*: τmatch, methxs :->: τmeth) -> do
+                                     impossible $ "Found application of a sensitivity function " <> show method <> " where a\
+                                                                       \private value was expected. Color preprocessing should\
+                                                                       \have prevented this."
+                                 (matchxs :->: τmatch, methxs :->*: τmeth) -> do
+                                     impossible $ "Found application of a privacy function " <> show method <> " where a\
+                                                                       \sensitivity value was expected. Color preprocessing should\
+                                                                       \have prevented this."
+                                 _ -> impossible $ "reached impossible case in resolving choices: " <> show (match, method)
 
-   methsigs <- mapM (\match -> resolveAnn match method) matches -- set sensitivities of all matches and get their dmtype signatures
+   methsigs <- mapM resolveAnn matches -- set sensitivities of all matches and get their dmtype signatures
    let argtypes = transpose (map snd methsigs) -- get per-argument list instead of per-match list
    let (methxs, methr) = case method of
            (xs :->: r) ->  ([t | (t :@ _) <- xs], r)
