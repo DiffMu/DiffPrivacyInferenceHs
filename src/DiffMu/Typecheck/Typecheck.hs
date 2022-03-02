@@ -1242,7 +1242,9 @@ checkPri' scope (AboveThresh qs e d t) = do
 
       (τqs, (τe, τd, τt)) <- msumTup (mqs, msum3Tup (me, md, mt))
 
-      unify τqs (NoFun (DMVec nrm clp n (Fun [([τd :@ (oneId :: Sensitivity)] :->: (NoFun (Numeric (Num DMReal NonConst)))) :@ Just [JTAny]])))
+      tfun <- newVar
+      addConstraint (Solvable (IsFunctionArgument (tfun, Fun([([τd :@ (oneId :: Sensitivity)] :->: (NoFun (Numeric (Num DMReal NonConst)))) :@ Nothing]))))
+      unify τqs (NoFun (DMVec nrm clp n tfun))
       addConstraint (Solvable (IsLessEqual (τe, (NoFun (Numeric (Num DMReal (Const eps)))))))
       addConstraint (Solvable (IsLessEqual (τt, (NoFun (Numeric (Num DMReal NonConst))))))
 
