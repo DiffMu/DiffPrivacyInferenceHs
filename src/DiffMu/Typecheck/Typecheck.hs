@@ -608,11 +608,9 @@ checkSen' scope (ClipN value upper lower) = do
 
   tv <- newVar
   tk <- newVar
-  tku <- newVar
-  tkl <- newVar
   unify τv (NoFun (Numeric (Num tv tk)))
-  unify τu (NoFun (Numeric (Num tv tku)))
-  unify τl (NoFun (Numeric (Num tv tkl)))
+  unify τu (NoFun (Numeric (Num tv (Const tu))))
+  unify τl (NoFun (Numeric (Num tv (Const tl))))
 
   return (NoFun (Numeric (Num tv NonConst)))
 
