@@ -145,7 +145,6 @@ solveIsChoice name (provided, required) = do
                                    -- as it was encoded in the Arr type of the choice, so its arg types can only be refinements.
                                   [(sign, (cτ, matches))] -> do
                                      -- append the match to the list of calls that matched this method.
-                                     traceM $ "found one match for " <> show curReq <> " namely " <> show τs <> " for sign " <> show cτ
                                      let resP = H.insert sign (cτ, (τs : matches)) curProv -- append match to match list
                                      res <- matchArgs resP restReq -- discard entry by recursing without τs
                                      return res
@@ -159,7 +158,6 @@ solveIsChoice name (provided, required) = do
    -- discard or update constraint.
    case newcs of
         [] -> do -- complete resolution! set counters, discard.
-                traceM $ "complete! " <> show newdict <> " from " <> show (provided, required)
                 mapM resolveChoiceHash (H.toList newdict)
                 dischargeConstraint name
         cs | (length required > length newcs) -> do
