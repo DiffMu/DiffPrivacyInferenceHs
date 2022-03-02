@@ -208,7 +208,7 @@ resolveChoiceHash (sign, (method, matches)) = do
            s <- foldM supremum a as -- get supremum of all things the current argument was applied to
            addConstraint (Solvable (IsFunctionArgument (s, m))) -- make sure it fits the type requred by the method
            addJuliaSubtypeConstraint s ann -- make sure it fits the given julia signature
-           
+
    mapM addC (zip3 argtypes methxs sign) -- do it for the arguments
 
    let (r:rs) = map fst methsigs -- do the same for the return type

@@ -803,9 +803,6 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
       -- log this as event
       tcstate.solvingEvents %= (Event_ConstraintCreated name (show c) :)
 
-      -- temp, also log this directly
-      logForce $ "!! Got constraint: " <> show name <> ": " <> show c
-
       return name
 
 
