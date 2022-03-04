@@ -349,17 +349,26 @@ checkSen' scope (MFold f acc₀ m) = do
     let mm = checkSens scope m <* mscale s₁
     let macc₀ = checkSens scope acc₀ <* mscale (exp s₂ (ηm ⋅! ηn))
     let mf = checkSens scope f <* mscale (ηm ⋅! ηn)
-    (τf :: DMMain, τacc₀, τm) <- msum3Tup (mf, macc₀, mm) -- sum args and f's context
+    (τf :: DMMain, τfold_in, τm) <- msum3Tup (mf, macc₀, mm) -- sum args and f's context
 
-    τ_in <- newVar -- a type var for the function input / matrix element type
-    τ_out <- newVar -- a type var for the function output type
+    τ_content <- newVar
+    τbody_in <- newVar -- a type var for the function input / matrix element type
+    τbody_out <- newVar -- a type var for the function output type
     clp₁ <- newVar -- variable for clip
-    unify τm (NoFun (DMMat L1 clp₁ ηm ηn τ_in))
+    unify τm (NoFun (DMMat L1 clp₁ ηm ηn τ_content))
 
     -- set the type of the function using IFA
-    addConstraint (Solvable (IsFunctionArgument (τf, (Fun [([τ_in :@ s₁, τacc₀ :@ s₂] :->: τacc₀ :@ Nothing)]))))
+    addConstraint (Solvable (IsFunctionArgument (τf, (Fun [([τ_content :@ s₁, τbody_in :@ s₂] :->: τbody_out :@ Nothing)]))))
 
-    return (NoFun τ_out)
+
+    -- we use the same constraints for dealing with constness
+    -- in the different fold iterations as we do in loop
+    --
+    addConstraint (Solvable (IsNonConst (τbody_out, τbody_in)))
+    addConstraint (Solvable (UnifyWithConstSubtype (τfold_in, τbody_out)))
+
+    return τbody_in
+
 
 
 checkSen' scope (FLet fname term body) = do
