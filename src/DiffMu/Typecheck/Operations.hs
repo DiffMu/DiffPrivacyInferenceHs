@@ -151,6 +151,7 @@ solveBinary op (τ1, τ2) = traceM ("solving " <> show op <> show (τ1, τ2)) >>
     f DMOpDiv (Numeric (Num t1 NonConst)) (Numeric (Num t2 (Const s2))) = ret (divide oneId s2) zeroId (return (Numeric (Num DMReal NonConst)))
     f DMOpDiv (Numeric (Num t1 NonConst)) (Numeric (Num t2 NonConst)) = ret (constCoeff Infty) (constCoeff Infty) (return (Numeric (Num DMReal NonConst)))
     f DMOpDiv (Numeric t) (TVar a)                            = matchType a (Numeric t)
+    f DMOpDiv (TVar a) (Numeric t)                            = matchType a (Numeric t)
 
     f DMOpMod (Numeric (Num t1 NonConst)) (Numeric (Num t2 (Const s2))) = ret s2 zeroId (Numeric <$> (Num <$> supremum t1 t2 <*> pure NonConst))
     f DMOpMod (Numeric (Num t1 NonConst)) (Numeric (Num t2 NonConst)) = ret (constCoeff Infty) (constCoeff Infty) (Numeric <$> (Num <$> supremum t1 t2 <*> pure NonConst)) -- ((Numeric . NonConst) <$> supremum t1 t2)

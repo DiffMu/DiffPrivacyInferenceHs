@@ -34,6 +34,7 @@ import Debug.Trace
 -- potentially match any method.
 juliatypes :: DMTypeOf k -> [JuliaType]
 juliatypes (Numeric (Num t c)) = juliatypes t
+juliatypes (Numeric DMData) = [JTInt, JTReal]
 juliatypes (Numeric (TVar _)) = [JTInt, JTReal]
 juliatypes DMInt = [JTInt]
 juliatypes DMReal = [JTReal]
