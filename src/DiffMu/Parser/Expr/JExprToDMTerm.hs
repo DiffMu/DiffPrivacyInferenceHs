@@ -337,13 +337,16 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
 
   (t@"scale_gradient!", [a1, a2]) -> ScaleGrad <$> pSingle a1 <*> pSingle a2
   (t@"scale_gradient!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
-  
+
   (t@"sum_gradients", [a1, a2]) -> SumGrads <$> pSingle a1 <*> pSingle a2
   (t@"sum_gradients", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 argument, but has been given " <> show (length args)
 
   (t@"map", [a1, a2]) -> MMap <$> pSingle a1 <*> pSingle a2
   (t@"map", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 argument, but has been given " <> show (length args)
-  
+
+  (t@"map_rows", [a1, a2]) -> MMapRows <$> pSingle a1 <*> pSingle a2
+  (t@"map_rows", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 argument, but has been given " <> show (length args)
+
   (t@"clip!", [a1,a2]) -> MutClipM <$> pClip a1 <*> pSingle a2
   (t@"clip!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
   (t@"clip", [a1,a2]) -> ClipM <$> pClip a1 <*> pSingle a2

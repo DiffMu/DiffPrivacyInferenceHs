@@ -314,10 +314,32 @@ checkSen' scope (MMap f m) = do
     -- only matrices or vectors (not gradients) are allowed.
     addConstraint (Solvable (IsVecOrMat (k, mr)))
 
-    -- dispatch is not allowed for map, hence unification with a one-choice ->
-    unify τf (Fun [([τ_in :@ s] :->: τ_out) :@ Just [JTAny]])
+    -- set the type of the function using IFA
+    addConstraint (Solvable (IsFunctionArgument (τf, (Fun [([τ_in :@ s] :->: τ_out) :@ Nothing]))))
 
     return (NoFun (DMContainer k nrm U mv τ_out))
+
+checkSen' scope (MMapRows f m) = do
+    s <- newVar
+    ηm <- newVar
+    ηn₁ <- newVar
+    ηn₂ <- newVar
+    let mm = checkSens scope m <* mscale s
+    let mf = checkSens scope f <* mscale ηm
+    (τf :: DMMain, τm) <- msumTup (mf, mm) -- sum args and f's context
+
+    τ_in <- newVar -- a type var for the function input / matrix element type
+    τ_out <- newVar -- a type var for the function output type
+    nrm₁ <- newVar -- variable for norm
+    clp₁ <- newVar -- variable for clip
+    nrm₂ <- newVar -- variable for norm
+    clp₂ <- newVar -- variable for clip
+    unify τm (NoFun (DMMat nrm₁ clp₁ ηm ηn₁ τ_in))
+
+    -- set the type of the function using IFA
+    addConstraint (Solvable (IsFunctionArgument (τf, (Fun [([NoFun (DMVec nrm₁ clp₁ ηn₁ τ_in) :@ s] :->: NoFun (DMVec nrm₂ clp₂ ηn₂ τ_out)) :@ Nothing]))))
+
+    return (NoFun (DMMat nrm₂ clp₂ ηm ηn₂ τ_out))
 
 
 checkSen' scope (FLet fname term body) = do

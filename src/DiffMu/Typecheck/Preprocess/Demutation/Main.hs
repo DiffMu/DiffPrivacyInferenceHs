@@ -33,7 +33,7 @@ import DiffMu.Typecheck.Preprocess.Demutation.Definitions (getAllMemVarsOfMemSta
 
 
 
-  
+
 demutTLetStatement :: LetKind -> [ProcVar] -> DemutDMTerm -> MTC TermType
 demutTLetStatement ltype vars term = case vars of
   [var] -> do
@@ -932,6 +932,7 @@ elaborateMut scname (Exponential t1 t2 t3 t4) = elaborateNonMut4 scname Exponent
 elaborateMut scname (ClipN t1 t2 t3) = elaborateNonMut3 scname ClipN t1 t2 t3
 elaborateMut scname (Count t1 t2) = elaborateNonMut2 scname Count t1 t2
 elaborateMut scname (MMap t1 t2) = elaborateNonMut2 scname MMap t1 t2
+elaborateMut scname (MMapRows t1 t2) = elaborateNonMut2 scname MMapRows t1 t2
 
 
 -- the unsupported terms
