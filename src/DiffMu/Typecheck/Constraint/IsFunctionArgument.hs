@@ -110,6 +110,7 @@ solveIsChoice name (provided, required) = do
           case curReq of
              [] -> return (curProv, [])
              (τs : restReq) -> do -- go through all required methods
+                 debug $ "[IFA]: called on " <> show τs
                  case τs of
                       TVar _ -> do -- it was a tvar
                               (resP, resR) <- (matchArgs curProv restReq) -- can't resolve TVar choice, keep it and recurse.
@@ -130,6 +131,9 @@ solveIsChoice name (provided, required) = do
                                True  -> keepLeastGeneral candidates
                                -- else we do not change them
                                False -> candidates
+
+                         debug $ "[IFA]: candidates before: " <> show candidates
+                         debug $ "[IFA]: candidates after:  " <> show candidates'
 
                          case and ((length candidates' == length curProv),(length candidates' > 1)) of
                             -- no choices were discarded, the constraint could not be simplified.
@@ -158,6 +162,8 @@ solveIsChoice name (provided, required) = do
    -- discard or update constraint.
    case newcs of
         [] -> do -- complete resolution! set counters, discard.
+                debug $ "[IFA]: Done, newdict is:"
+                debug $ show newdict
                 mapM resolveChoiceHash (H.toList newdict)
                 dischargeConstraint name
         cs | (length required > length newcs) -> do
@@ -244,11 +250,17 @@ getMatchCandidates τsτ provided = do
                         let argsNoJFun = [(τa, ann) | (τa :@ ann) <- args, noJuliaFunction τa]
                         -- ... and get the free typevars of the rest.
                         let free = and (null . freeVars @_ @TVarOf <$> argsNoJFun)
+                        debug $ "[IFA]: `getMatchCandidates` on " <> show τsτ
+                        debug $ "[IFA]: (via " <> show argsNoJFun <> ")"
+                        debug $ "[IFA]: => free vars is: " <> show free
                         return (cand, free)
       (args :->*: _) -> do -- same as for the above case.
                         let cand = (H.filterWithKey (\s c -> choiceCouldMatch (fstAnn <$> args) s) provided)
                         let argsNoJFun = [(τa, ann) | (τa :@ ann) <- args, noJuliaFunction τa]
                         let free = and (null . freeVars @_ @TVarOf <$> argsNoJFun)
+                        debug $ "[IFA]: `getMatchCandidates` on " <> show τsτ
+                        debug $ "[IFA]: (via " <> show argsNoJFun <> ")"
+                        debug $ "[IFA]: => free vars is: " <> show free
                         return (cand, free)
       _ -> throwError (ImpossibleError ("Invalid type for Choice: " <> show τsτ))
 
@@ -271,7 +283,7 @@ choiceCouldMatch args cs =
 
 -- return False if this type would become a "Function" if converted to a julia type
 noJuliaFunction :: DMTypeOf MainKind -> Bool
-noJuliaFunction τ = (juliatypes τ == [JTFunction])
+noJuliaFunction τ = (juliatypes τ /= [JTFunction])
 
 
 

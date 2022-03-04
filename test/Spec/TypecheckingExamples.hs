@@ -5,6 +5,8 @@ import Spec.Base
 import Data.String
 
 import DiffMu.Typecheck.Constraint.CheapConstraints
+import DiffMu.Typecheck.Constraint.IsFunctionArgument
+
 
 testTypecheckingExamples pp = do
   testSens pp
@@ -256,7 +258,24 @@ testMMap pp = describe "Matrix map" $ do
             let gradout = NoFun (DMVec nr U n (NoFun (Numeric (Num DMInt NonConst))))
             return (Fun ([([gradin :@ (constCoeff (Fin 2)), NoFun (Numeric (Num DMInt NonConst)) :@ n] :->: gradout) :@ Just [JTVector JTInt, JTInt]]))
     parseEvalUnify pp "good" ex ty
-    parseEvalFail pp "dispatch (bad)" ex_fail (UnificationError "" "")
+
+  
+    let ty2 = do
+          c <- newVar
+          n <- newVar
+          nr <- newVar
+          τ₁ <- newVar
+          τ₂ <- newVar
+          k <- newVar
+          let gradin = NoFun (DMContainer k nr c n τ₁)
+          let gradout = NoFun (DMContainer k nr U n τ₂)
+          return (Fun ([([gradin :@ (constCoeff oneId)] :->: gradout) :@ Just [JTAny]]))
+
+    parseEvalUnify_customCheck pp "dispatch (bad)" ex_fail ty2 $ do
+      ctrs <- getConstraintsByType (Proxy @(IsChoice (ChoiceHash, [DMTypeOf FunKind])))
+      case length ctrs of
+        1 -> pure (Right ())
+        _ -> pure (Left $ show ctrs)
 
 testPrivFunc pp = describe "PrivacyFunction annotations" $ do
     let ex_good = "function foo(f :: PrivacyFunction) :: Priv() \n\
