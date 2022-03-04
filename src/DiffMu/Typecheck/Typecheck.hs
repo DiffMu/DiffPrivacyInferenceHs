@@ -602,15 +602,15 @@ checkSen' scope (ClipM c m) = do
 
 
 checkSen' scope (ClipN value upper lower) = do
-  tu <- newVar
-  tl <- newVar
-  (τv,τu,τl) <- msum3Tup (checkSens scope value <* mscale (minus tu tl), checkSens scope upper, checkSens scope lower)
+  (τv,τu,τl) <- msum3Tup (checkSens scope value, checkSens scope upper, checkSens scope lower)
 
   tv <- newVar
   tk <- newVar
+  tu <- newVar
+  tl <- newVar
   unify τv (NoFun (Numeric (Num tv tk)))
-  unify τu (NoFun (Numeric (Num tv (Const tu))))
-  unify τl (NoFun (Numeric (Num tv (Const tl))))
+  unify τu (NoFun (Numeric (Num tv tu)))
+  unify τl (NoFun (Numeric (Num tv tl)))
 
   return (NoFun (Numeric (Num tv NonConst)))
 
