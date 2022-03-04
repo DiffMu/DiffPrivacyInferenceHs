@@ -749,6 +749,7 @@ data PreDMTerm (t :: * -> *) =
   | Count (PreDMTerm t) (PreDMTerm t)
   | MMap (PreDMTerm t) (PreDMTerm t)
   | MMapRows (PreDMTerm t) (PreDMTerm t)
+  | MFold (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
   | ConvertM (PreDMTerm t)
   | MCreate (PreDMTerm t) (PreDMTerm t) (TeVar, TeVar) (PreDMTerm t)
   | Transpose (PreDMTerm t)
@@ -784,7 +785,7 @@ pattern TBind a b c = TLetBase BindLet a b c
 pattern SmpLet a b c = TLetBase SampleLet a b c
 
 {-# COMPLETE Extra, Ret, DMTrue, DMFalse, Sng, Var, Arg, Op, Phi, Lam, LamStar, BBLet, BBApply,
- Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, Gauss, Laplace, Exponential, MutGauss, MutLaplace, AboveThresh, Count, MMap, ConvertM, MCreate, Transpose,
+ Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, Gauss, Laplace, Exponential, MutGauss, MutLaplace, AboveThresh, Count, MMap, MMapRows, MFold, ConvertM, MCreate, Transpose,
  Size, Length, Index, VIndex, Row, ClipN, ClipM, MutClipM, Loop, SubGrad, ScaleGrad, TProject, ZeroGrad, SumGrads, SmpLet,
  Sample, InternalExpectConst, InternalMutate #-}
 
@@ -906,6 +907,7 @@ recDMTermM f h (Exponential a b c d) = Exponential <$> (f a) <*> (f b) <*> (f c)
 recDMTermM f h (Count a b)         = Count <$> (f a) <*> (f b)
 recDMTermM f h (MMap a b)         = MMap <$> (f a) <*> (f b)
 recDMTermM f h (MMapRows a b)     = MMapRows <$> (f a) <*> (f b)
+recDMTermM f h (MFold a b c)      = MFold <$> (f a) <*> (f b) <*> (f c)
 recDMTermM f h (ConvertM a)       = ConvertM <$> (f a)
 recDMTermM f h (MCreate a b x c ) = MCreate <$> (f a) <*> (f b) <*> pure x <*> (f c)
 recDMTermM f h (Transpose a)      = Transpose <$> (f a)
@@ -1039,6 +1041,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (Count a b)         = "Count (" <> (showPretty a) <> " to " <> (showPretty b)  <> ")"
   showPretty (MMap a b)         = "MMap (" <> (showPretty a) <> " to " <> (showPretty b)  <> ")"
   showPretty (MMapRows a b)     = "MMapRows (" <> (showPretty a) <> " to " <> (showPretty b)  <> ")"
+  showPretty (MFold a b c)      = "MFold (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ")"
   showPretty (ConvertM a)       = "ConvertM (" <> (showPretty a) <> ")"
   showPretty (MCreate a b x c ) = "MCreate (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> show x <> ", " <> (showPretty c) <> ")"
   showPretty (Transpose a)      = "Transpose (" <> (showPretty a) <> ")"

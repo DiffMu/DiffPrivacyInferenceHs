@@ -341,6 +341,27 @@ checkSen' scope (MMapRows f m) = do
 
     return (NoFun (DMMat nrm₂ clp₂ ηm ηn₂ τ_out))
 
+checkSen' scope (MFold f acc₀ m) = do
+    s₁ <- newVar
+    s₂ <- newVar
+    ηm <- newVar
+    ηn <- newVar
+    let mm = checkSens scope m <* mscale s₁
+    let macc₀ = checkSens scope acc₀ <* mscale (exp s₂ (ηm ⋅! ηn))
+    let mf = checkSens scope f <* mscale (ηm ⋅! ηn)
+    (τf :: DMMain, τacc₀, τm) <- msum3Tup (mf, macc₀, mm) -- sum args and f's context
+
+    τ_in <- newVar -- a type var for the function input / matrix element type
+    τ_out <- newVar -- a type var for the function output type
+    nrm₁ <- newVar -- variable for norm
+    clp₁ <- newVar -- variable for clip
+    unify τm (NoFun (DMMat nrm₁ clp₁ ηm ηn τ_in))
+
+    -- set the type of the function using IFA
+    addConstraint (Solvable (IsFunctionArgument (τf, (Fun [([τ_in :@ s₁, τacc₀ :@ s₂] :->: τacc₀ :@ Nothing)]))))
+
+    return (NoFun τ_out)
+
 
 checkSen' scope (FLet fname term body) = do
 
