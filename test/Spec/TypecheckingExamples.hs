@@ -201,7 +201,7 @@ testSample pp = describe "Sample" $ do
               \  gaussian_mechanism!(2, 0.2, 0.3, gs)  \n\
               \  clone(x * gs) \n\
               \end"
-        ty = "Fun([([NoFun(Matrix<n: L∞, c: τ_39>[s_14 × s_23](NoFun(Num(Data)))) @ (0.4⋅(1 / s_14)⋅s_21,0.3⋅(1 / s_14)⋅s_21),NoFun(Num(Int[s_21])) @ (∑∅,∑∅),NoFun(Num(Int[--])) @ (∞,∞)] ->* NoFun(Vector<n: L∞, c: U>[s_23](NoFun(Num(Real[--]))))) @ Just [Any,Any,Integer]])"
+        ty = "Fun([([NoFun(Matrix<n: L∞, c: τ_39>[s_14 × s_23](NoFun(Num(Data)))) @ (0.4⋅(1 / s_14)⋅s_21,0.3⋅(1 / s_14)⋅s_21),NoFun(Num(Int[s_21 ©])) @ (∑∅,∑∅),NoFun(Num(Int[--])) @ (∞,∞)] ->* NoFun(Vector<n: L∞, c: U>[s_23](NoFun(Num(Real[--]))))) @ Just [Any,Any,Integer]])"
         cs = ""
     parseEvalString_l_customCheck pp "" ex (ty, cs) (pure $ Right ())
 
@@ -210,7 +210,7 @@ testAboveThresh pp = describe "Above threshold" $ do
     let ex = "function test(qs, d) :: Priv() \n\
               \  above_threshold(qs, 1, d, 100) \n\
               \ end"
-        ty = "Fun([([NoFun(Vector<n: τ_0, c: τ_1>[s_1](Fun([([τ_3 @ 1] -> NoFun(Num(Real[--]))) @ Just [Any]]))) @ (∞,∞),τ_3 @ (1,∑∅)] ->* NoFun(Num(Int[--]))) @ Just [Any,Any]])"
+        ty = "Fun([([NoFun(Vector<n: τ_0, c: τ_1>[s_1](Fun([([τ_3 @ 1] -> NoFun(Num(Real[--]))) @ Nothing]))) @ (∞,∞),τ_3 @ (1,∑∅)] ->* NoFun(Num(Int[--]))) @ Just [Any,Any]])"
         cs = ""
     parseEvalString_customCheck pp "" ex (ty, cs) (pure $ Right ())
 

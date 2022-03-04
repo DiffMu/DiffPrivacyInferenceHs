@@ -72,7 +72,6 @@ instance Monad t => SemiringM t (SymVal) where
 -- like variables with special rules.
 data SymVar (k :: SensKind) =
   HonestVar (SymbolOf k)
-  -- | Id (SymTerm MainSensKind)
   | Ln (SymTerm MainSensKind)
   | Exp (SymTerm MainSensKind, SymTerm MainSensKind)
   | Ceil (SymTerm MainSensKind)
@@ -149,7 +148,9 @@ normalizationSubstitution nt x = case f x of
     f (HonestVar _)  = Nothing
     -- f (Id t)         = Nothing
     f (Ln a)         = constCoeff <$> (dmLog <$> extractVal a)
-    f (Exp (a,b))    = constCoeff <$> (dmExp <$> extractVal a <*> extractVal b)
+    f (Exp (a,b))    = case extractVal a of
+      Just (Fin 1) -> pure (a)
+      _            -> constCoeff <$> (dmExp <$> extractVal a <*> extractVal b)
     f (Ceil a)       = constCoeff <$> (dmCeil <$> extractVal a)
     f (Sqrt a)       = constCoeff <$> (dmSqrt <$> extractVal a)
     f (Max [])       = Nothing
