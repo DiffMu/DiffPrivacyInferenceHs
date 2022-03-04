@@ -211,7 +211,7 @@ resolveChoiceHash (sign, (method, matches)) = do
    mapM addC (zip3 argtypes methxs sign) -- do it for the arguments
 
    let (r:rs) = map fst methsigs -- do the same for the return type
-   s <- foldM supremum r rs
+   s <- foldM infimum r rs
    addConstraint (Solvable (IsFunctionArgument (methr, s)))
 
    return ()

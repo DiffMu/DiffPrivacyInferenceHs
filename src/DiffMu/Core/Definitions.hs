@@ -269,7 +269,7 @@ instance Show (DMTypeOf k) where
   show DMData = "Data"
   show (Num t c) = show t <> "[" <> show c <> "]"
   show (NonConst) = "--"
-  show (Const c) = show c
+  show (Const c) = show c <> " ©"
   show (Numeric t) = "Num(" <> show t <> ")"
   show (TVar t) = show t
   show (a :->: b) = "(" <> show a <> " -> " <> show b <> ")"
@@ -321,10 +321,9 @@ instance ShowPretty (DMTypeOf k) where
   showPretty DMInt = "Int"
   showPretty DMReal = "Real"
   showPretty DMData = "Data"
-  showPretty (Num t (TVar a)) = showPretty t <> "[" <> showPretty a <> "?]"
   showPretty (Num t c) = showPretty t <> "[" <> showPretty c <> "]"
   showPretty (NonConst) = "--"
-  showPretty (Const c) = showPretty c
+  showPretty (Const c) = showPretty c <> " ©"
   showPretty (Numeric t) = showPretty t
   showPretty (TVar t) = showPretty t
   showPretty (a :->: b) = showFunPretty "->" a b
