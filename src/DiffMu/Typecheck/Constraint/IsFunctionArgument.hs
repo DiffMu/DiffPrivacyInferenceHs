@@ -216,8 +216,15 @@ resolveChoiceHash (sign, (method, matches)) = do
 
    mapM addC (zip3 argtypes methxs sign) -- do it for the arguments
 
+   --
+   -- NOTE: In the following, we would like to to make an `infimum` on the output types
+   --       of the choices, because we do supremum on the input types and do the dual kind of makes sense.
+   --       But then it breaks cases where we need to know the const output type of a function.
+   --       Instead we do unification here, this should behave like infimum in most cases anyways,
+   --       it is only slightly stronger (inf{Const,NonConst} is possible, while unification is not).
+   --
    let (r:rs) = map fst methsigs -- do the same for the return type
-   s <- foldM infimum r rs
+   s <- foldM unify r rs
    addConstraint (Solvable (IsFunctionArgument (methr, s)))
 
    return ()
