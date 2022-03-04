@@ -353,9 +353,8 @@ checkSen' scope (MFold f acc₀ m) = do
 
     τ_in <- newVar -- a type var for the function input / matrix element type
     τ_out <- newVar -- a type var for the function output type
-    nrm₁ <- newVar -- variable for norm
     clp₁ <- newVar -- variable for clip
-    unify τm (NoFun (DMMat nrm₁ clp₁ ηm ηn τ_in))
+    unify τm (NoFun (DMMat L1 clp₁ ηm ηn τ_in))
 
     -- set the type of the function using IFA
     addConstraint (Solvable (IsFunctionArgument (τf, (Fun [([τ_in :@ s₁, τacc₀ :@ s₂] :->: τacc₀ :@ Nothing)]))))
