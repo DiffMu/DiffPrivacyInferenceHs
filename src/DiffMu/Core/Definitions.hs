@@ -382,7 +382,7 @@ instance Eq (DMTypeOf k) where
   -- a base numeric type can be either constant or non constant or data
   Const s == Const s2 = s == s2
   NonConst == NonConst = True
-  (Num DMData NonConst)   == (Num DMData NonConst) = True
+  DMData   == DMData = True
   Num t1 c1 == Num t2 c2 = and [t1 == t2, c1 == c2]
 
   -- we include numeric types into main types using this constructor

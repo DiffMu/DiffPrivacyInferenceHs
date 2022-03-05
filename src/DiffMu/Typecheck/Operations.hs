@@ -173,6 +173,7 @@ solveBinary op (τ1, τ2) = traceM ("solving " <> show op <> show (τ1, τ2)) >>
     f _ _ _                            = return Nothing
 
 
+  {-
 -- if we fail to resolve a typeop constraint, we make the operands non-const and type again
 makeNonConstType :: (IsT MonadDMTC t) => Symbol -> DMType -> t DMType
 makeNonConstType myConstrName (Numeric (TVar a)) = do
@@ -221,6 +222,7 @@ makeNonConstTypeOp name (Binary op ((τ₁ :@ s₁) , (τ₂ :@ s₂)) ρ) = do
   τ₂n <- normalizeExact τ₂
   τ2' <- makeNonConstType name τ₂n
   pure (Binary op ((τ1' :@ s₁) , (τ2' :@ s₂)) ρ)
+-}
 
 ----------------------------------------
 -- Solving unary constraints (exactly)
