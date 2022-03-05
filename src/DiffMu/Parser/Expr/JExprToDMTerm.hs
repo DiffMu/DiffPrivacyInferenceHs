@@ -331,6 +331,9 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
   (t@"fold", [a1, a2, a3]) -> MFold <$> pSingle a1 <*> pSingle a2 <*> pSingle a3
   (t@"fold", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 3 arguments, but has been given " <> show (length args)
 
+  (t@"map_cols_binary", [a1, a2, a3]) -> MapCols2 <$> pSingle a1 <*> pSingle a2 <*> pSingle a3
+  (t@"map_cols_binary", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 3 arguments, but has been given " <> show (length args)
+
   (t@"clip", [a1, a2, a3]) -> ClipN <$> pSingle a1 <*> pSingle a2 <*> pSingle a3
 
 
