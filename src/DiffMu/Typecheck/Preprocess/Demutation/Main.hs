@@ -917,6 +917,7 @@ elaborateMut scname (InternalMutate t1) = do
 
 elaborateMut scname (MCreate t1 t2 t3 t4) = elaborateNonMut3 scname (\tt1 tt2 tt4 -> MCreate tt1 tt2 t3 tt4) t1 t2 t4
 elaborateMut scname (Transpose t1)   = elaborateNonMut1 scname Transpose t1
+elaborateMut scname (Disc t1)        = elaborateNonMut1 scname Disc t1
 elaborateMut scname (Size t1)        = elaborateNonMut1 scname Size t1
 elaborateMut scname (Length t1)      = elaborateNonMut1 scname Length t1
 elaborateMut scname (ZeroGrad t1)    = elaborateNonMut1 scname ZeroGrad t1

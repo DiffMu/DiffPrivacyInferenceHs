@@ -1030,6 +1030,11 @@ checkSen' scope term@(Clone t) = checkSen' scope t -- do
 
   -- return (NoFun (ta))
 
+checkSen' scope term@(Disc t) = do
+  tt <- checkSen' scope t <* mtruncateS inftyS
+  v <- newVar
+  unify (NoFun (Numeric v)) tt
+  return (NoFun (Numeric (Num DMData NonConst)))
 
 checkSen' scope term@(MakeVec m) = do
   mtype <- checkSens scope m

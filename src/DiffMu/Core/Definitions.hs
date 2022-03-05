@@ -726,6 +726,7 @@ data PreDMTerm (t :: * -> *) =
   | DMTrue
   | DMFalse
   | Var (Asgmt JuliaType)
+  | Disc (PreDMTerm t)
 --  | Rnd JuliaType
   | Arg TeVar JuliaType Relevance
   | Op DMTypeOp_Some [(PreDMTerm t)]
@@ -790,7 +791,7 @@ pattern TLet a b c = TLetBase PureLet a b c
 pattern TBind a b c = TLetBase BindLet a b c
 pattern SmpLet a b c = TLetBase SampleLet a b c
 
-{-# COMPLETE Extra, Ret, DMTrue, DMFalse, Sng, Var, Arg, Op, Phi, Lam, LamStar, BBLet, BBApply,
+{-# COMPLETE Extra, Ret, DMTrue, DMFalse, Sng, Var, Arg, Op, Phi, Lam, LamStar, BBLet, BBApply, Disc,
  Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, Gauss, Laplace, Exponential, MutGauss, MutLaplace, AboveThresh, Count, MMap, MapRows, MapCols, MapCols2, PReduceCols, MFold, ConvertM, MCreate, Transpose,
  Size, Length, Index, VIndex, Row, ClipN, ClipM, MutClipM, Loop, SubGrad, ScaleGrad, TProject, ZeroGrad, SumGrads, SmpLet,
  Sample, InternalExpectConst, InternalMutate #-}
@@ -886,6 +887,7 @@ recKindM f = \case
 recDMTermM :: forall t m s. (Monad m) => (PreDMTerm t -> m (PreDMTerm s)) -> (t (PreDMTerm t) -> m (PreDMTerm s)) -> PreDMTerm t -> m (PreDMTerm s)
 recDMTermM f h (Extra e)          = h e
 recDMTermM f h (Ret (r))          = Ret <$> (f r)
+recDMTermM f h (Disc (r))         = Disc <$> (f r)
 recDMTermM f h (Sng g jt)         = pure $ Sng g jt
 recDMTermM f h DMTrue             = pure $ DMTrue
 recDMTermM f h DMFalse            = pure $ DMFalse
@@ -1024,6 +1026,7 @@ instance ShowPretty Relevance where
 instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t) where
   showPretty (Extra e)          = showPretty e
   showPretty (Ret (r))          = "Ret (" <>  showPretty r <> ")"
+  showPretty (Disc (r))          = "Disc (" <>  showPretty r <> ")"
   showPretty (DMFalse)          = "DMFalse"
   showPretty (DMTrue)           = "DMTrue"
   showPretty (Sng g jt)         = show g
