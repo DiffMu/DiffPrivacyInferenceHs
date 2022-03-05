@@ -396,6 +396,9 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
   (t@"row_to_vec", [a]) -> MakeVec <$> pSingle a
   (t@"row_to_vec", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
 
+  (t@"vec_to_row", [a]) -> MakeRow <$> pSingle a
+  (t@"vec_to_row", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
+
   ----------------------
   -- the ops
   -- the + and * operators allow lists as arguments

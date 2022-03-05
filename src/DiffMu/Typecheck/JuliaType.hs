@@ -179,7 +179,7 @@ instance Solve MonadDMTC IsFloat DMMain where
              NoFun (Numeric (TVar _)) -> pure ()
              (NoFun (Numeric (Num (TVar _) _))) -> pure ()
              (NoFun (Numeric (Num DMReal _))) -> dischargeConstraint name
-             (NoFun (Numeric (Num DMData NonConst))) -> dischargeConstraint name
+             (NoFun (Numeric (Num DMData _))) -> dischargeConstraint name
              _ -> failConstraint name
 
 --------------------------------------------------

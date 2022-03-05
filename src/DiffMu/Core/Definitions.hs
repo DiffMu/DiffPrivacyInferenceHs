@@ -749,6 +749,7 @@ data PreDMTerm (t :: * -> *) =
 -- matrix related things
   | Count (PreDMTerm t) (PreDMTerm t)
   | MakeVec (PreDMTerm t)
+  | MakeRow (PreDMTerm t)
   | MMap (PreDMTerm t) (PreDMTerm t)
   | MapRows (PreDMTerm t) (PreDMTerm t)
   | MapCols (PreDMTerm t) (PreDMTerm t)
@@ -911,6 +912,7 @@ recDMTermM f h (MutLaplace a b c) = MutLaplace <$> (f a) <*> (f b) <*> (f c)
 recDMTermM f h (Exponential a b c d) = Exponential <$> (f a) <*> (f b) <*> (f c) <*> (f d)
 recDMTermM f h (Count a b)         = Count <$> (f a) <*> (f b)
 recDMTermM f h (MakeVec a)         = MakeVec <$> (f a)
+recDMTermM f h (MakeRow a)         = MakeRow <$> (f a)
 recDMTermM f h (MMap a b)         = MMap <$> (f a) <*> (f b)
 recDMTermM f h (MapRows a b)     = MapRows <$> (f a) <*> (f b)
 recDMTermM f h (MapCols a b)     = MapCols <$> (f a) <*> (f b)
@@ -1049,6 +1051,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (Exponential a b c d) = "Exponential (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ", " <> (showPretty d) <> ")"
   showPretty (Count a b)         = "Count (" <> (showPretty a) <> " to " <> (showPretty b)  <> ")"
   showPretty (MakeVec a)         = "MakeVec (" <> (showPretty a) <> ")"
+  showPretty (MakeRow a)         = "MakeRow (" <> (showPretty a) <> ")"
   showPretty (MMap a b)         = "MMap (" <> (showPretty a) <> " to " <> (showPretty b)  <> ")"
   showPretty (MapRows a b)     = "MapRows (" <> (showPretty a) <> " to " <> (showPretty b)  <> ")"
   showPretty (MapCols a b)     = "MapCols (" <> (showPretty a) <> " to " <> (showPretty b)  <> ")"

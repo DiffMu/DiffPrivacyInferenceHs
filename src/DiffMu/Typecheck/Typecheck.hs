@@ -1046,6 +1046,21 @@ checkSen' scope term@(MakeVec m) = do
   return (NoFun (DMVec nrm clp cols τ))
 
 
+checkSen' scope term@(MakeRow m) = do
+  mtype <- checkSens scope m
+  
+  -- variables for element type, norm and clip parameters and dimension
+  τ <- newVar
+  nrm <- newVar
+  clp <- newVar
+  cols <- newVar
+  
+  -- set 1-row matrix type
+  unify mtype (NoFun (DMVec nrm clp cols τ))
+
+  return (NoFun (DMMat nrm clp oneId cols τ))
+
+
 -- Everything else is currently not supported.
 checkSen' scope t = throwError (TermColorError SensitivityK t)
 
