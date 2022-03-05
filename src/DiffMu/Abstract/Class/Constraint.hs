@@ -172,6 +172,8 @@ solveAllConstraints nt modes = withLogLocation "Constr" $ do
   case openConstr of
     Nothing -> return ()
     Just (name, constr, mode) -> do
+      log $ "[Solver]: solving (" <> show mode <> ") " <> show name <> " : " <> show constr
+
       -- debug $ "[Solver]: Notice: BEFORE solving (" <> show mode <> ") " <> show name <> " : " <> show constr
       -- logPrintConstraints
       -- logPrintSubstitutions
@@ -191,9 +193,10 @@ solveAllConstraints nt modes = withLogLocation "Constr" $ do
 
       -- print if something notable happened
       case (bDischarged, events) of
-        (False,[]) -> pure ()
+        (False,[]) -> do
+          log $ "          => " <> blue "Unchanged"
+          pure ()
         (b,xs) -> do
-          log $ "[Solver]: solving (" <> show mode <> ") " <> show name <> " : " <> show constr
           log $ intercalate "\n" (fmap ("             - " <>) xs)
           log $ "          => " <> if b then green "Discharged" else yellow "Wait/Update"
 
