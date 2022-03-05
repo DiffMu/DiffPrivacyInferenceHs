@@ -315,14 +315,14 @@ instance Solve MonadDMTC IsBlackBoxReturn (DMMain, (DMMain, Sensitivity)) where
           NoFun (DMContainer _ _ _ _ (NoFun (TVar _))) -> pure ()
           
           NoFun (DMContainer kind nret cret dret (NoFun (Numeric tret))) -> do
-              unify ret (NoFun (DMContainer kind LInf U dret (NoFun (Numeric DMData))))
+              unify ret (NoFun (DMContainer kind LInf U dret (NoFun (Numeric (Num DMData NonConst)))))
               case argt of
                    TVar _ -> pure ()
                    NoFun (TVar _) -> pure ()
                    NoFun (DMContainer _ _ _ _ (TVar _)) -> pure ()
                    NoFun (DMContainer _ _ _ _ (NoFun (TVar _))) -> pure ()
                    NoFun (DMContainer _ _ _ _ (NoFun (Numeric targ))) -> do
-                       unify targ DMData
+                       unify targ (Num DMData NonConst)
                        discharge oneId
                    _ -> discharge inftyS
                    
@@ -346,14 +346,14 @@ instance Solve MonadDMTC IsBlackBoxReturn (DMMain, (DMMain, Sensitivity)) where
                         NoFun (DMContainer _ narg carg _ targ) -> case (nret, tret) of
                            (TVar _, TVar _)         -> pure ()
                            (LInf, TVar _)           -> pure ()
-                           (TVar _, Numeric DMData) -> pure ()
+                           (TVar _, Numeric (Num DMData NonConst)) -> pure ()
                            -- if the output norm d is (L_inf, Data) and the input norm is some norm d' on data,
                            -- we have for every function f and all input vectors x!=y:
                            -- d(f(x), f(y)) = 1 <= d'(x, y)
                            -- so f is 1-sensitive using these norms.
-                           (LInf, Numeric DMData)   -> case targ of
+                           (LInf, Numeric (Num DMData NonConst))   -> case targ of
                               TVar _ -> pure ()
-                              (Numeric DMData) -> discharge oneId
+                              (Numeric (Num DMData NonConst)) -> discharge oneId
                               _ -> discharge inftyS
                            _ -> discharge inftyS
                         _ -> discharge inftyS
@@ -367,8 +367,8 @@ instance Solve MonadDMTC IsBlackBoxReturn (DMMain, (DMMain, Sensitivity)) where
 -- risking unification errors but giving us sensitivity 1 on the black box...
     solve_ Dict SolveFinal name (IsBlackBoxReturn (ret, (argt, args))) = case (ret, argt) of
           (NoFun (DMContainer vret nret cret dret tret), (NoFun (DMContainer varg narg carg darg targ))) -> do
-              unify ret (NoFun (DMContainer vret LInf U dret (Numeric DMData)))
-              unify targ (Numeric DMData)
+              unify ret (NoFun (DMContainer vret LInf U dret (Numeric (Num DMData NonConst))))
+              unify targ (Numeric (Num DMData NonConst))
               return ()
           _ -> pure ()
           

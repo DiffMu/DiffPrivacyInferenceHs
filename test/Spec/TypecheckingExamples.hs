@@ -233,7 +233,7 @@ testCount pp = describe "Count" $ do
       ty :: TC DMMain = do
             c <- newVar
             n <- newVar
-            let vec = NoFun (DMVec L1 c n (NoFun (Numeric DMData)))
+            let vec = NoFun (DMVec L1 c n (NoFun (Numeric (Num DMData NonConst))))
             return (Fun ([([vec :@ oneId] :->: (NoFun (Numeric (Num DMInt NonConst)))) :@ Just [JTAny]]))
   parseEvalUnify pp "" ex ty
 

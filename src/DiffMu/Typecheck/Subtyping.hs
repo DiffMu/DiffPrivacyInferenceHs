@@ -158,18 +158,18 @@ subtypingGraph =
                  , SingleEdge $ return (DMBool, DMBool)
                       {-
                       {-
-                 , SingleEdge $ -- this is the conv rule made implicit, for converting DMData to DMReal
+                 , SingleEdge $ -- this is the conv rule made implicit, for converting (Num DMData NonConst) to DMReal
                    do nrm <- newVar
                       clp <- newVar
                       n <- newVar
                       m <- newVar
-                      return ((DMMat nrm (Clip clp) n m (Numeric DMData)), (DMMat clp U n m (Numeric (Num DMReal NonConst))))
+                      return ((DMMat nrm (Clip clp) n m (Numeric (Num DMData NonConst))), (DMMat clp U n m (Numeric (Num DMReal NonConst))))
                     -}
-                 , SingleEdge $ -- this is the conv rule made implicit, for converting DMData to DMReal
+                 , SingleEdge $ -- this is the conv rule made implicit, for converting (Num DMData NonConst) to DMReal
                    do nrm <- newVar
                       clp <- newVar
                       m <- newVar
-                      return ((DMGrads nrm (Clip clp) m (Numeric DMData)), (DMGrads clp U m (Numeric (Num DMReal NonConst))))
+                      return ((DMGrads nrm (Clip clp) m (Numeric (Num DMData NonConst))), (DMGrads clp U m (Numeric (Num DMReal NonConst))))
                  , SingleEdge $ -- this is the fr-sens rule made implicit, for converting from L1 norm to any other
                    do nrm <- newVar
                       clp <- newVar
@@ -186,8 +186,8 @@ subtypingGraph =
     (_,_, _, Just Refl, _, _, _, _) ->
       \case { IsReflexive IsStructural
               -> [
-                    SingleEdge $ return (DMData, DMData)
-                  , SingleEdge $ do
+                    -- SingleEdge $ return ((Num DMData NonConst), (Num DMData NonConst))
+                    SingleEdge $ do
                       a₀ <- newVar
                       a₁ <- newVar
                       a₀ ⊑! a₁
@@ -223,7 +223,10 @@ subtypingGraph =
 
     -- BaseNum Kind
     (_,_, _, _, Just Refl, _, _, _) ->
-      \case { IsReflexive IsRightStructural
+      \case { IsReflexive IsStructural
+              -> [ SingleEdge $ return (DMData, DMData)
+                 ]
+            ; IsReflexive IsRightStructural
               -> [ SingleEdge $ return (DMInt, DMInt)
 
                  -- , SingleEdge $

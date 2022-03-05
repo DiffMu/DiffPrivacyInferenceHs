@@ -704,10 +704,10 @@ checkSen' scope (ClipM c m) = do
   addConstraint (Solvable (IsVecLike k))
 
   -- set correct matrix type
-  unify τb (NoFun (DMContainer k LInf clp n (NoFun (Numeric DMData))))
+  unify τb (NoFun (DMContainer k LInf clp n (NoFun (Numeric (Num DMData NonConst)))))
 
   -- change clip parameter to input
-  return (NoFun (DMContainer k LInf c n (NoFun (Numeric DMData))))
+  return (NoFun (DMContainer k LInf c n (NoFun (Numeric (Num DMData NonConst)))))
 
 
 checkSen' scope (ClipN value upper lower) = do
@@ -736,8 +736,8 @@ checkSen' scope (Count f m) = let
     r <- newVar
     s <- newVar
         
-    unify tm (NoFun (DMVec n cl r (NoFun (Numeric DMData))))
-    unify tf (Fun [[(NoFun (Numeric DMData)) :@ s] :->: (NoFun DMBool) :@ (Just [JTAny])])
+    unify tm (NoFun (DMVec n cl r (NoFun (Numeric (Num DMData NonConst)))))
+    unify tf (Fun [[(NoFun (Numeric (Num DMData NonConst))) :@ s] :->: (NoFun DMBool) :@ (Just [JTAny])])
     
     return (NoFun (Numeric (Num DMInt NonConst)))
 
@@ -760,7 +760,7 @@ checkSen' scope (ConvertM m) = do
   k <- newVar
 
   -- set correct matrix type
-  unify τb (NoFun (DMContainer k nrm (Clip clp) n (NoFun (Numeric DMData))))
+  unify τb (NoFun (DMContainer k nrm (Clip clp) n (NoFun (Numeric (Num DMData NonConst)))))
 
   -- we have to scale by two unlike in the paper...see the matrixnorms pdf in julia docs
   mscale (oneId ⋆! oneId)
@@ -1594,8 +1594,8 @@ checkPri' scope (SmpLet xs (Sample n m1_in m2_in) tail) =
       unify pn (zeroId, zeroId)
       
       -- set input matrix types and truncate contexts to what it says in the rule
-      unify tm1 (NoFun (DMMat LInf clp m1 n1 (NoFun (Numeric DMData))))
-      unify tm2 (NoFun (DMMat LInf clp m1 n2 (NoFun (Numeric DMData))))
+      unify tm1 (NoFun (DMMat LInf clp m1 n1 (NoFun (Numeric (Num DMData NonConst)))))
+      unify tm2 (NoFun (DMMat LInf clp m1 n2 (NoFun (Numeric (Num DMData NonConst)))))
       let two = oneId ⋆! oneId
       unify pm1 (divide (two ⋅! (m2 ⋅! e1)) m1, divide (m2 ⋅! d1) m1)
       unify pm2 (divide (two ⋅! (m2 ⋅! e2)) m1, divide (m2 ⋅! d2) m1)
@@ -1618,10 +1618,10 @@ checkPri' scope (PReduceCols f m) = do
     (τf :: DMMain, τm) <- msumTup (mf, mm) -- sum args and f's context
 
     τ_out <- newVar -- a type var for the function output type
-    unify τm (NoFun (DMMat LInf U ηm r (NoFun (Numeric DMData))))
+    unify τm (NoFun (DMMat LInf U ηm r (NoFun (Numeric (Num DMData NonConst)))))
 
     -- set the type of the function using IFA
-    addConstraint (Solvable (IsFunctionArgument (τf, (Fun [([NoFun (DMMat LInf U ηm oneId (NoFun (Numeric DMData))) :@ (ε, δ)] :->*: τ_out) :@ Nothing]))))
+    addConstraint (Solvable (IsFunctionArgument (τf, (Fun [([NoFun (DMMat LInf U ηm oneId (NoFun (Numeric (Num DMData NonConst)))) :@ (ε, δ)] :->*: τ_out) :@ Nothing]))))
 
     return (NoFun (DMVec LInf U r τ_out))
 

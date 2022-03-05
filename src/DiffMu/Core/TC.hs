@@ -163,7 +163,7 @@ instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
   substitute σs DMBool = pure DMBool
   substitute σs DMInt = pure DMInt
   substitute σs DMReal = pure DMReal
-  substitute σs DMData = pure DMData
+  substitute σs (DMData) = pure DMData
   substitute σs (Numeric τ) = Numeric <$> substitute σs τ
   substitute σs (NonConst) = pure NonConst
   substitute σs (Const c) = Const <$> substitute σs c

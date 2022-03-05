@@ -165,9 +165,9 @@ solveBinary op (τ1, τ2) = traceM ("solving " <> show op <> show (τ1, τ2)) >>
     f DMOpEq (Numeric (Num t1 (Const s1))) (Numeric (Num DMReal NonConst)) = ret zeroId (constCoeff Infty)  (pure $ DMBool)
     f DMOpEq (Numeric (Num DMReal NonConst)) (Numeric (Num t2 (Const s2))) = ret (constCoeff Infty)  zeroId (pure $ DMBool)
     f DMOpEq (Numeric (Num DMReal NonConst)) (Numeric (Num DMReal NonConst)) = ret (constCoeff Infty) (constCoeff Infty) (pure $ DMBool)
-    f DMOpEq (Numeric DMData) (Numeric DMData)               = ret oneId  oneId  (pure $ DMBool)
-    f DMOpEq (Numeric (Num _ (Const _))) (Numeric DMData)          = ret zeroId  oneId (pure $ DMBool)
-    f DMOpEq (Numeric DMData) (Numeric (Num _ (Const _)))          = ret oneId  zeroId (pure $ DMBool)
+    f DMOpEq (Numeric (Num DMData NonConst)) (Numeric (Num DMData NonConst))               = ret oneId  oneId  (pure $ DMBool)
+    f DMOpEq (Numeric (Num _ (Const _))) (Numeric (Num DMData NonConst))          = ret zeroId  oneId (pure $ DMBool)
+    f DMOpEq (Numeric (Num DMData NonConst)) (Numeric (Num _ (Const _)))          = ret oneId  zeroId (pure $ DMBool)
     f DMOpEq (DMContainer k1 n1 cl1 c1 (NoFun t1)) (DMContainer k2 n2 cl2 c2 (NoFun t2)) = solveBinary DMOpEq (t1, t2)
 
     f _ _ _                            = return Nothing
@@ -196,7 +196,7 @@ makeNonConstType myConstrName (Numeric (TVar a)) = do
 makeNonConstType name (Numeric (Num t (TVar c))) = unify (TVar c) NonConst >> pure (Numeric (Num t NonConst))
 makeNonConstType name (Numeric (Num t NonConst)) = pure $ Numeric (Num t NonConst)
 makeNonConstType name (Numeric (Num t (Const s))) = pure $ Numeric (Num t (Const s))
-makeNonConstType name (Numeric DMData) = pure $ (Numeric DMData) -- TODO: Check, we do nothing with DMData?
+makeNonConstType name (Numeric (Num DMData NonConst)) = pure $ (Numeric (Num DMData NonConst)) -- TODO: Check, we do nothing with (Num DMData NonConst)?
 makeNonConstType name (DMContainer k a b c e) = do
     en <- makeNoFunNumeric e
     enc <- makeNonConstType name (Numeric en)

@@ -34,10 +34,10 @@ import Debug.Trace
 -- potentially match any method.
 juliatypes :: DMTypeOf k -> [JuliaType]
 juliatypes (Numeric (Num t c)) = juliatypes t
-juliatypes (Numeric DMData) = [JTInt, JTReal]
 juliatypes (Numeric (TVar _)) = [JTInt, JTReal]
 juliatypes DMInt = [JTInt]
 juliatypes DMReal = [JTReal]
+juliatypes (DMData) = [JTInt, JTReal]
 juliatypes (DMVec _ _ _ τ) = (juliatypesInContainer JTVector τ)
 juliatypes (DMMat _ _ _ _ τ) = (juliatypesInContainer JTMatrix τ)
 juliatypes (DMGrads _ _ _ _) = [JTGrads]
@@ -179,7 +179,7 @@ instance Solve MonadDMTC IsFloat DMMain where
              NoFun (Numeric (TVar _)) -> pure ()
              (NoFun (Numeric (Num (TVar _) _))) -> pure ()
              (NoFun (Numeric (Num DMReal _))) -> dischargeConstraint name
-             (NoFun (Numeric DMData)) -> dischargeConstraint name
+             (NoFun (Numeric (Num DMData NonConst))) -> dischargeConstraint name
              _ -> failConstraint name
 
 --------------------------------------------------
