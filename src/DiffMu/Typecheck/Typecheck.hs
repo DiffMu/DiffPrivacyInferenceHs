@@ -346,7 +346,7 @@ checkSen' scope (MapCols f m) = do
     r <- newVar
     ηm₁ <- newVar
     ηm₂ <- newVar
-    let mf = checkSens scope f <* mscale (ηm₁ ⋅! r)
+    let mf = checkSens scope f <* mscale (r)
     let mm = checkSens scope m <* mscale (ς ⋅! r)
     (τf :: DMMain, τm) <- msumTup (mf, mm) -- sum args and f's context
 
@@ -359,9 +359,45 @@ checkSen' scope (MapCols f m) = do
     unify τm (NoFun (DMMat nrm₁ clp₁ ηm₁ r τ_in))
 
     -- set the type of the function using IFA
-    addConstraint (Solvable (IsFunctionArgument (τf, (Fun [([NoFun (DMMat nrm₁ clp₁ ηm₁ oneId τ_in) :@ ς] :->: NoFun (DMMat nrm₂ clp₂ ηm₂ oneId τ_out)) :@ Nothing]))))
+    --
+    -- the output matrix has to have L1 norm, because after (virtually) doing MapRows, we have to transpose the matrix,
+    -- and this only works without further sensitivity costs when the norm is L1
+    addConstraint (Solvable (IsFunctionArgument (τf, (Fun [([NoFun (DMVec nrm₁ clp₁ ηm₁ τ_in) :@ ς] :->: NoFun (DMVec L1 clp₂ ηm₂ τ_out)) :@ Nothing]))))
 
-    return (NoFun (DMMat nrm₂ clp₂ ηm₂ r τ_out))
+    -- After transposing, since we have L1, we can output every norm,
+    -- thus nrm₂ is freely choosable
+    return (NoFun (DMMat nrm₂ U ηm₂ r τ_out))
+
+checkSen' scope (MapCols2 f m₁ m₂) = do
+    ς₁ <- newVar
+    ς₂ <- newVar
+    r <- newVar
+    ηm₁ <- newVar
+    ηm₂ <- newVar
+    ηm₃ <- newVar
+    let mf = checkSens scope f <* mscale (ηm₁ ⋅! r)
+    let mm₁ = checkSens scope m₁ <* mscale (ς₁ ⋅! r)
+    let mm₂ = checkSens scope m₂ <* mscale (ς₂ ⋅! r)
+    (τf :: DMMain, τm₁, τm₂) <- msum3Tup (mf, mm₁, mm₂) -- sum args and f's context
+
+    τ_in₁ <- newVar -- a type var for the function input / matrix element type
+    τ_in₂ <- newVar -- a type var for the function input / matrix element type
+    τ_out <- newVar -- a type var for the function output type
+    nrm₁ <- newVar -- variable for norm
+    clp₁ <- newVar -- variable for clip
+    nrm₂ <- newVar -- variable for norm
+    clp₂ <- newVar -- variable for clip
+    nrm₃ <- newVar -- variable for norm
+    clp₃ <- newVar -- variable for clip
+    unify τm₁ (NoFun (DMMat LInf clp₁ ηm₁ r τ_in₁))
+    unify τm₂ (NoFun (DMMat LInf clp₂ ηm₂ r τ_in₂))
+
+    -- set the type of the function using IFA
+    addConstraint (Solvable (IsFunctionArgument (τf, (Fun [([NoFun (DMVec nrm₁ clp₁ ηm₁ τ_in₁) :@ ς₁, NoFun (DMVec nrm₂ clp₂ ηm₂ τ_in₂) :@ ς₂] :->: NoFun (DMVec L1 clp₃ ηm₃ τ_out)) :@ Nothing]))))
+
+    -- After transposing, since we have L1, we can output every norm,
+    -- thus nrm₂ is freely choosable
+    return (NoFun (DMMat nrm₃ U ηm₃ r τ_out))
 
 checkSen' scope (MFold f acc₀ m) = do
     s₁ <- newVar
