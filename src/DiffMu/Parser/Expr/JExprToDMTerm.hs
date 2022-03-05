@@ -348,8 +348,14 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
   (t@"map", [a1, a2]) -> MMap <$> pSingle a1 <*> pSingle a2
   (t@"map", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 argument, but has been given " <> show (length args)
 
-  (t@"map_rows", [a1, a2]) -> MMapRows <$> pSingle a1 <*> pSingle a2
+  (t@"map_rows", [a1, a2]) -> MapRows <$> pSingle a1 <*> pSingle a2
   (t@"map_rows", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 argument, but has been given " <> show (length args)
+
+  (t@"map_cols", [a1, a2]) -> MapCols <$> pSingle a1 <*> pSingle a2
+  (t@"map_cols", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 argument, but has been given " <> show (length args)
+
+  (t@"reduce_cols", [a1, a2]) -> PReduceCols <$> pSingle a1 <*> pSingle a2
+  (t@"reduce_cols", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 argument, but has been given " <> show (length args)
 
   (t@"clip!", [a1,a2]) -> MutClipM <$> pClip a1 <*> pSingle a2
   (t@"clip!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)

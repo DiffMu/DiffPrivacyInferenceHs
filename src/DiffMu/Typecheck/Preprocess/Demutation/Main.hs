@@ -932,7 +932,9 @@ elaborateMut scname (Exponential t1 t2 t3 t4) = elaborateNonMut4 scname Exponent
 elaborateMut scname (ClipN t1 t2 t3) = elaborateNonMut3 scname ClipN t1 t2 t3
 elaborateMut scname (Count t1 t2) = elaborateNonMut2 scname Count t1 t2
 elaborateMut scname (MMap t1 t2) = elaborateNonMut2 scname MMap t1 t2
-elaborateMut scname (MMapRows t1 t2) = elaborateNonMut2 scname MMapRows t1 t2
+elaborateMut scname (MapRows t1 t2) = elaborateNonMut2 scname MapRows t1 t2
+elaborateMut scname (MapCols t1 t2) = elaborateNonMut2 scname MapCols t1 t2
+elaborateMut scname (PReduceCols t1 t2) = elaborateNonMut2 scname PReduceCols t1 t2
 elaborateMut scname (MFold t1 t2 t3) = elaborateNonMut3 scname MFold t1 t2 t3
 
 

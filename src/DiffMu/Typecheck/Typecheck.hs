@@ -319,7 +319,7 @@ checkSen' scope (MMap f m) = do
 
     return (NoFun (DMContainer k nrm U mv τ_out))
 
-checkSen' scope (MMapRows f m) = do
+checkSen' scope (MapRows f m) = do
     s <- newVar
     ηm <- newVar
     ηn₁ <- newVar
@@ -1534,7 +1534,26 @@ checkPri' scope (SmpLet xs (Sample n m1_in m2_in) tail) =
 
       -- expression has type of the tail
       return ttail
-    
+
+
+checkPri' scope (PReduceCols m f) = do
+    ε <- newVar
+    δ <- newVar
+    ηm <- newVar
+    r <- newVar
+    let mm = checkSens scope m <* mtruncateP (r ⋅! ε, r ⋅! δ)
+    let mf = checkSens scope f <* mtruncateP inftyP
+    (τf :: DMMain, τm) <- msumTup (mf, mm) -- sum args and f's context
+
+    τ_out <- newVar -- a type var for the function output type
+    unify τm (NoFun (DMMat LInf U ηm r (NoFun (Numeric DMData))))
+
+    -- set the type of the function using IFA
+    addConstraint (Solvable (IsFunctionArgument (τf, (Fun [([NoFun (DMVec LInf U ηm (NoFun (Numeric DMData))) :@ (ε, δ)] :->*: τ_out) :@ Nothing]))))
+
+    return (NoFun (DMMat LInf U oneId r τ_out))
+
+
 checkPri' scope t = throwError (TermColorError PrivacyK t)
 
 
