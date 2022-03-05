@@ -341,6 +341,28 @@ checkSen' scope (MapRows f m) = do
 
     return (NoFun (DMMat nrm₂ clp₂ ηm ηn₂ τ_out))
 
+checkSen' scope (MapCols f m) = do
+    ς <- newVar
+    r <- newVar
+    ηm₁ <- newVar
+    ηm₂ <- newVar
+    let mf = checkSens scope f <* mscale (ηm₁ ⋅! r)
+    let mm = checkSens scope m <* mscale (ς ⋅! r)
+    (τf :: DMMain, τm) <- msumTup (mf, mm) -- sum args and f's context
+
+    τ_in <- newVar -- a type var for the function input / matrix element type
+    τ_out <- newVar -- a type var for the function output type
+    nrm₁ <- newVar -- variable for norm
+    clp₁ <- newVar -- variable for clip
+    nrm₂ <- newVar -- variable for norm
+    clp₂ <- newVar -- variable for clip
+    unify τm (NoFun (DMMat nrm₁ clp₁ ηm₁ r τ_in))
+
+    -- set the type of the function using IFA
+    addConstraint (Solvable (IsFunctionArgument (τf, (Fun [([NoFun (DMMat nrm₁ clp₁ ηm₁ oneId τ_in) :@ ς] :->: NoFun (DMMat nrm₂ clp₂ ηm₂ oneId τ_out)) :@ Nothing]))))
+
+    return (NoFun (DMMat nrm₂ clp₂ ηm₂ r τ_out))
+
 checkSen' scope (MFold f acc₀ m) = do
     s₁ <- newVar
     s₂ <- newVar
@@ -1550,7 +1572,7 @@ checkPri' scope (SmpLet xs (Sample n m1_in m2_in) tail) =
       return ttail
 
 
-checkPri' scope (PReduceCols m f) = do
+checkPri' scope (PReduceCols f m) = do
     ε <- newVar
     δ <- newVar
     ηm <- newVar
