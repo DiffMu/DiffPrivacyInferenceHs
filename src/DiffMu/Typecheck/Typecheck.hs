@@ -1549,9 +1549,9 @@ checkPri' scope (PReduceCols m f) = do
     unify τm (NoFun (DMMat LInf U ηm r (NoFun (Numeric DMData))))
 
     -- set the type of the function using IFA
-    addConstraint (Solvable (IsFunctionArgument (τf, (Fun [([NoFun (DMVec LInf U ηm (NoFun (Numeric DMData))) :@ (ε, δ)] :->*: τ_out) :@ Nothing]))))
+    addConstraint (Solvable (IsFunctionArgument (τf, (Fun [([NoFun (DMMat LInf U ηm oneId (NoFun (Numeric DMData))) :@ (ε, δ)] :->*: τ_out) :@ Nothing]))))
 
-    return (NoFun (DMMat LInf U oneId r τ_out))
+    return (NoFun (DMVec LInf U r τ_out))
 
 
 checkPri' scope t = throwError (TermColorError PrivacyK t)
