@@ -9,6 +9,7 @@ import DiffMu.Core.TC
 import DiffMu.Core.Symbolic
 import DiffMu.Core.Unification
 import DiffMu.Typecheck.Subtyping
+import DiffMu.Typecheck.Constraint.CheapConstraints
 
 import Debug.Trace
 
@@ -129,7 +130,11 @@ solveBinary op (τ1, τ2) = traceM ("solving " <> show op <> show (τ1, τ2)) >>
     f DMOpMul (Numeric (Num t1 (Const s1))) (Numeric (Num t2 (Const s2))) = ret zeroId zeroId ((Numeric <$> (Num <$> (supremum t1 t2) <*> (Const <$> (s1 ⋅ s2)))))
     f DMOpMul (Numeric (Num t1 (Const s1))) (Numeric (Num t2 NonConst)) = ret zeroId s1 (Numeric <$> (Num <$> supremum t1 t2 <*> pure NonConst))
     f DMOpMul (Numeric (Num t1 NonConst)) (Numeric (Num t2 (Const s2))) = ret s2 zeroId (Numeric <$> (Num <$> supremum t1 t2 <*> pure NonConst))
-    f DMOpMul (Numeric (Num t1 NonConst)) (Numeric (Num t2 NonConst)) = ret (constCoeff Infty) (constCoeff Infty) (Numeric <$> (Num <$> supremum t1 t2 <*> pure NonConst))
+    f DMOpMul (Numeric (Num t1 NonConst)) (Numeric (Num t2 NonConst)) = do
+        s :: Sensitivity <- newVar
+        t <- supremum t1 t2
+        addConstraint (Solvable (SetIfTypesEqual (s, NoFun (Numeric (Num t NonConst)), NoFun (Numeric (Num DMData NonConst)), oneId::Sensitivity, inftyS))) -- if t is data the coeff is 1, else it's inf
+        return (Just (s, s, Numeric (Num t NonConst)))
     f DMOpMul (Numeric τs) (DMMat n cl r c t) = do
                                                   tt <- makeNoFunNumeric t
                                                   s <- solveBinary op (Numeric τs, Numeric tt)
