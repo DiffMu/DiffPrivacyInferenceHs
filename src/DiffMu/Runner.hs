@@ -76,7 +76,6 @@ typecheckFromJExprWithPrinter printer logoptions term = do
 
         term' <- parseDMTermFromJExpr term >>= (liftNewLightTC . preprocessAll)
 
-
         -- let tres = checkSens (term') def
         tres' <- checkSens def (term')
         -- let tres'' = tres
