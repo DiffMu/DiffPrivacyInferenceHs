@@ -184,8 +184,8 @@ getErrors :: DMMessages t -> [LocatedDMException t]
 getErrors (DMMessages _ errs) = errs
 
 getErrorMessage :: DMMessages t -> String
-getErrorMessage (DMMessages _ errs) = intercalate ("\n\n" <> red "error")
-                                            (fmap show errs)
+getErrorMessage (DMMessages _ errs) = intercalate ("\n\n")
+                                            (fmap (\e -> red "Error:\n" <> show e) errs)
 
 
 

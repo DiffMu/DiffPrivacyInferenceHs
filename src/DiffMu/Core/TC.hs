@@ -14,6 +14,7 @@ import {-# SOURCE #-} DiffMu.Typecheck.Subtyping
 import {-# SOURCE #-} DiffMu.Core.Unification
 
 import qualified Data.HashMap.Strict as H
+import qualified Prelude as P
 
 import Debug.Trace
 import DiffMu.Core.Symbolic (normalizeSensSpecial)
@@ -582,7 +583,8 @@ data TCState = TCState
   {
     _watcher :: Watcher,
     _logger :: DMLogger,
-    _solvingEvents :: [SolvingEvent]
+    _solvingEvents :: [SolvingEvent],
+    _persistingCounter :: Int
   }
   deriving (Generic)
 
@@ -679,8 +681,8 @@ instance Show Watcher where
   show (Watcher changed) = show changed
 
 instance Show (TCState) where
-  show (TCState w l _) = "- watcher: " <> show w <> "\n"
-                       <> "- messages: " <> show l <> "\n"
+  show (TCState w l _ _) = "- watcher: " <> show w <> "\n"
+                         <> "- messages: " <> show l <> "\n"
 
 instance Show (Full) where
   show (Full tcs m γ) = "\nState:\n" <> show tcs <> "\nMeta:\n" <> show m <> "\nTypes:\n" <> show γ <> "\n"
@@ -959,14 +961,21 @@ instance Monad m => MonadDMError (LocatedDMException (TCT m)) (TCT m) where
   isCritical (WithContext e _)= return (isCriticalError e)
   persistentError e = tell (DMMessages [] [e])
   catchAndPersist x handler = do
-      catchError x $ \(WithContext err msg) -> do
-        case isCriticalError err of
-          True -> throwError (WithContext err msg)
-          False -> do
-            (res,msg') <- handler msg
-            tell (DMMessages [] [(WithContext err (DMPersistentMessage msg'))])
-            return res
+      persistingC <- use (tcstate.persistingCounter)
+      case persistingC == 0 of
+        True -> do
+          catchError x $ \(WithContext err msg) -> do
+            case isCriticalError err of
+              True -> throwError (WithContext err msg)
+              False -> do
+                (res,msg') <- handler msg
+                tell (DMMessages [] [(WithContext err (DMPersistentMessage msg'))])
+                return res
+        False -> x
 
+
+  enterNonPersisting = tcstate.persistingCounter %= (P.+ 1)
+  exitNonPersisting = tcstate.persistingCounter %= (P.- 1)
 
 -- Normalizes all contexts in our typechecking monad, i.e., applies all available substitutions.
 normalizeContext :: (MonadDMTC t) => NormalizationType -> t ()

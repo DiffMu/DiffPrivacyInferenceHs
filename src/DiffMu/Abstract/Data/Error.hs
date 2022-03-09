@@ -164,8 +164,11 @@ isCriticalError e = case e of
   _ -> False
 
 
+
 class MonadError e t => MonadDMError e t where
   isCritical :: e -> t Bool
   persistentError :: LocatedDMException t -> t ()
   catchAndPersist :: (Normalize t x, Show x) => t a -> (DMPersistentMessage t -> t (a, x)) -> t a
+  enterNonPersisting :: t ()
+  exitNonPersisting :: t ()
 
