@@ -260,8 +260,11 @@ instance (Typeable j, Typeable r, Typeable v, IsKind (k :: j), KEq v, Eq r, KHas
                              let vslist = take e (repeat vs)
                              return (P.foldl (⋅!) oneId vslist)
         -- f (e , v) = undefined
-        g (MonCom mvs, r :: r) = do mvs' <- mapM f (H.toList mvs)
-                                    return $ (ActM r) ↷! P.foldl (⋅!) oneId mvs'
+        g (MonCom mvs, r :: r) = case runIdentity (checkNeutral r) of
+                                  True -> return (zeroId)
+                                  False -> 
+                                    do mvs' <- mapM f (H.toList mvs)
+                                       return $ (ActM r) ↷! P.foldl (⋅!) oneId mvs'
         -- g' (r, mvs) = r ↷! g mvs
         h (LinCom (MonCom ls)) = do ls' <- mapM g (H.toList ls)
                                     return $ P.foldl (+!) zeroId ls'
