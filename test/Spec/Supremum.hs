@@ -27,7 +27,7 @@ testSupremum = do
 
     testsup (NoFun (Numeric (Num DMInt NonConst)))
             (Fun [([NoFun (Numeric (Num DMInt NonConst)) :@ oneId] :->: (NoFun (Numeric (Num DMInt NonConst)))) :@ Nothing])
-            (Left (UnsatisfiableConstraint "[test]"))
+            (Left (LocatedError (UnsatisfiableConstraint "[test]") []))
 
 
   describe "infimum" $ do
@@ -42,7 +42,7 @@ testSupremum = do
     testinf (DMInt) (DMReal) (Right $ DMInt)
 
     testinf (Num DMInt (Const twoId)) (Num DMInt (Const twoId)) (Right $ Num DMInt (Const twoId)) -- (Right $ Const (twoId)))
-    testinf (Num DMInt (Const (twoId))) (Num DMInt (Const oneId)) (Left $ UnsatisfiableConstraint "")
+    testinf (Num DMInt (Const (twoId))) (Num DMInt (Const oneId)) (Left $ LocatedError (UnsatisfiableConstraint "") [])
 
 
 
@@ -112,7 +112,7 @@ testSupremum = do
             b <- supremum a DMReal
             unify b DMInt
             return ()
-      (tc $ (sn_EW test)) `shouldReturn` (Left (UnsatisfiableConstraint "test"))
+      (tc $ (sn_EW test)) `shouldReturn` (Left (LocatedError (UnsatisfiableConstraint "test") []))
 
   describe "supremum (with unknown variables)" $ do
     it "does NOT solve 'max{a,Int} = b'" $ do

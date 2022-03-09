@@ -38,7 +38,12 @@ newProcVar hint = holeNames %%= (first GenProcVar . (newName hint))
 parseError :: String -> ParseTC a
 parseError message = do
                        (file, line) <- use location
-                       throwOriginalError (ParseError message file line)
+                       loc <- getCurrentLoc
+
+                       throwError (LocatedError (ParseError message file line)
+                        [("While parsing this line", loc)])
+
+                      --  throwOriginalError (ParseError message file line)
 
 
 -- set parse state to be inside a function
@@ -98,7 +103,7 @@ pSingle e = case e of
                  JEColon -> parseError "Colon (:) can only be used to access matrix rows like in M[1,:]."
                  JETypeAnnotation _ _ -> parseError "Type annotations are only supported on function arguments."
                  JENotRelevant _ _ -> parseError "Type annotations are only supported on function arguments."
-                 JELineNumber _ _ -> throwOriginalError (InternalError "What now?") -- TODO
+                 JELineNumber _ _ -> throwUnlocatedError (InternalError "What now?") -- TODO
                  JEImport -> parseError "import statement is not allowed here."
 
 

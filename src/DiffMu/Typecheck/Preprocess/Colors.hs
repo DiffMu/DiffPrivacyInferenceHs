@@ -91,7 +91,7 @@ handleSensTerm_Loc term = do
     tterm <- transformLets_Loc (Just SensitivityK) term
     cterm <- getColor
     case cterm of
-        PrivacyK -> throwError (TermColorError SensitivityK (getLocated term))
+        PrivacyK -> throwUnlocatedError (TermColorError SensitivityK (getLocated term))
         SensitivityK -> return tterm
 
 -- handle a term that is required to be a privacy term
@@ -101,7 +101,7 @@ handlePrivTerm_Loc term = do
     cterm <- getColor
     case cterm of
         PrivacyK -> return tterm
-        SensitivityK -> throwError (TermColorError PrivacyK (getLocated tterm))
+        SensitivityK -> throwUnlocatedError (TermColorError PrivacyK (getLocated tterm))
 
 -- handle a term that can be whatever
 -- handleAnyTerm :: DMTerm -> ColorTC DMTerm
@@ -217,10 +217,10 @@ transformLets reqc (Located l_term (term)) = do
    Var _ -> retRequired reqc (Located l_term (term))
    Arg _ _ _ -> retRequired reqc (Located l_term (term))
 
-   TLetBase _ _ _ _ -> throwError (InternalError ("Parser spit out a non-pure TLet: " <> show term))
-   SLetBase _ _ _ _ -> throwError (InternalError ("Parser spit out a non-pure SLet: " <> show term))
-   FLet _ _ _ -> throwError (InternalError ("Parser spit out an FLet that has no lambda in its definition: " <> show term))
-   Ret _ -> throwError (InternalError ("Parser spit out a return term: " <> show term))
+   TLetBase _ _ _ _ -> throwUnlocatedError (InternalError ("Parser spit out a non-pure TLet: " <> show term))
+   SLetBase _ _ _ _ -> throwUnlocatedError (InternalError ("Parser spit out a non-pure SLet: " <> show term))
+   FLet _ _ _ -> throwUnlocatedError (InternalError ("Parser spit out an FLet that has no lambda in its definition: " <> show term))
+   Ret _ -> throwUnlocatedError (InternalError ("Parser spit out a return term: " <> show term))
 
    _ -> case reqc of
              Just PrivacyK -> do

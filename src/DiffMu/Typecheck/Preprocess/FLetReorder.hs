@@ -35,7 +35,7 @@ collectAllFLets (Located l (FLet var def rest)) = do
   -- if there are any, we throw an error
   case findDuplicates allsigs of
     [] -> pure ()
-    xs -> throwError $ FLetReorderError $ "The function `" <> show var <> "` has more than one definition for the following signatures: " <> show xs <> "\nThis means that the earlier definitions are going to have no effect, and as a precaution this is not allowed."
+    xs -> throwUnlocatedError $ FLetReorderError $ "The function `" <> show var <> "` has more than one definition for the following signatures: " <> show xs <> "\nThis means that the earlier definitions are going to have no effect, and as a precaution this is not allowed."
 
   -- let alldefsWithJuliaSig = zip allsigs alldefs
       -- we thread the elements through a hashmap => if we have terms with the same juliatype,

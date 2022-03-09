@@ -372,7 +372,7 @@ solveSubtyping name path = withLogLocation "Subtyping" $ do
   -- traceM $ "I have " <> show (length (graph (IsReflexive NotStructural))) <> " candidates."
 
   -- Executing the computation
-  (res) <- findPathM @(Full) relevance (GraphM graph) path
+  (res) <- findPathM @(Full) (\(LocatedError e _ ) -> relevance e) (GraphM graph) path
 
   -- We look at the result and if necessary throw errors.
   case res of
@@ -387,7 +387,7 @@ solveSubtyping name path = withLogLocation "Subtyping" $ do
       npath <- normalizeExact path
       log $ "(With normalizations applied the constraint is now " <> show npath <> " ; it should be the same as the input.)"
       convertSubtypingToSupremum name path -- in this case we try to change this one into a sup
-    Fail e         -> throwError (UnsatisfiableConstraint (show (fst path) <> " ⊑ " <> show (snd path) <> "\n\n"
+    Fail e         -> throwUnlocatedError (UnsatisfiableConstraint (show (fst path) <> " ⊑ " <> show (snd path) <> "\n\n"
                          <> "Got the following errors while searching the subtyping graph:\n"
                          <> show e))
 
@@ -683,14 +683,14 @@ callMonadicGraphSupremum graph name ((a,b) :=: x) = do
   -- traceM $ "I have " <> show (length (graph (IsReflexive NotStructural))) <> " candidates."
 
   -- Executing the computation
-  res <- findSupremumM @(Full) relevance (graph) ((a,b) :=: x, IsShortestPossiblePath)
+  res <- findSupremumM @(Full) (\(LocatedError e _) -> relevance e) (graph) ((a,b) :=: x, IsShortestPossiblePath)
 
   -- We look at the result and if necessary throw errors.
   case res of
     Finished a -> dischargeConstraint @MonadDMTC name
     Partial a  -> updateConstraint name (Solvable (IsSupremum a))
     Wait       -> return ()
-    Fail e     -> throwError (UnsatisfiableConstraint ("sup(" <> show (a) <> ", " <> show b <> ") = " <> show x <> "\n\n"
+    Fail e     -> throwUnlocatedError (UnsatisfiableConstraint ("sup(" <> show (a) <> ", " <> show b <> ") = " <> show x <> "\n\n"
                          <> "Got the following errors while search the subtyping graph:\n"
                          <> show e))
 

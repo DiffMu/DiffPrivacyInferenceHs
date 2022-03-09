@@ -109,7 +109,7 @@ createDMType (JTGrads) = do
   n <- newVar
   return (DMGrads nrm clp n DMAny)
 createDMType JTAny = return DMAny
-createDMType (t)  = throwError (TypeMismatchError $ "expected " <> show t <> " to not be a function.")
+createDMType (t)  = throwUnlocatedError (TypeMismatchError $ "expected " <> show t <> " to not be a function.")
 
 
 ---------------------------------------------------------
