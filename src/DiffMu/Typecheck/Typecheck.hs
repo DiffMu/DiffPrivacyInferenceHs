@@ -1,4 +1,5 @@
 
+
 module DiffMu.Typecheck.Typecheck where
 
 import DiffMu.Prelude
@@ -9,6 +10,7 @@ import DiffMu.Core.Symbolic
 import DiffMu.Core.TC
 import DiffMu.Typecheck.Operations
 import DiffMu.Core.Scope
+import DiffMu.Abstract.Data.ErrorReporting
 import DiffMu.Abstract.Data.Permutation
 import DiffMu.Typecheck.JuliaType
 import DiffMu.Typecheck.Constraint.IsFunctionArgument
@@ -23,9 +25,23 @@ import Debug.Trace
 
 import Data.IORef
 import System.IO.Unsafe
-import DiffMu.Core (SourceLocExt(RelatedLoc))
+
+default (String)
 
 
+catchNoncriticalError :: LocDMTerm -> TC DMMain -> TC DMMain
+catchNoncriticalError a x = do
+
+  catchError x $ \err@(LocatedError e locs) -> case isCriticalError e of
+    True -> throwError err
+    False -> do
+      resultType <- newVar
+      let msg = DMPersistentMessage $ (LocatedError e (("While checking the term", getLocation a):locs))
+                                      :-----:
+                                      "Since the checking was not successful, created the following type for this term:" :\\:
+                                      resultType
+      tell (DMMessages [] [msg])
+      return resultType
 
 
 ------------------------------------------------------------------------
@@ -42,7 +58,7 @@ checkPriv scope t = do
   types .= Right def -- cast to privacy context.
 
   -- The checking itself
-  res <- withLogLocation "Check" $ checkPri' scope t
+  res <- catchNoncriticalError t (withLogLocation "Check" $ checkPri' scope t)
 
   -- The computation to do after checking
   γ <- use types
@@ -65,7 +81,7 @@ checkSens scope t = do
 
 
   -- get the delayed value of the sensititivty checking
-  res <- withLogLocation "Check" $ checkSen' scope t
+  res <- catchNoncriticalError t (withLogLocation "Check" $ checkSen' scope t)
 
   -- The computation to do after checking
   γ <- use types
@@ -1071,7 +1087,7 @@ checkSen' scope term@(Located l (MakeRow m)) = do
 
 
 -- Everything else is currently not supported.
-checkSen' scope t = throwUnlocatedError (TermColorError SensitivityK (getLocated t))
+checkSen' scope t = throwUnlocatedError (TermColorError SensitivityK (showPretty $ getLocated t))
 
 --------------------------------------------------------------------------------
 -- Privacy terms
@@ -1656,7 +1672,7 @@ checkPri' scope (Located l (PReduceCols f m)) = do
     return (NoFun (DMVec LInf U r τ_out))
 
 
-checkPri' scope t = throwUnlocatedError (TermColorError PrivacyK (getLocated t))
+checkPri' scope t = throwUnlocatedError (TermColorError PrivacyK (showPretty $ getLocated t))
 
 
 

@@ -381,7 +381,7 @@ class (MonadImpossible (t), MonadWatch (t), MonadLog t,
        MonadTerm SensitivityOf (t),
        MonadState (Full) (t),
        MonadWriter (DMMessages t) (t),
-       MonadError LocatedDMException (t),
+       MonadDMError LocatedDMException (t),
        MonadInternalError t,
        MonadUnificationError t,
        -- MonadConstraint' Symbol (TC) (t),
@@ -662,6 +662,7 @@ instance Monad m => MonadLog (TCT m) where
   logForce = logWithSeverity Force
   warn = logWithSeverity Warning
   withLogLocation loc action = dmWithLogLocation (fromString_DMLogLocation loc) action
+  persistentError msg = tell (DMMessages [] [msg])
 
 
 
@@ -930,8 +931,6 @@ instance Monad m => MonadWatch (TCT m) where
 
 
 
-instance Monad t => (Normalize t Symbol) where
-  normalize nt a = pure a
 
 instance Monad t => Normalize t AnnotationKind where
   normalize nt a = pure a
@@ -957,6 +956,9 @@ instance Monad m => MonadInternalError (TCT m) where
 instance Monad m => MonadUnificationError (TCT m) where
   unificationError x y = throwUnlocatedError $ UnificationError x y
 
+instance Monad m => MonadDMError LocatedDMException (TCT m) where
+  isCritical (LocatedError e _)= return (isCriticalError e)
+  getPersistentErrorMessage = DMPersistentMessage
 
 -- Normalizes all contexts in our typechecking monad, i.e., applies all available substitutions.
 normalizeContext :: (MonadDMTC t) => NormalizationType -> t ()
@@ -1012,22 +1014,11 @@ instance (MonadDMTC t) => Normalize t (DMTypeOf k) where
        -- , i.e., compute {↷,∧,Trunc}-terms
        normalizeAnn nt n₃
 
-instance (Normalize t a, Normalize t b) => Normalize t (a :@ b) where
-  normalize nt (a :@ b) = (:@) <$> normalize nt a <*> normalize nt b
-
-instance (Normalize t a) => Normalize t [a] where
-  normalize nt as = mapM (normalize nt) as
-
-instance (Normalize t a, Normalize t b, Normalize t c) => Normalize t (a, b, c) where
-  normalize nt (a,b,c) = (,,) <$> normalize nt a <*> normalize nt b <*> normalize nt c
-
-instance (Normalize t a, Normalize t b, Normalize t c, Normalize t d) => Normalize t (a, b, c, d) where
-  normalize nt (a,b,c,d) = (,,,) <$> normalize nt a <*> normalize nt b <*> normalize nt c <*> normalize nt d
-
-instance (Normalize t a, Normalize t b, Normalize t c, Normalize t d, Normalize t e) => Normalize t (a, b, c, d, e) where
-  normalize nt (a,b,c,d,e) = (,,,,) <$> normalize nt a <*> normalize nt b <*> normalize nt c <*> normalize nt d <*> normalize nt e
 -- instance Monad t => Normalize t DMNumType where
 --   normalize = pure
+
+instance (Normalize t a, Normalize t b) => Normalize t (a :@ b) where
+  normalize nt (a :@ b) = (:@) <$> normalize nt a <*> normalize nt b
 
 instance MonadDMTC t => Normalize (t) Sensitivity where
   normalize nt n =
@@ -1051,6 +1042,11 @@ instance (MonadDMTC t) => Normalize (t) DMTypeOp where
   normalize nt (Unary op τ res) = Unary op <$> normalize nt τ <*> normalize nt res
   normalize nt (Binary op τ res) = Binary op <$> normalize nt τ <*> normalize nt res
 
+instance (MonadDMTC t) => Normalize t DMException where
+  normalize nt x = pure x
+
+instance Normalize m x => Normalize m (LocatedError x) where
+  normalize nt = mapM (normalize nt)
 
 instance (MonadDMTC t => Normalize (t) a) => MonadDMTC t :=> Normalize (t) a where
   ins = Sub Dict

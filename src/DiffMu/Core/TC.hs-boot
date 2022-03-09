@@ -8,6 +8,7 @@ import DiffMu.Abstract
 import DiffMu.Core.Symbolic
 import DiffMu.Core.Logging
 import {-# SOURCE #-} DiffMu.Core.Definitions
+import {-# SOURCE #-} DiffMu.Abstract.Data.Error
 
 data Full
 
@@ -25,7 +26,7 @@ class (MonadImpossible (t), MonadWatch (t), MonadLog t,
        MonadTerm SymTerm (t),
        MonadState (Full) (t),
        MonadWriter (DMMessages t) (t),
-       MonadError LocatedDMException (t),
+       MonadDMError LocatedDMException (t),
        MonadInternalError t,
        MonadUnificationError t,
        -- MonadConstraint' Symbol (TC) (t),

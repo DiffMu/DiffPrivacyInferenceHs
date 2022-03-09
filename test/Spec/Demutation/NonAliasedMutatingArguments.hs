@@ -3,7 +3,6 @@ module Spec.Demutation.NonAliasedMutatingArguments where
 
 import Spec.Base
 import DiffMu.Core.Definitions
-import DiffMu.Core.Definitions (DMException(DemutationNonAliasedMutatingArgumentError))
 
 
 testScoping_NonAliasedMutatingArguments pp = do

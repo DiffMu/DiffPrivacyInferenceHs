@@ -8,8 +8,13 @@ import DiffMu.Prelude
 import DiffMu.Abstract.Class.IsT
 import DiffMu.Abstract.Class.Log
 import DiffMu.Abstract.Class.Term
+import DiffMu.Abstract.Data.Error
+import DiffMu.Abstract.Data.ErrorReporting
+import DiffMu.Core.Logging
 -- import DiffMu.Abstract.Class.MonadTerm
 import Debug.Trace
+
+default (String)
 
 data SolvingMode = SolveExact | SolveAssumeWorst | SolveGlobal | SolveFinal | SolveSpecial
   deriving (Eq)
@@ -154,7 +159,7 @@ instance TCConstraint IsFunction where
 -- Returns if no "changed" constraints remains.
 -- An unchanged constraint is marked "changed", if it is affected by a new substitution.
 -- A changed constraint is marked "unchanged" if it is read by a call to `getUnsolvedConstraintMarkNormal`.
-solveAllConstraints :: forall isT t eC. (MonadImpossible t, MonadLog t, MonadConstraint isT t, MonadNormalize t, IsT isT t) => NormalizationType -> [SolvingMode] -> t ()
+solveAllConstraints :: forall isT t eC e. (MonadDMError e t, MonadImpossible t, MonadLog t, MonadConstraint isT t, MonadNormalize t, IsT isT t) => NormalizationType -> [SolvingMode] -> t ()
 solveAllConstraints nt modes = withLogLocation "Constr" $ do
 
   -- get events which came before us
@@ -175,7 +180,22 @@ solveAllConstraints nt modes = withLogLocation "Constr" $ do
       -- debug $ "[Solver]: Notice: BEFORE solving (" <> show mode <> ") " <> show name <> " : " <> show constr
       -- logPrintConstraints
       -- logPrintSubstitutions
-      solve mode name constr
+
+      catchError (solve mode name constr) $ \err -> do
+        crit <- isCritical err
+        case crit of
+          True -> throwError err
+          False -> do
+            let changeMsg :: DMPersistentMessage t -> DMPersistentMessage t
+                changeMsg (DMPersistentMessage msg) = DMPersistentMessage $ 
+                  "The constraint" :<>: name :<>: ":" :<>: constr
+                  :\\:
+                  "could not be solved:"
+                  :\\:
+                  msg
+            persistentError (changeMsg (getPersistentErrorMessage err))
+            dischargeConstraint name
+
       -- debug $ "[Solver]: Notice: AFTER solving (" <> show mode <> ") " <> show name <> " : " <> show constr
 
       -- check whether constraint disappeared
@@ -199,7 +219,7 @@ solveAllConstraints nt modes = withLogLocation "Constr" $ do
 
       solveAllConstraints nt modes
 
-solvingAllNewConstraints :: (MonadImpossible t, MonadLog t, MonadConstraint isT t, MonadNormalize t, IsT isT t) => NormalizationType -> [SolvingMode] -> t a -> t (CloseConstraintSetResult, a)
+solvingAllNewConstraints :: (MonadDMError e t, MonadImpossible t, MonadLog t, MonadConstraint isT t, MonadNormalize t, IsT isT t) => NormalizationType -> [SolvingMode] -> t a -> t (CloseConstraintSetResult, a)
 solvingAllNewConstraints nt modes f = withLogLocation "Constr" $ do
   log ""
   log "============ BEGIN solve all new constraints >>>>>>>>>>>>>>>>"
@@ -216,7 +236,7 @@ solvingAllNewConstraints nt modes f = withLogLocation "Constr" $ do
   return (closeRes, res)
 
 
-solveAndNormalize :: forall a isT t eC. (MonadImpossible t, MonadLog t, MonadConstraint isT t, MonadNormalize t, IsT isT t, Normalize t a, Show a) => NormalizationType -> [SolvingMode] -> a -> t a
+solveAndNormalize :: forall a isT t eC e. (MonadDMError e t, MonadImpossible t, MonadLog t, MonadConstraint isT t, MonadNormalize t, IsT isT t, Normalize t a, Show a) => NormalizationType -> [SolvingMode] -> a -> t a
 solveAndNormalize nt modes value = f 4 value
   where
     f :: Int -> a -> t a

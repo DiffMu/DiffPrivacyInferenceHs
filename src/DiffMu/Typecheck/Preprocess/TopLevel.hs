@@ -5,6 +5,8 @@ module DiffMu.Typecheck.Preprocess.TopLevel where
 
 import DiffMu.Prelude
 import DiffMu.Core
+import DiffMu.Abstract.Data.Error
+import DiffMu.Abstract.Class.Log
 import DiffMu.Core.Logging
 import DiffMu.Typecheck.Preprocess.Common
 
@@ -152,5 +154,6 @@ checkTopLevelStatement rest = do
 checkNonTopLevelBB :: LocProcDMTerm -> TLTC LocProcDMTerm 
 checkNonTopLevelBB (Located l (BBLet v jt rest)) = throwUnlocatedError (BlackBoxError $ "Found a black box definition (" <> show v <> ") which is not in the top level scope. Black boxes can only be defined at the top level scope. " )
 checkNonTopLevelBB term = recDMTermMSameExtension_Loc checkNonTopLevelBB term
+
 
 

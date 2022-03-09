@@ -317,9 +317,9 @@ testPrivFunc pp = describe "PrivacyFunction annotations" $ do
         cint =  NoFun (Numeric (Num DMInt (Const (constCoeff (Fin 1)))))
         ty_good = Fun([([] :->*: cint) :@ Just []])
     parseEval pp "proper usage" ex_good (pure ty_good)
-    parseEvalFail pp "not annotated" ex_bad (TermColorError PrivacyK (Sng 1 JTInt))
+    parseEvalFail pp "not annotated" ex_bad (TermColorError PrivacyK (""))
     parseEvalFail pp "wrong input" ex_ugly (UnsatisfiableConstraint "")
-    parseEvalFail pp "not a privacy function" ex_uglier (TermColorError PrivacyK (Sng 1 JTInt))
+    parseEvalFail pp "not a privacy function" ex_uglier (TermColorError PrivacyK (""))
     
 
 

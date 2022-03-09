@@ -5,6 +5,7 @@ module DiffMu.Core.Unification where
 
 import DiffMu.Prelude
 import DiffMu.Abstract
+import DiffMu.Abstract.Data.ErrorReporting
 import DiffMu.Core.Definitions
 import DiffMu.Core.TC
 import DiffMu.Core.Logging
@@ -12,10 +13,31 @@ import DiffMu.Core.Logging
 import DiffMu.Core.Symbolic
 
 import Data.HashMap.Strict as H
+import Control.Monad.Trans.Except (throwE)
+
+default (String)
 
 -------------------------------------------------------------------
 -- Unification of dmtypes
 --
+
+
+newtype WrapMessageINC e a = WrapMessageINC a
+
+instance Show a => Show (WrapMessageINC e a) where show (WrapMessageINC a) = show a
+
+instance (Show e, MonadInternalError m, MonadLog m, Normalize (INCResT e m) a) => Normalize m (WrapMessageINC e a) where
+  normalize e (WrapMessageINC x) = do
+    let n :: INCResT e m a
+        n = normalize e x
+    n' <- runExceptT (runINCResT n)
+    case n' of
+      Left sr -> case sr of
+        Wait' -> return (WrapMessageINC x)
+        Fail' e' -> internalError ("While normalizing inside INCRes got a fail :" <> show e')
+      Right a -> return (WrapMessageINC a)
+
+    -- return (WrapMessageINC n')
 
 
 -------------------------------------------
@@ -31,7 +53,18 @@ data StoppingReason e = Wait' | Fail' e
 
 newtype INCResT e m a = INCResT {runINCResT :: ExceptT (StoppingReason e) m a}
   -- Finished' (m a) | Wait' | Fail' e
-  deriving (Functor, Applicative, Monad, MonadError (StoppingReason e), MonadLog)
+  deriving (Functor, Applicative, Monad, MonadError (StoppingReason e))
+
+instance (Show e, MonadInternalError m, MonadLog m) => MonadLog (INCResT e m) where
+  log             = liftINC . log 
+  debug           = liftINC . debug
+  info            = liftINC . info
+  warn            = liftINC . warn
+  logForce        = liftINC . logForce
+  withLogLocation = \a b -> b
+  persistentError = \(DMPersistentMessage msg) -> liftINC (persistentError $ DMPersistentMessage $ WrapMessageINC @e (msg))
+
+
 
 instance HasUnificationError DMException a where
   unificationError' = UnificationError
@@ -39,13 +72,14 @@ instance HasUnificationError DMException a where
 instance HasUnificationError e a => HasUnificationError (StoppingReason e) a where
   unificationError' a b = Fail' (unificationError' a b)
 
-instance MonadLog m => MonadLog (ExceptT e m) where
-  log a = ExceptT (log a >> pure (Right ()))
-  debug a = ExceptT (debug a >> pure (Right ()))
-  info a = ExceptT (info a >> pure (Right ()))
-  warn a = ExceptT (warn a >> pure (Right ()))
-  logForce a = ExceptT (logForce a >> pure (Right ()))
-  withLogLocation s a = a -- TODO: Make this proper?
+-- instance MonadLog m => MonadLog (ExceptT e m) where
+--   log a = ExceptT (log a >> pure (Right ()))
+--   debug a = ExceptT (debug a >> pure (Right ()))
+--   info a = ExceptT (info a >> pure (Right ()))
+--   warn a = ExceptT (warn a >> pure (Right ()))
+--   logForce a = ExceptT (logForce a >> pure (Right ()))
+--   withLogLocation s a = a -- TODO: Make this proper?
+--   persistentError = undefined
 
 
 

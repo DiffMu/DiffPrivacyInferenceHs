@@ -3,6 +3,14 @@
 module DiffMu.Abstract.Class.Log where
 
 import DiffMu.Prelude
+import DiffMu.Abstract.Data.Error
+-- import DiffMu.Core.Logging -- (DMPersistentMessage(DMPersistentMessage))
+import qualified Control.Monad.Except as QUAL
+
+throwError :: (MonadLog m, MonadError e m) => e -> m a
+throwError e = do
+  -- logForce $ "-------------------------\nError information:\n-----------------------\ncallstack: " <> show callStack <> "\n"
+  QUAL.throwError e
 
 class Monad m => MonadLog m where
   log  :: String -> m ()
@@ -11,6 +19,8 @@ class Monad m => MonadLog m where
   warn :: String -> m ()
   logForce  :: String -> m ()
   withLogLocation :: String -> m a -> m a
+  persistentError :: DMPersistentMessage m -> m ()
 
 
+throwUnlocatedError e = throwError (LocatedError e [])
 

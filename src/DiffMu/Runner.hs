@@ -63,8 +63,12 @@ executeTC l r = do
         putStrLn "======================== LOG ========================="
         putStrLn realLogs
         putStrLn "======================== End LOG ====================="
-        putStrLn ""
+
     (DontShowLog) -> return ()
+
+  putStrLn "======================== Errors ====================="
+  putStrLn (getErrors logs)
+  putStrLn "======================== End Errors ====================="
 
   return x
 

@@ -4,6 +4,8 @@ module DiffMu.Typecheck.Preprocess.FLetReorder where
 import DiffMu.Prelude
 import DiffMu.Core
 import DiffMu.Core.Logging
+import DiffMu.Abstract.Data.Error
+import DiffMu.Abstract.Class.Log
 import DiffMu.Typecheck.Preprocess.Common
 
 import qualified Data.HashMap.Strict as H

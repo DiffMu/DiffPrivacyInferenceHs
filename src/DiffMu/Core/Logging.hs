@@ -4,7 +4,8 @@
 module DiffMu.Core.Logging where
 
 import DiffMu.Prelude
-import DiffMu.Abstract
+import DiffMu.Abstract.Data.Error
+-- import DiffMu.Abstract
 import GHC.Stack
 
 
@@ -97,8 +98,6 @@ instance Semigroup (DMMessages t) where
 instance Monoid (DMMessages t) where
   mempty = DMMessages [] []
 
-data DMPersistentMessage t where
-  DMPersistentMessage :: (Normalize t a, Show a) => a -> DMPersistentMessage t
 
 
 
@@ -181,10 +180,8 @@ getLogMessages (DMMessages messages _) sevR locsR =
       reversed = reverse filtered
   in intercalate "\n" (show <$> (markFollowup Nothing reversed))
 
-
-throwError :: (MonadLog m, MonadError e m) => e -> m a
-throwError e = do
-  -- logForce $ "-------------------------\nError information:\n-----------------------\ncallstack: " <> show callStack <> "\n"
-  QUAL.throwError e
+getErrors :: DMMessages t -> String
+getErrors (DMMessages _ errs) = intercalate ("\n\n" <> red "error")
+                                            (fmap (\(DMPersistentMessage x) -> show x) errs)
 
 

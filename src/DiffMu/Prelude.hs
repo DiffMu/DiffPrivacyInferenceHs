@@ -39,6 +39,9 @@ import Data.Text as T
 newtype Symbol = Symbol Text
   deriving (Eq,Ord,Hashable,Semigroup,Monoid)
 
+instance Monad t => Normalize t Symbol where
+  normalize nt a = pure a
+
 class FromSymbol (v :: j -> *) where
   fromSymbol :: Symbol -> v k
 

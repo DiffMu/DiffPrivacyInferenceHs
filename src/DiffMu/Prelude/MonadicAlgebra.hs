@@ -45,6 +45,7 @@ class Monad t => Normalize t n where
 normalizeExact = normalize ExactNormalization
 normalizeSimplifying = normalize SimplifyingNormalization
 
+
 instance Monad t => Normalize t Int where
   normalize _ i = pure i
 
@@ -60,6 +61,19 @@ instance (Normalize t a, Normalize t b) => Normalize t (a :=: b) where
 
 instance Monad t => (Normalize t ()) where
   normalize nt () = pure ()
+
+
+instance (Normalize t a) => Normalize t [a] where
+  normalize nt as = mapM (normalize nt) as
+
+instance (Normalize t a, Normalize t b, Normalize t c) => Normalize t (a, b, c) where
+  normalize nt (a,b,c) = (,,) <$> normalize nt a <*> normalize nt b <*> normalize nt c
+
+instance (Normalize t a, Normalize t b, Normalize t c, Normalize t d) => Normalize t (a, b, c, d) where
+  normalize nt (a,b,c,d) = (,,,) <$> normalize nt a <*> normalize nt b <*> normalize nt c <*> normalize nt d
+
+instance (Normalize t a, Normalize t b, Normalize t c, Normalize t d, Normalize t e) => Normalize t (a, b, c, d, e) where
+  normalize nt (a,b,c,d,e) = (,,,,) <$> normalize nt a <*> normalize nt b <*> normalize nt c <*> normalize nt d <*> normalize nt e
 
 
 -- class Has a where

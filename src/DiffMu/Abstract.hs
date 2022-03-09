@@ -12,6 +12,7 @@ import DiffMu.Abstract.Data.HashMap as All
 import DiffMu.Abstract.Data.MonComCtx as All
 import DiffMu.Abstract.Data.NameCtx as All
 import DiffMu.Abstract.Data.MonadicPolynomial as All
+import DiffMu.Abstract.Data.Error as All
 
 import DiffMu.Abstract.Computation.INC as All
 import DiffMu.Abstract.Computation.MonadicGraph as All

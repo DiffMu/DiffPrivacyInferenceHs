@@ -3,6 +3,7 @@ module DiffMu.Parser.Expr.FromString where
 
 import DiffMu.Prelude
 import DiffMu.Core
+import DiffMu.Abstract.Data.Error
 
 import Text.Megaparsec
 import Text.Megaparsec.Char
