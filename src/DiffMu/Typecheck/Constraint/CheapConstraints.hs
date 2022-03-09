@@ -41,31 +41,15 @@ instance Typeable k => FixedVars TVarOf (MakeConst (DMTypeOf k)) where
   fixedVars (MakeConst _) = []
 
 instance Typeable k => Solve MonadDMTC MakeConst (DMTypeOf k) where
-  solve_ Dict _ name (MakeConst τ) = do
-     -- colltect all free variables that are numeric
-     let freev = freeVars @_ @TVarOf τ
-         freev0 = filterSomeK @TVarOf @BaseNumKind freev
-         freev1 = filterSomeK @TVarOf @NormKind freev
-         freev2 = filterSomeK @TVarOf @ClipKind freev
-         freev3 = filterSomeK @TVarOf @NumKind freev
-
-     let makeVarConst v = do
-                     k <- newVar
-                     τv <- newVar
-                     unify (TVar v) (Num τv (Const k))
-
-     mapM makeVarConst freev3
-
-     -- compare the length of `m` and `n`, that is, if all free variables
-     -- have the aforementioned kinds
-     let m = length freev
-         n = length freev0 P.+ length freev1 P.+ length freev2 P.+ length freev3
-
-     case (m == n) of
-        True -> dischargeConstraint name
-        False -> pure () -- there are free variables whose numericity is not yet clear
-
-
+  solve_ Dict _ name (MakeConst τ) = case τ of
+      TVar _ -> pure ()
+      DMTup ts -> (mapM (\t -> addConstraint (Solvable (MakeConst t))) ts) >> dischargeConstraint name
+      Numeric (Num _ (TVar k)) -> do
+                     ck <- newVar
+                     unify (TVar k) (Const ck)
+                     dischargeConstraint name
+      Numeric (TVar _) -> pure ()
+      _ -> dischargeConstraint name 
 
 
 ----------------------------------------------------------
