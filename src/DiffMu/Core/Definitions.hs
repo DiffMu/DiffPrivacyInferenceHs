@@ -1,5 +1,6 @@
 
 {-# LANGUAGE TemplateHaskell, UndecidableInstances #-}
+{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 
 module DiffMu.Core.Definitions where
 
@@ -714,75 +715,101 @@ sndA (x :- τ) = τ
 data LetKind = PureLet | BindLet | SampleLet
   deriving (Eq, Show)
 
-data BBKind (t :: * -> *) = BBSimple JuliaType | BBVecLike JuliaType (PreDMTerm t) | BBMatrix JuliaType (PreDMTerm t) (PreDMTerm t)
+data BBKind (t :: * -> *) = BBSimple JuliaType | BBVecLike JuliaType (LocPreDMTerm t) | BBMatrix JuliaType (LocPreDMTerm t) (LocPreDMTerm t)
 
 deriving instance (forall a. Show a => Show (t a)) => Show (BBKind t)
 deriving instance (forall a. Eq a => Eq (t a)) => Eq (BBKind t)
 
+data SourceLoc = SourceLoc
+  {
+    getLocFile  :: String
+  , getLocBegin :: (Int,Int)
+  , getLocEnd   :: (Int,Int)
+  }
+  deriving (Eq, Show)
+
+data SourceLocExt = ExactLoc SourceLoc | RelatedLoc String SourceLocExt | UnknownLoc | NotImplementedLoc String
+  deriving (Eq, Show)
+
+data Located a = Located
+  {
+    getLocation :: SourceLocExt
+  , getLocated :: a
+}
+  deriving (Functor, Foldable, Traversable, Eq, Show)
+
+downgradeToRelated :: String -> SourceLocExt -> SourceLocExt
+downgradeToRelated = RelatedLoc
+
+notLocated :: a -> Located a
+notLocated = Located UnknownLoc
+
+type LocPreDMTerm t = Located (PreDMTerm t)
+
 data PreDMTerm (t :: * -> *) =
-    Extra (t (PreDMTerm t))
-  | Ret ((PreDMTerm t))
+    Extra (t (LocPreDMTerm t))
+  | Ret ((LocPreDMTerm t))
   | Sng Float JuliaType
   | DMTrue
   | DMFalse
   | Var (Asgmt JuliaType)
-  | Disc (PreDMTerm t)
+  | Disc (LocPreDMTerm t)
 --  | Rnd JuliaType
   | Arg TeVar JuliaType Relevance
-  | Op DMTypeOp_Some [(PreDMTerm t)]
-  | Phi (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
-  | Lam     [Asgmt JuliaType] (PreDMTerm t)
-  | LamStar [(Asgmt (JuliaType, Relevance))] (PreDMTerm t)
-  | BBLet TeVar [JuliaType] (PreDMTerm t) -- name, arguments, tail
-  | BBApply (PreDMTerm t) [(PreDMTerm t)] [TeVar] (BBKind t) -- term containing the application, list of captured variables, return type.
-  | Apply (PreDMTerm t) [(PreDMTerm t)]
-  | FLet TeVar (PreDMTerm t) (PreDMTerm t)
-  | Choice (HashMap [JuliaType] (PreDMTerm t))
-  | SLetBase LetKind (Asgmt JuliaType) (PreDMTerm t) (PreDMTerm t)
-  | Tup [(PreDMTerm t)]
-  | TLetBase LetKind [(Asgmt JuliaType)] (PreDMTerm t) (PreDMTerm t)
-  | Gauss (PreDMTerm t) (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
-  | Laplace (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
-  | Exponential (PreDMTerm t) (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
-  | AboveThresh (PreDMTerm t) (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
-  | MutGauss (PreDMTerm t) (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
-  | MutLaplace (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
+  | Op DMTypeOp_Some [(LocPreDMTerm t)]
+  | Phi (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t)
+  | Lam     [Asgmt JuliaType] (LocPreDMTerm t)
+  | LamStar [(Asgmt (JuliaType, Relevance))] (LocPreDMTerm t)
+  | BBLet TeVar [JuliaType] (LocPreDMTerm t) -- name, arguments, tail
+  | BBApply (LocPreDMTerm t) [(LocPreDMTerm t)] [TeVar] (BBKind t) -- term containing the application, list of captured variables, return type.
+  | Apply (LocPreDMTerm t) [(LocPreDMTerm t)]
+  | FLet TeVar (LocPreDMTerm t) (LocPreDMTerm t)
+  | Choice (HashMap [JuliaType] (LocPreDMTerm t))
+  | SLetBase LetKind (Asgmt JuliaType) (LocPreDMTerm t) (LocPreDMTerm t)
+  | Tup [(LocPreDMTerm t)]
+  | TLetBase LetKind [(Asgmt JuliaType)] (LocPreDMTerm t) (LocPreDMTerm t)
+  | Gauss (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t)
+  | Laplace (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t)
+  | Exponential (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t)
+  | AboveThresh (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t)
+  | MutGauss (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t)
+  | MutLaplace (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t)
 -- matrix related things
-  | Count (PreDMTerm t) (PreDMTerm t)
-  | MakeVec (PreDMTerm t)
-  | MakeRow (PreDMTerm t)
-  | MMap (PreDMTerm t) (PreDMTerm t)
-  | MapRows (PreDMTerm t) (PreDMTerm t)
-  | MapCols (PreDMTerm t) (PreDMTerm t)
-  | MapCols2 (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
-  | PReduceCols (PreDMTerm t) (PreDMTerm t)
-  | MFold (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
-  | ConvertM (PreDMTerm t)
-  | MCreate (PreDMTerm t) (PreDMTerm t) (TeVar, TeVar) (PreDMTerm t)
-  | Transpose (PreDMTerm t)
-  | Size (PreDMTerm t) -- matrix dimensions, returns a tuple of two numbers
-  | Length (PreDMTerm t) -- vector dimension, returns a number
-  | Index (PreDMTerm t) (PreDMTerm t) (PreDMTerm t) -- matrix index
-  | VIndex (PreDMTerm t) (PreDMTerm t) -- vector index
-  | Row (PreDMTerm t) (PreDMTerm t) -- matrix row
-  | ClipM Clip (PreDMTerm t)
-  | ClipN (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
-  | MutClipM Clip (PreDMTerm t)
+  | MakeVec (LocPreDMTerm t)
+  | MakeRow (LocPreDMTerm t)
+  | MapRows (LocPreDMTerm t) (LocPreDMTerm t)
+  | MapCols (LocPreDMTerm t) (LocPreDMTerm t)
+  | MapCols2 (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t)
+  | PReduceCols (LocPreDMTerm t) (LocPreDMTerm t)
+  | MFold (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t)
+  | Count (LocPreDMTerm t) (LocPreDMTerm t)
+  | MMap (LocPreDMTerm t) (LocPreDMTerm t)
+  | ConvertM (LocPreDMTerm t)
+  | MCreate (LocPreDMTerm t) (LocPreDMTerm t) (TeVar, TeVar) (LocPreDMTerm t)
+  | Transpose (LocPreDMTerm t)
+  | Size (LocPreDMTerm t) -- matrix dimensions, returns a tuple of two numbers
+  | Length (LocPreDMTerm t) -- vector dimension, returns a number
+  | Index (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t) -- matrix index
+  | VIndex (LocPreDMTerm t) (LocPreDMTerm t) -- vector index
+  | Row (LocPreDMTerm t) (LocPreDMTerm t) -- matrix row
+  | ClipM Clip (LocPreDMTerm t)
+  | ClipN (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t)
+  | MutClipM Clip (LocPreDMTerm t)
   -- Loop (DMTerm : "Number of iterations") ([TeVar] : "Captured variables") (TeVar : "name of iteration var", TeVar : "name of capture variable") (DMTerm : "body")
-  | Loop (PreDMTerm t) [TeVar] (TeVar, TeVar) (PreDMTerm t)
+  | Loop (LocPreDMTerm t) [TeVar] (TeVar, TeVar) (LocPreDMTerm t)
 -- Special NN builtins
-  | SubGrad (PreDMTerm t) (PreDMTerm t)
-  | ScaleGrad (PreDMTerm t) (PreDMTerm t) -- scale (a : Scalar) (g : Mutating Gradient)
+  | SubGrad (LocPreDMTerm t) (LocPreDMTerm t)
+  | ScaleGrad (LocPreDMTerm t) (LocPreDMTerm t) -- scale (a : Scalar) (g : Mutating Gradient)
 -- Special Tuple terms
-  | TProject Int (PreDMTerm t)
-  | ZeroGrad (PreDMTerm t)
-  | SumGrads (PreDMTerm t) (PreDMTerm t)
-  | Sample (PreDMTerm t) (PreDMTerm t) (PreDMTerm t)
+  | TProject Int (LocPreDMTerm t)
+  | ZeroGrad (LocPreDMTerm t)
+  | SumGrads (LocPreDMTerm t) (LocPreDMTerm t)
+  | Sample (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t)
 -- Internal terms
-  | InternalExpectConst (PreDMTerm t)
-  | InternalMutate (PreDMTerm t)
+  | InternalExpectConst (LocPreDMTerm t)
+  | InternalMutate (LocPreDMTerm t)
 -- Demutation related, but user specified
-  | Clone (PreDMTerm t)
+  | Clone (LocPreDMTerm t)
   deriving (Generic)
 
 pattern SLet a b c = SLetBase PureLet a b c
@@ -821,7 +848,9 @@ type DMTerm = PreDMTerm EmptyExtension
 data ProcAsgmt a = (::-) (ProcVar) a
   deriving (Generic, Show, Eq, Ord)
 
+type LocDMTerm = LocPreDMTerm EmptyExtension
 type ProcDMTerm = PreDMTerm ProceduralExtension
+type LocProcDMTerm = LocPreDMTerm ProceduralExtension
 
 
 data ProceduralExtension a =
@@ -841,6 +870,7 @@ data ProceduralExtension a =
 
 
 type DemutDMTerm = PreDMTerm DemutatedExtension
+type LocDemutDMTerm = LocPreDMTerm DemutatedExtension
  
 data DemutatedExtension a =
   DemutTLetBase LetKind [(Asgmt JuliaType)] a
@@ -860,110 +890,155 @@ data SumExtension e f a = SELeft (e a) | SERight (f a)
 ----
 -- functions
 
-liftExtension :: (t (PreDMTerm t) -> PreDMTerm s) -> PreDMTerm t -> PreDMTerm s
-liftExtension f x = runIdentity $ recDMTermM (Identity . liftExtension f) (Identity . f) (x)
+liftExtension_Loc :: (Located (t (LocPreDMTerm t)) -> LocPreDMTerm s) -> LocPreDMTerm t -> LocPreDMTerm s
+liftExtension_Loc f x = runIdentity $ recDMTermM_Loc (Identity . liftExtension_Loc f) (Identity . f) (x)
+
+recDMTermSameExtension_Loc :: forall t. (Traversable t) => (LocPreDMTerm t -> (LocPreDMTerm t)) -> LocPreDMTerm t -> (LocPreDMTerm t)
+recDMTermSameExtension_Loc f x = runIdentity (recDMTermMSameExtension_Loc (Identity . f) x)
+
+recDMTermMSameExtension_Loc :: forall t m. (Monad m, Traversable t) => (LocPreDMTerm t -> m (LocPreDMTerm t)) -> LocPreDMTerm t -> m (LocPreDMTerm t)
+recDMTermMSameExtension_Loc f t = recDMTermM_Loc f g t
+  where
+    -- g' :: t (LocPreDMTerm t) -> m (LocPreDMTerm t)
+    -- g' = undefined
+
+    g :: Located (t (LocPreDMTerm t)) -> m (LocPreDMTerm t)
+    g (Located l x) =
+      let x' :: t (m (LocPreDMTerm t))
+          x' = fmap (recDMTermMSameExtension_Loc f) x
+          x'' :: m (t (LocPreDMTerm t))
+          x'' = sequence x'
+      in Located l <$> fmap Extra x''
 
 -- recursing into a dmterm
+  {-
 recDMTermSameExtension :: forall t. (Traversable t) => (PreDMTerm t -> (PreDMTerm t)) -> PreDMTerm t -> (PreDMTerm t)
 recDMTermSameExtension f x = runIdentity (recDMTermMSameExtension (Identity . f) x)
 
 recDMTermMSameExtension :: forall t m. (Monad m, Traversable t) => (PreDMTerm t -> m (PreDMTerm t)) -> PreDMTerm t -> m (PreDMTerm t)
-recDMTermMSameExtension f t = recDMTermM f g t
+recDMTermMSameExtension f t = recDMTermM f g' t
   where
+    g' :: t (LocPreDMTerm t) -> m (LocPreDMTerm t)
+    g' = undefined
+
     g :: t (PreDMTerm t) -> m (PreDMTerm t)
     g x =
       let x' :: t (m (PreDMTerm t))
           x' = fmap (recDMTermMSameExtension f) x
           x'' :: m (t (PreDMTerm t))
           x'' = sequence x'
-      in fmap Extra x''
+      in undefined -- fmap Extra x''
+-}
 
-recKindM :: forall t m s. (Monad m) => (PreDMTerm t -> m (PreDMTerm s)) -> BBKind t -> m (BBKind s)
+recKindM :: forall t m s. (Monad m) => (LocPreDMTerm t -> m (LocPreDMTerm s)) -> BBKind t -> m (BBKind s)
 recKindM f = \case
   BBSimple jt -> return $ BBSimple jt
   BBVecLike jt pdt -> BBVecLike jt <$> f pdt
   BBMatrix jt pdt pdt' -> BBMatrix jt <$> f pdt <*> f pdt'
 
-recDMTermM :: forall t m s. (Monad m) => (PreDMTerm t -> m (PreDMTerm s)) -> (t (PreDMTerm t) -> m (PreDMTerm s)) -> PreDMTerm t -> m (PreDMTerm s)
-recDMTermM f h (Extra e)          = h e
-recDMTermM f h (Ret (r))          = Ret <$> (f r)
-recDMTermM f h (Disc (r))         = Disc <$> (f r)
-recDMTermM f h (Sng g jt)         = pure $ Sng g jt
-recDMTermM f h DMTrue             = pure $ DMTrue
-recDMTermM f h DMFalse            = pure $ DMFalse
-recDMTermM f h (Var (v :- jt))    = pure $ Var (v :- jt)
--- recDMTermM f h (Rnd jt)           = pure $ Rnd jt
-recDMTermM f h (Arg v jt r)       = pure $ Arg v jt r
-recDMTermM f h (Op op ts)         = Op op <$> (mapM (f) ts)
-recDMTermM f h (Phi a b c)        = Phi <$> (f a) <*> (f b) <*> (f c)
-recDMTermM f h (Lam     jts a)    = Lam jts <$> (f a)
-recDMTermM f h (LamStar jts a)    = LamStar jts <$> (f a)
-recDMTermM f h (BBLet n jts b)    = (BBLet n jts <$> f b)
-recDMTermM f h (BBApply a as bs k)  = BBApply <$> (f a) <*> (mapM (f) as) <*> pure bs <*> recKindM f k
-recDMTermM f h (Apply a bs)       = Apply <$> (f a) <*> (mapM (f) bs)
-recDMTermM f h (FLet v a b)       = FLet v <$> (f a) <*> (f b)
-recDMTermM f h (Choice chs)       = Choice <$> (mapM (f) chs)
-recDMTermM f h (SLetBase x jt a b) = SLetBase x jt <$> (f a) <*> (f b)
-recDMTermM f h (Tup as)           = Tup <$> (mapM (f) as)
-recDMTermM f h (TLetBase x jt a b) = TLetBase x jt <$> (f a) <*> (f b)
-recDMTermM f h (Gauss a b c d)    = Gauss <$> (f a) <*> (f b) <*> (f c) <*> (f d)
-recDMTermM f h (AboveThresh a b c d)    = AboveThresh <$> (f a) <*> (f b) <*> (f c) <*> (f d)
-recDMTermM f h (Laplace a b c)    = Laplace <$> (f a) <*> (f b) <*> (f c)
-recDMTermM f h (MutGauss a b c d) = MutGauss <$> (f a) <*> (f b) <*> (f c) <*> (f d)
-recDMTermM f h (MutLaplace a b c) = MutLaplace <$> (f a) <*> (f b) <*> (f c)
-recDMTermM f h (Exponential a b c d) = Exponential <$> (f a) <*> (f b) <*> (f c) <*> (f d)
-recDMTermM f h (Count a b)         = Count <$> (f a) <*> (f b)
-recDMTermM f h (MakeVec a)         = MakeVec <$> (f a)
-recDMTermM f h (MakeRow a)         = MakeRow <$> (f a)
-recDMTermM f h (MMap a b)         = MMap <$> (f a) <*> (f b)
-recDMTermM f h (MapRows a b)     = MapRows <$> (f a) <*> (f b)
-recDMTermM f h (MapCols a b)     = MapCols <$> (f a) <*> (f b)
-recDMTermM f h (MapCols2 a b c)   = MapCols2 <$> (f a) <*> (f b) <*> (f c)
-recDMTermM f h (PReduceCols a b)  = PReduceCols <$> (f a) <*> (f b)
-recDMTermM f h (MFold a b c)      = MFold <$> (f a) <*> (f b) <*> (f c)
-recDMTermM f h (ConvertM a)       = ConvertM <$> (f a)
-recDMTermM f h (MCreate a b x c ) = MCreate <$> (f a) <*> (f b) <*> pure x <*> (f c)
-recDMTermM f h (Transpose a)      = Transpose <$> (f a)
-recDMTermM f h (Size a)           = Size <$> (f a)
-recDMTermM f h (Length a)         = Length <$> (f a)
-recDMTermM f h (Index a b c)      = Index <$> (f a) <*> (f b) <*> (f c)
-recDMTermM f h (VIndex a b)       = VIndex <$> (f a) <*> (f b)
-recDMTermM f h (Row a b)          = Row <$> (f a) <*> (f b)
-recDMTermM f h (ClipN a b c)      = ClipN <$> (f a) <*> (f b) <*> (f c)
-recDMTermM f h (ClipM c a)        = ClipM c <$> (f a)
-recDMTermM f h (MutClipM c a)     = MutClipM c <$> (f a)
-recDMTermM f h (Loop a b x d )    = Loop <$> (f a) <*> pure b <*> pure x <*> (f d)
-recDMTermM f h (SubGrad a b)      = SubGrad <$> (f a) <*> (f b)
-recDMTermM f h (ScaleGrad a b)    = ScaleGrad <$> (f a) <*> (f b)
-recDMTermM f h (TProject x a)     = TProject x <$> f a
-recDMTermM f h (ZeroGrad a)       = ZeroGrad <$> (f a)
-recDMTermM f h (SumGrads a b)     = SumGrads <$> (f a) <*> (f b)
-recDMTermM f h (Sample a b c)     = Sample <$> (f a) <*> (f b) <*> (f c)
-recDMTermM f h (Clone t) = Clone <$> (f t)
-recDMTermM f h (InternalExpectConst a) = InternalExpectConst <$> (f a)
-recDMTermM f h (InternalMutate a) = InternalMutate <$> (f a)
+  {-
+recDMTermM :: forall t m s. (Monad m, Traversable t) => (PreDMTerm t -> m (PreDMTerm s)) -> (t (LocPreDMTerm t) -> m (LocPreDMTerm s)) -> PreDMTerm t -> m (PreDMTerm s)
+recDMTermM f h x = (recDMTermM_Loc_Impl (mapM f) h) x
+  -- where
+  --   h' y = let y1 = sequence y
+  --          in _
+-}
+
+-- recDMTermM_Loc :: forall t m s. (Monad m) => (LocPreDMTerm t -> m (LocPreDMTerm s)) -> (t (LocPreDMTerm t) -> m (PreDMTerm s)) -> LocPreDMTerm t -> m (LocPreDMTerm s)
+-- recDMTermM_Loc f h x = mapM (recDMTermM_Loc_Impl f h) x
+
+recDMTermM_Loc :: forall t m s. (Monad m) => (LocPreDMTerm t -> m (LocPreDMTerm s)) -> (Located (t (LocPreDMTerm t)) -> m (LocPreDMTerm s)) -> LocPreDMTerm t -> m (LocPreDMTerm s)
+recDMTermM_Loc f h (Located l (Extra e))         = h (Located l e)
+recDMTermM_Loc f h (rest)            = mapM (recDMTermM_Loc_Impl f h) rest -- h e
+  where
+-- recDMTermM_Loc_Impl f h (Ret (r))          = Ret <$> (f r)
+    recDMTermM_Loc_Impl f h (Disc (r))         = Disc <$> (f r)
+    recDMTermM_Loc_Impl f h (Extra e)          = undefined -- impossible "This DMTerm recursion case should already be handled."
+    recDMTermM_Loc_Impl f h (Ret r)            = Ret <$> (f r)
+    recDMTermM_Loc_Impl f h (Sng g jt)         = pure $ Sng g jt
+    recDMTermM_Loc_Impl f h DMTrue             = pure $ DMTrue
+    recDMTermM_Loc_Impl f h DMFalse            = pure $ DMFalse
+    recDMTermM_Loc_Impl f h (Var (v :- jt))    = pure $ Var (v :- jt)
+    -- recDMTe_Loc_ImplrmM f h (Rnd jt)           = pure $ Rnd jt
+    recDMTermM_Loc_Impl f h (Arg v jt r)       = pure $ Arg v jt r
+    recDMTermM_Loc_Impl f h (Op op ts)         = Op op <$> (mapM (f) ts)
+    recDMTermM_Loc_Impl f h (Phi a b c)        = Phi <$> (f a) <*> (f b) <*> (f c)
+    recDMTermM_Loc_Impl f h (Lam     jts a)    = Lam jts <$> (f a)
+    recDMTermM_Loc_Impl f h (LamStar jts a)    = LamStar jts <$> (f a)
+    recDMTermM_Loc_Impl f h (BBLet n jts b)    = (BBLet n jts <$> f b)
+    recDMTermM_Loc_Impl f h (BBApply a as bs k)  = BBApply <$> (f a) <*> (mapM (f) as) <*> pure bs <*> recKindM f k
+    recDMTermM_Loc_Impl f h (Apply a bs)       = Apply <$> (f a) <*> (mapM (f) bs)
+    recDMTermM_Loc_Impl f h (FLet v a b)       = FLet v <$> (f a) <*> (f b)
+    recDMTermM_Loc_Impl f h (Choice chs)       = Choice <$> (mapM (f) chs)
+    recDMTermM_Loc_Impl f h (SLetBase x jt a b) = SLetBase x jt <$> (f a) <*> (f b)
+    recDMTermM_Loc_Impl f h (Tup as)           = Tup <$> (mapM (f) as)
+    recDMTermM_Loc_Impl f h (TLetBase x jt a b) = TLetBase x jt <$> (f a) <*> (f b)
+    recDMTermM_Loc_Impl f h (Gauss a b c d)    = Gauss <$> (f a) <*> (f b) <*> (f c) <*> (f d)
+    recDMTermM_Loc_Impl f h (AboveThresh a b c d)    = AboveThresh <$> (f a) <*> (f b) <*> (f c) <*> (f d)
+    recDMTermM_Loc_Impl f h (Laplace a b c)    = Laplace <$> (f a) <*> (f b) <*> (f c)
+    recDMTermM_Loc_Impl f h (MutGauss a b c d) = MutGauss <$> (f a) <*> (f b) <*> (f c) <*> (f d)
+    recDMTermM_Loc_Impl f h (MutLaplace a b c) = MutLaplace <$> (f a) <*> (f b) <*> (f c)
+    recDMTermM_Loc_Impl f h (Exponential a b c d) = Exponential <$> (f a) <*> (f b) <*> (f c) <*> (f d)
+    recDMTermM_Loc_Impl f h (Count a b)         = Count <$> (f a) <*> (f b)
+    recDMTermM_Loc_Impl f h (MakeVec a)         = MakeVec <$> (f a)
+    recDMTermM_Loc_Impl f h (MakeRow a)         = MakeRow <$> (f a)
+    recDMTermM_Loc_Impl f h (MMap a b)         = MMap <$> (f a) <*> (f b)
+    recDMTermM_Loc_Impl f h (MapRows a b)     = MapRows <$> (f a) <*> (f b)
+    recDMTermM_Loc_Impl f h (MapCols a b)     = MapCols <$> (f a) <*> (f b)
+    recDMTermM_Loc_Impl f h (MapCols2 a b c)   = MapCols2 <$> (f a) <*> (f b) <*> (f c)
+    recDMTermM_Loc_Impl f h (PReduceCols a b)  = PReduceCols <$> (f a) <*> (f b)
+    recDMTermM_Loc_Impl f h (MFold a b c)      = MFold <$> (f a) <*> (f b) <*> (f c)
+    recDMTermM_Loc_Impl f h (ConvertM a)       = ConvertM <$> (f a)
+    recDMTermM_Loc_Impl f h (MCreate a b x c ) = MCreate <$> (f a) <*> (f b) <*> pure x <*> (f c)
+    recDMTermM_Loc_Impl f h (Transpose a)      = Transpose <$> (f a)
+    recDMTermM_Loc_Impl f h (Size a)           = Size <$> (f a)
+    recDMTermM_Loc_Impl f h (Length a)         = Length <$> (f a)
+    recDMTermM_Loc_Impl f h (Index a b c)      = Index <$> (f a) <*> (f b) <*> (f c)
+    recDMTermM_Loc_Impl f h (VIndex a b)       = VIndex <$> (f a) <*> (f b)
+    recDMTermM_Loc_Impl f h (Row a b)          = Row <$> (f a) <*> (f b)
+    recDMTermM_Loc_Impl f h (ClipN a b c)      = ClipN <$> (f a) <*> (f b) <*> (f c)
+    recDMTermM_Loc_Impl f h (ClipM c a)        = ClipM c <$> (f a)
+    recDMTermM_Loc_Impl f h (MutClipM c a)     = MutClipM c <$> (f a)
+    recDMTermM_Loc_Impl f h (Loop a b x d )    = Loop <$> (f a) <*> pure b <*> pure x <*> (f d)
+    recDMTermM_Loc_Impl f h (SubGrad a b)      = SubGrad <$> (f a) <*> (f b)
+    recDMTermM_Loc_Impl f h (ScaleGrad a b)    = ScaleGrad <$> (f a) <*> (f b)
+    recDMTermM_Loc_Impl f h (TProject x a)     = TProject x <$> f a
+    recDMTermM_Loc_Impl f h (ZeroGrad a)       = ZeroGrad <$> (f a)
+    recDMTermM_Loc_Impl f h (SumGrads a b)     = SumGrads <$> (f a) <*> (f b)
+    recDMTermM_Loc_Impl f h (Sample a b c)     = Sample <$> (f a) <*> (f b) <*> (f c)
+    recDMTermM_Loc_Impl f h (Clone t) = Clone <$> (f t)
+    recDMTermM_Loc_Impl f h (InternalExpectConst a) = InternalExpectConst <$> (f a)
+    recDMTermM_Loc_Impl f h (InternalMutate a) = InternalMutate <$> (f a)
 
 --------------------------------------------------------------------------
 -- Free variables for terms
 
+
+freeVarsOfDMTerm_Loc :: LocDMTerm -> [TeVar]
+freeVarsOfDMTerm_Loc = freeVarsOfDMTerm . getLocated
+
 freeVarsOfDMTerm :: DMTerm -> [TeVar]
 freeVarsOfDMTerm (Var (v  :- jt)) = [v]
-freeVarsOfDMTerm (Lam jts body) = freeVarsOfDMTerm body \\ [v | (v :- _) <- jts]
-freeVarsOfDMTerm (LamStar jts body) = freeVarsOfDMTerm body \\ [v | (v :- _) <- jts]
-freeVarsOfDMTerm t = fst $ recDMTermMSameExtension f t
+freeVarsOfDMTerm (Lam jts body) = freeVarsOfDMTerm_Loc body \\ [v | (v :- _) <- jts]
+freeVarsOfDMTerm (LamStar jts body) = freeVarsOfDMTerm_Loc body \\ [v | (v :- _) <- jts]
+freeVarsOfDMTerm t = fst $ recDMTermMSameExtension_Loc f (Located UnknownLoc t)
   where
-    f :: DMTerm -> ([TeVar] , DMTerm)
-    f = (\a -> (freeVarsOfDMTerm a, a))
+    f :: LocDMTerm -> ([TeVar] , LocDMTerm)
+    f = (\a -> (freeVarsOfDMTerm_Loc a, a))
+
+
+freeVarsOfProcDMTerm_Loc :: LocProcDMTerm -> [ProcVar]
+freeVarsOfProcDMTerm_Loc = freeVarsOfProcDMTerm . getLocated
 
 
 freeVarsOfProcDMTerm :: ProcDMTerm -> [ProcVar]
 freeVarsOfProcDMTerm (Extra (ProcVarTerm (v  ::- jt))) = [v]
-freeVarsOfProcDMTerm (Extra (ProcLam jts body)) = freeVarsOfProcDMTerm body \\ [v | (v ::- _) <- jts]
-freeVarsOfProcDMTerm (Extra (ProcLamStar jts body)) = freeVarsOfProcDMTerm body \\ [v | (v ::- _) <- jts]
-freeVarsOfProcDMTerm t = fst $ recDMTermMSameExtension f t
+freeVarsOfProcDMTerm (Extra (ProcLam jts body)) = freeVarsOfProcDMTerm_Loc body \\ [v | (v ::- _) <- jts]
+freeVarsOfProcDMTerm (Extra (ProcLamStar jts body)) = freeVarsOfProcDMTerm_Loc body \\ [v | (v ::- _) <- jts]
+freeVarsOfProcDMTerm t = fst $ recDMTermMSameExtension_Loc f (Located UnknownLoc t)
   where
-    f :: ProcDMTerm -> ([ProcVar] , ProcDMTerm)
-    f = (\a -> (freeVarsOfProcDMTerm a, a))
+    f :: LocProcDMTerm -> ([ProcVar] , LocProcDMTerm)
+    f = (\a -> (freeVarsOfProcDMTerm_Loc a, a))
 
 --------------------------------------------------------------------------
 -- pretty printing
@@ -1021,6 +1096,9 @@ instance (ShowPretty a, ShowPretty b) => ShowPretty (a,b) where
 
 instance ShowPretty Relevance where
   showPretty = show
+
+instance ShowPretty a => ShowPretty (Located a) where
+  showPretty (Located l a) = showPretty a
 
 
 instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t) where
@@ -1261,3 +1339,4 @@ makeRelev = WithRelev IsRelevant
 
 makeNotRelev :: (DMTypeOf MainKind :@ Annotation e) -> WithRelev e
 makeNotRelev = WithRelev NotRelevant
+

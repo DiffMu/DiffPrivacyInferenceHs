@@ -21,11 +21,10 @@ import Debug.Trace
 
 type PreProTC = LightTC Location_PreProcess ()
 
-preprocessAll :: ProcDMTerm -> PreProTC (DMTerm)
+preprocessAll :: LocProcDMTerm -> PreProTC (LocDMTerm)
 preprocessAll term = do
 
   -- top level processing
-
   (tlinfo) <- liftLightTC def def (checkTopLevel term)
   info $ "-----------------------------------"
   info $ "Toplevel information:\n" <> show tlinfo

@@ -59,14 +59,14 @@ instance Show TopLevelInformation where
 -- we extract the list of statements, and call for each
 -- of them the main `checkTopLevelStatement` function
 --
-checkTopLevel :: ProcDMTerm -> TLTC (TopLevelInformation)
-checkTopLevel term = do
+checkTopLevel :: LocProcDMTerm -> TLTC (TopLevelInformation)
+checkTopLevel (Located l term) = do
   let terms = case term of 
         Extra (Block ts) -> ts
-        other -> [other]
+        other -> [Located l other]
 
   -- compute for all statements
-  mapM checkTopLevelStatement terms
+  mapM checkTopLevelStatement_Loc terms
 
   -- return the accumulated tlinfo
   use tlinfo
@@ -77,6 +77,9 @@ checkTopLevel term = do
 -- check a single statement and update the state
 -- according to above rules
 --
+checkTopLevelStatement_Loc :: LocProcDMTerm -> TLTC ()
+checkTopLevelStatement_Loc = checkTopLevelStatement . getLocated
+
 checkTopLevelStatement :: ProcDMTerm -> TLTC ()
 
 -- if we have a black box
@@ -146,8 +149,8 @@ checkTopLevelStatement rest = do
 
 
 -- make sure that no black box definitions are here.
-checkNonTopLevelBB :: ProcDMTerm -> TLTC ProcDMTerm
-checkNonTopLevelBB (BBLet v jt rest) = throwError (BlackBoxError $ "Found a black box definition (" <> show v <> ") which is not in the top level scope. Black boxes can only be defined at the top level scope. " )
-checkNonTopLevelBB term = recDMTermMSameExtension checkNonTopLevelBB term
+checkNonTopLevelBB :: LocProcDMTerm -> TLTC LocProcDMTerm 
+checkNonTopLevelBB (Located l (BBLet v jt rest)) = throwError (BlackBoxError $ "Found a black box definition (" <> show v <> ") which is not in the top level scope. Black boxes can only be defined at the top level scope. " )
+checkNonTopLevelBB term = recDMTermMSameExtension_Loc checkNonTopLevelBB term
 
 

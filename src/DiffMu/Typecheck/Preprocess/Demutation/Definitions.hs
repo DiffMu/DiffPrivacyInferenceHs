@@ -86,30 +86,34 @@ data ImmutType = Pure | Mutating [IsMutated] | PureBlackBox
 -- are in the RHS and must be moved on tlet/slet assignment
 -- See #171 #172
 data MoveType =
-  TupleMove [MoveType]
+  TupleMove [LocMoveType]
   | SingleMove ProcVar
   | RefMove DemutDMTerm
   | NoMove DemutDMTerm
-  | PhiMove DemutDMTerm (MoveType,DemutDMTerm) (MoveType,DemutDMTerm)
+  | PhiMove LocDemutDMTerm (LocMoveType,LocDemutDMTerm) (LocMoveType,LocDemutDMTerm)
   deriving (Eq, Show)
+
+type LocMoveType = Located MoveType
 
 -- singleMoveMaybe :: Maybe ProcVar -> MoveType
 -- singleMoveMaybe (Just a) = SingleMove a
 -- singleMoveMaybe Nothing  = NoMove
 
 data TermType =
-  Value ImmutType MoveType
-  | Statement DemutDMTerm MoveType
-  | StatementWithoutDefault DemutDMTerm
-  -- | PurePhiTermType DemutDMTerm ([MoveType],DemutDMTerm) (TermType,DemutDMTerm)
-  | MutatingFunctionEnd
+  Value ImmutType LocMoveType
+  | Statement SourceLocExt DemutDMTerm MoveType
+  | StatementWithoutDefault SourceLocExt DemutDMTerm
+  -- | PurePhiTermType LocDemutDMTerm ([MoveType],LocDemutDMTerm) (TermType,LocDemutDMTerm)
+  | MutatingFunctionEnd SourceLocExt
 
 data LastValue =
-   PureValue MoveType
+   PureValue LocMoveType
    | MutatingFunctionEndValue
    | NoLastValue
 
-data PhiBranchType = ValueBranch [DemutDMTerm] MoveType | StatementBranch [DemutDMTerm]
+data PhiBranchType =
+  ValueBranch SourceLocExt [LocDemutDMTerm] LocMoveType
+  | StatementBranch SourceLocExt [LocDemutDMTerm]
   deriving (Show)
 
 --------------------------------------------------
@@ -547,6 +551,9 @@ oneOfEach [] = [[]]
 
 
 
+moveGetMem_Loc :: ScopeVar -> Maybe ProcVar -> LocMoveType -> MTC [MemType]
+moveGetMem_Loc scname pv (Located _ mt) = moveGetMem scname pv mt
+
 moveGetMem :: ScopeVar -> Maybe ProcVar -> MoveType -> MTC [MemType]
 moveGetMem scname pv (NoMove te) = do
   mem <- allocateMem scname pv
@@ -556,11 +563,11 @@ moveGetMem scname pv (SingleMove a) = do
   memCtx %= (setValue a MemMoved)
   return (memstate)
 moveGetMem scname pv (PhiMove _ (mt1,_) (mt2,_)) = do
-  memt1 <- moveGetMem scname Nothing mt1
-  memt2 <- moveGetMem scname Nothing mt2
+  memt1 <- moveGetMem_Loc scname Nothing mt1
+  memt2 <- moveGetMem_Loc scname Nothing mt2
   return (memt1 <> memt2)
 moveGetMem scname pv (TupleMove as) = do
-  mems <- mapM (moveGetMem scname Nothing) as
+  mems <- mapM (moveGetMem_Loc scname Nothing) as
   return (TupleMem <$> oneOfEach mems)
 moveGetMem scname pv (RefMove te) = do
   -- if we had a reference,
@@ -683,13 +690,13 @@ getMemVarMutationStatus mv = do
     Just (_, TeVarMutTrace _ split tvars) -> return (split,tvars)
 
 
-coequalizeTeVarMutTrace :: TeVarMutTrace -> TeVarMutTrace -> WriterT ([DemutDMTerm],[DemutDMTerm]) MTC TeVarMutTrace
+coequalizeTeVarMutTrace :: TeVarMutTrace -> TeVarMutTrace -> WriterT ([LocDemutDMTerm],[LocDemutDMTerm]) MTC TeVarMutTrace
 coequalizeTeVarMutTrace (TeVarMutTrace pv1 split1 ts1) (TeVarMutTrace pv2 split2 ts2) | and [ts1 == ts2, pv1 == pv2, split1 == split2] = pure $ TeVarMutTrace pv1 split1 ts1
 coequalizeTeVarMutTrace (TeVarMutTrace pv1 split1 ts1) (TeVarMutTrace pv2 split2 ts2)  = do
   t3 <- newTeVarOfMut "phi"
-  let makeProj (Just pv) []     = pure $ Extra (DemutSLetBase PureLet (t3 :- JTAny) (Var (UserTeVar pv :- JTAny))) 
+  let makeProj (Just pv) []     = pure $ Extra (DemutSLetBase PureLet (t3 :- JTAny) (notLocated $ Var (UserTeVar pv :- JTAny)))
       makeProj Nothing   []     = lift $ demutationError $ "While demutating phi encountered a branch where a proc-var-less memory location is mutated. This cannot be done."
-      makeProj _         (t:ts) = pure $ Extra (DemutSLetBase PureLet (t3 :- JTAny) (Var (t :- JTAny)))
+      makeProj _         (t:ts) = pure $ Extra (DemutSLetBase PureLet (t3 :- JTAny) (notLocated $ Var (t :- JTAny)))
 
   proj1 <- makeProj pv1 ts1 
   proj2 <- makeProj pv2 ts2
@@ -698,7 +705,7 @@ coequalizeTeVarMutTrace (TeVarMutTrace pv1 split1 ts1) (TeVarMutTrace pv2 split2
   lift $ debug $ "  proj1: " <> show proj1
   lift $ debug $ "  proj2: " <> show proj2
 
-  tell ([proj1],[proj2])
+  tell ([notLocated proj1],[notLocated proj2])
 
   split3 <- case (split1,split2) of
               (NotSplit, NotSplit) -> pure NotSplit
@@ -715,23 +722,23 @@ coequalizeTeVarMutTrace (TeVarMutTrace pv1 split1 ts1) (TeVarMutTrace pv2 split2
 -- coequalizeTeVarMutTrace (TeVarMutTrace pv1 _ ts1) (TeVarMutTrace pv2 _ ts2)  = lift $ demutationError $ "While demutating phi, encountered two branches where the owners of a tvar differ. This is not allowed."
 
 
-instance SemigroupM (WriterT ([DemutDMTerm],[DemutDMTerm]) MTC) TeVarMutTrace where
+instance SemigroupM (WriterT ([LocDemutDMTerm],[LocDemutDMTerm]) MTC) TeVarMutTrace where
   (⋆) = coequalizeTeVarMutTrace
-instance MonoidM (WriterT ([DemutDMTerm],[DemutDMTerm]) MTC) TeVarMutTrace where
+instance MonoidM (WriterT ([LocDemutDMTerm],[LocDemutDMTerm]) MTC) TeVarMutTrace where
   neutral = pure $ TeVarMutTrace Nothing NotSplit []
-instance CheckNeutral (WriterT ([DemutDMTerm],[DemutDMTerm]) MTC) TeVarMutTrace where
+instance CheckNeutral (WriterT ([LocDemutDMTerm],[LocDemutDMTerm]) MTC) TeVarMutTrace where
   checkNeutral _ = pure False
 
-instance SemigroupM (WriterT ([DemutDMTerm],[DemutDMTerm]) MTC) ScopeVar where
+instance SemigroupM (WriterT ([LocDemutDMTerm],[LocDemutDMTerm]) MTC) ScopeVar where
   (⋆) a b | a == b    = pure a
   (⋆) a b | otherwise = lift $ demutationError $ "While demutating phi, encountered two branches where the scopevars of a memvar differ. This is not allowed."
-instance MonoidM (WriterT ([DemutDMTerm],[DemutDMTerm]) MTC) ScopeVar where
+instance MonoidM (WriterT ([LocDemutDMTerm],[LocDemutDMTerm]) MTC) ScopeVar where
   neutral = lift $ internalError $ "There is no neutral element for scopevars"
 
-instance CheckNeutral (WriterT ([DemutDMTerm],[DemutDMTerm]) MTC) ScopeVar where
+instance CheckNeutral (WriterT ([LocDemutDMTerm],[LocDemutDMTerm]) MTC) ScopeVar where
   checkNeutral _ = pure False
 
-coequalizeMutCtx :: MutCtx -> MutCtx -> MTC (MutCtx, ([DemutDMTerm], [DemutDMTerm]))
+coequalizeMutCtx :: MutCtx -> MutCtx -> MTC (MutCtx, ([LocDemutDMTerm], [LocDemutDMTerm]))
 coequalizeMutCtx muts1 muts2 = runWriterT (muts1 ⋆ muts2)
 
 
@@ -796,32 +803,38 @@ procVarAsTeVarInMutCtx tempMemCtx tempMutCtx pv = do
   memCtx .= oldMemCtx
   return val
 
+moveTypeAsTerm_Loc :: LocMoveType -> MTC LocDemutDMTerm
+moveTypeAsTerm_Loc = mapM moveTypeAsTerm
 
-moveTypeAsTerm :: MoveType -> MTC DemutDMTerm 
+moveTypeAsTerm :: MoveType -> MTC DemutDMTerm
 moveTypeAsTerm = \case
   TupleMove mts -> do
-    terms <- mapM moveTypeAsTerm mts
-    pure $ Tup $ terms
+    terms <- mapM moveTypeAsTerm_Loc mts
+    pure $ (Tup terms)
   SingleMove pv -> do tv <- procVarAsTeVar pv ; pure $ Var $ (tv :- JTAny)
   PhiMove cond (_,tt1) (_,tt2) -> return (Extra (DemutPhi cond tt1 tt2))
   RefMove pdt   -> pure pdt
   NoMove pdt    -> pure pdt
 
+
+movedVarsOfMoveType_Loc :: LocMoveType -> [ProcVar]
+movedVarsOfMoveType_Loc = movedVarsOfMoveType . getLocated
+
 movedVarsOfMoveType :: MoveType -> [ProcVar]
 movedVarsOfMoveType = \case
-  TupleMove mts -> mts >>= movedVarsOfMoveType 
+  TupleMove mts -> mts >>= movedVarsOfMoveType_Loc
   SingleMove pv -> return pv
-  PhiMove cond (mt1,_) (mt2,_) -> movedVarsOfMoveType mt1 <> movedVarsOfMoveType mt2
+  PhiMove cond (mt1,_) (mt2,_) -> movedVarsOfMoveType_Loc mt1 <> movedVarsOfMoveType_Loc mt2
   RefMove pdt -> []
   NoMove pdt -> []
 
-termTypeAsTerm :: TermType -> MTC DemutDMTerm
+termTypeAsTerm :: TermType -> MTC LocDemutDMTerm
 termTypeAsTerm = \case
-  Value it mt -> moveTypeAsTerm mt
-  Statement pdt mt -> do
+  Value it mt -> moveTypeAsTerm_Loc mt
+  Statement l pdt mt -> do
     mt' <- moveTypeAsTerm mt
-    pure $ Extra $ DemutBlock [pdt, mt']
-  StatementWithoutDefault pdt -> pure $ Extra $ DemutBlock [pdt]
-  MutatingFunctionEnd         -> pure $ Extra $ DemutBlock []
+    pure $ Located l $ Extra $ DemutBlock [Located l pdt, Located l mt']
+  StatementWithoutDefault l pdt -> pure $ Located l $ Extra $ DemutBlock [Located l pdt]
+  MutatingFunctionEnd l       -> pure $ Located l $ Extra $ DemutBlock []
 
 

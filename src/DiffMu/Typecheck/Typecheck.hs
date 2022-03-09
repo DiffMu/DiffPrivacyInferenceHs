@@ -23,13 +23,14 @@ import Debug.Trace
 
 import Data.IORef
 import System.IO.Unsafe
+import DiffMu.Core (SourceLocExt(RelatedLoc))
 
 
 
 
 ------------------------------------------------------------------------
 -- The typechecking function
-checkPriv :: DMScope -> DMTerm -> TC DMMain
+checkPriv :: DMScope -> LocDMTerm -> TC DMMain
 checkPriv scope t = do
 
   -- The computation to do before checking
@@ -52,7 +53,7 @@ checkPriv scope t = do
 
 
 
-checkSens :: DMScope -> DMTerm -> TC DMMain
+checkSens :: DMScope -> LocDMTerm -> TC DMMain
 checkSens scope t = do
   -- The computation to do before checking
   γ <- use types
@@ -77,18 +78,18 @@ checkSens scope t = do
 -- Sensitivity terms
 
 
-checkSen' :: DMScope -> DMTerm -> TC DMMain
+checkSen' :: DMScope -> LocDMTerm -> TC DMMain
 
-checkSen' scope DMTrue = return (NoFun DMBool)
-checkSen' scope DMFalse = return (NoFun DMBool)
+checkSen' scope (Located l (DMTrue)) = return (NoFun DMBool)
+checkSen' scope (Located l (DMFalse)) = return (NoFun DMBool)
 
 -- TODO: Here we assume that η really has type τ, and do not check it. Should maybe do that.
-checkSen' scope (Sng η τ) = do
+checkSen' scope (Located l (Sng η τ)) = do
   res <- Numeric <$> (Num <$> (createDMTypeBaseNum τ) <*> pure (Const (constCoeff (Fin η))))
   return (NoFun res)
 
 -- typechecking an op
-checkSen' scope (Op op args) = do
+checkSen' scope (Located l (Op op args)) = do
   -- create a new typeop constraint for op
   -- res is resulting type of the operation when used on types in arg_sens
   -- arg_sens :: [(SMType, Sensitivity)]
@@ -111,7 +112,7 @@ checkSen' scope (Op op args) = do
 
 -- a special term for function argument variables.
 -- those get sensitivity 1, all other variables are var terms
-checkSen' scope (Arg x jτ i) = do
+checkSen' scope (Located l (Arg x jτ i)) = do
   τs <- newVar
   logForce $ "checking arg:" <> show (x :- jτ) <> ", dmtype is " <> show τs
   -- the inferred type must be a subtype of the user annotation, if given.
@@ -124,7 +125,7 @@ checkSen' scope (Arg x jτ i) = do
 
 
 
-checkSen' scope (Var (x :- dτ)) =  -- get the term that corresponds to this variable from the scope dict
+checkSen' scope (Located l (Var (x :- dτ))) =  -- get the term that corresponds to this variable from the scope dict
    let mτ = getValue x scope
    in case mτ of
      Nothing -> logForce ("[Var-Sens] Scope is:\n" <> show (getAllKeys scope)) >> throwError (VariableNotInScope x)
@@ -136,11 +137,11 @@ checkSen' scope (Var (x :- dτ)) =  -- get the term that corresponds to this var
                      addJuliaSubtypeConstraint τ dτ
                      return τ
 
-checkSen' scope (Lam xτs body) = do
+checkSen' scope (Located l (Lam xτs body)) = do
 
     -- put a special term to mark x as a function argument. those get special treatment
     -- because we're interested in their privacy. put the relevance given in the function signature, too.
-    let f s sc (x :- τ) = setValue x (checkSens s (Arg x τ IsRelevant)) sc
+    let f s sc (x :- τ) = setValue x (checkSens s (Located (RelatedLoc "argument of this function" l) (Arg x τ IsRelevant))) sc
     let addArgs s = foldl (f s) s xτs
     let scope' = addArgs scope
 
@@ -149,7 +150,7 @@ checkSen' scope (Lam xτs body) = do
 
     -- extract julia signature
     let sign = (sndA <$> xτs)
-        
+
     -- get inferred types and sensitivities for the arguments
     xrτs <- getArgList @_ @SensitivityK xτs
     let xrτs' = [x :@ s | (x :@ SensitivityAnnotation s) <- xrτs]
@@ -165,10 +166,10 @@ checkSen' scope (Lam xτs body) = do
     return (Fun [τ :@ (Just sign)])
 
 
-checkSen' scope (LamStar xτs body) = do
+checkSen' scope (Located l (LamStar xτs body)) = do
     -- put a special term to mark x as a function argument. those get special treatment
     -- because we're interested in their sensitivity
-    let f s sc (x :- (τ , rel)) = setValue x (checkSens s (Arg x τ rel)) sc
+    let f s sc (x :- (τ , rel)) = setValue x (checkSens s (Located (RelatedLoc "argument of this function" l) (Arg x τ rel))) sc
     let addArgs s = foldl (f s) s xτs
     let scope' = addArgs scope
 
@@ -177,7 +178,7 @@ checkSen' scope (LamStar xτs body) = do
 
     -- extract julia signature
     let sign = (fst <$> sndA <$> xτs)
-        
+
     -- get inferred types and privacies for the arguments
     xrτs <- getArgList @_ @PrivacyK [(x :- τ) | (x :- (τ, _)) <- xτs]
 
@@ -196,7 +197,7 @@ checkSen' scope (LamStar xτs body) = do
 
     -- truncate function context to infinity sensitivity
     mtruncateS inftyS
-    
+
     -- build the type signature and proper ->* type
     let xrτs' = [x :@ p | (x :@ PrivacyAnnotation p) <- xrτs]
 
@@ -208,7 +209,7 @@ checkSen' scope (LamStar xτs body) = do
     return (Fun [τ :@ (Just sign)])
 
 
-checkSen' scope (SLet (x :- dτ) term body) = do
+checkSen' scope (Located l (SLet (x :- dτ) term body)) = do
 
    -- put the computation to check the term into the scope
    --  let scope' = setValue x (checkSens term scope) scope
@@ -226,7 +227,7 @@ checkSen' scope (SLet (x :- dτ) term body) = do
    return result
 
 
-checkSen' scope (BBLet name jτs tail) = do
+checkSen' scope (Located l (BBLet name jτs tail)) = do
 
    -- the type of this is just a BlackBox, put it in the scope
    let scope' = setValue name (return (BlackBox jτs)) scope
@@ -239,7 +240,7 @@ checkSen' scope (BBLet name jτs tail) = do
 
 
 
-checkSen' scope (BBApply app args cs k) =
+checkSen' scope (Located l (BBApply app args cs k)) =
   let
     checkArg arg = do
       let τ = checkSens scope arg
@@ -272,13 +273,13 @@ checkSen' scope (BBApply app args cs k) =
     addConstraint (Solvable (IsBlackBox (τ_box, fst <$> argτs))) -- constraint makes sure the signature matches the args
     mapM (\s -> addConstraint (Solvable (IsBlackBoxReturn (τ_ret, s)))) argτs -- constraint sets the sensitivity to the right thing
     return τ_ret
-    
 
-checkSen' scope (Apply f args) =
+
+checkSen' scope (Located l (Apply f args)) =
   let
     -- check the argument in the given scope,
     -- and scale scope by new variable, return both
-    checkArg :: DMScope -> DMTerm -> (TC (DMMain :@ Sensitivity))
+    checkArg :: DMScope -> LocDMTerm -> (TC (DMMain :@ Sensitivity))
     checkArg scope arg = do
       τ' <- checkSens scope arg
       s <- newVar
@@ -296,7 +297,7 @@ checkSen' scope (Apply f args) =
     return τ_ret
 
 
-checkSen' scope (MMap f m) = do
+checkSen' scope (Located l (MMap f m)) = do
     s <- newVar
     mv <- newVar
     mr <- newVar
@@ -319,7 +320,7 @@ checkSen' scope (MMap f m) = do
 
     return (NoFun (DMContainer k nrm U mv τ_out))
 
-checkSen' scope (MapRows f m) = do
+checkSen' scope (Located l (MapRows f m)) = do
     s <- newVar
     ηm <- newVar
     ηn₁ <- newVar
@@ -341,7 +342,7 @@ checkSen' scope (MapRows f m) = do
 
     return (NoFun (DMMat nrm₂ clp₂ ηm ηn₂ τ_out))
 
-checkSen' scope (MapCols f m) = do
+checkSen' scope (Located l (MapCols f m)) = do
     ς <- newVar
     r <- newVar
     ηm₁ <- newVar
@@ -368,7 +369,7 @@ checkSen' scope (MapCols f m) = do
     -- thus nrm₂ is freely choosable
     return (NoFun (DMMat nrm₂ U ηm₂ r τ_out))
 
-checkSen' scope (MapCols2 f m₁ m₂) = do
+checkSen' scope (Located l (MapCols2 f m₁ m₂)) = do
     ς₁ <- newVar
     ς₂ <- newVar
     r <- newVar
@@ -399,7 +400,7 @@ checkSen' scope (MapCols2 f m₁ m₂) = do
     -- thus nrm₂ is freely choosable
     return (NoFun (DMMat nrm₃ U ηm₃ r τ_out))
 
-checkSen' scope (MFold f acc₀ m) = do
+checkSen' scope (Located l (MFold f acc₀ m)) = do
     s₁ <- newVar
     s₂ <- newVar
     ηm <- newVar
@@ -429,7 +430,7 @@ checkSen' scope (MFold f acc₀ m) = do
 
 
 
-checkSen' scope (FLet fname term body) = do
+checkSen' scope (Located l (FLet fname term body)) = do
 
   -- make a Choice term to put in the scope
   let scope' = pushChoice fname (checkSens scope term) scope
@@ -442,8 +443,7 @@ checkSen' scope (FLet fname term body) = do
   return result'
 
 
-
-checkSen' scope (Choice d) = do
+checkSen' scope (Located l (Choice d)) = do
   let delCs = checkSens scope <$> (snd <$> H.toList d)
   choices <- msumS delCs
   let combined = foldl (:∧:) (Fun []) choices
@@ -451,7 +451,7 @@ checkSen' scope (Choice d) = do
 
 
 
-checkSen' scope (Phi cond ifbr elsebr) = do
+checkSen' scope (Located l (Phi cond ifbr elsebr)) = do
   let ifd   = checkSens scope ifbr
   let elsed = checkSens scope elsebr
   let condd = checkSens scope cond <* mscale inftyS
@@ -475,7 +475,7 @@ checkSen' scope (Phi cond ifbr elsebr) = do
 
 
 
-checkSen' scope (Tup ts) = do
+checkSen' scope (Located l (Tup ts)) = do
 
   -- check tuple entries and sum contexts
   τsum <- msumS (checkSens scope <$> ts)
@@ -492,11 +492,11 @@ checkSen' scope (Tup ts) = do
 
 
 
-checkSen' original_scope (TLet xs term body) = do
+checkSen' original_scope (Located l (TLet xs term body)) = do
 
   -- add all variables bound in the tuple let as args-checking-commands to the scope
   -- TODO: do we need to make sure that we have unique names here?
-  let addarg scope (x :- τ) = setValue x (checkSens original_scope (Arg x τ NotRelevant)) scope
+  let addarg scope (x :- τ) = setValue x (checkSens original_scope (Located (RelatedLoc "Arg generated by this tlet" l) (Arg x τ NotRelevant))) scope
   let scope_with_args = foldl addarg original_scope xs
 
   -- check the body in the scope with the new args
@@ -543,21 +543,25 @@ checkSen' original_scope (TLet xs term body) = do
   -- and we return the type of the body
   return τbody
 
-checkSen' scope (Loop niter cs' (xi, xc) body) = do
+checkSen' scope (Located l (Loop niter cs' (xi, xc) body)) = do
   let cniter = checkSens scope niter
 
   let scope_vars = getAllKeys scope
+  let s0 = "Capture tuple of this loop"
+  let s1 = "Var generated for capture tuple by this loop"
+  let s2 = "Iterator var generated by this loop"
+  let s3 = "Capture var generated by this loop"
 
   -- build the tup of variables
-  let cs = Tup ((\a -> Var (a :- JTAny)) <$> cs')
+  let cs = Located (RelatedLoc s0 l) $ Tup ((\a -> (Located (RelatedLoc s1 l) (Var (a :- JTAny)))) <$> cs')
 
   -- check it
   let ccs = checkSens scope cs
 
   -- add iteration and capture variables as args-checking-commands to the scope
   -- TODO: do we need to make sure that we have unique names here?
-  let scope' = setValue xi (checkSens scope (Arg xi JTInt NotRelevant)) scope
-  let scope'' = setValue xc (checkSens scope (Arg xc JTAny IsRelevant)) scope'
+  let scope' = setValue xi (checkSens scope (Located (RelatedLoc s2 l) (Arg xi JTInt NotRelevant))) scope
+  let scope'' = setValue xc (checkSens scope (Located (RelatedLoc s3 l) (Arg xc JTAny IsRelevant))) scope'
 
   -- check body term in that new scope
   let cbody = checkSens scope'' body
@@ -617,7 +621,7 @@ checkSen' scope (Loop niter cs' (xi, xc) body) = do
   return τbody_in
 
 
-checkSen' scope (MCreate n m (x1, x2) body) =
+checkSen' scope (Located l (MCreate n m (x1, x2) body)) =
    let setDim :: TC DMMain -> Sensitivity -> TC DMMain
        setDim tm s = do
           τ <- tm -- check dimension term
@@ -655,9 +659,9 @@ checkSen' scope (MCreate n m (x1, x2) body) =
       nrm <- newVar -- variable for norm
       return (NoFun (DMMat nrm U nv mv τbody))
 
-checkSen' scope (Size m) = do
+checkSen' scope (Located l (Size m)) = do
   mt <- checkSens scope m
-  
+
   -- variables for matrix dimension
   nv <- newVar
   mv <- newVar
@@ -673,9 +677,9 @@ checkSen' scope (Size m) = do
 
   return (NoFun (DMTup [Numeric (Num DMInt (Const nv)), Numeric (Num DMInt (Const mv))]))
 
-checkSen' scope (Length m) = do
+checkSen' scope (Located l (Length m)) = do
   mt <- checkSens scope m
-  
+
   -- variables for vector dimension and entries
   nv <- newVar
   τ <- newVar
@@ -689,8 +693,8 @@ checkSen' scope (Length m) = do
   return (NoFun (Numeric (Num DMInt (Const nv))))
 
 
-checkSen' scope (MutClipM c m) = checkSens scope (ClipM c m)
-checkSen' scope (ClipM c m) = do
+checkSen' scope (Located l (MutClipM c m)) = checkSens scope (Located l (ClipM c m))
+checkSen' scope (Located l (ClipM c m)) = do
   τb <- checkSens scope m -- check the matrix
 
   -- variables for norm and clip parameters and dimension
@@ -710,7 +714,7 @@ checkSen' scope (ClipM c m) = do
   return (NoFun (DMContainer k LInf c n (NoFun (Numeric (Num DMData NonConst)))))
 
 
-checkSen' scope (ClipN value upper lower) = do
+checkSen' scope (Located l (ClipN value upper lower)) = do
   (τv,τu,τl) <- msum3Tup (checkSens scope value, checkSens scope upper, checkSens scope lower)
 
   tv <- newVar
@@ -724,7 +728,7 @@ checkSen' scope (ClipN value upper lower) = do
   return (NoFun (Numeric (Num tv NonConst)))
 
 
-checkSen' scope (Count f m) = let
+checkSen' scope (Located l (Count f m)) = let
     mf = checkSens scope f <* mscale inftyS -- inf-sensitive in the function
     mm = checkSens scope m -- 1-sensitive in the matrix
   in do
@@ -747,7 +751,7 @@ checkSen' scope (Count f m) = let
 --------------------
 -- NOTE this is different from what is in the paper, as we scale the result context by 2 not by 1
 -- a proof that this is correct is in the matrixnorm pdf, and the authors told me it's correct too
-checkSen' scope (ConvertM m) = do
+checkSen' scope (Located l (ConvertM m)) = do
   τb <- checkSens scope m -- check the matrix
 
   -- variables for norm and clip parameters and dimension
@@ -792,7 +796,7 @@ checkSen' (Transpose m) scope = do
       -- change clip parameter to input
       return (NoFun (DMMat L1 U m n (Numeric τ)))
 -}
-checkSen' scope  (Index m i j) = do
+checkSen' scope  (Located l (Index m i j)) = do
 
       -- check indices and set their sensitivity to infinity
       let di = checkSens scope i
@@ -821,7 +825,7 @@ checkSen' scope  (Index m i j) = do
       return τ
 
 
-checkSen' scope (VIndex v i)  = do
+checkSen' scope (Located l (VIndex v i))  = do
 
       -- check index and set the sensitivity to infinity
       let di = checkSens scope i
@@ -847,7 +851,7 @@ checkSen' scope (VIndex v i)  = do
 
       return τ
 
-checkSen' scope (Row m i) = do
+checkSen' scope (Located l (Row m i)) = do
           -- check index and set their sensitivity to infinity
       let di = checkSens scope i
       let dx = do
@@ -873,7 +877,7 @@ checkSen' scope (Row m i) = do
 
       return (NoFun (DMVec nrm clp m τ)) -- returns Vector type to accomodate julia behaviour
 
-checkSen' scope (SubGrad ps gs) = do
+checkSen' scope (Located l (SubGrad ps gs)) = do
       -- check model and gradient
       let dps = checkSens scope ps
       let dgs = checkSens scope gs
@@ -891,7 +895,7 @@ checkSen' scope (SubGrad ps gs) = do
 
       return (NoFun (DMModel m))
 
-checkSen' scope term@(ScaleGrad scalar grad) = do
+checkSen' scope term@(Located l (ScaleGrad scalar grad)) = do
 
   let makeNumeric t = do
           tn <- newVar
@@ -941,13 +945,13 @@ checkSen' scope term@(ScaleGrad scalar grad) = do
 --   addConstraint (Solvable (IsReorderedTuple ((σ , τ) :=: ρ)))
 --   return ρ
 
-checkSen' scope (TProject i t) = do
+checkSen' scope (Located l (TProject i t)) = do
   τ <- checkSens scope t
   ρ <- newVar
   addConstraint (Solvable (IsTProject ((i , τ) :=: ρ)))
   return ρ
 
-checkSen' scope (ZeroGrad m) = do
+checkSen' scope (Located l (ZeroGrad m)) = do
    -- check model
    tm <- checkSens scope m
 
@@ -963,7 +967,7 @@ checkSen' scope (ZeroGrad m) = do
    return (NoFun (DMGrads nrm clp n (NoFun (Numeric (Num DMReal NonConst)))))
 
 
-checkSen' scope term@(SumGrads g1 g2) = do
+checkSen' scope term@(Located l (SumGrads g1 g2)) = do
 
   -- Create sensitivity / type variables for the addition
   (τres , types_sens) <- makeTypeOp (IsBinary DMOpAdd) 2
@@ -1002,11 +1006,11 @@ checkSen' scope term@(SumGrads g1 g2) = do
   return (NoFun (DMGrads nrm U m (NoFun (Numeric τresnum))))
 
 
-checkSen' scope term@(SBind x a b) = do
+checkSen' scope term@(Located l (SBind x a b)) = do
   throwError (TypeMismatchError $ "Found the term\n" <> showPretty term <> "\nwhich is a privacy term because of the bind in a place where a sensitivity term was expected.")
 
 
-checkSen' scope term@(InternalExpectConst a) = do
+checkSen' scope term@(Located l (InternalExpectConst a)) = do
   res <- checkSens scope a
   sa <- newVar
   ta <- newVar
@@ -1015,14 +1019,14 @@ checkSen' scope term@(InternalExpectConst a) = do
   return res'
 
 
-checkSen' scope term@(InternalMutate a) = do
+checkSen' scope term@(Located l (InternalMutate a)) = do
   res <- checkSens scope a <* mscale (constCoeff $ Fin 2)
   return res
 
--- 
+--
 -- The user can explicitly copy return values.
 --
-checkSen' scope term@(Clone t) = checkSen' scope t -- do
+checkSen' scope term@(Located l (Clone t)) = checkSen' scope t -- do
   -- res <- checkSens scope t
 
   -- ta <- newVar
@@ -1030,36 +1034,36 @@ checkSen' scope term@(Clone t) = checkSen' scope t -- do
 
   -- return (NoFun (ta))
 
-checkSen' scope term@(Disc t) = do
+checkSen' scope term@(Located l (Disc t)) = do
   tt <- checkSen' scope t <* mtruncateS inftyS
   v <- newVar
   unify (NoFun (Numeric v)) tt
   return (NoFun (Numeric (Num DMData NonConst)))
 
-checkSen' scope term@(MakeVec m) = do
+checkSen' scope term@(Located l (MakeVec m)) = do
   mtype <- checkSens scope m
-  
+
   -- variables for element type, norm and clip parameters and dimension
   τ <- newVar
   nrm <- newVar
   clp <- newVar
   cols <- newVar
-  
+
   -- set 1-row matrix type
   unify mtype (NoFun (DMMat nrm clp oneId cols τ))
 
   return (NoFun (DMVec nrm clp cols τ))
 
 
-checkSen' scope term@(MakeRow m) = do
+checkSen' scope term@(Located l (MakeRow m)) = do
   mtype <- checkSens scope m
-  
+
   -- variables for element type, norm and clip parameters and dimension
   τ <- newVar
   nrm <- newVar
   clp <- newVar
   cols <- newVar
-  
+
   -- set 1-row matrix type
   unify mtype (NoFun (DMVec nrm clp cols τ))
 
@@ -1067,13 +1071,13 @@ checkSen' scope term@(MakeRow m) = do
 
 
 -- Everything else is currently not supported.
-checkSen' scope t = throwError (TermColorError SensitivityK t)
+checkSen' scope t = throwError (TermColorError SensitivityK (getLocated t))
 
 --------------------------------------------------------------------------------
 -- Privacy terms
 
-checkPri' :: DMScope -> DMTerm -> TC DMMain
-checkPri' scope (Ret t) = do
+checkPri' :: DMScope -> LocDMTerm -> TC DMMain
+checkPri' scope (Located l (Ret t)) = do
    τ <- checkSens scope t
    mtruncateP inftyP
    log $ "checking privacy " <> show (Ret t) <> ", type is " <> show τ
@@ -1085,11 +1089,11 @@ checkPri' scope (Rnd t) = do
   return (NoFun (Numeric (NonConst τ)))
 -}
 
-checkPri' scope (Apply f args) =
+checkPri' scope (Located l (Apply f args)) =
   let
     -- check the argument in the given scope,
     -- and scale scope by new variable, return both
-    checkArg :: DMScope -> DMTerm -> (TC (DMMain :@ Privacy))
+    checkArg :: DMScope -> LocDMTerm -> (TC (DMMain :@ Privacy))
     checkArg scope arg = do
       τ <- checkSens scope arg
       restrictAll oneId -- sensitivity of everything in context must be <= 1
@@ -1115,7 +1119,7 @@ checkPri' scope (Apply f args) =
     return τ_ret
 
 
-checkPri' scope (SLet (x :- dτ) term body) = do
+checkPri' scope (Located l (SLet (x :- dτ) term body)) = do
 
   -- put the computation to check the term into the scope
   --  let scope' = setValue x (checkSens term scope) scope
@@ -1131,12 +1135,12 @@ checkPri' scope (SLet (x :- dτ) term body) = do
 
   return result
 
-checkPri' scope (SBind (x :- dτ) term body) = do
+checkPri' scope (Located l (SBind (x :- dτ) term body)) = do
   -- this is the bind rule.
   -- as it does not matter what sensitivity/privacy x has in the body, we put an Arg term in the scope
   -- and later discard its annotation. we use checkSens because there are no Vars in privacy terms so
   -- x will only ever be used in a sensitivity term.
-  let scope' = setValue x (checkSens scope (Arg x dτ NotRelevant)) scope
+  let scope' = setValue x (checkSens scope (Located (RelatedLoc "Arg generated by this bind" l) (Arg x dτ NotRelevant))) scope
 
   -- check body with that new scope
   let dbody = checkPriv scope' body 
@@ -1172,7 +1176,7 @@ checkPri' scope (SBind (x :- dτ) term body) = do
   -- return the type of this bind expression
   return τbody
 
-checkPri' scope (FLet fname term body) = do
+checkPri' scope (Located l (FLet fname term body)) = do
 
   -- make a Choice term to put in the scope
   let scope' = pushChoice fname (checkSens scope term) scope
@@ -1187,12 +1191,12 @@ checkPri' scope (FLet fname term body) = do
 -----------------------------------
 -- "transparent" privacy tlets
 
-checkPri' original_scope curterm@(TLet xs term body) = do
+checkPri' original_scope curterm@(Located l (TLet xs term body)) = do
 
   -- put the computations to check the terms into the scope
   -- (in privacy terms we use projections here, making this a "transparent" tlet)
 
-  let addarg scope (x :- _, i) = setValue x (checkSens original_scope (TProject i term)) scope
+  let addarg scope (x :- _, i) = setValue x (checkSens original_scope (Located (RelatedLoc "TProject generated by this tlet" l) (TProject i term))) scope
   let scope_with_args = foldl addarg original_scope (xs `zip` [0..])
 
   -- -- check body with that new scope
@@ -1204,7 +1208,7 @@ checkPri' original_scope curterm@(TLet xs term body) = do
       False -> throwError (ImpossibleError $ "Type annotations on variables not yet supported\n when checking " <> showPretty curterm)
 
   return result
-checkPri' original_scope curterm@(TBind xs term body) = do
+checkPri' original_scope curterm@(Located l (TBind xs term body)) = do
   a <- newTeVar "tbind_var"
   -- we check the term
   -- ```
@@ -1212,9 +1216,10 @@ checkPri' original_scope curterm@(TBind xs term body) = do
   --  tlet (xs...) = a
   --  body
   -- ```
-  checkPri' original_scope (SBind (a :- JTAny) term
-                   (TLet xs (Var (a :- JTAny))
-                         body))
+  let s1 = "SBind-TLet construction generated for this TBind"
+  checkPri' original_scope (Located (RelatedLoc s1 l) (SBind (a :- JTAny) term
+                   (Located (RelatedLoc s1 l) (TLet xs (Located (RelatedLoc s1 l) (Var (a :- JTAny)))
+                         body))))
 
 
 -----------------------------------
@@ -1258,8 +1263,8 @@ checkPri' (TLet xs term body) scope = do
    checkPriv t2 scope
 -}
 
-checkPri' scope (MutGauss rp εp δp f) = checkPri' scope (Gauss rp εp δp f)
-checkPri' scope (Gauss rp εp δp f) =
+checkPri' scope (Located l (MutGauss rp εp δp f)) = checkPri' scope (Located l (Gauss rp εp δp f))
+checkPri' scope (Located l (Gauss rp εp δp f)) =
   let
    setParam :: TC DMMain -> Sensitivity -> TC ()
    setParam dt v = do -- parameters must be const numbers.
@@ -1317,8 +1322,8 @@ checkPri' scope (Gauss rp εp δp f) =
       return (NoFun (τgauss))
 
 
-checkPri' scope (MutLaplace rp εp f) = checkPri' scope (Laplace rp εp f)
-checkPri' scope (Laplace rp εp f) =
+checkPri' scope (Located l (MutLaplace rp εp f)) = checkPri' scope (Located l (Laplace rp εp f))
+checkPri' scope (Located l (Laplace rp εp f)) =
   let
    setParam :: TC DMMain -> Sensitivity -> TC ()
    setParam dt v = do -- parameters must be const numbers.
@@ -1369,7 +1374,7 @@ checkPri' scope (Laplace rp εp f) =
       return (NoFun (τlap))
 
 
-checkPri' scope (AboveThresh qs e d t) = do
+checkPri' scope (Located l (AboveThresh qs e d t)) = do
       eps <- newVar
 
       let mqs = checkSens scope qs <* mtruncateP inftyP
@@ -1391,7 +1396,7 @@ checkPri' scope (AboveThresh qs e d t) = do
 
       return (NoFun (Numeric (Num DMInt NonConst)))
 
-checkPri' scope (Exponential rp εp xs f) = do
+checkPri' scope (Located l (Exponential rp εp xs f)) = do
 
   let
    setParamConst :: TC DMMain -> Sensitivity -> TC ()
@@ -1464,7 +1469,7 @@ checkPri' scope (Exponential rp εp xs f) = do
 
       return (v_t_x)
 
-checkPri' scope (Loop niter cs' (xi, xc) body) =
+checkPri' scope (Located l (Loop niter cs' (xi, xc) body)) =
    --let setInteresting :: ([Symbol],[DMMain :@ PrivacyAnnotation]) -> Sensitivity -> TC ()
    let setInteresting (xs, τps) n = do
           let τs = map fstAnn τps
@@ -1485,11 +1490,16 @@ checkPri' scope (Loop niter cs' (xi, xc) body) =
           return ()
 
    in do
+      let s0 = "Capture tuple of this loop"
+      let s1 = "Var generated for capture tuple by this loop"
+      let s2 = "Iterator var generated by this loop"
+      let s3 = "Capture var generated by this loop"
+
       --traceM $ "checking privacy Loop: " <> show  (Loop niter cs (xi, xc) body)
       let cniter = checkSens scope niter <* mtruncateP zeroId
 
       -- build the tup of variables
-      let cs = Tup ((\a -> Var (a :- JTAny)) <$> cs')
+      let cs = (Located (RelatedLoc s0 l) (Tup ((\a -> (Located (RelatedLoc s1 l) (Var (a :- JTAny)))) <$> cs')))
 
       -- check it
       let mcaps = checkSens scope cs <* mtruncateP inftyP
@@ -1497,8 +1507,8 @@ checkPri' scope (Loop niter cs' (xi, xc) body) =
       -- add iteration and capture variables as args-checking-commands to the scope
       -- capture variable is not relevant bc captures get ∞ privacy anyways
       -- TODO: do we need to make sure that we have unique names here?
-      let scope'  = setValue xi (checkSens scope (Arg xi JTInt NotRelevant)) scope
-      let scope'' = setValue xc (checkSens scope (Arg xc JTAny NotRelevant)) scope'
+      let scope'  = setValue xi (checkSens scope (Located (RelatedLoc s2 l) (Arg xi JTInt NotRelevant))) scope
+      let scope'' = setValue xc (checkSens scope (Located (RelatedLoc s3 l) (Arg xc JTAny NotRelevant))) scope'
 
       -- check body term in that new scope
       let cbody = checkPriv scope'' body 
@@ -1561,8 +1571,8 @@ checkPri' scope (Loop niter cs' (xi, xc) body) =
 --   return ρ
 
 
-checkPri' scope (SmpLet xs (Sample n m1_in m2_in) tail) =
-  let checkArg :: DMTerm -> (TC (DMMain, Privacy))
+checkPri' scope (Located l (SmpLet xs (Located l2 (Sample n m1_in m2_in)) tail)) =
+  let checkArg :: LocDMTerm -> (TC (DMMain, Privacy))
       checkArg arg = do
          -- check the argument in the given scope,
          -- and scale scope by new variable, return both
@@ -1580,7 +1590,7 @@ checkPri' scope (SmpLet xs (Sample n m1_in m2_in) tail) =
       mtail = do
                 -- add all variables bound by the sample let as args-checking-commands to the scope
                 -- TODO: do we need to make sure that we have unique names here?
-                let addarg scope' (x :- τ) = setValue x (checkSens scope (Arg x τ IsRelevant)) scope'
+                let addarg scope' (x :- τ) = setValue x (checkSens scope (Located (RelatedLoc "Arg generated for this sample" l) (Arg x τ IsRelevant))) scope'
                 let scope_with_samples = foldl addarg scope xs
               
                 -- check the tail in the scope with the new args
@@ -1628,7 +1638,7 @@ checkPri' scope (SmpLet xs (Sample n m1_in m2_in) tail) =
       return ttail
 
 
-checkPri' scope (PReduceCols f m) = do
+checkPri' scope (Located l (PReduceCols f m)) = do
     ε <- newVar
     δ <- newVar
     ηm <- newVar
@@ -1646,7 +1656,7 @@ checkPri' scope (PReduceCols f m) = do
     return (NoFun (DMVec LInf U r τ_out))
 
 
-checkPri' scope t = throwError (TermColorError PrivacyK t)
+checkPri' scope t = throwError (TermColorError PrivacyK (getLocated t))
 
 
 

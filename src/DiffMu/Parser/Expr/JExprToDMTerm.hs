@@ -11,6 +11,7 @@ import DiffMu.Core.TC
 import DiffMu.Parser.Expr.FromString
 import DiffMu.Typecheck.Preprocess.Common
 import qualified Data.Text as T
+import qualified Prelude as P
 
 import Debug.Trace
 
@@ -56,6 +57,18 @@ enterAssignment = insideAssignment .= True
 exitAssignment :: (MonadState ParseFull m) => m ()
 exitAssignment = insideAssignment .= False
 
+getCurrentLoc :: (MonadState ParseFull m) => m SourceLocExt
+getCurrentLoc = do
+  (file,line) <- use location
+  return $ ExactLoc (SourceLoc file (line,0) (line P.+ 1,0))
+
+
+pSingle_Loc :: JExpr -> ParseTC LocProcDMTerm
+pSingle_Loc e = do
+  loc <- getCurrentLoc
+  val <- pSingle e
+  return (Located loc val)
+
 pSingle :: JExpr -> ParseTC ProcDMTerm
 pSingle e = case e of
                  JEInteger n -> pure $ Sng n JTInt
@@ -63,14 +76,14 @@ pSingle e = case e of
                  JEFalse -> pure $ DMFalse
                  JEReal r -> pure $ Sng r JTReal
                  JESymbol s -> return  (Extra (ProcVarTerm ((UserProcVar s) ::- JTAny)))
-                 JETup elems -> (Tup <$> (mapM pSingle elems))
+                 JETup elems -> (Tup <$> (mapM pSingle_Loc elems))
                  JERef name refs -> pJRef name refs
                  JECall name args -> pJCall name args
                  
                  JEBlock stmts -> Extra <$> (Block <$> pList stmts)
                  JELam args body -> pJLam args body
                  JELamStar args body -> pJLamStar args body
-                 JEIfElse cond tr fs -> Extra <$> (ProcPhi <$> (pSingle cond) <*> (pSingle tr) <*> (mapM pSingle fs))
+                 JEIfElse cond tr fs -> Extra <$> (ProcPhi <$> (pSingle_Loc cond) <*> (pSingle_Loc tr) <*> (mapM pSingle_Loc fs))
                  JELoop ivar iter body -> pJLoop ivar iter body
                  JEAssignment aee amt -> pJLet aee amt
                  JETupAssignment aee amt -> pJTLet aee amt
@@ -89,14 +102,18 @@ pSingle e = case e of
                  JEImport -> parseError "import statement is not allowed here."
 
 
-pList :: [JExpr] -> ParseTC [ProcDMTerm]
+
+-- pList_Loc :: [JExpr] -> ParseTC [LocProcDMTerm]
+-- pList_Loc = undefined
+
+pList :: [JExpr] -> ParseTC [LocProcDMTerm]
 pList [] = pure []
 pList (JEBlock stmts : tail) = pList (stmts ++ tail) -- handle nested blocks
 pList (JEImport : tail) = pList tail -- ignore imports
 pList (s : tail) = do
     ps <- case s of
                JELineNumber file line -> location .= (file, line) >> return Nothing
-               _ -> Just <$> (pSingle s)
+               _ -> Just <$> (pSingle_Loc s)
                
     ptail <- pList tail
     case ps of
@@ -106,18 +123,18 @@ pList (s : tail) = do
 
 pJRef name refs = case refs of
                        [i1,JEColon] -> do
-                                       t1 <- pSingle i1
-                                       referee <- pSingle name
+                                       t1 <- pSingle_Loc i1
+                                       referee <- pSingle_Loc name
                                        return (Row referee t1)
                        [JEColon,_] -> parseError "Acessing columns of matrices as Vectors is not permitted."
                        [i1,i2] -> do
-                                  t1 <- pSingle i1
-                                  t2 <- pSingle i2
-                                  referee <- pSingle name
+                                  t1 <- pSingle_Loc i1
+                                  t2 <- pSingle_Loc i2
+                                  referee <- pSingle_Loc name
                                   return (Index referee t1 t2)
                        [i] -> do -- single indices are only allowed for vectors
-                                  t <- pSingle i
-                                  referee <- pSingle name
+                                  t <- pSingle_Loc i
+                                  referee <- pSingle_Loc name
                                   return (VIndex referee t)
                        _ -> parseError ("Only double indexing to matrix elements and single indexing to vector entries supported, but you gave " <> show refs)
 
@@ -138,28 +155,29 @@ pArgRel arg = case arg of
 
 pJLam args body = do
                    dargs <- mapM pArg args
-                   dbody <- pSingle body
+                   dbody <- pSingle_Loc body
                    return (Extra (ProcLam dargs dbody))
 
 pJLamStar args body = do
                        dargs <- mapM pArgRel args
-                       dbody <- pSingle body
+                       dbody <- pSingle_Loc body
                        return (Extra (ProcLamStar dargs dbody))
 
 
 
 pJLoop ivar iter body =
   let pIter start step end = do
-       dstart <- pSingle start
-       dstep <- pSingle step
-       dend <- pSingle end
-       let div = Op (IsBinary DMOpDiv)
-       let sub = Op (IsBinary DMOpSub)
-       let ceil = Op (IsUnary DMOpCeil)
-       return (ceil [div [sub [dend, sub [dstart, (Sng 1 JTInt)]], dstep]]) -- compute number of steps
+       dstart <- pSingle_Loc start
+       dstep <- pSingle_Loc step
+       dend <- pSingle_Loc end
+       myloc <- getCurrentLoc
+       let div  = Located myloc . Op (IsBinary DMOpDiv)
+       let sub  = Located myloc . Op (IsBinary DMOpSub)
+       let ceil = Located myloc . Op (IsUnary DMOpCeil)
+       return (ceil [div [sub [dend, sub [dstart, (Located myloc (Sng 1 JTInt))]], dstep]]) -- compute number of steps
   in case iter of
        JEIter start step end -> do
-                                 dbody <- pSingle body
+                                 dbody <- pSingle_Loc body
                                  nit <- pIter start step end
                                  i <- case ivar of
                                               JEHole -> newProcVar "hole"
@@ -175,7 +193,7 @@ pJLet assignee assignment = do
         True -> parseError ("Assignments within assignments are forbidden, but variable " <> show assignee <> " is assigned to.")
         False -> do
                    enterAssignment
-                   dasgmt <- pSingle assignment
+                   dasgmt <- pSingle_Loc assignment
                    exitAssignment
                    case assignee of
                         JEHole     -> (\p -> Extra (ProcSLetBase PureLet (p ::- JTAny) dasgmt)) <$> newProcVar "hole"
@@ -189,10 +207,10 @@ pJTLet :: [JExpr] -> JExpr -> ParseTC ProcDMTerm
 pJTLet assignees assignment = let
    pSample args = case args of
                     [n, m1, m2] -> do
-                                     tn <- pSingle n
-                                     tm1 <- pSingle m1
-                                     tm2 <- pSingle m2
-                                     return (Sample tn tm1 tm2)
+                                     tn <- pSingle_Loc n
+                                     tm1 <- pSingle_Loc m1
+                                     tm2 <- pSingle_Loc m2
+                                     return (Located (NotImplementedLoc "Sample location") (Sample tn tm1 tm2))
                     _ -> parseError ("Invalid number of arguments for sample, namely " <> (show (length args)) <> " instead of 2.")
                     
    -- make sure that all assignees are simply symbols
@@ -215,7 +233,7 @@ pJTLet assignees assignment = let
                                                return (Extra (ProcTLetBase SampleLet assignee_vars smp))
                                         _ -> do  -- parse assignment, tail; and build term
                                                enterAssignment
-                                               dasgmt <- pSingle assignment
+                                               dasgmt <- pSingle_Loc assignment
                                                exitAssignment
                                                return (Extra (ProcTLetBase PureLet assignee_vars dasgmt))
 
@@ -224,7 +242,7 @@ pJFLet name assignment =
   case name of
     JESymbol n -> do
                        enterFunction n
-                       dasgmt <- pSingle assignment
+                       dasgmt <- pSingle_Loc assignment
                        exitFunction
                        return (Extra (ProcFLet (UserProcVar n) dasgmt))
     _ -> parseError $ "Invalid function name expression " <> show name <> ", must be a symbol."
@@ -253,10 +271,10 @@ pJBBCall :: JExpr -> [JExpr] -> JuliaType -> [JExpr] -> ParseTC (ProcDMTerm)
 pJBBCall name args rt size = do
     let kind = case size of
                  [] -> pure $ (BBSimple rt)
-                 [JETup [s1, s2]] -> BBMatrix <$> pure rt <*> pSingle s1 <*> pSingle s2
-                 [s] -> BBVecLike <$> pure rt <*> pSingle s
+                 [JETup [s1, s2]] -> BBMatrix <$> pure rt <*> pSingle_Loc s1 <*> pSingle_Loc s2
+                 [s] -> BBVecLike <$> pure rt <*> pSingle_Loc s
                  a -> parseError $ "Invalid call of `unbox`, expected one argument for the return container's dimension but got " <> show a
-    (Extra <$> (ProcBBApply <$> pSingle name <*> mapM pSingle args <*> kind))
+    (Extra <$> (ProcBBApply <$> pSingle_Loc name <*> mapM pSingle_Loc args <*> kind))
 
     --      | ProcBBApply a [a] (BBKind ProceduralExtension))
 
@@ -264,7 +282,9 @@ pJBBCall name args rt size = do
 pJCall :: JExpr -> [JExpr] -> ParseTC ProcDMTerm
 -- if the term is a symbol, we check if it
 -- is a builtin/op, if so, we construct the appropriate DMTerm
-pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
+pJCall (JESymbol (Symbol sym)) args = do
+  myloc <- getCurrentLoc
+  case (sym,args) of
 
   -----------------
   -- binding builtins (use lambdas)
@@ -302,150 +322,150 @@ pJCall (JESymbol (Symbol sym)) args = case (sym,args) of
 
 -}
 
-  ------------
-  -- the non binding builtins
+    ------------
+    -- the non binding builtins
 
-  -- 4 arguments
-  (t@"gaussian_mechanism!", [a1, a2, a3, a4]) -> MutGauss <$> pSingle a1 <*> pSingle a2 <*> pSingle a3 <*> pSingle a4
-  (t@"gaussian_mechanism!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 4 arguments, but has been given " <> show (length args)
+    -- 4 arguments
+    (t@"gaussian_mechanism!", [a1, a2, a3, a4]) -> MutGauss <$> pSingle_Loc a1 <*> pSingle_Loc a2 <*> pSingle_Loc a3 <*> pSingle_Loc a4
+    (t@"gaussian_mechanism!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 4 arguments, but has been given " <> show (length args)
 
-  (t@"gaussian_mechanism", [a1, a2, a3, a4]) -> Gauss <$> pSingle a1 <*> pSingle a2 <*> pSingle a3 <*> pSingle a4
-  (t@"gaussian_mechanism", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 4 arguments, but has been given " <> show (length args)
+    (t@"gaussian_mechanism", [a1, a2, a3, a4]) -> Gauss <$> pSingle_Loc a1 <*> pSingle_Loc a2 <*> pSingle_Loc a3 <*> pSingle_Loc a4
+    (t@"gaussian_mechanism", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 4 arguments, but has been given " <> show (length args)
 
-  (t@"above_threshold", [a1, a2, a3, a4]) -> AboveThresh <$> pSingle a1 <*> pSingle a2 <*> pSingle a3 <*> pSingle a4
-  (t@"above_threshold", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 4 arguments, but has been given " <> show (length args)
+    (t@"above_threshold", [a1, a2, a3, a4]) -> AboveThresh <$> pSingle_Loc a1 <*> pSingle_Loc a2 <*> pSingle_Loc a3 <*> pSingle_Loc a4
+    (t@"above_threshold", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 4 arguments, but has been given " <> show (length args)
 
-  (t@"exponential", [a1, a2, a3, a4]) -> Exponential <$> pSingle a1 <*> pSingle a2 <*> pSingle a3 <*> pSingle a4
-  (t@"exponential", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 4 arguments, but has been given " <> show (length args)
+    (t@"exponential", [a1, a2, a3, a4]) -> Exponential <$> pSingle_Loc a1 <*> pSingle_Loc a2 <*> pSingle_Loc a3 <*> pSingle_Loc a4
+    (t@"exponential", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 4 arguments, but has been given " <> show (length args)
 
-  -- 3 arguments
-  (t@"index", [a1, a2, a3]) -> Index <$> pSingle a1 <*> pSingle a2 <*> pSingle a3
-  (t@"index", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 3 arguments, but has been given " <> show (length args)
+    -- 3 arguments
+    (t@"index", [a1, a2, a3]) -> Index <$> pSingle_Loc a1 <*> pSingle_Loc a2 <*> pSingle_Loc a3
+    (t@"index", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 3 arguments, but has been given " <> show (length args)
 
-  (t@"laplacian_mechanism!", [a1, a2, a3]) -> MutLaplace <$> pSingle a1 <*> pSingle a2 <*> pSingle a3
-  (t@"laplacian_mechanism!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 3 arguments, but has been given " <> show (length args)
+    (t@"laplacian_mechanism!", [a1, a2, a3]) -> MutLaplace <$> pSingle_Loc a1 <*> pSingle_Loc a2 <*> pSingle_Loc a3
+    (t@"laplacian_mechanism!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 3 arguments, but has been given " <> show (length args)
 
-  (t@"laplacian_mechanism", [a1, a2, a3]) -> Laplace <$> pSingle a1 <*> pSingle a2 <*> pSingle a3
-  (t@"laplacian_mechanism", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 3 arguments, but has been given " <> show (length args)
+    (t@"laplacian_mechanism", [a1, a2, a3]) -> Laplace <$> pSingle_Loc a1 <*> pSingle_Loc a2 <*> pSingle_Loc a3
+    (t@"laplacian_mechanism", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 3 arguments, but has been given " <> show (length args)
 
-  (t@"fold", [a1, a2, a3]) -> MFold <$> pSingle a1 <*> pSingle a2 <*> pSingle a3
-  (t@"fold", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 3 arguments, but has been given " <> show (length args)
+    (t@"fold", [a1, a2, a3]) -> MFold <$> pSingle_Loc a1 <*> pSingle_Loc a2 <*> pSingle_Loc a3
+    (t@"fold", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 3 arguments, but has been given " <> show (length args)
 
-  (t@"map_cols_binary", [a1, a2, a3]) -> MapCols2 <$> pSingle a1 <*> pSingle a2 <*> pSingle a3
-  (t@"map_cols_binary", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 3 arguments, but has been given " <> show (length args)
+    (t@"map_cols_binary", [a1, a2, a3]) -> MapCols2 <$> pSingle_Loc a1 <*> pSingle_Loc a2 <*> pSingle_Loc a3
+    (t@"map_cols_binary", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 3 arguments, but has been given " <> show (length args)
 
-  (t@"clip", [a1, a2, a3]) -> ClipN <$> pSingle a1 <*> pSingle a2 <*> pSingle a3
+    (t@"clip", [a1, a2, a3]) -> ClipN <$> pSingle_Loc a1 <*> pSingle_Loc a2 <*> pSingle_Loc a3
 
 
--- 2 arguments
+--   2 arguments
 
-  (t@"subtract_gradient!", [a1, a2]) -> SubGrad <$> pSingle a1 <*> pSingle a2
-  (t@"subtract_gradient!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
+    (t@"subtract_gradient!", [a1, a2]) -> SubGrad <$> pSingle_Loc a1 <*> pSingle_Loc a2
+    (t@"subtract_gradient!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
 
-  (t@"scale_gradient!", [a1, a2]) -> ScaleGrad <$> pSingle a1 <*> pSingle a2
-  (t@"scale_gradient!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
+    (t@"scale_gradient!", [a1, a2]) -> ScaleGrad <$> pSingle_Loc a1 <*> pSingle_Loc a2
+    (t@"scale_gradient!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
 
-  (t@"sum_gradients", [a1, a2]) -> SumGrads <$> pSingle a1 <*> pSingle a2
-  (t@"sum_gradients", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 argument, but has been given " <> show (length args)
+    (t@"sum_gradients", [a1, a2]) -> SumGrads <$> pSingle_Loc a1 <*> pSingle_Loc a2
+    (t@"sum_gradients", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 argument, but has been given " <> show (length args)
 
-  (t@"map", [a1, a2]) -> MMap <$> pSingle a1 <*> pSingle a2
-  (t@"map", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 argument, but has been given " <> show (length args)
+    (t@"map", [a1, a2]) -> MMap <$> pSingle_Loc a1 <*> pSingle_Loc a2
+    (t@"map", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 argument, but has been given " <> show (length args)
 
-  (t@"map_rows", [a1, a2]) -> MapRows <$> pSingle a1 <*> pSingle a2
-  (t@"map_rows", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 argument, but has been given " <> show (length args)
+    (t@"map_rows", [a1, a2]) -> MapRows <$> pSingle_Loc a1 <*> pSingle_Loc a2
+    (t@"map_rows", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 argument, but has been given " <> show (length args)
 
-  (t@"map_cols", [a1, a2]) -> MapCols <$> pSingle a1 <*> pSingle a2
-  (t@"map_cols", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 argument, but has been given " <> show (length args)
+    (t@"map_cols", [a1, a2]) -> MapCols <$> pSingle_Loc a1 <*> pSingle_Loc a2
+    (t@"map_cols", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 argument, but has been given " <> show (length args)
 
-  (t@"reduce_cols", [a1, a2]) -> PReduceCols <$> pSingle a1 <*> pSingle a2
-  (t@"reduce_cols", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 argument, but has been given " <> show (length args)
+    (t@"reduce_cols", [a1, a2]) -> PReduceCols <$> pSingle_Loc a1 <*> pSingle_Loc a2
+    (t@"reduce_cols", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 argument, but has been given " <> show (length args)
 
-  (t@"clip!", [a1,a2]) -> MutClipM <$> pClip a1 <*> pSingle a2
-  (t@"clip!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
-  (t@"clip", [a1,a2]) -> ClipM <$> pClip a1 <*> pSingle a2
-  (t@"clip", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
+    (t@"clip!", [a1,a2]) -> MutClipM <$> pClip a1 <*> pSingle_Loc a2
+    (t@"clip!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
+    (t@"clip", [a1,a2]) -> ClipM <$> pClip a1 <*> pSingle_Loc a2
+    (t@"clip", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
 
-  (t@"count", [a1, a2]) -> Count <$> pSingle a1 <*> pSingle a2
-  (t@"count", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 argument, but has been given " <> show (length args)
+    (t@"count", [a1, a2]) -> Count <$> pSingle_Loc a1 <*> pSingle_Loc a2
+    (t@"count", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 argument, but has been given " <> show (length args)
 
-  -- 1 argument
-  (t@"norm_convert!", [a1]) -> ConvertM <$> pSingle a1
-  (t@"norm_convert!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
+    -- 1 argument
+    (t@"norm_convert!", [a1]) -> ConvertM <$> pSingle_Loc a1
+    (t@"norm_convert!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
 
-  (t@"transpose", [a1]) -> Transpose <$> pSingle a1
-  (t@"transpose", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
+    (t@"transpose", [a1]) -> Transpose <$> pSingle_Loc a1
+    (t@"transpose", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
 
-  (t@"size", [a1]) -> Size <$> pSingle a1
-  (t@"size", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
+    (t@"size", [a1]) -> Size <$> pSingle_Loc a1
+    (t@"size", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
 
-  (t@"length", [a1]) -> Length <$> pSingle a1
-  (t@"length", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
+    (t@"length", [a1]) -> Length <$> pSingle_Loc a1
+    (t@"length", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
   
-  (t@"zero_gradient", [a]) -> ZeroGrad <$> pSingle a
-  (t@"zero_gradient", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
+    (t@"zero_gradient", [a]) -> ZeroGrad <$> pSingle_Loc a
+    (t@"zero_gradient", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
 
-  (t@"internal_expect_const", [a1]) -> InternalExpectConst <$> pSingle a1
-  (t@"internal_expect_const", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
+    (t@"internal_expect_const", [a1]) -> InternalExpectConst <$> pSingle_Loc a1
+    (t@"internal_expect_const", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
 
-  (t@"internal_mutate!", [a1]) -> InternalMutate <$> pSingle a1
-  (t@"internal_mutate!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
+    (t@"internal_mutate!", [a1]) -> InternalMutate <$> pSingle_Loc a1
+    (t@"internal_mutate!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
 
-  (t@"clone", [a]) -> Clone <$> pSingle a
-  (t@"clone", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
+    (t@"clone", [a]) -> Clone <$> pSingle_Loc a
+    (t@"clone", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
 
-  (t@"row_to_vec", [a]) -> MakeVec <$> pSingle a
-  (t@"row_to_vec", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
+    (t@"row_to_vec", [a]) -> MakeVec <$> pSingle_Loc a
+    (t@"row_to_vec", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
 
-  (t@"vec_to_row", [a]) -> MakeRow <$> pSingle a
-  (t@"vec_to_row", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
+    (t@"vec_to_row", [a]) -> MakeRow <$> pSingle_Loc a
+    (t@"vec_to_row", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
 
-  (t@"disc", [a1]) -> Disc <$> pSingle a1
-  (t@"disc", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
+    (t@"disc", [a1]) -> Disc <$> pSingle_Loc a1
+    (t@"disc", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
 
-  ----------------------
-  -- the ops
-  -- the + and * operators allow lists as arguments
-  (t@"+", [])   -> parseError "The builtin operation (+) requires at least 2 arguments, but has been given none."
-  (t@"+", [a])  -> parseError "The builtin operation (+) requires at least 2 arguments, but has only been given 1."
-  (t@"+", args) -> foldl1 (\a b -> Op (IsBinary DMOpAdd) [a,b]) <$> (mapM pSingle args)
+    ----------------------
+    -- the ops
+    -- the + and * operators allow lists as arguments
+    (t@"+", [])   -> parseError "The builtin operation (+) requires at least 2 arguments, but has been given none."
+    (t@"+", [a])  -> parseError "The builtin operation (+) requires at least 2 arguments, but has only been given 1."
+    (t@"+", args) -> getLocated <$> foldl1 (\a b -> Located myloc (Op (IsBinary DMOpAdd) [a,b])) <$> (mapM pSingle_Loc args)
 
 
-  (t@"*", [])   -> parseError "The builtin operation (*) requires at least 2 arguments, but has been given none."
-  (t@"*", [a])  -> parseError "The builtin operation (*) requires at least 2 arguments, but has only been given 1."
-  (t@"*", args) -> foldl1 (\a b -> Op (IsBinary DMOpMul) [a,b]) <$> (mapM pSingle args)
+    (t@"*", [])   -> parseError "The builtin operation (*) requires at least 2 arguments, but has been given none."
+    (t@"*", [a])  -> parseError "The builtin operation (*) requires at least 2 arguments, but has only been given 1."
+    (t@"*", args) -> getLocated <$> foldl1 (\a b -> Located myloc (Op (IsBinary DMOpMul) [a,b])) <$> (mapM pSingle_Loc args)
 
-  -- all unary operations.
-  (t@"ceil", [a])  -> (\a -> Op (IsUnary DMOpCeil) [a]) <$> pSingle a
-  (t@"ceil", args) -> parseError $ "The builtin operation (ceil) requires exactly 1 argument, but it has been given " <> show (length args)
+    -- all unary operations.
+    (t@"ceil", [a])  -> (\a -> Op (IsUnary DMOpCeil) [a]) <$> pSingle_Loc a
+    (t@"ceil", args) -> parseError $ "The builtin operation (ceil) requires exactly 1 argument, but it has been given " <> show (length args)
 
-  -- all binary operations.
-  (t@"/", [a,b]) -> (\a b -> Op (IsBinary DMOpDiv) [a,b]) <$> pSingle a <*> pSingle b
-  (t@"/", args)  -> parseError $ "The builtin operation (/) requires exactly 2 arguments, but it has been given " <> show (length args)
+    -- all binary operations.
+    (t@"/", [a,b]) -> (\a b -> Op (IsBinary DMOpDiv) [a,b]) <$> pSingle_Loc a <*> pSingle_Loc b
+    (t@"/", args)  -> parseError $ "The builtin operation (/) requires exactly 2 arguments, but it has been given " <> show (length args)
 
-  (t@"-", [a,b]) -> (\a b -> Op (IsBinary DMOpSub) [a,b]) <$> pSingle a <*> pSingle b
-  (t@"-", args)  -> parseError $ "The builtin operation (-) requires exactly 2 arguments, but it has been given " <> show (length args)
+    (t@"-", [a,b]) -> (\a b -> Op (IsBinary DMOpSub) [a,b]) <$> pSingle_Loc a <*> pSingle_Loc b
+    (t@"-", args)  -> parseError $ "The builtin operation (-) requires exactly 2 arguments, but it has been given " <> show (length args)
 
-  (t@"%", [a,b]) -> (\a b -> Op (IsBinary DMOpMod) [a,b]) <$> pSingle a <*> pSingle b
-  (t@"%", args)  -> parseError $ "The builtin operation (%) requires exactly 2 arguments, but it has been given " <> show (length args)
+    (t@"%", [a,b]) -> (\a b -> Op (IsBinary DMOpMod) [a,b]) <$> pSingle_Loc a <*> pSingle_Loc b
+    (t@"%", args)  -> parseError $ "The builtin operation (%) requires exactly 2 arguments, but it has been given " <> show (length args)
 
-  (t@"==", [a,b]) -> (\a b -> Op (IsBinary DMOpEq) [a,b]) <$> pSingle a <*> pSingle b
-  (t@"==", args)  -> parseError $ "The builtin operation (==) requires exactly 2 arguments, but it has been given " <> show (length args)
+    (t@"==", [a,b]) -> (\a b -> Op (IsBinary DMOpEq) [a,b]) <$> pSingle_Loc a <*> pSingle_Loc b
+    (t@"==", args)  -> parseError $ "The builtin operation (==) requires exactly 2 arguments, but it has been given " <> show (length args)
 
-  ---------------------
-  -- other symbols
-  --
-  -- all other symbols turn into calls on TeVars
-  (sym, args) -> do
-      inside <- use outerFuncNames
-      case ((Symbol sym) `elem` inside) of
-         False -> (Apply (Extra (ProcVarTerm ((UserProcVar (Symbol sym)) ::- JTAny))) <$> mapM pSingle args)
-         True -> parseError $ "Recursive call of " <> show sym <> " is not permitted."
+    ---------------------
+    -- other symbols
+    --
+    -- all other symbols turn into calls on TeVars
+    (sym, args) -> do
+        inside <- use outerFuncNames
+        case ((Symbol sym) `elem` inside) of
+           False -> (Apply (Located myloc (Extra (ProcVarTerm ((UserProcVar (Symbol sym)) ::- JTAny)))) <$> mapM pSingle_Loc args)
+           True -> parseError $ "Recursive call of " <> show sym <> " is not permitted."
 
 -- all other terms turn into calls
-pJCall term args = Apply <$> pSingle term <*> mapM pSingle args
+pJCall term args = Apply <$> pSingle_Loc term <*> mapM pSingle_Loc args
 
 --(arseDMTermFromJExpr :: JExpr -> Either DMException ProcDMTerm
---parseDMTermFromJExpr expr = liftLightTC (ParseFull  (\_ -> ()) (pSingle expr)
+--parseDMTermFromJExpr expr = liftLightTC (ParseFull  (\_ -> ()) (pSingle_Loc expr)
 
-parseDMTermFromJExpr :: JExpr -> TC ProcDMTerm
-parseDMTermFromJExpr expr = liftNewLightTC (pSingle expr)
+parseDMTermFromJExpr :: JExpr -> TC LocProcDMTerm
+parseDMTermFromJExpr expr = liftNewLightTC (pSingle_Loc expr)
