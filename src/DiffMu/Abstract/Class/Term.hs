@@ -77,6 +77,9 @@ instance (FreeVars v a, FreeVars v b) => FreeVars v (a , b) where
 instance (FreeVars v a, FreeVars v b, FreeVars v c) => FreeVars v (a , b, c) where
   freeVars (a, b, c) = freeVars a <> freeVars b <> freeVars c
 
+instance (FreeVars v a, FreeVars v b, FreeVars v c, FreeVars v d, FreeVars v e) => FreeVars v (a , b, c, d, e) where
+  freeVars (a, b, c, d, e) = freeVars a <> freeVars b <> freeVars c <> freeVars d <> freeVars e
+
 instance (FreeVars v a) => FreeVars v (Maybe a) where
   freeVars (Just a) = freeVars a
   freeVars (Nothing) = mempty

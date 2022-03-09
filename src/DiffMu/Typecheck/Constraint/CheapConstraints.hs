@@ -476,3 +476,32 @@ instance Solve MonadDMTC IsVecLike VecKind where
         Gradient -> dischargeConstraint name
         Matrix r -> unify r oneId >> dischargeConstraint name
 
+
+--------------------------------------------------
+-- check if a type is equal to another, set a sensitivity accordingly
+
+
+newtype SetIfTypesEqual a = SetIfTypesEqual a deriving Show
+
+instance FixedVars TVarOf (SetIfTypesEqual (Sensitivity, DMMain, DMMain, Sensitivity, Sensitivity)) where
+  fixedVars (SetIfTypesEqual _) = []
+
+instance TCConstraint SetIfTypesEqual where
+  constr = SetIfTypesEqual
+  runConstr (SetIfTypesEqual c) = c
+
+instance Solve MonadDMTC SetIfTypesEqual (Sensitivity, DMMain, DMMain, Sensitivity, Sensitivity) where
+    solve_ Dict _ name (SetIfTypesEqual (target, t1, t2, strue, sfalse)) = let
+       f1 :: [SomeK TVarOf] = freeVars t1
+       f2 :: [SomeK TVarOf] = freeVars t2
+     in
+       case (and [null f1, null f2]) of -- no free variables in any of the types
+            True -> case t1 == t2 of
+                         True -> do
+                           unify target strue
+                           dischargeConstraint name
+                         False -> do
+                           unify target sfalse
+                           dischargeConstraint name
+            False -> pure ()
+

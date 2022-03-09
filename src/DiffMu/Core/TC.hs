@@ -52,6 +52,9 @@ inftyS = constCoeff Infty
 inftyP :: Privacy
 inftyP = (constCoeff Infty, constCoeff Infty)
 
+instance (Substitute v x a, Substitute v x b, Substitute v x c, Substitute v x d, Substitute v x e) => Substitute v x (a, b, c, d, e) where
+  substitute σs (a, b, c, d, e) = (,,,,) <$> substitute σs a <*> substitute σs b <*> substitute σs c <*> substitute σs d <*> substitute σs e
+
 instance (Substitute v x a, Substitute v x b, Substitute v x c) => Substitute v x (a, b, c) where
   substitute σs (a, b, c) = (,,) <$> substitute σs a <*> substitute σs b <*> substitute σs c
 
@@ -1005,6 +1008,9 @@ instance (Normalize t a, Normalize t b, Normalize t c) => Normalize t (a, b, c) 
 
 instance (Normalize t a, Normalize t b, Normalize t c, Normalize t d) => Normalize t (a, b, c, d) where
   normalize nt (a,b,c,d) = (,,,) <$> normalize nt a <*> normalize nt b <*> normalize nt c <*> normalize nt d
+
+instance (Normalize t a, Normalize t b, Normalize t c, Normalize t d, Normalize t e) => Normalize t (a, b, c, d, e) where
+  normalize nt (a,b,c,d,e) = (,,,,) <$> normalize nt a <*> normalize nt b <*> normalize nt c <*> normalize nt d <*> normalize nt e
 -- instance Monad t => Normalize t DMNumType where
 --   normalize = pure
 
