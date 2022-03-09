@@ -230,7 +230,7 @@ instance Solve MonadDMTC IsReorderedTuple (([Int], DMTypeOf MainKind) :=: DMType
           resultTuple -> unify ρ (NoFun (DMTup resultTuple))
         dischargeConstraint name
         pure ()
-      f (τs) = throwError (TypeMismatchError $ "Expected the type " <> show τ <> " to be a tuple type.")
+      f (τs) = throwUnlocatedError (TypeMismatchError $ "Expected the type " <> show τ <> " to be a tuple type.")
 
 -}
 
@@ -261,7 +261,7 @@ instance Solve MonadDMTC IsTProject ((Int, DMTypeOf MainKind) :=: DMTypeOf MainK
             dischargeConstraint name
             pure ()
           Nothing -> internalError $ "tuple index out of range\nwhere index: " <> show i <> ",tuple type: " <> show ρs
-      f (τs) = throwError (TypeMismatchError $ "Expected the type " <> show ρs <> " to be a tuple type.")
+      f (τs) = throwUnlocatedError (TypeMismatchError $ "Expected the type " <> show ρs <> " to be a tuple type.")
 
 
 --------------------------------------------------
@@ -287,7 +287,7 @@ instance Solve MonadDMTC IsBlackBox (DMMain, [DMMain]) where
                         in do
                             mapM setArg (zip jts args)
                             dischargeConstraint @MonadDMTC name
-                False -> throwError (NoChoiceFoundError "Wrong number of arguments for black box call.")
+                False -> throwUnlocatedError (NoChoiceFoundError "Wrong number of arguments for black box call.")
         _ -> impossible $ "Box Apply used with non-box!"
 
 

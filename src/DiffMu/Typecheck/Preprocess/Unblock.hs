@@ -16,7 +16,7 @@ import Debug.Trace
 
 type BlockTC = LightTC Location_PrePro_Demutation ()
 
-unblockingError = throwError . UnblockingError
+unblockingError = throwUnlocatedError . UnblockingError
 
 unblock :: LocDemutDMTerm -> BlockTC LocDMTerm
 unblock = unblockValue

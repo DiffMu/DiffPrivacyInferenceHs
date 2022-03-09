@@ -246,7 +246,7 @@ elaborateMut scname (Located l (Extra (ProcSLetBase ltype (x ::- τ) term))) = d
   case newTermType of
     Pure -> pure ()
     Mutating _ -> pure ()
-    PureBlackBox     -> throwError (DemutationError $ "Found an assignment " <> show x <> " = " <> showPretty term <> " where RHS is a black box. This is not allowed.")
+    PureBlackBox     -> throwUnlocatedError (DemutationError $ "Found an assignment " <> show x <> " = " <> showPretty term <> " where RHS is a black box. This is not allowed.")
 
   moveType' <- (moveTypeAsTerm moveType)
 
@@ -306,8 +306,8 @@ elaborateMut scname fullterm@(Located l (Extra (ProcTLetBase ltype vars term))) 
   --
   case newTermType of
     Pure -> pure ()
-    Mutating ims -> throwError (DemutationError $ "Found a tuple assignment " <> show vars <> " = " <> showPretty term <> " where RHS is a mutating function. This is not allowed.")
-    PureBlackBox -> throwError (DemutationError $ "Found an assignment " <> show vars <> " = " <> showPretty term <> " where RHS is a black box. This is not allowed.")
+    Mutating ims -> throwUnlocatedError (DemutationError $ "Found a tuple assignment " <> show vars <> " = " <> showPretty term <> " where RHS is a mutating function. This is not allowed.")
+    PureBlackBox -> throwUnlocatedError (DemutationError $ "Found an assignment " <> show vars <> " = " <> showPretty term <> " where RHS is a black box. This is not allowed.")
   --
   -- we set the immuttype of every element on the LHS to Pure
   --
@@ -403,7 +403,7 @@ elaborateMut scname term@(Located l (Apply f args)) = do
         -- make sure that there are as many arguments as the function requires
         case length muts == length args of
           True -> pure ()
-          False -> throwError (DemutationError $ "Trying to call the function '" <> showPretty f <> "' with a wrong number of arguments.")
+          False -> throwUnlocatedError (DemutationError $ "Trying to call the function '" <> showPretty f <> "' with a wrong number of arguments.")
 
         let mutargs = zip muts args
         (newArgs , muts) <- elaborateMutList (showPretty f) scname mutargs
@@ -528,7 +528,7 @@ elaborateMut scname (Located l (Extra (ProcPreLoop iters iterVar body))) = do --
   let newMemVars = (snd <$> newMems) >>= getAllMemVarsOfMemState
   case newMemVars `intersect` oldMemVars of
     [] -> pure ()
-    xs -> throwError $ DemutationMovedVariableAccessError $ "Found a loop body which moves variables around.\n"
+    xs -> throwUnlocatedError $ DemutationMovedVariableAccessError $ "Found a loop body which moves variables around.\n"
                           <> "The following variables are changed and contain memory locations from before: " <> show xs <> "\n"
                           <> "Since this means that we cannot track what actually happens in the case of an unknown number of iterations,\n"
                           <> "this is not allowed.\n"
@@ -827,14 +827,14 @@ elaborateMut scname (Located l (MFold t1 t2 t3))          = elaborateNonMut3 scn
 
 
 -- the unsupported terms
-elaborateMut scname term@(Located l (Choice t1))        = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
-elaborateMut scname term@(Located l (Loop t1 t2 t3 t4)) = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
-elaborateMut scname term@(Located l (TProject t1 t2))   = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
-elaborateMut scname term@(Located l (Arg x a b))        = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
-elaborateMut scname term@(Located l (Ret t1))           = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
+elaborateMut scname term@(Located l (Choice t1))        = throwUnlocatedError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
+elaborateMut scname term@(Located l (Loop t1 t2 t3 t4)) = throwUnlocatedError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
+elaborateMut scname term@(Located l (TProject t1 t2))   = throwUnlocatedError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
+elaborateMut scname term@(Located l (Arg x a b))        = throwUnlocatedError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
+elaborateMut scname term@(Located l (Ret t1))           = throwUnlocatedError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
 
 
-elaborateMut scname term@_    = throwError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
+elaborateMut scname term@_    = throwUnlocatedError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
 
 
 ------------------------------------------------------
@@ -1017,14 +1017,14 @@ elaborateLambda scname args body = do
 
     let toTeVar (NotSplit, (t:ts)) = pure (Just t)
         toTeVar (NotSplit, [])     = pure Nothing
-        toTeVar (Split as, (t:ts)) = throwError $ DemutationSplitMutatingArgumentError $ "While demutating a function definition, encountered the case that an argument memory location was split. This is not allowed"
+        toTeVar (Split as, (t:ts)) = throwUnlocatedError $ DemutationSplitMutatingArgumentError $ "While demutating a function definition, encountered the case that an argument memory location was split. This is not allowed"
         toTeVar (Split as, []) = do
           -- if a var was split, we check recursively if
           -- its parts have been mutated.
           let f a = do
                       partTerms <- toTeVar =<< getMemVarMutationStatus a
                       case partTerms of
-                        Just _ -> throwError $ DemutationSplitMutatingArgumentError "Part of a split function argument was mutated. This is currently not allowed"
+                        Just _ -> throwUnlocatedError $ DemutationSplitMutatingArgumentError "Part of a split function argument was mutated. This is currently not allowed"
                         Nothing  -> pure ()
 
           mapM f as
@@ -1171,7 +1171,7 @@ elaborateMutList f scname mutargs = do
             return ((Located l (Var (x' :- a))), (Located l (SingleMove x)), Just x)
 
           -- if argument is not a var, throw error
-          _ -> throwError (DemutationError $ "When calling the mutating function " <> f <> " found the term " <> showPretty arg <> " as argument in a mutable-argument-position. Only variables are allowed here.")
+          _ -> throwUnlocatedError (DemutationError $ "When calling the mutating function " <> f <> " found the term " <> showPretty arg <> " as argument in a mutable-argument-position. Only variables are allowed here.")
 
       checkArg (NotMutated , arg) = do
         -- if the argument is given in an immutable position,
@@ -1228,7 +1228,7 @@ elaborateMutList f scname mutargs = do
   -- make sure that such variables do not occur
   case wrongVarCounts of
     [] -> return ()
-    xs -> throwError $ DemutationNonAliasedMutatingArgumentError
+    xs -> throwUnlocatedError $ DemutationNonAliasedMutatingArgumentError
                      $ "The function '" <> f <> "' is called with the following vars in mutating positions:\n\n"
                         <> showvarcounts mutvarcounts <> "\n"
                         <> "But it is not allowed to have the same variable occur multiple times "

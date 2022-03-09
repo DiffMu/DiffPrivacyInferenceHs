@@ -380,8 +380,8 @@ class (MonadImpossible (t), MonadWatch (t), MonadLog t,
        MonadTerm DMTypeOf (t),
        MonadTerm SensitivityOf (t),
        MonadState (Full) (t),
-       MonadWriter DMLogMessages (t),
-       MonadError DMException (t),
+       MonadWriter (DMMessages t) (t),
+       MonadError LocatedDMException (t),
        MonadInternalError t,
        MonadUnificationError t,
        -- MonadConstraint' Symbol (TC) (t),
@@ -394,6 +394,7 @@ class (MonadImpossible (t), MonadWatch (t), MonadLog t,
       ) => MonadDMTC (t :: * -> *) where
 
 data Tag = DM
+
 
 data AnnNameCtx ks = AnnNameCtx
   {
@@ -593,8 +594,8 @@ data Full = Full
   }
   deriving (Generic)
 
-newtype TCT m a = TCT {runTCT :: ((StateT Full (ExceptT DMException (WriterT DMLogMessages (m)))) a)}
-  deriving (Functor, Applicative, Monad, MonadState Full, MonadError DMException, MonadWriter DMLogMessages)
+newtype TCT m a = TCT {runTCT :: ((StateT Full (ExceptT LocatedDMException (WriterT (DMMessages (TCT m)) (m)))) a)}
+  deriving (Functor, Applicative, Monad, MonadState Full, MonadError LocatedDMException, MonadWriter (DMMessages (TCT m)))
 
 class LiftTC t where
   liftTC :: TC a -> t a
@@ -640,7 +641,7 @@ logWithSeverity sev text = do
   -- in order to get consistent looking output (every line has a header)
   let messages = DMLogMessage sev loc <$> (reverse $ lines text)
   -- traceM text -- force logging even if the computation des not terminate
-  tell (DMLogMessages messages)
+  tell (DMMessages messages [])
   -- tcstate.logger.loggerMessages %= (messages <>)
 
 dmlog :: MonadDMTC t => String -> t ()
@@ -651,7 +652,7 @@ dmlog text = do
   -- in order to get consistent looking output (every line has a header)
   let messages = DMLogMessage sev loc <$> (reverse $ lines text)
   -- traceM text -- force logging even if the computation des not terminate
-  tell (DMLogMessages messages)
+  tell (DMMessages messages [])
   -- tcstate.logger.loggerMessages %= ( <>)
 
 instance Monad m => MonadLog (TCT m) where
@@ -830,7 +831,7 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
   failConstraint name = do
     (AnnNameCtx n cs) <- use (meta.constraints)
     let c = getValue name cs
-    throwError (UnsatisfiableConstraint (show c))
+    throwUnlocatedError (UnsatisfiableConstraint (show c))
 
   updateConstraint name c = do
     meta.constraints %= (\(AnnNameCtx n cs) -> AnnNameCtx n (setValue name (Watched (NormalForMode []) c) cs))
@@ -951,10 +952,10 @@ infimum x y = do
 
 
 instance Monad m => MonadInternalError (TCT m) where
-  internalError = throwError . InternalError
+  internalError = throwUnlocatedError . InternalError
 
 instance Monad m => MonadUnificationError (TCT m) where
-  unificationError x y = throwError $ UnificationError x y
+  unificationError x y = throwUnlocatedError $ UnificationError x y
 
 
 -- Normalizes all contexts in our typechecking monad, i.e., applies all available substitutions.
@@ -974,14 +975,28 @@ instance Monad m => MonadDMTC (TCT m) where
 -- instance MonadDMTC t => Normalize (t) (Solvable' TC) where
 --   normalize solv = liftTC (normalize solv)
 
+newtype WrapMessageId a = WrapMessageId a
+
+instance Show a => Show (WrapMessageId a) where show (WrapMessageId a) = show a
+
+instance (Monad m, Normalize TC a) => Normalize (TCT m) (WrapMessageId a) where
+  normalize e x = liftTC (normalize e x)
+
 instance Monad m => LiftTC (TCT m) where
   liftTC (TCT v) = -- TCT (v >>= (lift . lift . return))
-    let x = StateT (\s -> ExceptT (WriterT (return $ runWriter $ runExceptT $ runStateT v s)))
+    let g :: DMPersistentMessage (TCT Identity) -> DMPersistentMessage (TCT m)
+        g (DMPersistentMessage a) = DMPersistentMessage (WrapMessageId a)
+
+        f :: DMMessages (TCT Identity) -> DMMessages (TCT m)
+        f (DMMessages logs errors) = DMMessages logs (fmap g errors) 
+
+        x = StateT (\s -> ExceptT (WriterT (return (second f $ runWriter $ runExceptT $ runStateT v s))))
+
     in TCT x
 
 
 instance Monad m => MonadImpossible (TCT m) where
-  impossible err = throwError (ImpossibleError err)
+  impossible err = throwUnlocatedError (ImpossibleError err)
 
 instance (MonadDMTC t) => Normalize t (DMTypeOf k) where
   normalize nt n =
@@ -1090,7 +1105,7 @@ instance (Monad t, Unify t a, Unify t b) => Unify t (a,b) where
 instance (MonadDMTC t, Show a, Unify t a) => Unify t (Maybe a) where
   unify_ Nothing Nothing = pure Nothing
   unify_ (Just a) (Just b) = Just <$> unify_ a b
-  unify_ t s = throwError (UnificationError t s)
+  unify_ t s = throwUnlocatedError (UnificationError t s)
 
 
 
@@ -1152,8 +1167,8 @@ normalizeAnn nt (a :∧: b) = do
       x' <- newVar
       addSub (x := NoFun x')
       makeNoFunInf x' y
-    (NoFun x, Fun y) -> throwError (UnificationError (NoFun x) (Fun y))
-    (Fun x, NoFun y) -> throwError (UnificationError (Fun x) (NoFun y))
+    (NoFun x, Fun y) -> throwUnlocatedError (UnificationError (NoFun x) (Fun y))
+    (Fun x, NoFun y) -> throwUnlocatedError (UnificationError (Fun x) (NoFun y))
     (_ , _) -> return (a' :∧: b')
 normalizeAnn nt (xs :->: y) = do
   let normalizeInside (x :@ annot) = (:@) <$> normalizeAnn nt x <*> pure (normalizeSensSpecial nt annot)

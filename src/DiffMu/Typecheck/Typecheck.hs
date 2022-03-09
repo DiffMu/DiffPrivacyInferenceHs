@@ -128,7 +128,7 @@ checkSen' scope (Located l (Arg x jτ i)) = do
 checkSen' scope (Located l (Var (x :- dτ))) =  -- get the term that corresponds to this variable from the scope dict
    let mτ = getValue x scope
    in case mτ of
-     Nothing -> logForce ("[Var-Sens] Scope is:\n" <> show (getAllKeys scope)) >> throwError (VariableNotInScope x)
+     Nothing -> logForce ("[Var-Sens] Scope is:\n" <> show (getAllKeys scope)) >> throwUnlocatedError (VariableNotInScope x)
      Just jτ -> do
                      logForce ("[Var-Sens] Scope is:\n" <> show (getAllKeys scope))
                      τ <- jτ -- extract the type of x
@@ -222,7 +222,7 @@ checkSen' scope (Located l (SLet (x :- dτ) term body)) = do
    -- TODO
    case dτ of
       JTAny -> return dτ
-      dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
+      dτ -> throwUnlocatedError (ImpossibleError "Type annotations on variables not yet supported.")
 
    return result
 
@@ -459,7 +459,7 @@ checkSen' scope (Located l (Phi cond ifbr elsebr)) = do
   τ_sum <- msumS [ifd, elsed, condd]
   (τif, τelse, τcond) <- case τ_sum of
                        [τ1 , τ2 , τ3]  -> return (τ1, τ2, τ3)
-                       _ -> throwError (ImpossibleError "Sum cannot return empty.")
+                       _ -> throwUnlocatedError (ImpossibleError "Sum cannot return empty.")
 
   -- the branches need to return types that are indistinguishable by julia dispatch,
   -- otherwise we cannot resolve dispatch because we don't know which branch is going
@@ -1007,7 +1007,7 @@ checkSen' scope term@(Located l (SumGrads g1 g2)) = do
 
 
 checkSen' scope term@(Located l (SBind x a b)) = do
-  throwError (TypeMismatchError $ "Found the term\n" <> showPretty term <> "\nwhich is a privacy term because of the bind in a place where a sensitivity term was expected.")
+  throwUnlocatedError (TypeMismatchError $ "Found the term\n" <> showPretty term <> "\nwhich is a privacy term because of the bind in a place where a sensitivity term was expected.")
 
 
 checkSen' scope term@(Located l (InternalExpectConst a)) = do
@@ -1071,7 +1071,7 @@ checkSen' scope term@(Located l (MakeRow m)) = do
 
 
 -- Everything else is currently not supported.
-checkSen' scope t = throwError (TermColorError SensitivityK (getLocated t))
+checkSen' scope t = throwUnlocatedError (TermColorError SensitivityK (getLocated t))
 
 --------------------------------------------------------------------------------
 -- Privacy terms
@@ -1131,7 +1131,7 @@ checkPri' scope (Located l (SLet (x :- dτ) term body)) = do
   log $ "checking (transparent) privacy SLet: " <> show (x :- dτ) <> " = " <> show term <> " in " <> show body
   case dτ of
     JTAny -> return dτ
-    dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
+    dτ -> throwUnlocatedError (ImpossibleError "Type annotations on variables not yet supported.")
 
   return result
 
@@ -1155,7 +1155,7 @@ checkPri' scope (Located l (SBind (x :- dτ) term body)) = do
 
   case dτ of
     JTAny -> return dτ
-    dτ -> throwError (ImpossibleError "Type annotations on variables not yet supported.")
+    dτ -> throwUnlocatedError (ImpossibleError "Type annotations on variables not yet supported.")
 
   -- sum contexts
   ((τbody, τx), τterm) <- msumTup (mbody, dterm)
@@ -1205,7 +1205,7 @@ checkPri' original_scope curterm@(Located l (TLet xs term body)) = do
   log $ "checking (transparent) privacy SLet: " <> show xs <> " = " <> show term <> " in " <> show body
   case and [True | (_ :- JTAny) <- xs] of
       True  -> return ()
-      False -> throwError (ImpossibleError $ "Type annotations on variables not yet supported\n when checking " <> showPretty curterm)
+      False -> throwUnlocatedError (ImpossibleError $ "Type annotations on variables not yet supported\n when checking " <> showPretty curterm)
 
   return result
 checkPri' original_scope curterm@(Located l (TBind xs term body)) = do
@@ -1656,7 +1656,7 @@ checkPri' scope (Located l (PReduceCols f m)) = do
     return (NoFun (DMVec LInf U r τ_out))
 
 
-checkPri' scope t = throwError (TermColorError PrivacyK (getLocated t))
+checkPri' scope t = throwUnlocatedError (TermColorError PrivacyK (getLocated t))
 
 
 
@@ -1677,7 +1677,7 @@ checkBBKind scope a = let
     JTInt  -> return $ NoFun $ Numeric $ Num DMInt NonConst
     JTBool -> return $ NoFun $ DMBool
     JTReal -> do v <- getFloat; return $ NoFun $ Numeric $ v
-    _      -> throwError $ TypeMismatchError $ "The type " <> show jt <> " is not allowed as return type of black boxes.\n"
+    _      -> throwUnlocatedError $ TypeMismatchError $ "The type " <> show jt <> " is not allowed as return type of black boxes.\n"
                                               <> "You can only have annotations of the following form:\n"
                                               <> "[redacted]"
   BBVecLike jt pdt -> do
@@ -1696,7 +1696,7 @@ checkBBKind scope a = let
       JTVector JTReal -> do n <- newVar ; r <- getFloat; return $ NoFun $ DMVec n U pdt_val (NoFun $ Numeric r)
       JTModel -> return $ NoFun $ DMModel pdt_val
       JTGrads -> do n <- newVar; r <- getFloat;  return $ NoFun $ DMGrads n U pdt_val (NoFun $ Numeric $ r)
-      _ -> throwError $ TypeMismatchError $ "The type " <> show jt <> " is not allowed as return type of black boxes.\n"
+      _ -> throwUnlocatedError $ TypeMismatchError $ "The type " <> show jt <> " is not allowed as return type of black boxes.\n"
                                               <> "You can only have annotations of the following form:\n"
                                               <> "[redacted]"
 
@@ -1719,7 +1719,7 @@ checkBBKind scope a = let
       JTMatrix JTBool -> do n <- newVar ; return $ NoFun $ DMMat n U pdt1_val pdt2_val (NoFun $ DMBool)
       JTMatrix JTInt -> do n <- newVar ; return $ NoFun $ DMMat n U pdt1_val pdt2_val (NoFun $ Numeric $ Num DMInt NonConst)
       JTMatrix JTReal -> do n <- newVar ; r <- getFloat; return $ NoFun $ DMMat n U pdt1_val pdt2_val (NoFun $ Numeric $ r)
-      _ -> throwError $ TypeMismatchError $ "The type " <> show jt <> " is not allowed as return type of black boxes.\n"
+      _ -> throwUnlocatedError $ TypeMismatchError $ "The type " <> show jt <> " is not allowed as return type of black boxes.\n"
                                               <> "You can only have annotations of the following form:\n"
                                               <> "[redacted]"
 

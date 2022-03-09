@@ -88,11 +88,11 @@ checkTopLevelStatement (Extra (ProcBBLet v body)) = do
   (TopLevelInformation bbvars glvars) <- use tlinfo
 
   case v `elem` bbvars of
-    True -> throwError (BlackBoxError $ "Found multiple black boxes definitions for the name " <> show v <> ". Black boxes are only allowed to have a single implementation.")
+    True -> throwUnlocatedError (BlackBoxError $ "Found multiple black boxes definitions for the name " <> show v <> ". Black boxes are only allowed to have a single implementation.")
     False -> pure ()
 
   case v `elem` glvars of
-    True -> throwError (BlackBoxError $ "Found a global definition for the name " <> show v <> ". This is not allowed since there already is a black box with that name.")
+    True -> throwUnlocatedError (BlackBoxError $ "Found a global definition for the name " <> show v <> ". This is not allowed since there already is a black box with that name.")
     False -> pure ()
 
   tlinfo .= TopLevelInformation (v : bbvars) (v : glvars)
@@ -106,7 +106,7 @@ checkTopLevelStatement (Extra (ProcSLetBase _ (v ::- vt) body)) = do
   (TopLevelInformation bbvars glvars) <- use tlinfo
 
   case v `elem` (bbvars) of
-    True -> throwError (BlackBoxError $ "Found a black box definition for the name " <> show v <> ". This is not allowed since there already is a global variable with that name.")
+    True -> throwUnlocatedError (BlackBoxError $ "Found a black box definition for the name " <> show v <> ". This is not allowed since there already is a global variable with that name.")
     False -> pure ()
 
   tlinfo .= TopLevelInformation bbvars (v : glvars)
@@ -119,7 +119,7 @@ checkTopLevelStatement (Extra (ProcFLet v body)) = do
   (TopLevelInformation bbvars glvars) <- use tlinfo
 
   case v `elem` bbvars of
-    True -> throwError (BlackBoxError $ "Found a black box definition for the name " <> show v <> ". This is not allowed since there already is a global variable with that name.")
+    True -> throwUnlocatedError (BlackBoxError $ "Found a black box definition for the name " <> show v <> ". This is not allowed since there already is a global variable with that name.")
     False -> pure ()
 
   tlinfo .= TopLevelInformation bbvars (v : glvars)
@@ -134,7 +134,7 @@ checkTopLevelStatement (Extra (ProcTLetBase _ (vs) body)) = do
   let letvars = [v | v ::- _ <- vs]
 
   let checkname v = case v `elem` (bbvars) of
-        True -> throwError (BlackBoxError $ "Found a black box definition for the name " <> show v <> ". This is not allowed since there already is a global variable with that name.")
+        True -> throwUnlocatedError (BlackBoxError $ "Found a black box definition for the name " <> show v <> ". This is not allowed since there already is a global variable with that name.")
         False -> pure ()
 
   mapM checkname letvars
@@ -150,7 +150,7 @@ checkTopLevelStatement rest = do
 
 -- make sure that no black box definitions are here.
 checkNonTopLevelBB :: LocProcDMTerm -> TLTC LocProcDMTerm 
-checkNonTopLevelBB (Located l (BBLet v jt rest)) = throwError (BlackBoxError $ "Found a black box definition (" <> show v <> ") which is not in the top level scope. Black boxes can only be defined at the top level scope. " )
+checkNonTopLevelBB (Located l (BBLet v jt rest)) = throwUnlocatedError (BlackBoxError $ "Found a black box definition (" <> show v <> ") which is not in the top level scope. Black boxes can only be defined at the top level scope. " )
 checkNonTopLevelBB term = recDMTermMSameExtension_Loc checkNonTopLevelBB term
 
 

@@ -27,7 +27,7 @@ testSubtyping = do
 
   describe "subtyping of BaseNumKind/NumKind" $ do
     testsub False DMInt DMReal (Right Nothing)
-    testsub False DMReal DMInt (Left (UnsatisfiableConstraint "[test]"))
+    testsub False DMReal DMInt (Left (LocatedError (UnsatisfiableConstraint "[test]") []))
 
   describe "subtyping of tuples" $ do
     let nci1 = (Numeric (Num DMInt (Const oneId)))
@@ -36,9 +36,9 @@ testSubtyping = do
 
     testsub False (NoFun nci1) (NoFun nnr) (Right Nothing)
     testsub False (DMTup [nci1,nci2]) (DMTup [nci1,nnr]) (Right Nothing)
-    testsub False (DMTup [nci1,nci2]) (DMTup [nci2,nnr]) (Left (UnsatisfiableConstraint "[test]"))
-    testsub False (DMTup [nnr,nci2]) (DMTup [nci2,nnr]) (Left (UnsatisfiableConstraint "[test]"))
-    testsub False (DMTup [nnr,nci2]) (nnr) (Left (UnsatisfiableConstraint "[test]"))
+    testsub False (DMTup [nci1,nci2]) (DMTup [nci2,nnr]) (Left (LocatedError (UnsatisfiableConstraint "[test]") []))
+    testsub False (DMTup [nnr,nci2]) (DMTup [nci2,nnr]) (Left (LocatedError (UnsatisfiableConstraint "[test]") []))
+    testsub False (DMTup [nnr,nci2]) (nnr) (Left (LocatedError (UnsatisfiableConstraint "[test]") []))
 
 
 testSubtyping_MaxMinCases = do

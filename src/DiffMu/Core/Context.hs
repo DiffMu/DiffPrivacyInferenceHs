@@ -111,10 +111,10 @@ mtruncateS η = types %= truncateS η
 mtruncateP :: MonadDMTC t => Privacy -> t ()
 mtruncateP η = types %= truncateP η
 
-instance (MonadLog t, MonadError DMException t, SemigroupM t a, SemigroupM t b, Show a, Show b) => SemigroupM t (Either a b) where
+instance (MonadLog t, MonadError LocatedDMException t, SemigroupM t a, SemigroupM t b, Show a, Show b) => SemigroupM t (Either a b) where
   (⋆) (Left a) (Left b) = Left <$> (a ⋆ b)
   (⋆) (Right a) (Right b) = Right <$> (a ⋆ b)
-  (⋆) ea eb =  throwError (ImpossibleError ("Could not match left and right. (Probably a sensitivity / privacy context mismatch between " <> show ea <> " and " <> show eb))
+  (⋆) ea eb =  throwUnlocatedError (ImpossibleError ("Could not match left and right. (Probably a sensitivity / privacy context mismatch between " <> show ea <> " and " <> show eb))
 --  (⋆) _ _ = internalError "Could not match left and right. (Probably a sensitivity / privacy context mismatch.)"
 -- instance (MonoidM t a, MonoidM t b) => MonoidM t (Either a b) where
 
@@ -235,7 +235,7 @@ restrictAll s = let
    in do
       γ <- use types
       case γ of
-         Right _ -> throwError (ImpossibleError "restrictAll called on privacy context.")
+         Right _ -> throwUnlocatedError (ImpossibleError "restrictAll called on privacy context.")
          Left (Ctx (MonCom h)) -> mapM (\(WithRelev _ (_ :@ SensitivityAnnotation sv)) -> addC sv) h -- restrict sensitivities of all γ entries
       return ()
 
@@ -253,7 +253,7 @@ restrictInteresting s = let
    in do
       γ <- use types
       case γ of
-         Right _ -> throwError (ImpossibleError "restrictAll called on privacy context.")
+         Right _ -> throwUnlocatedError (ImpossibleError "restrictAll called on privacy context.")
          Left (Ctx (MonCom h)) -> mapM addC h -- restrict sensitivities of all γ entries
       return ()
 
@@ -293,7 +293,7 @@ getArgList xτs = do
 getAllVars = do
   (γ :: TypeCtxSP) <- use types
   h <- case γ of
-           Right _ -> throwError (ImpossibleError "getAllVars called on privacy context.")
+           Right _ -> throwUnlocatedError (ImpossibleError "getAllVars called on privacy context.")
            Left (Ctx (MonCom h')) -> return (H.toList h')
   return h
 
@@ -325,7 +325,7 @@ getInteresting :: MonadDMTC t => t ([TeVar],[DMTypeOf MainKind :@ (Annotation Pr
 getInteresting = do
    γ <- use types
    h <- case γ of
-           Left _ -> throwError (ImpossibleError "getInteresting called on sensitivity context.")
+           Left _ -> throwUnlocatedError (ImpossibleError "getInteresting called on sensitivity context.")
            Right (Ctx (MonCom h')) -> return (H.toList h')
    let f :: [(TeVar, WithRelev PrivacyK)] -> ([(TeVar, DMTypeOf MainKind :@ (Annotation PrivacyK))])
        f xs = [ (x , τ) | (x , WithRelev IsRelevant τ) <- xs ]

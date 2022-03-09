@@ -37,7 +37,7 @@ makeTypeOp (IsBinary op) 2 =
      res <- TVar <$> newTVar "τr"
      addConstraint (Solvable (IsTypeOpResult (Binary op (τ1:@s1, τ2:@s2) res)))
      return (res , [(τ1,s1),(τ2,s2)])
-makeTypeOp op lengthArgs = throwError (WrongNumberOfArgsOp op (lengthArgs))
+makeTypeOp op lengthArgs = throwUnlocatedError (WrongNumberOfArgsOp op (lengthArgs))
 
 -- We can solve a unary typeop constraint.
 solveUnary :: forall t e. IsT MonadDMTC t => DMTypeOps_Unary -> DMType -> t (Maybe (Sensitivity, DMType))

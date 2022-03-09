@@ -269,10 +269,10 @@ getMatchCandidates τsτ provided = do
                         debug $ "[IFA]: (via " <> show argsNoJFun <> ")"
                         debug $ "[IFA]: => free vars is: " <> show free
                         return (cand, free)
-      _ -> throwError (ImpossibleError ("Invalid type for Choice: " <> show τsτ))
+      _ -> throwUnlocatedError (ImpossibleError ("Invalid type for Choice: " <> show τsτ))
 
    if H.null candidates
-      then throwError (NoChoiceFoundError $ "No matching choice for " <> show τsτ <> " found in " <> show provided)
+      then throwUnlocatedError (NoChoiceFoundError $ "No matching choice for " <> show τsτ <> " found in " <> show provided)
       else return (candidates, hasFreeVars)
 
 

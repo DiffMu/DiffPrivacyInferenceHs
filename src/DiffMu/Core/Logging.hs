@@ -89,14 +89,16 @@ instance Show (DMLogger) where
   show (DMLogger _ _ _) = "(hidden)"
     -- intercalate "\n\t" m
 
-newtype DMLogMessages = DMLogMessages [DMLogMessage]
+data DMMessages t = DMMessages [DMLogMessage] [DMPersistentMessage t]
 
-instance Semigroup DMLogMessages where
-  (<>) (DMLogMessages xs) (DMLogMessages ys) = DMLogMessages (ys <> xs)
+instance Semigroup (DMMessages t) where
+  (<>) (DMMessages xs xs2) (DMMessages ys ys2) = DMMessages (ys <> xs) (ys2 <> xs2)
 
-instance Monoid DMLogMessages where
-  mempty = DMLogMessages []
+instance Monoid (DMMessages t) where
+  mempty = DMMessages [] []
 
+data DMPersistentMessage t where
+  DMPersistentMessage :: (Normalize t a, Show a) => a -> DMPersistentMessage t
 
 
 
@@ -173,8 +175,8 @@ markFollowup (Just m1@(DMLogMessage s1 l1 t1)) (m2@(DMLogMessage s2 l2 t2):xs) =
   True  -> DMLogMessageFU FollowUpMessage m2    : markFollowup (Just m2) xs
   False -> DMLogMessageFU NotFollowUpMessage m2 : markFollowup (Just m2) xs
 
-getLogMessages :: DMLogMessages -> DMLogSeverity -> [DMLogLocation] -> String
-getLogMessages (DMLogMessages messages) sevR locsR =
+getLogMessages :: DMMessages t -> DMLogSeverity -> [DMLogLocation] -> String
+getLogMessages (DMMessages messages _) sevR locsR =
   let filtered = [DMLogMessage s l m | DMLogMessage s l m <- messages, or [sevR <= s, or ((l <=) <$> locsR)]]
       reversed = reverse filtered
   in intercalate "\n" (show <$> (markFollowup Nothing reversed))

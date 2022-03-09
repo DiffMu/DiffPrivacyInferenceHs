@@ -8,6 +8,8 @@ import DiffMu.Prelude
 
 import DiffMu.Core.Symbolic
 import DiffMu.Abstract
+import DiffMu.Core.Logging
+
 import {-# SOURCE #-} DiffMu.Core.TC
 
 import Data.Singletons.TH
@@ -1287,11 +1289,12 @@ instance Eq DMException where
   DemutationSplitMutatingArgumentError a       == DemutationSplitMutatingArgumentError b = True
   _ == _ = False
 
+data LocatedError e = LocatedError e [(String,SourceLocExt)]
+  deriving (Show,Eq)
+type LocatedDMException = LocatedError DMException
 
-
-
-
-
+throwUnlocatedError e = throwError (LocatedError e [])
+-- throwLocatedError e xs = throwError (LocatedError e [(s,)])
 
 --------------------------------------------------------------------------
 -- The environment for executing typechecking

@@ -149,7 +149,7 @@ instance Monad t => Unify t () where
 
 instance MonadDMTC t => Unify t JuliaType where
   unify_ a b | a == b = pure a
-  unify_ t s = throwError (UnificationError t s)
+  unify_ t s = throwUnlocatedError (UnificationError t s)
 
 
 instance MonadDMTC t => Unify t (Annotation e) where
@@ -175,7 +175,7 @@ instance (Typeable k, MonadDMTC t) => Unify t (DMTypeOf k) where
         withLogLocation "Unification" $ debug ("Got wait in unify on " <> show a <> " ==! "<> show b)
         liftTC (a ==! b)
         return a
-      Left (Fail' e) -> throwError e
+      Left (Fail' e) -> throwUnlocatedError e
       Right a -> return a
 
 -- Above we implictly use unification of terms of the type (a :@ b).
@@ -198,7 +198,7 @@ instance Solve MonadDMTC IsEqual (DMTypeOf k, DMTypeOf k) where
     res <- runExceptT $ runINCResT $ unifyᵢ_ @(INCResT DMException _) a b
     case res of
       Left (Wait')   -> return ()
-      Left (Fail' e) -> throwError e
+      Left (Fail' e) -> throwUnlocatedError e
       Right a -> dischargeConstraint name
 
 

@@ -200,33 +200,33 @@ computeVarAccessType var (x,xvat) (y,yvat) = do
            [(ReadSingle, a), (ReadSingle, b)] | a /= b   -> pure (ReadMulti)
            [(ReadSingle, a), (ReadMulti, u)]               -> pure ((ReadMulti))
            [(ReadSingle, a), (WriteSingle, b)] | a == b  -> pure ((WriteSingle))
-           [(ReadSingle, a), (WriteSingle, b)] | a /= b  -> throwError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' "
+           [(ReadSingle, a), (WriteSingle, b)] | a /= b  -> throwUnlocatedError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' "
                                                                                   <> "' is being mutated and read in two different scopes.\n"
                                                                                   <> "This is not allowed."
            -- [(ReadSingle, a), (WriteSingleFunction, b)] | a == b -> pure ((WriteSingleFunction, a))
-           -- [(ReadSingle, a), (WriteSingleFunction, b)] | a /= b -> throwError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' "
+           -- [(ReadSingle, a), (WriteSingleFunction, b)] | a /= b -> throwUnlocatedError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' "
            --                                                                                <> "' is being mutated and read in two different scopes.\n"
            --                                                                                <> "This is not allowed."
            [(ReadSingle, a), (WriteSingleFunction, b)]   -> pure ((WriteSingleFunction))
            [(ReadMulti, u),(ReadMulti, v)]                   -> pure ((ReadMulti))
-           [(ReadMulti, u),(WriteSingle, _)]               -> throwError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' "
+           [(ReadMulti, u),(WriteSingle, _)]               -> throwUnlocatedError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' "
                                                                                    <> "' is being mutated and read in two different scopes.\n"
                                                                                    <> "This is not allowed."
            [(ReadMulti, u),(WriteSingleFunction, a)]       -> pure ((WriteSingleFunction)) -- because of flet reordering it is allowed to mutate functions
            [(WriteSingle, a), (WriteSingle, b)] | a == b  -> pure ((WriteSingle))
-           -- [(WriteSingle, a) l, (WriteSingle, b) k] | a == b -> throwError $ DemutationError $ "The function argument '" <> show var <> "' has been mutated.\n"
+           -- [(WriteSingle, a) l, (WriteSingle, b) k] | a == b -> throwUnlocatedError $ DemutationError $ "The function argument '" <> show var <> "' has been mutated.\n"
            --                                                                             <> "But then a statement follows which assigns a variable with the same name."
            --                                                                             <> "This is not allowed, please use a different name here."
-           [(WriteSingle, a), (WriteSingle, b)]          -> throwError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' "
+           [(WriteSingle, a), (WriteSingle, b)]          -> throwUnlocatedError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' "
                                                                                    <> "' is being mutated in two different scopes.\n"
                                                                                    <> "This is not allowed."
-           [(WriteSingle, _), (WriteSingleFunction, _)]  -> throwError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' is defined as function and as value."
+           [(WriteSingle, _), (WriteSingleFunction, _)]  -> throwUnlocatedError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' is defined as function and as value."
                                                                                    <> "This is not allowed."
            [(WriteSingleFunction, a), (WriteSingleFunction, b)] | a == b -> pure ((WriteSingleFunction))
-           -- [(WriteSingleFunction, a), (WriteSingleFunction, b)] | a == b         -> throwError $ DemutationError $ "The function argument '" <> show var <> "' has been mutated.\n"
+           -- [(WriteSingleFunction, a), (WriteSingleFunction, b)] | a == b         -> throwUnlocatedError $ DemutationError $ "The function argument '" <> show var <> "' has been mutated.\n"
            --                                                                             <> "But then a statement follows which assigns a variable with the same name."
            --                                                                             <> "This is not allowed, please use a different name here."
-           [(WriteSingleFunction, a), (WriteSingleFunction, b)] | a /= b -> throwError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' "
+           [(WriteSingleFunction, a), (WriteSingleFunction, b)] | a /= b -> throwUnlocatedError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' "
                                                                                    <> "' is being mutated in two different scopes.\n"
                                                                                    <> "This is not allowed."
            vavalues -> impossible $ "In demutation, while computing var access type. This branch should be inaccessible.\nlist is:\n" <> show vavalues
@@ -315,7 +315,7 @@ mergeMemCtx = (⋆!)
 
 fst3 (a,b,c) = a
 
-demutationError = throwError . DemutationError
+demutationError = throwUnlocatedError . DemutationError
 
 -- buildReturnValue :: [ProcVar] -> DMTerm
 -- buildReturnValue [x] = Var (Just x :- JTAny)
@@ -359,7 +359,7 @@ markReassignedBase fletdef scname tevar itype = do
                 debug $ "[markReassignedBase]: VA type for '" <> show tevar <> "' changes from " <> show oldvatype <> " to " <> show newvatype
                 return (setValue tevar (scname, newvatype, olditype) ctx)
               False ->
-                throwError (DemutationError $ "Found a redefinition of the variable '" <> show tevar
+                throwUnlocatedError (DemutationError $ "Found a redefinition of the variable '" <> show tevar
                             <> "', where the old type (" <> show olditype <> ") and the new type (" <> show itype
                             <> ") differ. This is not allowed.")
 
@@ -389,7 +389,7 @@ markRead scname tevar = do
           markReadInScope :: ScopeVar -> ProcVar -> VarAccessCtx -> MTC VarAccessCtx 
           markReadInScope scname tevar ctx =
             case getValue tevar ctx of
-              Nothing -> throwError (DemutationDefinitionOrderError tevar)
+              Nothing -> throwUnlocatedError (DemutationDefinitionOrderError tevar)
               Just (oldscname, oldvatype, olditype) -> do
                 newvatype <- computeVarAccessType tevar (oldscname, oldvatype) (scname, ReadSingle)
                 return (setValue tevar (scname,newvatype, olditype) ctx)
@@ -481,7 +481,7 @@ safeSetValueBase fletdef scname (Just var) itype = do
       markReassignedBase fletdef scname var -- We say that we are changing this variable. This can throw an error.
       if immutTypeEq oldType newType
                       then pure scope
-                      else throwError (DemutationError $ "Found a redefinition of the variable '" <> show var <> "', where the old type (" <> show oldType <> ") and the new type (" <> show newType <> ") differ. This is not allowed.")
+                      else throwUnlocatedError (DemutationError $ "Found a redefinition of the variable '" <> show var <> "', where the old type (" <> show oldType <> ") and the new type (" <> show newType <> ") differ. This is not allowed.")
 -}
 
 {-
@@ -496,7 +496,7 @@ safeSetValueAllowFLet (Just var) newType scope =
     Nothing -> pure $ setValue var newType scope
     (Just oldType) -> if immutTypeEq oldType newType
                       then pure scope
-                      else throwError (DemutationError $ "Found a redefinition of the variable '" <> show var <> "', where the old type (" <> show oldType <> ") and the new type (" <> show newType <> ") differ. This is not allowed.")
+                      else throwUnlocatedError (DemutationError $ "Found a redefinition of the variable '" <> show var <> "', where the old type (" <> show oldType <> ") and the new type (" <> show newType <> ") differ. This is not allowed.")
 -}
 
 --------------------------------------------------------------------------------
@@ -631,10 +631,10 @@ expectNotMoved :: ProcVar -> MTC [MemType]
 expectNotMoved tevar = do
   mc <- use memCtx
   case getValue tevar mc of
-    Nothing          -> throwError $ DemutationDefinitionOrderError $ "The variable " <> show tevar <> " is not assigned to anything.\n"
+    Nothing          -> throwUnlocatedError $ DemutationDefinitionOrderError $ "The variable " <> show tevar <> " is not assigned to anything.\n"
                                         <> "The memctx is:\n"
                                         <> show mc
-    Just (MemMoved) -> throwError $ DemutationMovedVariableAccessError tevar
+    Just (MemMoved) -> throwUnlocatedError $ DemutationMovedVariableAccessError tevar
     Just (MemExists a) -> pure a
 
 -- expectNotMovedMaybe :: Maybe ProcVar -> MTC (Maybe [MemType]) 
