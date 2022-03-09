@@ -62,7 +62,7 @@ instance (Show e, MonadInternalError m, MonadLog m) => MonadLog (INCResT e m) wh
   warn            = liftINC . warn
   logForce        = liftINC . logForce
   withLogLocation = \a b -> b
-  persistentError = \(DMPersistentMessage msg) -> liftINC (persistentError $ DMPersistentMessage $ WrapMessageINC @e (msg))
+  -- persistentError = \(DMPersistentMessage msg) -> liftINC (persistentError $ DMPersistentMessage $ WrapMessageINC @e (msg))
 
 
 

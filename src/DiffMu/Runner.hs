@@ -67,10 +67,12 @@ executeTC l r = do
     (DontShowLog) -> return ()
 
   putStrLn "======================== Errors ====================="
-  putStrLn (getErrors logs)
+  putStrLn (getErrorMessage logs)
   putStrLn "======================== End Errors ====================="
 
-  return x
+  case getErrors logs of
+    [] -> return x
+    (x:xs) -> return (Left x)
 
 typecheckFromJExprWithPrinter :: ((DMMain,Full) -> String) -> DoShowLog -> JExpr -> IO ()
 typecheckFromJExprWithPrinter printer logoptions term = do

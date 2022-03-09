@@ -7,16 +7,6 @@ import DiffMu.Prelude
 import {-# SOURCE #-} DiffMu.Core.Definitions
 
 
--------------------------------------------------------------------------
-
-data DMPersistentMessage t where
-  DMPersistentMessage :: (Normalize t a, Show a) => a -> DMPersistentMessage t
-
-instance Show (DMPersistentMessage t) where
-  show (DMPersistentMessage msg) = show msg
-
-instance Monad t => Normalize t (DMPersistentMessage t) where
-  normalize e (DMPersistentMessage msg) = DMPersistentMessage <$> normalize e msg
 
 
 
@@ -29,10 +19,10 @@ data SourceLoc = SourceLoc
   , getLocBegin :: (Int,Int)
   , getLocEnd   :: (Int,Int)
   }
-  deriving (Eq, Show)
+  deriving (Eq)
 
 data SourceLocExt = ExactLoc SourceLoc | RelatedLoc String SourceLocExt | UnknownLoc | NotImplementedLoc String
-  deriving (Eq, Show)
+  deriving (Eq)
 
 data Located a = Located
   {
@@ -47,6 +37,36 @@ downgradeToRelated = RelatedLoc
 notLocated :: a -> Located a
 notLocated = Located UnknownLoc
 
+instance Monad t => Normalize t SourceLocExt where
+  normalize e = pure
+
+instance Show SourceLoc where
+  show (SourceLoc file (begin,_) _) = file <> ": line " <> show begin
+
+instance Show SourceLocExt where
+  show = \case
+    ExactLoc sl -> "In " <> show sl
+    RelatedLoc s sle -> s <> ": " <> show sle
+    UnknownLoc -> "Unknown location"
+    NotImplementedLoc s -> "This location is currently ineffable. (" <> show s <> ")"
+
+-------------------------------------------------------------------------
+
+data DMPersistentMessage t where
+  DMPersistentMessage :: (Normalize t a, Show a) => a -> DMPersistentMessage t
+
+instance Show (DMPersistentMessage t) where
+  show (DMPersistentMessage msg) = show msg
+
+instance Monad t => Normalize t (DMPersistentMessage t) where
+  normalize e (DMPersistentMessage msg) = DMPersistentMessage <$> normalize e msg
+
+data WithContext t e = WithContext e (DMPersistentMessage t)
+  deriving (Show,Functor,Foldable,Traversable)
+
+withContext e x = WithContext e (DMPersistentMessage x)
+
+type LocatedDMException t = WithContext t DMException
 
 
 --------------------------------------------------------------------------
@@ -135,11 +155,8 @@ instance Eq DMException where
   DemutationSplitMutatingArgumentError a       == DemutationSplitMutatingArgumentError b = True
   _ == _ = False
 
-data LocatedError e = LocatedError e [(String,SourceLocExt)]
-  deriving (Show,Eq,Functor,Foldable,Traversable)
-type LocatedDMException = LocatedError DMException
 
--- throwLocatedError e xs = throwError (LocatedError e [(s,)])
+-- throwLocatedError e xs = throwError (WithContext e [(s,)])
 
 isCriticalError e = case e of
   ImpossibleError s -> True
@@ -147,7 +164,8 @@ isCriticalError e = case e of
   _ -> False
 
 
-
 class MonadError e t => MonadDMError e t where
   isCritical :: e -> t Bool
-  getPersistentErrorMessage :: e -> DMPersistentMessage t
+  persistentError :: LocatedDMException t -> t ()
+  catchAndPersist :: (Normalize t x, Show x) => t a -> (DMPersistentMessage t -> t (a, x)) -> t a
+

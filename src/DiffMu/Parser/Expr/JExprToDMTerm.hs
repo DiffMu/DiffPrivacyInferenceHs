@@ -40,8 +40,9 @@ parseError message = do
                        (file, line) <- use location
                        loc <- getCurrentLoc
 
-                       throwError (LocatedError (ParseError message file line)
-                        [("While parsing this line", loc)])
+                       throwError (withContext (ParseError message file line) loc)
+                        
+                        -- [("While parsing this line", loc)])
 
                       --  throwOriginalError (ParseError message file line)
 

@@ -90,7 +90,7 @@ instance Show (DMLogger) where
   show (DMLogger _ _ _) = "(hidden)"
     -- intercalate "\n\t" m
 
-data DMMessages t = DMMessages [DMLogMessage] [DMPersistentMessage t]
+data DMMessages t = DMMessages [DMLogMessage] [LocatedDMException t]
 
 instance Semigroup (DMMessages t) where
   (<>) (DMMessages xs xs2) (DMMessages ys ys2) = DMMessages (ys <> xs) (ys2 <> xs2)
@@ -180,8 +180,12 @@ getLogMessages (DMMessages messages _) sevR locsR =
       reversed = reverse filtered
   in intercalate "\n" (show <$> (markFollowup Nothing reversed))
 
-getErrors :: DMMessages t -> String
-getErrors (DMMessages _ errs) = intercalate ("\n\n" <> red "error")
-                                            (fmap (\(DMPersistentMessage x) -> show x) errs)
+getErrors :: DMMessages t -> [LocatedDMException t]
+getErrors (DMMessages _ errs) = errs
+
+getErrorMessage :: DMMessages t -> String
+getErrorMessage (DMMessages _ errs) = intercalate ("\n\n" <> red "error")
+                                            (fmap show errs)
+
 
 

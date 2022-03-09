@@ -19,8 +19,7 @@ class Monad m => MonadLog m where
   warn :: String -> m ()
   logForce  :: String -> m ()
   withLogLocation :: String -> m a -> m a
-  persistentError :: DMPersistentMessage m -> m ()
 
 
-throwUnlocatedError e = throwError (LocatedError e [])
+throwUnlocatedError e = throwError (WithContext e (DMPersistentMessage ()))
 

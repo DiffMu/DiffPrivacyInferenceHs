@@ -181,20 +181,28 @@ solveAllConstraints nt modes = withLogLocation "Constr" $ do
       -- logPrintConstraints
       -- logPrintSubstitutions
 
-      catchError (solve mode name constr) $ \err -> do
-        crit <- isCritical err
-        case crit of
-          True -> throwError err
-          False -> do
-            let changeMsg :: DMPersistentMessage t -> DMPersistentMessage t
-                changeMsg (DMPersistentMessage msg) = DMPersistentMessage $ 
-                  "The constraint" :<>: name :<>: ":" :<>: constr
+      catchAndPersist (solve mode name constr) $ \msg -> do
+        dischargeConstraint name
+        let msg' = "The constraint" :<>: name :<>: ":" :<>: constr
                   :\\:
                   "could not be solved:"
                   :\\:
                   msg
-            persistentError (changeMsg (getPersistentErrorMessage err))
-            dischargeConstraint name
+        return ((),msg')
+      -- catchError (solve mode name constr) $ \(WithContext err ctx) -> do
+      --   crit <- isCritical err
+      --   case crit of
+      --     True -> throwError err
+      --     False -> do
+      --       let changeMsg :: DMPersistentMessage t -> DMPersistentMessage t
+      --           changeMsg (DMPersistentMessage msg) = DMPersistentMessage $ 
+      --             "The constraint" :<>: name :<>: ":" :<>: constr
+      --             :\\:
+      --             "could not be solved:"
+      --             :\\:
+      --             msg
+      --       persistentError (changeMsg (getPersistentErrorMessage err))
+      --       dischargeConstraint name
 
       -- debug $ "[Solver]: Notice: AFTER solving (" <> show mode <> ") " <> show name <> " : " <> show constr
 

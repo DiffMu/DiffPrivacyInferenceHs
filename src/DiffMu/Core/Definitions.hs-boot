@@ -11,8 +11,8 @@ data AnnotationKind
 instance Show AnnotationKind
 instance Show (DMTypeOf (k :: DMKind))
 -- data DMException
--- data LocatedError (a :: *)
--- type LocatedDMException = LocatedError DMException
+-- data WithContext (a :: *)
+-- type LocatedDMException = WithContext DMException
 
 -- data SourceLocExt
 

@@ -111,7 +111,7 @@ mtruncateS η = types %= truncateS η
 mtruncateP :: MonadDMTC t => Privacy -> t ()
 mtruncateP η = types %= truncateP η
 
-instance (MonadLog t, MonadError LocatedDMException t, SemigroupM t a, SemigroupM t b, Show a, Show b) => SemigroupM t (Either a b) where
+instance (MonadLog t, MonadError (LocatedDMException t) t, SemigroupM t a, SemigroupM t b, Show a, Show b) => SemigroupM t (Either a b) where
   (⋆) (Left a) (Left b) = Left <$> (a ⋆ b)
   (⋆) (Right a) (Right b) = Right <$> (a ⋆ b)
   (⋆) ea eb =  throwUnlocatedError (ImpossibleError ("Could not match left and right. (Probably a sensitivity / privacy context mismatch between " <> show ea <> " and " <> show eb))

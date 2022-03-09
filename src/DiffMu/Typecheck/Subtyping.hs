@@ -372,7 +372,7 @@ solveSubtyping name path = withLogLocation "Subtyping" $ do
   -- traceM $ "I have " <> show (length (graph (IsReflexive NotStructural))) <> " candidates."
 
   -- Executing the computation
-  (res) <- findPathM @(Full) (\(LocatedError e _ ) -> relevance e) (GraphM graph) path
+  (res) <- findPathM @(Full) (\(WithContext e _ ) -> relevance e) (GraphM graph) path
 
   -- We look at the result and if necessary throw errors.
   case res of
@@ -683,7 +683,7 @@ callMonadicGraphSupremum graph name ((a,b) :=: x) = do
   -- traceM $ "I have " <> show (length (graph (IsReflexive NotStructural))) <> " candidates."
 
   -- Executing the computation
-  res <- findSupremumM @(Full) (\(LocatedError e _) -> relevance e) (graph) ((a,b) :=: x, IsShortestPossiblePath)
+  res <- findSupremumM @(Full) (\(WithContext e _) -> relevance e) (graph) ((a,b) :=: x, IsShortestPossiblePath)
 
   -- We look at the result and if necessary throw errors.
   case res of

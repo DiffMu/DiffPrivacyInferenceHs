@@ -381,7 +381,7 @@ class (MonadImpossible (t), MonadWatch (t), MonadLog t,
        MonadTerm SensitivityOf (t),
        MonadState (Full) (t),
        MonadWriter (DMMessages t) (t),
-       MonadDMError LocatedDMException (t),
+       MonadDMError (LocatedDMException t) (t),
        MonadInternalError t,
        MonadUnificationError t,
        -- MonadConstraint' Symbol (TC) (t),
@@ -594,8 +594,8 @@ data Full = Full
   }
   deriving (Generic)
 
-newtype TCT m a = TCT {runTCT :: ((StateT Full (ExceptT LocatedDMException (WriterT (DMMessages (TCT m)) (m)))) a)}
-  deriving (Functor, Applicative, Monad, MonadState Full, MonadError LocatedDMException, MonadWriter (DMMessages (TCT m)))
+newtype TCT m a = TCT {runTCT :: ((StateT Full (ExceptT (LocatedDMException (TCT m)) (WriterT (DMMessages (TCT m)) (m)))) a)}
+  deriving (Functor, Applicative, Monad, MonadState Full, MonadError (LocatedDMException (TCT m)), MonadWriter (DMMessages (TCT m)))
 
 class LiftTC t where
   liftTC :: TC a -> t a
@@ -662,7 +662,6 @@ instance Monad m => MonadLog (TCT m) where
   logForce = logWithSeverity Force
   warn = logWithSeverity Warning
   withLogLocation loc action = dmWithLogLocation (fromString_DMLogLocation loc) action
-  persistentError msg = tell (DMMessages [] [msg])
 
 
 
@@ -956,9 +955,18 @@ instance Monad m => MonadInternalError (TCT m) where
 instance Monad m => MonadUnificationError (TCT m) where
   unificationError x y = throwUnlocatedError $ UnificationError x y
 
-instance Monad m => MonadDMError LocatedDMException (TCT m) where
-  isCritical (LocatedError e _)= return (isCriticalError e)
-  getPersistentErrorMessage = DMPersistentMessage
+instance Monad m => MonadDMError (LocatedDMException (TCT m)) (TCT m) where
+  isCritical (WithContext e _)= return (isCriticalError e)
+  persistentError e = tell (DMMessages [] [e])
+  catchAndPersist x handler = do
+      catchError x $ \(WithContext err msg) -> do
+        case isCriticalError err of
+          True -> throwError (WithContext err msg)
+          False -> do
+            (res,msg') <- handler msg
+            tell (DMMessages [] [(WithContext err (DMPersistentMessage msg'))])
+            return res
+
 
 -- Normalizes all contexts in our typechecking monad, i.e., applies all available substitutions.
 normalizeContext :: (MonadDMTC t) => NormalizationType -> t ()
@@ -989,10 +997,17 @@ instance Monad m => LiftTC (TCT m) where
     let g :: DMPersistentMessage (TCT Identity) -> DMPersistentMessage (TCT m)
         g (DMPersistentMessage a) = DMPersistentMessage (WrapMessageId a)
 
-        f :: DMMessages (TCT Identity) -> DMMessages (TCT m)
-        f (DMMessages logs errors) = DMMessages logs (fmap g errors) 
+        i :: LocatedDMException (TCT Identity) -> LocatedDMException (TCT m)
+        i (WithContext e ctx) = WithContext e (g ctx)
 
-        x = StateT (\s -> ExceptT (WriterT (return (second f $ runWriter $ runExceptT $ runStateT v s))))
+        f :: DMMessages (TCT Identity) -> DMMessages (TCT m)
+        f (DMMessages logs errors) = DMMessages logs (fmap i errors) 
+
+        h :: Either (LocatedDMException (TCT Identity)) (a, Full) -> Either (LocatedDMException (TCT m)) (a, Full)
+        h (Right a) = Right a
+        h (Left (WithContext e ctx)) = Left (WithContext e (g ctx))
+
+        x = StateT (\s -> ExceptT (WriterT (return (first h $ second f $ runWriter $ runExceptT $ runStateT v s))))
 
     in TCT x
 
@@ -1045,7 +1060,7 @@ instance (MonadDMTC t) => Normalize (t) DMTypeOp where
 instance (MonadDMTC t) => Normalize t DMException where
   normalize nt x = pure x
 
-instance Normalize m x => Normalize m (LocatedError x) where
+instance Normalize m x => Normalize m (WithContext m x) where
   normalize nt = mapM (normalize nt)
 
 instance (MonadDMTC t => Normalize (t) a) => MonadDMTC t :=> Normalize (t) a where
