@@ -17,12 +17,12 @@ instance Monad t => Normalize t Char where
 infixl 5 :-----:
 data (:-----:) a b = (:-----:) a b
 
-instance (Show a, Show b) => Show (a :-----: b) where
-  show (a :-----: b) = show a
+instance (ShowPretty a, ShowPretty b) => ShowPretty (a :-----: b) where
+  showPretty (a :-----: b) = showPretty a
                    <> "\n"
                    <> "---------------------------------------------------------"
                    <> "\n"
-                   <> show b
+                   <> showPretty b
 
 instance (Normalize t a, Normalize t b) => Normalize t (a :-----: b) where
 
@@ -31,10 +31,10 @@ instance (Normalize t a, Normalize t b) => Normalize t (a :-----: b) where
 infixl 5 :\\:
 data (:\\:) a b = (:\\:) a b
 
-instance (Show a, Show b) => Show (a :\\: b) where
-  show (a :\\: b) = show a
+instance (ShowPretty a, ShowPretty b) => ShowPretty (a :\\: b) where
+  showPretty (a :\\: b) = showPretty a
                    <> "\n"
-                   <> show b
+                   <> showPretty b
 
 instance (Normalize t a, Normalize t b) => Normalize t (a :\\: b) where
 
@@ -46,8 +46,8 @@ instance (Normalize t a, Normalize t b) => Normalize t (a :\\: b) where
 infixl 6 :<>:
 data (:<>:) a b = (:<>:) a b
 
-instance (Show a, Show b) => Show (a :<>: b) where
-  show (a :<>: b) = show a <> " " <> show b
+instance (ShowPretty a, ShowPretty b) => ShowPretty (a :<>: b) where
+  showPretty (a :<>: b) = showPretty a <> " " <> showPretty b
 
 instance (Normalize t a, Normalize t b) => Normalize t (a :<>: b) where
 
@@ -56,7 +56,7 @@ instance (Normalize t a, Normalize t b) => Normalize t (a :<>: b) where
 
 -- data (:<.:) a = (:<.:) a String
 
--- instance (Show a) => Show (:<.:) a where
---   show (a :<.: b) = show a <> " " <> show b
+-- instance (ShowPretty a) => ShowPretty (:<.:) a where
+--   showPretty (a :<.: b) = showPretty a <> " " <> showPretty b
 
 -- instance (Normalize t a) => Normalize t ((:<.:) a) where

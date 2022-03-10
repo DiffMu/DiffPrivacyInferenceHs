@@ -20,6 +20,7 @@ module DiffMu.Prelude
   , TeVar (..)
   , ScopeVar (..)
   , MemVar (..)
+  , ShowPretty (..)
   , throwOriginalError
   , blue, green, yellow, red, magenta
   )
@@ -41,6 +42,18 @@ newtype Symbol = Symbol Text
 
 instance Monad t => Normalize t Symbol where
   normalize nt a = pure a
+
+instance Monad t => Normalize t Text where
+  normalize nt a = pure a
+
+class ShowPretty a where
+  showPretty :: a -> String
+
+instance ShowPretty () where
+  showPretty _ = ""
+
+instance ShowPretty Text where
+  showPretty s = T.unpack s
 
 class FromSymbol (v :: j -> *) where
   fromSymbol :: Symbol -> v k
@@ -74,6 +87,9 @@ instance Show (SymbolOf k) where
 
 instance Show Symbol where
   show (Symbol t) = T.unpack t
+
+instance ShowPretty Symbol where
+  showPretty = show
 
 instance DictKey Symbol
 

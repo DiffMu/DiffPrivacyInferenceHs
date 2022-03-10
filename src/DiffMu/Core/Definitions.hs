@@ -307,7 +307,7 @@ showFunPretty marker args ret = intercalate "\n" (fmap showArgPretty args)
                          <> " " <> marker <> " " <> (showPretty ret)
 
 showPrettyEnumVertical :: (ShowPretty a) => [a] -> String
-showPrettyEnumVertical as = "{\n" <> intercalate "\n,\n" (fmap (justIndent . showPretty) as) <> "\n}"
+showPrettyEnumVertical as = "{\n" <> intercalate "\n,\n" (fmap (indent . showPretty) as) <> "\n}"
 
 instance ShowPretty (Sensitivity) where
   showPretty s = show s
@@ -1022,9 +1022,6 @@ freeVarsOfProcDMTerm t = fst $ recDMTermMSameExtension_Loc f (Located UnknownLoc
 --------------------------------------------------------------------------
 -- pretty printing
 
-class ShowPretty a where
-  showPretty :: a -> String
-
 instance ShowPretty a => ShowPretty [a] where
   showPretty as = "[" <> intercalate ", " (fmap showPretty as) <> "]"
 
@@ -1032,23 +1029,6 @@ instance ShowPretty a => ShowPretty (Maybe a) where
       showPretty (Just v) = "Just " <> (showPretty v)
       showPretty Nothing = "Nothing"
 
-newlineIndentIfLong :: String -> String
-newlineIndentIfLong xs = case '\n' `elem` xs of
-  False -> xs
-  True -> "\n" <> justIndent xs
-
-parenIndent :: String -> String
-parenIndent s = "\n(\n" <> unlines (fmap ("  " <>) (lines s)) <> ")"
-
-braceIndent :: String -> String
-braceIndent s = "\n{\n" <> unlines (fmap ("  " <>) (lines s)) <> "}"
-
-
-justIndent :: String -> String
-justIndent s = unlines (fmap ("  " <>) (lines s))
-
-indent :: String -> String
-indent s = unlines (fmap ("  " <>) (lines s))
 
 instance ShowPretty (TeVar) where
   showPretty (v) = show v

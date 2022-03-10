@@ -14,7 +14,7 @@ import DiffMu.Core.Logging
 -- import DiffMu.Abstract.Class.MonadTerm
 import Debug.Trace
 
-default (String)
+default (Text)
 
 data SolvingMode = SolveExact | SolveAssumeWorst | SolveGlobal | SolveFinal | SolveSpecial
   deriving (Eq)
@@ -65,6 +65,9 @@ instance (isT t, Monad (t)) => Normalize (t) (Solvable eC eC2 isT) where
 
 instance Show (Solvable eC eC2 isT) where
   show (Solvable c) = show c
+
+instance ShowPretty (Solvable eC eC2 isT) where
+  showPretty = show
 
 data CloseConstraintSetResult = ConstraintSet_WasEmpty | ConstraintSet_WasNotEmpty
 

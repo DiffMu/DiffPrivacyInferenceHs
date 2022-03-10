@@ -6,7 +6,26 @@ import DiffMu.Prelude
 
 import {-# SOURCE #-} DiffMu.Core.Definitions
 
+--------------------------------------------------------------------------
+-- Printing
 
+newlineIndentIfLong :: String -> String
+newlineIndentIfLong xs = case '\n' `elem` xs of
+  False -> xs
+  True -> "\n" <> indent xs
+
+parenIndent :: String -> String
+parenIndent s = "\n(\n" <> unlines (fmap ("  " <>) (lines s)) <> ")"
+
+braceIndent :: String -> String
+braceIndent s = "\n{\n" <> unlines (fmap ("  " <>) (lines s)) <> "}"
+
+
+-- justIndent :: String -> String
+-- justIndent s = unlines (fmap ("  " <>) (lines s))
+
+indent :: String -> String
+indent s = unlines (fmap ("  " <>) (lines s))
 
 
 
@@ -21,7 +40,7 @@ data SourceLoc = SourceLoc
   }
   deriving (Eq)
 
-data SourceLocExt = ExactLoc SourceLoc | RelatedLoc String SourceLocExt | UnknownLoc | NotImplementedLoc String
+data SourceLocExt = ExactLoc SourceLoc | RelatedLoc Text SourceLocExt | UnknownLoc | NotImplementedLoc Text
   deriving (Eq)
 
 data Located a = Located
@@ -29,9 +48,12 @@ data Located a = Located
     getLocation :: SourceLocExt
   , getLocated :: a
 }
-  deriving (Functor, Foldable, Traversable, Eq, Show)
+  deriving (Functor, Foldable, Traversable, Eq)
 
-downgradeToRelated :: String -> SourceLocExt -> SourceLocExt
+instance Show a => Show (Located a) where
+  show (Located loc a) = show a
+
+downgradeToRelated :: Text -> SourceLocExt -> SourceLocExt
 downgradeToRelated = RelatedLoc
 
 notLocated :: a -> Located a
@@ -40,29 +62,40 @@ notLocated = Located UnknownLoc
 instance Monad t => Normalize t SourceLocExt where
   normalize e = pure
 
-instance Show SourceLoc where
-  show (SourceLoc file (begin,_) _) = file <> ": line " <> show begin
+instance ShowPretty SourceLoc where
+  showPretty (SourceLoc file (begin,_) _) = file <> ": line " <> show begin
 
 instance Show SourceLocExt where
-  show = \case
-    ExactLoc sl -> "In " <> show sl
-    RelatedLoc s sle -> s <> ": " <> show sle
+  show = showPretty
+
+instance ShowPretty SourceLocExt where
+  showPretty = \case
+    ExactLoc sl -> "In " <> showPretty sl
+    RelatedLoc s sle -> showPretty s <> ": " <> showPretty sle
     UnknownLoc -> "Unknown location"
-    NotImplementedLoc s -> "This location is currently ineffable. (" <> show s <> ")"
+    NotImplementedLoc s -> "This location is currently ineffable. (" <> showPretty s <> ")"
 
 -------------------------------------------------------------------------
 
 data DMPersistentMessage t where
-  DMPersistentMessage :: (Normalize t a, Show a) => a -> DMPersistentMessage t
+  DMPersistentMessage :: (Normalize t a, ShowPretty a) => a -> DMPersistentMessage t
 
-instance Show (DMPersistentMessage t) where
-  show (DMPersistentMessage msg) = show msg
+instance ShowPretty (DMPersistentMessage t) where
+  showPretty (DMPersistentMessage msg) = showPretty msg
 
 instance Monad t => Normalize t (DMPersistentMessage t) where
   normalize e (DMPersistentMessage msg) = DMPersistentMessage <$> normalize e msg
 
 data WithContext t e = WithContext e (DMPersistentMessage t)
-  deriving (Show,Functor,Foldable,Traversable)
+  deriving (Functor,Foldable,Traversable)
+
+instance ShowPretty e => ShowPretty (WithContext t e) where
+  showPretty (WithContext e ctx) = showPretty e <> "\n"
+                                   <> indent (showPretty ctx)
+                                  
+instance ShowPretty e => Show (WithContext t e) where
+  show (WithContext e ctx) = showPretty e <> "\n"
+                            <> indent (showPretty ctx)
 
 withContext e x = WithContext e (DMPersistentMessage x)
 
@@ -132,6 +165,9 @@ instance Show DMException where
   show (DemutationNonAliasedMutatingArgumentError a) = "An error regarding non-aliasing of mutating arguments occured:\n" <> a
   show (DemutationSplitMutatingArgumentError a) = "An error regarding mutating arguments occured:\n" <> a
 
+instance ShowPretty (DMException) where
+  showPretty = show
+
 instance Eq DMException where
   -- UnsupportedTermError    a        == UnsupportedTermError    b       = True
   UnificationError        a a2     == UnificationError        b b2    = True
@@ -168,7 +204,7 @@ isCriticalError e = case e of
 class MonadError e t => MonadDMError e t where
   isCritical :: e -> t Bool
   persistentError :: LocatedDMException t -> t ()
-  catchAndPersist :: (Normalize t x, Show x) => t a -> (DMPersistentMessage t -> t (a, x)) -> t a
+  catchAndPersist :: (Normalize t x, ShowPretty x) => t a -> (DMPersistentMessage t -> t (a, x)) -> t a
   enterNonPersisting :: t ()
   exitNonPersisting :: t ()
 

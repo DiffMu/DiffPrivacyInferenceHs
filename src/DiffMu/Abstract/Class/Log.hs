@@ -23,3 +23,4 @@ class Monad m => MonadLog m where
 
 throwUnlocatedError e = throwError (WithContext e (DMPersistentMessage ()))
 
+

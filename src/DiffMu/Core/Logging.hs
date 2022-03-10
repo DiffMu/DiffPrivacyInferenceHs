@@ -185,7 +185,7 @@ getErrors (DMMessages _ errs) = errs
 
 getErrorMessage :: DMMessages t -> String
 getErrorMessage (DMMessages _ errs) = intercalate ("\n\n")
-                                            (fmap (\e -> red "Error:\n" <> show e) errs)
+                                            (fmap (\e -> red "Error:\n" <> showPretty e) errs)
 
 
 

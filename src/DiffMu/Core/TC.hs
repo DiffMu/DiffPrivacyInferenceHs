@@ -996,7 +996,7 @@ instance Monad m => MonadDMTC (TCT m) where
 
 newtype WrapMessageId a = WrapMessageId a
 
-instance Show a => Show (WrapMessageId a) where show (WrapMessageId a) = show a
+instance ShowPretty a => ShowPretty (WrapMessageId a) where showPretty (WrapMessageId a) = showPretty a
 
 instance (Monad m, Normalize TC a) => Normalize (TCT m) (WrapMessageId a) where
   normalize e x = liftTC (normalize e x)

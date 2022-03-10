@@ -25,19 +25,22 @@ import Debug.Trace
 
 import Data.IORef
 import System.IO.Unsafe
-import DiffMu.Abstract.Data.Error (MonadDMError(catchAndPersist))
+import DiffMu.Abstract.Data.Error
+import DiffMu.Abstract.Data.ErrorReporting
 
-default (String)
+default (Text)
 
 
 catchNoncriticalError :: LocDMTerm -> TC DMMain -> TC DMMain
 catchNoncriticalError a x = do
   catchAndPersist x $ \msg -> do
     resultType <- newVar
-    let msg' = (("While checking the term", getLocation a))
+    let msg' = ("While checking the term" :<>: getLocation a)
                 :-----:
-                "Since the checking was not successful, created the following type for this term:" :\\:
+                ("Since the checking was not successful, created the following type for this term:" :: Text) :\\:
                 resultType
+                :-----:
+                msg
     return (resultType, msg')
 
 
