@@ -160,7 +160,7 @@ parseEval_b_customCheck dolog parse desc term (testBy :: TestBy) customTCCheck =
   it desc $ do
     term' <- parse term
 
-    let res = parseJTreeFromString term' >>= parseJExprFromJTree
+    let res = parseJTreeFromString ("(:module,true,:Test," <> term' <> ")" ) >>= parseJExprFromJTree
 
     let term'' :: TC DMMain
         term'' = case res of
