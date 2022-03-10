@@ -71,6 +71,11 @@ class DictKey k => DictLike k v d | d -> k v where
   getAllKeyElemPairs :: d -> [(k,v)]
   fromKeyElemPairs :: [(k,v)] -> d
 
+changeValue :: DictLike k v d => k -> (v -> v) -> d -> d
+changeValue k f d = case getValue k d of
+  Just x -> setValue k (f x) d
+  Nothing -> d
+
 popValue :: DictLike k v d => k -> d -> (Maybe v , d)
 popValue k d = (getValue k d , deleteValue k d)
 

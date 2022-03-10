@@ -61,7 +61,7 @@ liftNewLightTC a =
       g :: DMMessages (LightTC l1 s1) -> DMMessages (TCT Identity)
       g (DMMessages xs ys) = DMMessages xs (fmap i ys)
 
-      f :: (Either (LocatedDMException (LightTC l s)) (a, s), DMMessages (LightTC l s)) -> (Either (LocatedDMException (TCT Identity)) (a, Full), DMMessages (TCT Identity))
+      f :: (Either (LocatedDMException (LightTC l s)) (a, s), DMMessages (LightTC l s)) -> (Either (LocatedDMException (TCT Identity)) (a, Full (DMPersistentMessage TC)), DMMessages (TCT Identity))
       f (Left (WithContext e ctx), b) = (Left (WithContext e (h ctx)) , g b)
       f (Right (a, s), b) = (Right (a, def), g b)
 

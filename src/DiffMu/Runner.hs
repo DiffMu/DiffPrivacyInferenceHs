@@ -74,7 +74,7 @@ executeTC l r = do
     [] -> return x
     (x:xs) -> return (Left x)
 
-typecheckFromJExprWithPrinter :: ((DMMain,Full) -> String) -> DoShowLog -> JExpr -> IO ()
+typecheckFromJExprWithPrinter :: ((DMMain,Full (DMPersistentMessage TC)) -> String) -> DoShowLog -> JExpr -> IO ()
 typecheckFromJExprWithPrinter printer logoptions term = do
   let r = do
 

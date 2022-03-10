@@ -9,6 +9,7 @@ import DiffMu.Prelude
 
 
 instance Monad t => Normalize t Char where
+  normalize e = pure
 
 
 -------------------------------------------------------------------------
@@ -25,6 +26,7 @@ instance (ShowPretty a, ShowPretty b) => ShowPretty (a :-----: b) where
                    <> showPretty b
 
 instance (Normalize t a, Normalize t b) => Normalize t (a :-----: b) where
+  normalize e (a :-----: b) = (:-----:) <$> normalize e a <*> normalize e b
 
 --------------
 
@@ -37,6 +39,7 @@ instance (ShowPretty a, ShowPretty b) => ShowPretty (a :\\: b) where
                    <> showPretty b
 
 instance (Normalize t a, Normalize t b) => Normalize t (a :\\: b) where
+  normalize e (a :\\: b) = (:\\:) <$> normalize e a <*> normalize e b
 
 
 
@@ -50,6 +53,7 @@ instance (ShowPretty a, ShowPretty b) => ShowPretty (a :<>: b) where
   showPretty (a :<>: b) = showPretty a <> " " <> showPretty b
 
 instance (Normalize t a, Normalize t b) => Normalize t (a :<>: b) where
+  normalize e (a :<>: b) = (:<>:) <$> normalize e a <*> normalize e b
 
 
 -- -------

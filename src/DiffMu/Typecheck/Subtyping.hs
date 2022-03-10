@@ -19,13 +19,12 @@ import qualified Prelude as P
 
 
 
-
 ---------------------------------------------------------------------
 -- "Non strict subtyping"
 
 -- An abbreviation for adding a subtyping constraint.
 (⊑!) :: (SingI k, Typeable k, MonadDMTC t) => DMTypeOf k -> DMTypeOf k -> t ()
-(⊑!) a b = addConstraint (Solvable (IsLessEqual (a,b))) >> pure ()
+(⊑!) a b = addConstraintNoMessage (Solvable (IsLessEqual (a,b))) >> pure ()
 
 
 -- A helper function used below in defining the subtyping graph.
@@ -339,14 +338,14 @@ convertSubtypingToSupremum name (lower, TVar upper) = do
                     (l:[]) -> do
                                 dischargeConstraint name
                                 mapM dischargeConstraint names
-                                addConstraint (Solvable (IsSupremum ((lower, l) :=: TVar upper)))
+                                addConstraintNoMessage (Solvable (IsSupremum ((lower, l) :=: TVar upper)))
                                 logForce "Something very suspicious is happening, at least make sure that this is really the correct approach."
                                 logForce ("What happens is that we convert the subtyping constraint of " <> show (lower, TVar upper) <> " into the supremum " <> show ((lower, l) :=: TVar upper))
                                 logForce "Whyever that is supposed to be correct..."
                                 return ()
                     (l1:l2:ls) -> do
                                 u <- newVar
-                                addConstraint (Solvable (IsSupremum ((l1, l2) :=: u)))
+                                addConstraintNoMessage (Solvable (IsSupremum ((l1, l2) :=: u)))
                                 makeChain (u:ls)
                                 return ()
 
@@ -373,7 +372,7 @@ solveSubtyping name path = withLogLocation "Subtyping" $ do
 
   -- Executing the computation
   enterNonPersisting 
-  (res) <- findPathM @(Full) (\(WithContext e _ ) -> relevance e) (GraphM graph) path
+  (res) <- findPathM @(Full (DMPersistentMessage t)) (\(WithContext e _ ) -> relevance e) (GraphM graph) path
   exitNonPersisting 
 
   -- We look at the result and if necessary throw errors.
@@ -686,7 +685,7 @@ callMonadicGraphSupremum graph name ((a,b) :=: x) = do
 
   enterNonPersisting 
   -- Executing the computation
-  res <- findSupremumM @(Full) (\(WithContext e _) -> relevance e) (graph) ((a,b) :=: x, IsShortestPossiblePath)
+  res <- findSupremumM @(Full (DMPersistentMessage t)) (\(WithContext e _) -> relevance e) (graph) ((a,b) :=: x, IsShortestPossiblePath)
   exitNonPersisting 
 
   -- We look at the result and if necessary throw errors.

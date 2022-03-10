@@ -230,7 +230,7 @@ restrictAll s = let
    addC :: Sensitivity -> TC ()
    addC sv = do
       -- make constraints that say sv <= s and sv is the sensitivity of τ
-      addConstraint (Solvable (IsLessEqual (sv, s)))
+      addConstraintNoMessage (Solvable (IsLessEqual (sv, s)))
       return ()
    in do
       γ <- use types
@@ -247,7 +247,7 @@ restrictInteresting s = let
       case rel of
          IsRelevant -> do
             -- make constraints that say sv <= s and sv is the sensitivity of τ
-            addConstraint (Solvable (IsLessEqual (sv, s)))
+            addConstraintNoMessage (Solvable (IsLessEqual (sv, s)))
             return ()
          _ -> return ()
    in do

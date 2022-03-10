@@ -76,8 +76,8 @@ class (Monad t) => MonadConstraint isT t | t -> isT where
   type ContentConstraintOnSolvable t :: * -> Constraint
   type ConstraintOnSolvable t :: * -> Constraint
   type ConstraintBackup t
-  addConstraint :: Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT -> t Symbol
-  getUnsolvedConstraintMarkNormal :: [SolvingMode] -> t (Maybe (Symbol , Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT, SolvingMode))
+  addConstraint :: (Normalize t a, ShowPretty a) => Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT -> a -> t Symbol
+  getUnsolvedConstraintMarkNormal :: [SolvingMode] -> t (Maybe (Symbol , Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT, SolvingMode, DMPersistentMessage t))
   dischargeConstraint :: Symbol -> t ()
   failConstraint :: Symbol -> t ()
   updateConstraint :: Symbol -> Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT -> t ()
@@ -88,16 +88,16 @@ class (Monad t) => MonadConstraint isT t | t -> isT where
   getConstraintsByType :: (Typeable c, Typeable a) => Proxy (c a) -> t [(Symbol, c a)]
   getAllConstraints :: t [(Symbol, Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT)]
   clearSolvingEvents :: t [String]
-  -- clearConstraints :: t (ConstraintBackup t)
-  -- restoreConstraints :: ConstraintBackup t -> t ()
+
+addConstraintNoMessage solvable = addConstraint solvable ()
 
 
 (==!) :: (MonadConstraint isT t, Solve isT IsEqual (a,a), (HasNormalize isT a), Show (a), Typeable a, IsT isT t, ContentConstraintOnSolvable t (a,a), ConstraintOnSolvable t (IsEqual (a,a))) => a -> a -> t ()
-(==!) a b = addConstraint (Solvable (IsEqual (a,b))) >> pure ()
+(==!) a b = addConstraintNoMessage (Solvable (IsEqual (a,b))) >> pure ()
 
 -- An abbreviation for adding a less equal constraint.
 (≤!) :: (MonadConstraint isT t, Solve isT IsLessEqual (a,a), (HasNormalize isT a), Show (a), Typeable a, IsT isT t, ContentConstraintOnSolvable t (a,a), ConstraintOnSolvable t (IsLessEqual (a,a))) => a -> a -> t ()
-(≤!) a b = addConstraint (Solvable (IsLessEqual (a,b))) >> pure ()
+(≤!) a b = addConstraintNoMessage (Solvable (IsLessEqual (a,b))) >> pure ()
 
 
 -- Basic constraints
@@ -179,7 +179,7 @@ solveAllConstraints nt modes = withLogLocation "Constr" $ do
 
   case openConstr of
     Nothing -> return ()
-    Just (name, constr, mode) -> do
+    Just (name, constr, mode, constr_desc) -> do
       -- debug $ "[Solver]: Notice: BEFORE solving (" <> show mode <> ") " <> show name <> " : " <> show constr
       -- logPrintConstraints
       -- logPrintSubstitutions
@@ -187,6 +187,8 @@ solveAllConstraints nt modes = withLogLocation "Constr" $ do
       catchAndPersist (solve mode name constr) $ \msg -> do
         dischargeConstraint name
         let msg' = "The constraint" :<>: name :<>: ":" :<>: constr
+                  :\\:
+                  constr_desc
                   :\\:
                   "could not be solved:"
                   :\\:

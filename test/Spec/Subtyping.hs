@@ -175,10 +175,10 @@ testSubtyping_Cycles = do
             (zb :: DMMain) <- newVar
             (ab :: DMMain) <- newVar
             (bb :: DMMain) <- newVar
-            addConstraint (Solvable (IsJuliaEqual (y, yb)))
-            addConstraint (Solvable (IsJuliaEqual (z, zb)))
-            addConstraint (Solvable (IsJuliaEqual (a, ab)))
-            addConstraint (Solvable (IsJuliaEqual (b, bb)))
+            addConstraintNoMessage (Solvable (IsJuliaEqual (y, yb)))
+            addConstraintNoMessage (Solvable (IsJuliaEqual (z, zb)))
+            addConstraintNoMessage (Solvable (IsJuliaEqual (a, ab)))
+            addConstraintNoMessage (Solvable (IsJuliaEqual (b, bb)))
 
             -- we are interested in how `a` and `b` turn out
             return (a,b)
@@ -204,10 +204,10 @@ testSubtyping_Cycles = do
             (zb :: DMMain) <- newVar
             (ab :: DMMain) <- newVar
             (bb :: DMMain) <- newVar
-            addConstraint (Solvable (IsJuliaEqual (y, yb)))
-            addConstraint (Solvable (IsJuliaEqual (z, zb)))
-            addConstraint (Solvable (IsJuliaEqual (a, ab)))
-            addConstraint (Solvable (IsJuliaEqual (b, bb)))
+            addConstraintNoMessage (Solvable (IsJuliaEqual (y, yb)))
+            addConstraintNoMessage (Solvable (IsJuliaEqual (z, zb)))
+            addConstraintNoMessage (Solvable (IsJuliaEqual (a, ab)))
+            addConstraintNoMessage (Solvable (IsJuliaEqual (b, bb)))
 
             -- we are interested in how `a` and `b` turn out
             return (a,b)
@@ -232,10 +232,10 @@ testSubtyping_Cycles = do
             (zb :: DMMain) <- newVar
             (ab :: DMMain) <- newVar
             (bb :: DMMain) <- newVar
-            addConstraint (Solvable (IsJuliaEqual (y, yb)))
-            addConstraint (Solvable (IsJuliaEqual (z, zb)))
-            addConstraint (Solvable (IsJuliaEqual (a, ab)))
-            addConstraint (Solvable (IsJuliaEqual (b, bb)))
+            addConstraintNoMessage (Solvable (IsJuliaEqual (y, yb)))
+            addConstraintNoMessage (Solvable (IsJuliaEqual (z, zb)))
+            addConstraintNoMessage (Solvable (IsJuliaEqual (a, ab)))
+            addConstraintNoMessage (Solvable (IsJuliaEqual (b, bb)))
 
             -- we are interested in how `a` and `b` turn out
             return (a,b)
@@ -288,7 +288,7 @@ testSubtyping_ContractEdge = do
 
             -- b is fixed
             (y :: DMMain) <- newVar
-            addConstraint (Solvable (IsJuliaEqual (y, b)))
+            addConstraintNoMessage (Solvable (IsJuliaEqual (y, b)))
 
             return (a,b)
       (tc $ (sn test1 >>= (\(a,b) -> return (a == b)))) `shouldReturn` (Right False)
@@ -306,7 +306,7 @@ testSubtyping_ContractEdge = do
 
             -- a is fixed
             (x :: DMMain) <- newVar
-            addConstraint (Solvable (IsJuliaEqual (x, a)))
+            addConstraintNoMessage (Solvable (IsJuliaEqual (x, a)))
 
             return (a,b)
       (tc $ (sn test1 >>= (\(a,b) -> return (a == b)))) `shouldReturn` (Right False)
@@ -319,10 +319,10 @@ testSubtyping_ContractEdge = do
             a ⊑! b
             -- blocking constraint
             (ba :: DMMain) <- newVar
-            addConstraint (Solvable (IsJuliaEqual (ba, a)))
+            addConstraintNoMessage (Solvable (IsJuliaEqual (ba, a)))
 
             (bb :: DMMain) <- newVar
-            addConstraint (Solvable (IsJuliaEqual (bb, b)))
+            addConstraintNoMessage (Solvable (IsJuliaEqual (bb, b)))
 
             return (a,b)
       (tc $ (sn test1 >>= (\(a,b) -> return (a == b)))) `shouldReturn` (Right False)
@@ -343,8 +343,8 @@ testSubtyping_ContractEdge = do
             -- blocking constraints for x and y
             (y' :: DMMain) <- newVar
             (x' :: DMMain) <- newVar
-            addConstraint (Solvable (IsJuliaEqual (x, x')))
-            addConstraint (Solvable (IsJuliaEqual (y, y')))
+            addConstraintNoMessage (Solvable (IsJuliaEqual (x, x')))
+            addConstraintNoMessage (Solvable (IsJuliaEqual (y, y')))
 
             -- we are interested in how `a`, `b`, `x`, `y` turn out
             return (x,a,b,y)
@@ -440,8 +440,8 @@ testSubtyping_ContractEdge = do
             d ≤! b
 
             -- the additional constraint
-            addConstraint (Solvable (IsJuliaEqual (a, int)))
-            addConstraint (Solvable (IsJuliaEqual (b, int)))
+            addConstraintNoMessage (Solvable (IsJuliaEqual (a, int)))
+            addConstraintNoMessage (Solvable (IsJuliaEqual (b, int)))
 
             return (d,a,b,c)
       let checkres (d,a,b,c) = let f = [a,b,c,d]

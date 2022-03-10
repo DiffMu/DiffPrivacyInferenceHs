@@ -685,7 +685,7 @@ instance TCConstraint IsTypeOpResult where
 --
 --    But to reiterate: the Haskell type system only allows to add a constraint `c`, via
 --    ```
---    do addConstraint (Solvable (c))
+--    do addConstraintNoMessage (Solvable (c))
 --    ```
 --    if there is an instance of `Solve isT c a` currently in scope.
 --
@@ -805,6 +805,9 @@ pattern SmpLet a b c = TLetBase SampleLet a b c
 
 deriving instance (forall a. Show a => Show (t a)) => Show (PreDMTerm t)
 deriving instance (forall a. Eq a => Eq (t a)) => Eq (PreDMTerm t)
+
+instance Monad m => Normalize m (PreDMTerm t) where
+  normalize e x = pure x
 
 
 --------------------------------------------------------------------------

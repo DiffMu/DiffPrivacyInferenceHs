@@ -3,6 +3,7 @@ module DiffMu.Abstract.Data.Error where
 
 import DiffMu.Prelude
 -- import DiffMu.Abstract.Class.Log
+import DiffMu.Abstract.Data.ErrorReporting
 
 import {-# SOURCE #-} DiffMu.Core.Definitions
 
@@ -50,6 +51,9 @@ data Located a = Located
 }
   deriving (Functor, Foldable, Traversable, Eq)
 
+instance Normalize t a => Normalize t (Located a) where
+  normalize e (Located loc a) = Located loc <$> normalize e a
+
 instance Show a => Show (Located a) where
   show (Located loc a) = show a
 
@@ -83,8 +87,20 @@ data DMPersistentMessage t where
 instance ShowPretty (DMPersistentMessage t) where
   showPretty (DMPersistentMessage msg) = showPretty msg
 
+instance Show (DMPersistentMessage t) where
+  show = showPretty
+
 instance Monad t => Normalize t (DMPersistentMessage t) where
   normalize e (DMPersistentMessage msg) = DMPersistentMessage <$> normalize e msg
+
+instance Monad t => SemigroupM t (DMPersistentMessage t) where
+  (DMPersistentMessage a) ⋆ (DMPersistentMessage b) = return (DMPersistentMessage $ a :-----: b)
+
+instance Monad t => MonoidM t (DMPersistentMessage t) where
+  neutral = pure (DMPersistentMessage ())
+
+instance Monad t => CheckNeutral t (DMPersistentMessage t) where
+  checkNeutral b = pure False
 
 data WithContext t e = WithContext e (DMPersistentMessage t)
   deriving (Functor,Foldable,Traversable)

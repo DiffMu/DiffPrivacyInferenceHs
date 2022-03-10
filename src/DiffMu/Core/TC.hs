@@ -32,6 +32,7 @@ import DiffMu.Core.Symbolic (normalizeSensSpecial)
 
 
 
+
 -- Helper function for using a monadic function to update the state of a "by a lens accessible"
 -- value in a state monad. Such an operator does not seem to be defined in the "lenses" library.
 -- This might be because using it is not always well behaved, the following note applies.
@@ -380,7 +381,7 @@ instance (FreeVars TVarOf x, Substitute TVarOf DMTypeOf x) => GoodConstraintCont
 class (MonadImpossible (t), MonadWatch (t), MonadLog t,
        MonadTerm DMTypeOf (t),
        MonadTerm SensitivityOf (t),
-       MonadState (Full) (t),
+       MonadState (Full (DMPersistentMessage t)) (t),
        MonadWriter (DMMessages t) (t),
        MonadDMError (LocatedDMException t) (t),
        MonadInternalError t,
@@ -402,7 +403,7 @@ data AnnNameCtx ks = AnnNameCtx
     _annnames :: NameCtx,
     _anncontent :: ks
   }
-  deriving (Generic)
+  deriving (Generic, Functor)
 -- data DMSolvable where
 --   DMSolvable :: (forall e t. MonadDMTC t => Solve (t) c a) => c a -> DMSolvable
 
@@ -439,7 +440,9 @@ data CtxStack v a = CtxStack
     _topctx :: Ctx v a,
     _otherctxs :: [Ctx v a]
   }
-type ConstraintCtx = AnnNameCtx (CtxStack Symbol (Watched (Solvable GoodConstraint GoodConstraintContent MonadDMTC)))
+deriving instance Functor (CtxStack v)
+
+type ConstraintCtx m = AnnNameCtx (CtxStack Symbol (Watched (Solvable GoodConstraint GoodConstraintContent MonadDMTC), m))
 instance DictKey v => DictLike v x (CtxStack v x) where
   setValue k v (CtxStack d other) = CtxStack (setValue k v d) other
   getValue k (CtxStack d _) = getValue k d
@@ -566,18 +569,18 @@ instance Show SolvingEvent where
 data Watcher = Watcher Changed
   deriving (Generic)
 
-data MetaCtx = MetaCtx
+data MetaCtx m = MetaCtx
   {
     _sensVars :: KindedNameCtx SVarOf,
     _typeVars :: KindedNameCtx TVarOf,
     _termVars :: NameCtx,
     _sensSubs :: Subs SVarOf SensitivityOf,
     _typeSubs :: Subs TVarOf DMTypeOf,
-    _constraints :: ConstraintCtx,
+    _constraints :: ConstraintCtx m,
     -- cached state
     _fixedTVars :: Ctx (SingSomeK TVarOf) [Symbol]
   }
-  deriving (Generic)
+  deriving (Generic, Functor)
 
 data TCState = TCState
   {
@@ -588,16 +591,16 @@ data TCState = TCState
   }
   deriving (Generic)
 
-data Full = Full
+data Full m = Full
   {
     _tcstate :: TCState,
-    _meta :: MetaCtx,
+    _meta :: MetaCtx m,
     _types :: TypeCtxSP
   }
-  deriving (Generic)
+  deriving (Generic, Functor)
 
-newtype TCT m a = TCT {runTCT :: ((StateT Full (ExceptT (LocatedDMException (TCT m)) (WriterT (DMMessages (TCT m)) (m)))) a)}
-  deriving (Functor, Applicative, Monad, MonadState Full, MonadError (LocatedDMException (TCT m)), MonadWriter (DMMessages (TCT m)))
+newtype TCT m a = TCT {runTCT :: ((StateT (Full (DMPersistentMessage (TCT m))) (ExceptT (LocatedDMException (TCT m)) (WriterT (DMMessages (TCT m)) (m)))) a)}
+  deriving (Functor, Applicative, Monad, MonadState (Full (DMPersistentMessage (TCT m))), MonadError (LocatedDMException (TCT m)), MonadWriter (DMMessages (TCT m)))
 
 class LiftTC t where
   liftTC :: TC a -> t a
@@ -667,7 +670,7 @@ instance Monad m => MonadLog (TCT m) where
 
 
 
-instance Show (MetaCtx) where
+instance Show m => Show (MetaCtx m) where
   show (MetaCtx s t n sσ tσ cs fixedT) =
        "- sens vars: " <> show s <> "\n"
     <> "- type vars: " <> show t <> "\n"
@@ -684,7 +687,7 @@ instance Show (TCState) where
   show (TCState w l _ _) = "- watcher: " <> show w <> "\n"
                          <> "- messages: " <> show l <> "\n"
 
-instance Show (Full) where
+instance Show m => Show (Full m) where
   show (Full tcs m γ) = "\nState:\n" <> show tcs <> "\nMeta:\n" <> show m <> "\nTypes:\n" <> show γ <> "\n"
 
 
@@ -692,8 +695,8 @@ instance Default (CtxStack v a) where
   def = CtxStack def []
 instance Default (Watcher) where
 instance Default (TCState) where
-instance Default (MetaCtx) where
-instance Default (Full) where
+instance Default (MetaCtx m) where
+instance Default (Full m) where
   def = Full def def (Left def)
 
 
@@ -772,7 +775,7 @@ recomputeFixedVars :: MonadDMTC t => t ()
 recomputeFixedVars = do
   (Ctx (MonCom constrs)) <- use (meta.constraints.anncontent.topctx)
   let constrs2 = H.toList constrs
-  let constrs3 = [(c, name) | (name , Watched _ c) <- constrs2]
+  let constrs3 = [(c, name) | (name , (Watched _ c,_)) <- constrs2]
 
   let createSingleCtx (c,name) =
         let vars = getFixedVarsOfSolvable c
@@ -793,10 +796,10 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
   type ConstraintBackup (TCT m) = (Ctx Symbol (Watched (Solvable GoodConstraint GoodConstraintContent MonadDMTC)))
   type ContentConstraintOnSolvable (TCT m) = GoodConstraintContent
   type ConstraintOnSolvable (TCT m) = GoodConstraint
-  addConstraint (Solvable c) = do
+  addConstraint (Solvable c) constr_desc = do
 
       -- add the constraint to the constraint list
-      name <- meta.constraints %%= (newAnnName "constr" (Watched (NormalForMode []) (Solvable c)))
+      name <- meta.constraints %%= (newAnnName "constr" (Watched (NormalForMode []) (Solvable c), DMPersistentMessage constr_desc))
 
       -- compute the fixed vars of this constraint
       -- and add them to the cached list
@@ -814,14 +817,15 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
 
   getUnsolvedConstraintMarkNormal modes = do
     (Ctx (MonCom constrs)) <- use (meta.constraints.anncontent.topctx)
-    let constrs2 = H.toList constrs
-    let changedFor curMode = filter (\(a, Watched (NormalForMode normalModes) constr) -> (curMode `notElem` normalModes)) constrs2
+
+    let constrs2 :: [(_,(_,DMPersistentMessage (TCT m)))] = H.toList constrs
+    let changedFor curMode = filter (\(a, (Watched (NormalForMode normalModes) constr, _)) -> (curMode `notElem` normalModes)) constrs2
     let changed = join [zip (changedFor m) (repeat m) | m <- modes]
     case changed of
       [] -> return Nothing
-      (((name,Watched (NormalForMode normalModes) constr),newMode):_) -> do
-        meta.constraints.anncontent.topctx %= (setValue name (Watched (NormalForMode (newMode:normalModes)) constr))
-        return (Just (name, constr, newMode))
+      ((((name,(Watched (NormalForMode normalModes) constr,descr)),newMode):_)) -> do
+        meta.constraints.anncontent.topctx %= (setValue name (Watched (NormalForMode (newMode:normalModes)) constr, descr))
+        return (Just (name, constr, newMode, descr))
 
   dischargeConstraint name = do
     meta.constraints.anncontent.topctx %= (deleteValue name)
@@ -836,7 +840,7 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
     throwUnlocatedError (UnsatisfiableConstraint (show c))
 
   updateConstraint name c = do
-    meta.constraints %= (\(AnnNameCtx n cs) -> AnnNameCtx n (setValue name (Watched (NormalForMode []) c) cs))
+    meta.constraints %= (\(AnnNameCtx n cs) -> AnnNameCtx n (changeValue name (\(_,descr) -> (Watched (NormalForMode []) c, descr)) cs))
     recomputeFixedVars
 
     -- log this as event
@@ -880,8 +884,8 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
           Nothing -> Nothing
 
     let cs' = H.toList cs
-        cs'' = second f <$> cs'
-    return [(name,c) | (name, Just c) <- cs'' ]
+        cs'' = second (first f) <$> cs'
+    return [(name,c) | (name, (Just c, _)) <- cs'' ]
 
   logPrintConstraints = do
     ctrs <- use (meta.constraints.anncontent)
@@ -898,7 +902,7 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
   getAllConstraints = do
     (Ctx (MonCom cs)) <- use (meta.constraints.anncontent.topctx)
     let cs' = H.toList cs
-    return [(name,c) | (name, Watched _ c) <- cs']
+    return [(name,c) | (name, (Watched _ c, _)) <- cs']
 
   clearSolvingEvents = do
     events <- tcstate.solvingEvents %%= (\ev -> (ev,[]))
@@ -940,13 +944,13 @@ instance Monad t => Normalize t AnnotationKind where
 supremum :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsSupremum ((a k, a k) :=: a k), SingI k, Typeable k, ContentConstraintOnSolvable t ((a k, a k) :=: a k), ConstraintOnSolvable t (IsSupremum ((a k, a k) :=: a k))) => (a k) -> (a k) -> t (a k)
 supremum x y = do
   (z :: a k) <- newVar
-  addConstraint (Solvable (IsSupremum ((x, y) :=: z)))
+  addConstraintNoMessage (Solvable (IsSupremum ((x, y) :=: z)))
   return z
 
 infimum :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsInfimum ((a k, a k) :=: a k), SingI k, Typeable k, ContentConstraintOnSolvable t ((a k, a k) :=: a k), ConstraintOnSolvable t (IsInfimum ((a k, a k) :=: a k))) => (a k) -> (a k) -> t (a k)
 infimum x y = do
   (z :: a k) <- newVar
-  addConstraint (Solvable (IsInfimum ((x, y) :=: z)))
+  addConstraintNoMessage (Solvable (IsInfimum ((x, y) :=: z)))
   return z
 
 
@@ -1001,6 +1005,14 @@ instance ShowPretty a => ShowPretty (WrapMessageId a) where showPretty (WrapMess
 instance (Monad m, Normalize TC a) => Normalize (TCT m) (WrapMessageId a) where
   normalize e x = liftTC (normalize e x)
 
+newtype WrapMessageRevId a = WrapMessageRevId a
+instance ShowPretty a => ShowPretty (WrapMessageRevId a) where showPretty (WrapMessageRevId a) = showPretty a
+
+instance (Monad m) => Normalize (m) (WrapMessageRevId a) where
+  normalize e x = pure x
+    -- liftTC (normalize e x)
+
+
 instance Monad m => LiftTC (TCT m) where
   liftTC (TCT v) = -- TCT (v >>= (lift . lift . return))
     let g :: DMPersistentMessage (TCT Identity) -> DMPersistentMessage (TCT m)
@@ -1009,14 +1021,19 @@ instance Monad m => LiftTC (TCT m) where
         i :: LocatedDMException (TCT Identity) -> LocatedDMException (TCT m)
         i (WithContext e ctx) = WithContext e (g ctx)
 
+        g' :: DMPersistentMessage (TCT m) -> DMPersistentMessage (TCT Identity)
+        g' (DMPersistentMessage a) = DMPersistentMessage (WrapMessageRevId a)
+
         f :: DMMessages (TCT Identity) -> DMMessages (TCT m)
         f (DMMessages logs errors) = DMMessages logs (fmap i errors) 
 
-        h :: Either (LocatedDMException (TCT Identity)) (a, Full) -> Either (LocatedDMException (TCT m)) (a, Full)
-        h (Right a) = Right a
+        h :: forall a. Either (LocatedDMException (TCT Identity)) (a, Full (DMPersistentMessage (TCT Identity)))
+              -> Either (LocatedDMException (TCT m)) (a, Full (DMPersistentMessage (TCT m)))
+        h (Right (a,msg)) = Right (a, fmap g msg)
         h (Left (WithContext e ctx)) = Left (WithContext e (g ctx))
 
-        x = StateT (\s -> ExceptT (WriterT (return (first h $ second f $ runWriter $ runExceptT $ runStateT v s))))
+        -- x :: StateT (Full (TCT m)) (ExceptT (LocatedDMException (TCT m)) (WriterT (DMMessages (TCT m)) m)) a
+        x = StateT (\s -> ExceptT (WriterT (return (bimap h f $ runWriter $ runExceptT $ runStateT v (fmap g' s)))))
 
     in TCT x
 
@@ -1116,7 +1133,7 @@ instance FixedVars (TVarOf) (IsLess (Sensitivity,Sensitivity)) where
 --
 instance MonadDMTC t => Unify t Sensitivity where
   unify_ s1 s2 = do
-    c <- addConstraint @MonadDMTC (Solvable (IsEqual (s1, s2)))
+    c <- addConstraintNoMessage (Solvable (IsEqual (s1, s2)))
     return s1
 
 instance (Monad t, Unify t a, Unify t b) => Unify t (a,b) where
@@ -1169,9 +1186,9 @@ normalizeAnn nt (a :∧: b) = do
         --       receive the actual type `Int`.
         --
         -- z <- newVar
-        -- addConstraint (Solvable (IsInfimum ((x, y) :=: z)))
+        -- addConstraintNoMessage (Solvable (IsInfimum ((x, y) :=: z)))
         -- return (NoFun z)
-        -- addConstraint (Solvable (IsEqual (x,y)))
+        -- addConstraintNoMessage (Solvable (IsEqual (x,y)))
 
         unify x y
         return (NoFun x)
