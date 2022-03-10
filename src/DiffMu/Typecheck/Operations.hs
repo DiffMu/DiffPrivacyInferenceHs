@@ -65,7 +65,7 @@ makeNoFunNumeric t = case t of
 
 -- We can solve a binary typeop constraint.
 solveBinary :: forall t. IsT MonadDMTC t => DMTypeOps_Binary -> (DMType, DMType) -> t (Maybe (Sensitivity , Sensitivity, DMType))
-solveBinary op (τ1, τ2) = traceM ("solving " <> show op <> show (τ1, τ2)) >> f op τ1 τ2
+solveBinary op (τ1, τ2) = f op τ1 τ2
   where
     ret :: Sensitivity -> Sensitivity -> t (DMType) -> t (Maybe (Sensitivity, Sensitivity, DMType))
     ret s1 s2 τ = do
@@ -154,10 +154,11 @@ solveBinary op (τ1, τ2) = traceM ("solving " <> show op <> show (τ1, τ2)) >>
     f DMOpDiv (Numeric (Num t1 (Const s1))) (Numeric (Num t2 (Const s2))) = ret zeroId zeroId (return (Numeric (Num DMReal (Const (divide s1 s2)))))
     f DMOpDiv (Numeric (Num t1 (Const s1))) (Numeric (Num t2 NonConst)) = ret zeroId (constCoeff Infty) (return (Numeric (Num DMReal NonConst)))
     f DMOpDiv (Numeric (Num t1 NonConst)) (Numeric (Num t2 (Const s2))) = ret (divide oneId s2) zeroId (return (Numeric (Num DMReal NonConst)))
+    f DMOpDiv (Numeric (Num DMInt NonConst)) (Numeric (Num DMInt NonConst)) = ret inftyS inftyS (return (Numeric (Num DMReal NonConst)))
     f DMOpDiv (Numeric (Num t1 NonConst)) (Numeric (Num t2 NonConst)) = do
         s :: Sensitivity <- newVar
         t <- supremum t1 t2
-        addConstraint (Solvable (SetIfTypesEqual (s, NoFun (Numeric (Num t NonConst)), NoFun (Numeric (Num DMData NonConst)), oneId::Sensitivity, inftyS))) -- if t is data the coeff is 1, else it's inf
+        addConstraintNoMessage (Solvable (SetIfTypesEqual (s, NoFun (Numeric (Num t NonConst)), NoFun (Numeric (Num DMData NonConst)), oneId::Sensitivity, inftyS))) -- if t is data the coeff is 1, else it's inf
         return (Just (s, s, Numeric (Num t NonConst)))
     f DMOpDiv (Numeric t) (TVar a)                            = matchType a (Numeric t)
     f DMOpDiv (TVar a) (Numeric t)                            = matchType a (Numeric t)
