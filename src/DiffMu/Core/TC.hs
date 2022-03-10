@@ -920,6 +920,12 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
     case getValue name ctrs of
       Just (_,descr) -> return descr
       Nothing -> internalError $ "Expected a constraint with the name " <> show name <> " to exist."
+
+  getConstraint name = do
+    (AnnNameCtx _ ctrs) <- use (meta.constraints) 
+    case getValue name ctrs of
+      Just (Watched _ a,descr) -> return (a, descr)
+      Nothing -> internalError $ "Expected a constraint with the name " <> show name <> " to exist."
     
 
 

@@ -3,6 +3,10 @@ module Spec.Subtyping where
 
 import Spec.Base
 
+(⊑!) :: forall k t. (SingI k, Typeable k, MonadDMTC t) => DMTypeOf k -> DMTypeOf k -> t ()
+(⊑!) a b = addConstraintNoMessage (Solvable (IsLessEqual (a,b))) >> pure ()
+
+
 testSubtyping = do
   let testsub x (a :: DMTypeOf k) b c = do
         it ("computes " <> show a <> " ≤ " <> show b <> " as [" <> show c <> "]") $ do
