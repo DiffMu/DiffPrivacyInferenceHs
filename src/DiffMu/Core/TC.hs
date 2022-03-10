@@ -999,13 +999,15 @@ instance Monad m => MonadDMTC (TCT m) where
 --   normalize solv = liftTC (normalize solv)
 
 newtype WrapMessageId a = WrapMessageId a
+  deriving (Show)
 
 instance ShowPretty a => ShowPretty (WrapMessageId a) where showPretty (WrapMessageId a) = showPretty a
 
 instance (Monad m, Normalize TC a) => Normalize (TCT m) (WrapMessageId a) where
-  normalize e x = liftTC (normalize e x)
+  normalize e (WrapMessageId x) = WrapMessageId <$> liftTC (normalize e x)
 
 newtype WrapMessageRevId a = WrapMessageRevId a
+  deriving (Show)
 instance ShowPretty a => ShowPretty (WrapMessageRevId a) where showPretty (WrapMessageRevId a) = showPretty a
 
 instance (Monad m) => Normalize (m) (WrapMessageRevId a) where

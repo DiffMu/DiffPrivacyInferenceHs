@@ -7,6 +7,8 @@ import DiffMu.Abstract.Data.ErrorReporting
 
 import {-# SOURCE #-} DiffMu.Core.Definitions
 
+import Debug.Trace
+
 --------------------------------------------------------------------------
 -- Printing
 
@@ -82,7 +84,7 @@ instance ShowPretty SourceLocExt where
 -------------------------------------------------------------------------
 
 data DMPersistentMessage t where
-  DMPersistentMessage :: (Normalize t a, ShowPretty a) => a -> DMPersistentMessage t
+  DMPersistentMessage :: (Normalize t a, ShowPretty a, Show a) => a -> DMPersistentMessage t
 
 instance ShowPretty (DMPersistentMessage t) where
   showPretty (DMPersistentMessage msg) = showPretty msg
@@ -220,7 +222,7 @@ isCriticalError e = case e of
 class MonadError e t => MonadDMError e t where
   isCritical :: e -> t Bool
   persistentError :: LocatedDMException t -> t ()
-  catchAndPersist :: (Normalize t x, ShowPretty x) => t a -> (DMPersistentMessage t -> t (a, x)) -> t a
+  catchAndPersist :: (Normalize t x, ShowPretty x, Show x) => t a -> (DMPersistentMessage t -> t (a, x)) -> t a
   enterNonPersisting :: t ()
   exitNonPersisting :: t ()
 

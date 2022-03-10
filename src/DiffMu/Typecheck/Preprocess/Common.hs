@@ -45,6 +45,7 @@ logWithSeverityOfMut sev text = do
 -- lifting
 
 newtype WrapMessageLight a = WrapMessageLight a
+  deriving (Show)
 instance ShowPretty a => ShowPretty (WrapMessageLight a) where
   showPretty (WrapMessageLight a) = showPretty a
 instance Monad m => Normalize m (WrapMessageLight a) where

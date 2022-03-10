@@ -17,6 +17,7 @@ instance Monad t => Normalize t Char where
 
 infixl 5 :-----:
 data (:-----:) a b = (:-----:) a b
+  deriving (Show)
 
 instance (ShowPretty a, ShowPretty b) => ShowPretty (a :-----: b) where
   showPretty (a :-----: b) = showPretty a
@@ -32,6 +33,7 @@ instance (Normalize t a, Normalize t b) => Normalize t (a :-----: b) where
 
 infixl 5 :\\:
 data (:\\:) a b = (:\\:) a b
+  deriving (Show)
 
 instance (ShowPretty a, ShowPretty b) => ShowPretty (a :\\: b) where
   showPretty (a :\\: b) = showPretty a
@@ -48,6 +50,7 @@ instance (Normalize t a, Normalize t b) => Normalize t (a :\\: b) where
 
 infixl 6 :<>:
 data (:<>:) a b = (:<>:) a b
+  deriving (Show)
 
 instance (ShowPretty a, ShowPretty b) => ShowPretty (a :<>: b) where
   showPretty (a :<>: b) = showPretty a <> " " <> showPretty b

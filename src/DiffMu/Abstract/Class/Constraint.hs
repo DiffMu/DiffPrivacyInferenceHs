@@ -76,7 +76,7 @@ class (Monad t) => MonadConstraint isT t | t -> isT where
   type ContentConstraintOnSolvable t :: * -> Constraint
   type ConstraintOnSolvable t :: * -> Constraint
   type ConstraintBackup t
-  addConstraint :: (Normalize t a, ShowPretty a) => Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT -> a -> t Symbol
+  addConstraint :: (Normalize t a, ShowPretty a, Show a) => Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT -> a -> t Symbol
   getUnsolvedConstraintMarkNormal :: [SolvingMode] -> t (Maybe (Symbol , Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT, SolvingMode, DMPersistentMessage t))
   dischargeConstraint :: Symbol -> t ()
   failConstraint :: Symbol -> t ()
@@ -173,6 +173,7 @@ solveAllConstraints nt modes = withLogLocation "Constr" $ do
       log $ "[Solver]: Before solving all constraints, the following events have accumulated unnoticed:"
       log $ intercalate "\n" (fmap ("           - " <>) xs)
       log ""
+
 
   normalizeState nt
   openConstr <- getUnsolvedConstraintMarkNormal modes

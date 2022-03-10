@@ -81,9 +81,9 @@ sn x = do
   -- return x3
   tres' <- x
 
-  logForce $ "================================================"
-  logForce $ "before solving constraints (1)"
-  logPrintConstraints
+  -- logForce $ "================================================"
+  -- logForce $ "before solving constraints (1)"
+  -- logPrintConstraints
   tres'' <- solveAndNormalize ExactNormalization [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal] tres'
   tres''' <- solveAndNormalize SimplifyingNormalization [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal] tres''
   -- tres'' <- normalize tres'
