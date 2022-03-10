@@ -91,6 +91,9 @@ class (Monad t) => MonadConstraint isT t | t -> isT where
   clearSolvingEvents :: t [String]
 
 addConstraintNoMessage solvable = addConstraint solvable ()
+addConstraintFromName solvable name = do
+    l <- getConstraintMessage name
+    addConstraint solvable l
 
 
 (==!) :: (MonadConstraint isT t, Solve isT IsEqual (a,a), (HasNormalize isT a), Show (a), Typeable a, IsT isT t, ContentConstraintOnSolvable t (a,a), ConstraintOnSolvable t (IsEqual (a,a))) => a -> a -> t ()
