@@ -426,7 +426,7 @@ checkSen' scope (Located l (MFold f acc₀ m)) = do
     addConstraint (Solvable (IsNonConst (τbody_out, τbody_in)))
     addConstraint (Solvable (UnifyWithConstSubtype (τfold_in, τbody_out)))
 
-    return τbody_in
+    return (NoFun (DMMat L1 U ηm ηn τbody_out))
 
 
 
