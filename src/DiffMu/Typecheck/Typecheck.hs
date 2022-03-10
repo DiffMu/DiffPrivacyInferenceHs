@@ -1,4 +1,5 @@
 
+
 module DiffMu.Typecheck.Typecheck where
 
 import DiffMu.Prelude
@@ -9,6 +10,7 @@ import DiffMu.Core.Symbolic
 import DiffMu.Core.TC
 import DiffMu.Typecheck.Operations
 import DiffMu.Core.Scope
+import DiffMu.Abstract.Data.ErrorReporting
 import DiffMu.Abstract.Data.Permutation
 import DiffMu.Typecheck.JuliaType
 import DiffMu.Typecheck.Constraint.IsFunctionArgument
@@ -23,9 +25,36 @@ import Debug.Trace
 
 import Data.IORef
 import System.IO.Unsafe
-import DiffMu.Core (SourceLocExt(RelatedLoc))
+import DiffMu.Abstract.Data.Error
+import DiffMu.Abstract.Data.ErrorReporting
+
+default (Text)
 
 
+catchNoncriticalError :: LocDMTerm -> TC DMMain -> TC DMMain
+catchNoncriticalError a x = do
+  catchAndPersist x $ \msg -> do
+    resultType <- newVar
+    let msg' = ("While checking the term" :<>: getLocation a)
+                :-----:
+                ("Since the checking was not successful, created the following type for this term:" :: Text) :\\:
+                resultType
+                :-----:
+                msg
+    return (resultType, msg')
+
+
+  -- catchError x $ \err@(WithContext e msg) -> case isCriticalError e of
+  --   True -> throwError err
+  --   False -> do
+  --     resultType <- newVar
+  --     -- let msg = DMPersistentMessage $ (WithContext e (("While checking the term", getLocation a):locs))
+  --     --                                 :-----:
+  --     --                                 "Since the checking was not successful, created the following type for this term:" :\\:
+  --     --                                 resultType
+  --     -- tell (DMMessages [] [msg])
+  --     persistentError $ msg :-----: "While checking the term"
+  --     return resultType
 
 
 ------------------------------------------------------------------------
@@ -42,7 +71,7 @@ checkPriv scope t = do
   types .= Right def -- cast to privacy context.
 
   -- The checking itself
-  res <- withLogLocation "Check" $ checkPri' scope t
+  res <- catchNoncriticalError t (withLogLocation "Check" $ checkPri' scope t)
 
   -- The computation to do after checking
   γ <- use types
@@ -65,7 +94,7 @@ checkSens scope t = do
 
 
   -- get the delayed value of the sensititivty checking
-  res <- withLogLocation "Check" $ checkSen' scope t
+  res <- catchNoncriticalError t (withLogLocation "Check" $ checkSen' scope t)
 
   -- The computation to do after checking
   γ <- use types
@@ -158,7 +187,7 @@ checkSen' scope (Located l (Lam xτs body)) = do
 
     -- add constraints for making non-const if not resolvable
     let addC :: (DMMain :@ b, a) -> TCT Identity ()
-        addC ((τ :@ _), _) = addConstraint (Solvable (MakeNonConst (τ, SolveAssumeWorst))) >> pure ()
+        addC ((τ :@ _), _) = addConstraintNoMessage (Solvable (MakeNonConst (τ, SolveAssumeWorst))) >> pure ()
     mapM addC (zip xrτs (sndA <$> xτs))
 
     -- make an arrow type.
@@ -188,9 +217,9 @@ checkSen' scope (Located l (LamStar xτs body)) = do
     let addC :: (DMMain :@ b, (a, Relevance)) -> TCT Identity ()
         addC ((τ :@ _), (_, i)) = do
                _ <- case i of
-                     IsRelevant -> addConstraint (Solvable (MakeNonConst (τ, SolveAssumeWorst))) >> pure ()
+                     IsRelevant -> addConstraintNoMessage (Solvable (MakeNonConst (τ, SolveAssumeWorst))) >> pure ()
                      NotRelevant -> do
-                                      addConstraint (Solvable (MakeConst τ))
+                                      addConstraintNoMessage (Solvable (MakeConst τ))
                                       return ()
                return ()
     mapM addC (zip xrτs (sndA <$> xτs))
@@ -203,7 +232,7 @@ checkSen' scope (Located l (LamStar xτs body)) = do
 
     -- functions can only return deepcopies of DMModel and DMGrads
     -- restype <- newVar
-    -- addConstraint (Solvable (IsClone (btype, restype)))
+    -- addConstraintNoMessage (Solvable (IsClone (btype, restype)))
 
     let τ = (xrτs' :->*: btype)
     return (Fun [τ :@ (Just sign)])
@@ -270,8 +299,8 @@ checkSen' scope (Located l (BBApply app args cs k)) =
     -- τ_ret <- checkBBKind scope k
     logForce $ "blackbox return tyoe is " <> show τ_ret
 
-    addConstraint (Solvable (IsBlackBox (τ_box, fst <$> argτs))) -- constraint makes sure the signature matches the args
-    mapM (\s -> addConstraint (Solvable (IsBlackBoxReturn (τ_ret, s)))) argτs -- constraint sets the sensitivity to the right thing
+    addConstraintNoMessage (Solvable (IsBlackBox (τ_box, fst <$> argτs))) -- constraint makes sure the signature matches the args
+    mapM (\s -> addConstraintNoMessage (Solvable (IsBlackBoxReturn (τ_ret, s)))) argτs -- constraint sets the sensitivity to the right thing
     return τ_ret
 
 
@@ -294,6 +323,8 @@ checkSen' scope (Located l (Apply f args)) =
     (τ_sum :: DMMain, argτs) <- msumTup (mf , msumS margs) -- sum args and f's context
     τ_ret <- newVar -- a type var for the function return type
     addConstraint (Solvable (IsFunctionArgument (τ_sum, Fun [(argτs :->: τ_ret) :@ Nothing])))
+      (l :\\:
+      "The function " :<>: f :<>: "is applied to" :<>: args)
     return τ_ret
 
 
@@ -313,10 +344,10 @@ checkSen' scope (Located l (MMap f m)) = do
     unify τm (NoFun (DMContainer k nrm clp mv τ_in))
 
     -- only matrices or vectors (not gradients) are allowed.
-    addConstraint (Solvable (IsVecOrMat (k, mr)))
+    addConstraintNoMessage (Solvable (IsVecOrMat (k, mr)))
 
     -- set the type of the function using IFA
-    addConstraint (Solvable (IsFunctionArgument (τf, (Fun [([τ_in :@ s] :->: τ_out) :@ Nothing]))))
+    addConstraintNoMessage (Solvable (IsFunctionArgument (τf, (Fun [([τ_in :@ s] :->: τ_out) :@ Nothing]))))
 
     return (NoFun (DMContainer k nrm U mv τ_out))
 
@@ -338,7 +369,7 @@ checkSen' scope (Located l (MapRows f m)) = do
     unify τm (NoFun (DMMat nrm₁ clp₁ ηm ηn₁ τ_in))
 
     -- set the type of the function using IFA
-    addConstraint (Solvable (IsFunctionArgument (τf, (Fun [([NoFun (DMVec nrm₁ clp₁ ηn₁ τ_in) :@ s] :->: NoFun (DMVec nrm₂ clp₂ ηn₂ τ_out)) :@ Nothing]))))
+    addConstraintNoMessage (Solvable (IsFunctionArgument (τf, (Fun [([NoFun (DMVec nrm₁ clp₁ ηn₁ τ_in) :@ s] :->: NoFun (DMVec nrm₂ clp₂ ηn₂ τ_out)) :@ Nothing]))))
 
     return (NoFun (DMMat nrm₂ clp₂ ηm ηn₂ τ_out))
 
@@ -363,7 +394,7 @@ checkSen' scope (Located l (MapCols f m)) = do
     --
     -- the output matrix has to have L1 norm, because after (virtually) doing MapRows, we have to transpose the matrix,
     -- and this only works without further sensitivity costs when the norm is L1
-    addConstraint (Solvable (IsFunctionArgument (τf, (Fun [([NoFun (DMVec nrm₁ clp₁ ηm₁ τ_in) :@ ς] :->: NoFun (DMVec L1 clp₂ ηm₂ τ_out)) :@ Nothing]))))
+    addConstraintNoMessage (Solvable (IsFunctionArgument (τf, (Fun [([NoFun (DMVec nrm₁ clp₁ ηm₁ τ_in) :@ ς] :->: NoFun (DMVec L1 clp₂ ηm₂ τ_out)) :@ Nothing]))))
 
     -- After transposing, since we have L1, we can output every norm,
     -- thus nrm₂ is freely choosable
@@ -394,7 +425,7 @@ checkSen' scope (Located l (MapCols2 f m₁ m₂)) = do
     unify τm₂ (NoFun (DMMat LInf clp₂ ηm₂ r τ_in₂))
 
     -- set the type of the function using IFA
-    addConstraint (Solvable (IsFunctionArgument (τf, (Fun [([NoFun (DMVec nrm₁ clp₁ ηm₁ τ_in₁) :@ ς₁, NoFun (DMVec nrm₂ clp₂ ηm₂ τ_in₂) :@ ς₂] :->: NoFun (DMVec L1 clp₃ ηm₃ τ_out)) :@ Nothing]))))
+    addConstraintNoMessage (Solvable (IsFunctionArgument (τf, (Fun [([NoFun (DMVec nrm₁ clp₁ ηm₁ τ_in₁) :@ ς₁, NoFun (DMVec nrm₂ clp₂ ηm₂ τ_in₂) :@ ς₂] :->: NoFun (DMVec L1 clp₃ ηm₃ τ_out)) :@ Nothing]))))
 
     -- After transposing, since we have L1, we can output every norm,
     -- thus nrm₂ is freely choosable
@@ -417,14 +448,14 @@ checkSen' scope (Located l (MFold f acc₀ m)) = do
     unify τm (NoFun (DMMat L1 clp₁ ηm ηn τ_content))
 
     -- set the type of the function using IFA
-    addConstraint (Solvable (IsFunctionArgument (τf, (Fun [([τ_content :@ s₁, τbody_in :@ s₂] :->: τbody_out :@ Nothing)]))))
+    addConstraintNoMessage (Solvable (IsFunctionArgument (τf, (Fun [([τ_content :@ s₁, τbody_in :@ s₂] :->: τbody_out :@ Nothing)]))))
 
 
     -- we use the same constraints for dealing with constness
     -- in the different fold iterations as we do in loop
     --
-    addConstraint (Solvable (IsNonConst (τbody_out, τbody_in)))
-    addConstraint (Solvable (UnifyWithConstSubtype (τfold_in, τbody_out)))
+    addConstraintNoMessage (Solvable (IsNonConst (τbody_out, τbody_in)))
+    addConstraintNoMessage (Solvable (UnifyWithConstSubtype (τfold_in, τbody_out)))
 
     return (NoFun (DMMat L1 U ηm ηn τbody_out))
 
@@ -464,13 +495,13 @@ checkSen' scope (Located l (Phi cond ifbr elsebr)) = do
   -- the branches need to return types that are indistinguishable by julia dispatch,
   -- otherwise we cannot resolve dispatch because we don't know which branch is going
   -- to be chosen at runtime.
-  addConstraint (Solvable (IsJuliaEqual (τif, τelse)))
+  addConstraintNoMessage (Solvable (IsJuliaEqual (τif, τelse)))
 
   unify τcond (NoFun DMBool)
 
   -- once we know they are julia-equal, we can safely make the Phi return their supremum.
   τ <- newVar
-  addConstraint (Solvable (IsSupremum ((τif, τelse) :=: τ)))
+  addConstraintNoMessage (Solvable (IsSupremum ((τif, τelse) :=: τ)))
   return τ
 
 
@@ -595,7 +626,7 @@ checkSen' scope (Located l (Loop niter cs' (xi, xc) body)) = do
   τcsnf <- newVar
   unify (NoFun τcsnf) τloop_in -- functions cannot be captured.
 
-  addConstraint (Solvable (IsLoopResult ((sit, scs, sb), sbcs, τit))) -- compute the right scalars once we know if τ_iter is const or not.
+  addConstraintNoMessage (Solvable (IsLoopResult ((sit, scs, sb), sbcs, τit))) -- compute the right scalars once we know if τ_iter is const or not.
 
 {-
       -- TODO loops with Const captures/output don't work yet.
@@ -603,10 +634,10 @@ checkSen' scope (Located l (Loop niter cs' (xi, xc) body)) = do
       -- so we can loop properly by plugging the loop result into the loop in again
       -- the inferred type for xc must be non-const, as we cannot assume that it will be the same in each
       -- iteration.
-      addConstraint (Solvable (IsNonConst (τb, τbcs)))
+      addConstraintNoMessage (Solvable (IsNonConst (τb, τbcs)))
 
       -- also the given capture that we start iteration with should fit into the expected capture
-      addConstraint (Solvable (IsNonConst (τcs, τbcs)))
+      addConstraintNoMessage (Solvable (IsNonConst (τcs, τbcs)))
 -}
 
       -- the types of body, input captures and captures as used in the body must all be equal
@@ -614,9 +645,9 @@ checkSen' scope (Located l (Loop niter cs' (xi, xc) body)) = do
   -- unify τb τbcs
   -- unify τcs τbcs
 
-  addConstraint (Solvable (IsNonConst (τbody_out, τbody_in)))
-  addConstraint (Solvable (UnifyWithConstSubtype (τloop_in, τbody_out)))
-  addConstraint (Solvable (IsLoopResult ((sit, scs, sb), sbcs, τit))) -- compute the right scalars once we know if τ_iter is const or not.
+  addConstraintNoMessage (Solvable (IsNonConst (τbody_out, τbody_in)))
+  addConstraintNoMessage (Solvable (UnifyWithConstSubtype (τloop_in, τbody_out)))
+  addConstraintNoMessage (Solvable (IsLoopResult ((sit, scs, sb), sbcs, τit))) -- compute the right scalars once we know if τ_iter is const or not.
 
   return τbody_in
 
@@ -640,8 +671,8 @@ checkSen' scope (Located l (MCreate n m (x1, x2) body)) =
           WithRelev _ (x2τ :@ _) <- removeVar @SensitivityK x2
 
           -- input vars must be integer
-          addConstraint (Solvable (IsLessEqual (x1τ, NoFun (Numeric (Num DMInt NonConst)))))
-          addConstraint (Solvable (IsLessEqual (x2τ, NoFun (Numeric (Num DMInt NonConst)))))
+          addConstraintNoMessage (Solvable (IsLessEqual (x1τ, NoFun (Numeric (Num DMInt NonConst)))))
+          addConstraintNoMessage (Solvable (IsLessEqual (x2τ, NoFun (Numeric (Num DMInt NonConst)))))
 
           return τ
    in do
@@ -705,7 +736,7 @@ checkSen' scope (Located l (ClipM c m)) = do
   k <- newVar
 
   -- only 1-d things are allowed here (vec, grad or 1-d matrix)
-  addConstraint (Solvable (IsVecLike k))
+  addConstraintNoMessage (Solvable (IsVecLike k))
 
   -- set correct matrix type
   unify τb (NoFun (DMContainer k LInf clp n (NoFun (Numeric (Num DMData NonConst)))))
@@ -942,13 +973,13 @@ checkSen' scope term@(Located l (ScaleGrad scalar grad)) = do
 -- checkSen' scope (Reorder σ t) = do
 --   τ <- checkSens scope t
 --   ρ <- newVar
---   addConstraint (Solvable (IsReorderedTuple ((σ , τ) :=: ρ)))
+--   addConstraintNoMessage (Solvable (IsReorderedTuple ((σ , τ) :=: ρ)))
 --   return ρ
 
 checkSen' scope (Located l (TProject i t)) = do
   τ <- checkSens scope t
   ρ <- newVar
-  addConstraint (Solvable (IsTProject ((i , τ) :=: ρ)))
+  addConstraintNoMessage (Solvable (IsTProject ((i , τ) :=: ρ)))
   return ρ
 
 checkSen' scope (Located l (ZeroGrad m)) = do
@@ -1071,7 +1102,7 @@ checkSen' scope term@(Located l (MakeRow m)) = do
 
 
 -- Everything else is currently not supported.
-checkSen' scope t = throwUnlocatedError (TermColorError SensitivityK (getLocated t))
+checkSen' scope t = throwUnlocatedError (TermColorError SensitivityK (showPretty $ getLocated t))
 
 --------------------------------------------------------------------------------
 -- Privacy terms
@@ -1114,7 +1145,7 @@ checkPri' scope (Located l (Apply f args)) =
   in do
     (τ_sum :: DMMain, argτs) <- msumTup (f_check , msumP margs) -- sum args and f's context
     τ_ret <- newVar -- a type var for the function return type
-    addConstraint (Solvable (IsFunctionArgument (τ_sum, Fun [(argτs :->*: τ_ret) :@ Nothing])))
+    addConstraintNoMessage (Solvable (IsFunctionArgument (τ_sum, Fun [(argτs :->*: τ_ret) :@ Nothing])))
 
     return τ_ret
 
@@ -1302,10 +1333,10 @@ checkPri' scope (Located l (Gauss rp εp δp f)) =
       v_r :: Sensitivity <- newVar
 
       -- parameters must be in (0,1) for gauss to be DP
-      addConstraint (Solvable (IsLess (v_ε, oneId :: Sensitivity)))
-      addConstraint (Solvable (IsLess (v_δ, oneId :: Sensitivity)))
-      addConstraint (Solvable (IsLess (zeroId :: Sensitivity, v_ε)))
-      addConstraint (Solvable (IsLess (zeroId :: Sensitivity, v_δ)))
+      addConstraintNoMessage (Solvable (IsLess (v_ε, oneId :: Sensitivity)))
+      addConstraintNoMessage (Solvable (IsLess (v_δ, oneId :: Sensitivity)))
+      addConstraintNoMessage (Solvable (IsLess (zeroId :: Sensitivity, v_ε)))
+      addConstraintNoMessage (Solvable (IsLess (zeroId :: Sensitivity, v_δ)))
 
       -- restrict interesting variables in f's context to v_r
       let mf = setBody df (v_ε, v_δ) v_r
@@ -1317,7 +1348,7 @@ checkPri' scope (Located l (Gauss rp εp δp f)) =
       (τf, _) <- msumTup (mf, msum3Tup (mr, mε, mδ))
 
       τgauss <- newVar
-      addConstraint (Solvable (IsAdditiveNoiseResult ((NoFun τgauss), τf))) -- we decide later if its gauss or mgauss according to return type
+      addConstraintNoMessage (Solvable (IsAdditiveNoiseResult ((NoFun τgauss), τf))) -- we decide later if its gauss or mgauss according to return type
  
       return (NoFun (τgauss))
 
@@ -1355,10 +1386,10 @@ checkPri' scope (Located l (Laplace rp εp f)) =
       v_r :: Sensitivity <- newVar
 
       -- eps parameter must be > 0 for scaling factor to be well-defined
-      addConstraint (Solvable (IsLess (zeroId :: Sensitivity, v_ε)))
+      addConstraintNoMessage (Solvable (IsLess (zeroId :: Sensitivity, v_ε)))
 
       -- sensitivity parameter must be > 0 for laplace distribution to be well-defined
-      addConstraint (Solvable (IsLess (zeroId :: Sensitivity, v_r)))
+      addConstraintNoMessage (Solvable (IsLess (zeroId :: Sensitivity, v_r)))
 
       -- restrict interesting variables in f's context to v_r
       let mf = setBody df v_ε v_r
@@ -1369,7 +1400,7 @@ checkPri' scope (Located l (Laplace rp εp f)) =
       (τf, _) <- msumTup (mf, msumTup (mr, mε))
 
       τlap <- newVar
-      addConstraint (Solvable (IsAdditiveNoiseResult ((NoFun τlap), τf))) -- we decide later if its lap or mlap according to return type
+      addConstraintNoMessage (Solvable (IsAdditiveNoiseResult ((NoFun τlap), τf))) -- we decide later if its lap or mlap according to return type
  
       return (NoFun (τlap))
 
@@ -1389,10 +1420,10 @@ checkPri' scope (Located l (AboveThresh qs e d t)) = do
       (τqs, (τe, τd, τt)) <- msumTup (mqs, msum3Tup (me, md, mt))
 
       tfun <- newVar
-      addConstraint (Solvable (IsFunctionArgument (tfun, Fun([([τd :@ (oneId :: Sensitivity)] :->: (NoFun (Numeric (Num DMReal NonConst)))) :@ Nothing]))))
+      addConstraintNoMessage (Solvable (IsFunctionArgument (tfun, Fun([([τd :@ (oneId :: Sensitivity)] :->: (NoFun (Numeric (Num DMReal NonConst)))) :@ Nothing]))))
       unify τqs (NoFun (DMVec nrm clp n tfun))
-      addConstraint (Solvable (IsLessEqual (τe, (NoFun (Numeric (Num DMReal (Const eps)))))))
-      addConstraint (Solvable (IsLessEqual (τt, (NoFun (Numeric (Num DMReal NonConst))))))
+      addConstraintNoMessage (Solvable (IsLessEqual (τe, (NoFun (Numeric (Num DMReal (Const eps)))))))
+      addConstraintNoMessage (Solvable (IsLessEqual (τt, (NoFun (Numeric (Num DMReal NonConst))))))
 
       return (NoFun (Numeric (Num DMInt NonConst)))
 
@@ -1479,8 +1510,8 @@ checkPri' scope (Located l (Loop niter cs' (xi, xc) body)) =
           let δ = maxS (map (\(PrivacyAnnotation (_, δs)) -> δs) ps)
 
           δn :: Sensitivity <- newVar -- we can choose this freely!
-          addConstraint (Solvable (IsLessEqual (δn, oneId :: Sensitivity))) -- otherwise we get a negative ε...
-          addConstraint (Solvable (IsLess (zeroId :: Sensitivity, δn))) -- otherwise we get an infinite ε...
+          addConstraintNoMessage (Solvable (IsLessEqual (δn, oneId :: Sensitivity))) -- otherwise we get a negative ε...
+          addConstraintNoMessage (Solvable (IsLess (zeroId :: Sensitivity, δn))) -- otherwise we get an infinite ε...
 
           -- compute the new privacy for the xs according to the advanced composition theorem
           let two = oneId ⋆! oneId
@@ -1548,17 +1579,17 @@ checkPri' scope (Located l (Loop niter cs' (xi, xc) body)) =
       -- so we can loop properly by plugging the loop result into the loop in again
       -- the inferred type for xc must be non-const, as we cannot assume that it will be the same in each
       -- iteration.
-      addConstraint (Solvable (IsNonConst (τb, τbcs)))
+      addConstraintNoMessage (Solvable (IsNonConst (τb, τbcs)))
 
       -- also the given capture that we start iteration with should fit into the expected capture
-      addConstraint (Solvable (IsNonConst (τcs, τbcs)))
+      addConstraintNoMessage (Solvable (IsNonConst (τcs, τbcs)))
 -}
 
       -- the types of body, input captures and captures as used in the body must all be equal
       -- (except Const-ness, actually. we'll figure that out at some point)
 
-      addConstraint (Solvable (IsNonConst (τbody_out, τbody_in)))
-      addConstraint (Solvable (UnifyWithConstSubtype (τloop_in, τbody_out)))
+      addConstraintNoMessage (Solvable (IsNonConst (τbody_out, τbody_in)))
+      addConstraintNoMessage (Solvable (UnifyWithConstSubtype (τloop_in, τbody_out)))
 
       return τbody_in
 
@@ -1567,7 +1598,7 @@ checkPri' scope (Located l (Loop niter cs' (xi, xc) body)) =
 -- checkPri' scope (Reorder σ t) = do
 --   τ <- checkPriv scope t
 --   ρ <- newVar
---   addConstraint (Solvable (IsReorderedTuple ((σ , τ) :=: ρ)))
+--   addConstraintNoMessage (Solvable (IsReorderedTuple ((σ , τ) :=: ρ)))
 --   return ρ
 
 
@@ -1651,12 +1682,12 @@ checkPri' scope (Located l (PReduceCols f m)) = do
     unify τm (NoFun (DMMat LInf U ηm r (NoFun (Numeric (Num DMData NonConst)))))
 
     -- set the type of the function using IFA
-    addConstraint (Solvable (IsFunctionArgument (τf, (Fun [([NoFun (DMMat LInf U ηm oneId (NoFun (Numeric (Num DMData NonConst)))) :@ (ε, δ)] :->*: τ_out) :@ Nothing]))))
+    addConstraintNoMessage (Solvable (IsFunctionArgument (τf, (Fun [([NoFun (DMMat LInf U ηm oneId (NoFun (Numeric (Num DMData NonConst)))) :@ (ε, δ)] :->*: τ_out) :@ Nothing]))))
 
     return (NoFun (DMVec LInf U r τ_out))
 
 
-checkPri' scope t = throwUnlocatedError (TermColorError PrivacyK (getLocated t))
+checkPri' scope t = throwUnlocatedError (TermColorError PrivacyK (showPretty $ getLocated t))
 
 
 
@@ -1670,7 +1701,7 @@ checkBBKind scope a = let
  getFloat :: TC (DMTypeOf NumKind)
  getFloat = do
                 v <- newVar
-                addConstraint (Solvable (IsFloat $ NoFun (Numeric v)))
+                addConstraintNoMessage (Solvable (IsFloat $ NoFun (Numeric v)))
                 return v
  in case a of
   BBSimple jt -> case jt of

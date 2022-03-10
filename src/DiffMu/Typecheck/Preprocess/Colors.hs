@@ -7,6 +7,7 @@ import DiffMu.Prelude
 import DiffMu.Abstract
 import DiffMu.Core
 import DiffMu.Core.Logging
+import DiffMu.Abstract.Data.Error
 import DiffMu.Typecheck.Preprocess.Common
 
 import qualified Data.Text as T
@@ -91,7 +92,7 @@ handleSensTerm_Loc term = do
     tterm <- transformLets_Loc (Just SensitivityK) term
     cterm <- getColor
     case cterm of
-        PrivacyK -> throwUnlocatedError (TermColorError SensitivityK (getLocated term))
+        PrivacyK -> throwUnlocatedError (TermColorError SensitivityK (showPretty (getLocated term)))
         SensitivityK -> return tterm
 
 -- handle a term that is required to be a privacy term
@@ -101,7 +102,7 @@ handlePrivTerm_Loc term = do
     cterm <- getColor
     case cterm of
         PrivacyK -> return tterm
-        SensitivityK -> throwUnlocatedError (TermColorError PrivacyK (getLocated tterm))
+        SensitivityK -> throwUnlocatedError (TermColorError PrivacyK (showPretty (getLocated tterm)))
 
 -- handle a term that can be whatever
 -- handleAnyTerm :: DMTerm -> ColorTC DMTerm

@@ -8,8 +8,11 @@ import DiffMu.Abstract
 import DiffMu.Core.Symbolic
 import DiffMu.Core.Logging
 import {-# SOURCE #-} DiffMu.Core.Definitions
+import {-# SOURCE #-} DiffMu.Abstract.Data.Error
 
-data Full
+
+-- type role Full nominal
+data Full (t :: *)
 
 
 class (FreeVars TVarOf x, Substitute TVarOf DMTypeOf x) => GoodConstraintContent (x :: *) where
@@ -23,9 +26,9 @@ class LiftTC (t :: * -> *)
 class (MonadImpossible (t), MonadWatch (t), MonadLog t,
        MonadTerm DMTypeOf (t),
        MonadTerm SymTerm (t),
-       MonadState (Full) (t),
+       MonadState (Full (DMPersistentMessage t)) (t),
        MonadWriter (DMMessages t) (t),
-       MonadError LocatedDMException (t),
+       MonadDMError (LocatedDMException t) (t),
        MonadInternalError t,
        MonadUnificationError t,
        -- MonadConstraint' Symbol (TC) (t),

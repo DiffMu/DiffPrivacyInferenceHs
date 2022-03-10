@@ -61,7 +61,7 @@ solveIsFunctionArgument name (Fun xs, Fun ys) = do
     [] -> do
       -- replace the IFA constraint by an IsChoice constraint   
       dischargeConstraint name
-      addConstraint (Solvable (IsChoice ((H.fromListWith (\_ _ -> error "Duplicate Method!") existingFunctions), wantedFunctions)))
+      addConstraintNoMessage (Solvable (IsChoice ((H.fromListWith (\_ _ -> error "Duplicate Method!") existingFunctions), wantedFunctions)))
       return ()
 
     -- if there were functions without annotation, error out
@@ -211,7 +211,7 @@ resolveChoiceHash (sign, (method, matches)) = do
        addC ([], _, _) = pure ()
        addC ((a:as), m, ann) = do
            s <- foldM supremum a as -- get supremum of all things the current argument was applied to
-           addConstraint (Solvable (IsFunctionArgument (s, m))) -- make sure it fits the type requred by the method
+           addConstraintNoMessage (Solvable (IsFunctionArgument (s, m))) -- make sure it fits the type requred by the method
            addJuliaSubtypeConstraint s ann -- make sure it fits the given julia signature
 
    mapM addC (zip3 argtypes methxs sign) -- do it for the arguments
@@ -225,7 +225,7 @@ resolveChoiceHash (sign, (method, matches)) = do
    --
    let (r:rs) = map fst methsigs -- do the same for the return type
    s <- foldM unify r rs
-   addConstraint (Solvable (IsFunctionArgument (methr, s)))
+   addConstraintNoMessage (Solvable (IsFunctionArgument (methr, s)))
 
    return ()
 

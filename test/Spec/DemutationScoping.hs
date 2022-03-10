@@ -2,7 +2,6 @@
 module Spec.DemutationScoping where
 
 import Spec.Base
-import DiffMu.Core.Definitions (DMException(DemutationVariableAccessTypeError))
 
 
 testDemutationScoping pp = do

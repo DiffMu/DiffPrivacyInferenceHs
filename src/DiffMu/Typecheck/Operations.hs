@@ -27,7 +27,7 @@ makeTypeOp (IsUnary op) 1 =
   do s1 <- newSVar "η"
      τ1 <-  TVar <$> newTVar "τa"
      res <- TVar <$> newTVar "τr"
-     addConstraint @MonadDMTC (Solvable (IsTypeOpResult (Unary op (τ1 :@ s1) res)))
+     addConstraintNoMessage (Solvable (IsTypeOpResult (Unary op (τ1 :@ s1) res)))
      return (res , [(τ1, s1)])
 makeTypeOp (IsBinary op) 2 =
   do s1 <- newSVar "η"
@@ -35,7 +35,7 @@ makeTypeOp (IsBinary op) 2 =
      τ1 <-  TVar <$> newTVar "τa"
      τ2 <-  TVar <$> newTVar "τa"
      res <- TVar <$> newTVar "τr"
-     addConstraint (Solvable (IsTypeOpResult (Binary op (τ1:@s1, τ2:@s2) res)))
+     addConstraintNoMessage (Solvable (IsTypeOpResult (Binary op (τ1:@s1, τ2:@s2) res)))
      return (res , [(τ1,s1),(τ2,s2)])
 makeTypeOp op lengthArgs = throwUnlocatedError (WrongNumberOfArgsOp op (lengthArgs))
 
@@ -133,7 +133,7 @@ solveBinary op (τ1, τ2) = traceM ("solving " <> show op <> show (τ1, τ2)) >>
     f DMOpMul (Numeric (Num t1 NonConst)) (Numeric (Num t2 NonConst)) = do
         s :: Sensitivity <- newVar
         t <- supremum t1 t2
-        addConstraint (Solvable (SetIfTypesEqual (s, NoFun (Numeric (Num t NonConst)), NoFun (Numeric (Num DMData NonConst)), oneId::Sensitivity, inftyS))) -- if t is data the coeff is 1, else it's inf
+        addConstraintNoMessage (Solvable (SetIfTypesEqual (s, NoFun (Numeric (Num t NonConst)), NoFun (Numeric (Num DMData NonConst)), oneId::Sensitivity, inftyS))) -- if t is data the coeff is 1, else it's inf
         return (Just (s, s, Numeric (Num t NonConst)))
     f DMOpMul (Numeric τs) (DMMat n cl r c t) = do
                                                   tt <- makeNoFunNumeric t
@@ -248,7 +248,7 @@ solveop name (IsTypeOpResult (Unary op (τa :@ s) τr)) = do
       -- unification would lead to an error then so we do subtyping in that case
       -- see issue #124
       case τr of
-          (Numeric (Num _ NonConst)) -> addConstraint (Solvable (IsLessEqual (val_τr ,τr))) >> return val_τr
+          (Numeric (Num _ NonConst)) -> addConstraintNoMessage (Solvable (IsLessEqual (val_τr ,τr))) >> return val_τr
           _ -> unify τr val_τr
       dischargeConstraint @MonadDMTC name
 

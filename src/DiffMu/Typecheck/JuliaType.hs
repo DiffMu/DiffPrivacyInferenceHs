@@ -71,7 +71,7 @@ createDMTypeNum :: MonadDMTC t => JuliaType -> t DMMain
 createDMTypeNum (JTInt) = pure (NoFun (Numeric (Num DMInt NonConst)))
 createDMTypeNum (JTReal)  = do
     v <- newVar -- could be data!
-    addConstraint (Solvable (IsFloat $ NoFun (Numeric v)))
+    addConstraintNoMessage (Solvable (IsFloat $ NoFun (Numeric v)))
     return (NoFun (Numeric v))
 createDMTypeNum (t) = pure DMAny
 
@@ -82,7 +82,7 @@ createDMType (JTInt) = do
   return (Numeric (Num DMInt NonConst))
 createDMType (JTReal) = do
   v <- newVar
-  addConstraint (Solvable (IsFloat $ NoFun (Numeric v)))
+  addConstraintNoMessage (Solvable (IsFloat $ NoFun (Numeric v)))
   return (Numeric v)
 createDMType (JTTuple ts) = do
   dts <- mapM createDMType ts
@@ -120,10 +120,10 @@ createDMType (t)  = throwUnlocatedError (TypeMismatchError $ "expected " <> show
 addJuliaSubtypeConstraint :: IsT MonadDMTC t => DMMain -> JuliaType -> t ()
 addJuliaSubtypeConstraint τ JTAny = pure ()
 addJuliaSubtypeConstraint τ JTFunction = do
-    addConstraint (Solvable (IsFunction (SensitivityK, τ)))
+    addConstraintNoMessage (Solvable (IsFunction (SensitivityK, τ)))
     pure ()
 addJuliaSubtypeConstraint τ JTPFunction = do
-    addConstraint (Solvable (IsFunction (PrivacyK, τ)))
+    addConstraintNoMessage (Solvable (IsFunction (PrivacyK, τ)))
     pure ()
 addJuliaSubtypeConstraint τ jt = do
   ι <- createDMType jt

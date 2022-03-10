@@ -16,8 +16,8 @@ import qualified Data.Text as T
 import Debug.Trace
 
 
-newtype LightTC l s a = LightTC {runLightTC :: ((StateT s (ExceptT LocatedDMException (Writer (DMMessages (LightTC l s) )))) a)}
-  deriving (Functor, Applicative, Monad, MonadState s, MonadError LocatedDMException, MonadWriter (DMMessages (LightTC l s)))
+newtype LightTC l s a = LightTC {runLightTC :: ((StateT s (ExceptT (LocatedDMException (LightTC l s)) (Writer (DMMessages (LightTC l s) )))) a)}
+  deriving (Functor, Applicative, Monad, MonadState s, MonadError (LocatedDMException (LightTC l s)), MonadWriter (DMMessages (LightTC l s)))
 
 instance ISing_DMLogLocation l => MonadInternalError (LightTC l s) where
   internalError = throwUnlocatedError . InternalError
@@ -45,8 +45,9 @@ logWithSeverityOfMut sev text = do
 -- lifting
 
 newtype WrapMessageLight a = WrapMessageLight a
-instance Show a => Show (WrapMessageLight a) where
-  show (WrapMessageLight a) = show a
+  deriving (Show)
+instance ShowPretty a => ShowPretty (WrapMessageLight a) where
+  showPretty (WrapMessageLight a) = showPretty a
 instance Monad m => Normalize m (WrapMessageLight a) where
   normalize e x = pure x
 
@@ -54,11 +55,15 @@ liftNewLightTC :: Default s => LightTC l s a -> TC a
 liftNewLightTC a =
   let s = runExceptT $ runStateT (runLightTC a) def
 
-      g :: DMMessages (LightTC l1 s1) -> DMMessages (TCT Identity)
-      g (DMMessages xs ys) = DMMessages xs (fmap (\(DMPersistentMessage a) -> DMPersistentMessage (WrapMessageLight a)) ys)
+      h = \(DMPersistentMessage a) -> DMPersistentMessage (WrapMessageLight a)
 
-      f :: (Either LocatedDMException (a, s), DMMessages (LightTC l s)) -> (Either LocatedDMException (a, Full), DMMessages (TCT Identity))
-      f (Left a, b) = (Left a , g b)
+      i = \(WithContext e ctx) -> WithContext e (h ctx)
+
+      g :: DMMessages (LightTC l1 s1) -> DMMessages (TCT Identity)
+      g (DMMessages xs ys) = DMMessages xs (fmap i ys)
+
+      f :: (Either (LocatedDMException (LightTC l s)) (a, s), DMMessages (LightTC l s)) -> (Either (LocatedDMException (TCT Identity)) (a, Full (DMPersistentMessage TC)), DMMessages (TCT Identity))
+      f (Left (WithContext e ctx), b) = (Left (WithContext e (h ctx)) , g b)
       f (Right (a, s), b) = (Right (a, def), g b)
 
   in TCT (StateT (\t -> ExceptT (WriterT (return (f $ runWriter $ s)))))
@@ -67,11 +72,15 @@ liftLightTC :: forall s t k l a. s -> (s -> t) -> LightTC k s a -> LightTC l t a
 liftLightTC start conv a =
   let s = runExceptT $ runStateT (runLightTC a) start
 
-      g :: DMMessages (LightTC k1 s) -> DMMessages (LightTC k2 t)
-      g (DMMessages xs ys) = DMMessages xs (fmap (\(DMPersistentMessage a) -> DMPersistentMessage (WrapMessageLight a)) ys)
+      h = \(DMPersistentMessage a) -> DMPersistentMessage (WrapMessageLight a)
 
-      f :: (Either LocatedDMException (a, s), DMMessages (LightTC k1 s)) -> (Either LocatedDMException (a, t), DMMessages (LightTC l t))
-      f (Left a, b) = (Left a , g b)
+      i = \(WithContext e ctx) -> WithContext e (h ctx)
+
+      g :: DMMessages (LightTC k1 s) -> DMMessages (LightTC k2 t)
+      g (DMMessages xs ys) = DMMessages xs (fmap (i) ys)
+
+      f :: (Either (LocatedDMException (LightTC k1 s)) (a, s), DMMessages (LightTC k1 s)) -> (Either (LocatedDMException (LightTC l t)) (a, t), DMMessages (LightTC l t))
+      f (Left (WithContext e ctx), b) = (Left (WithContext e (h ctx)) , g b)
       f (Right (a, s), b) = (Right (a, conv s), g b)
 
   in LightTC (StateT (\t -> ExceptT (WriterT (return (f $ runWriter $ s)))))

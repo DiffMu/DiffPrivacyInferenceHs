@@ -307,7 +307,7 @@ showFunPretty marker args ret = intercalate "\n" (fmap showArgPretty args)
                          <> " " <> marker <> " " <> (showPretty ret)
 
 showPrettyEnumVertical :: (ShowPretty a) => [a] -> String
-showPrettyEnumVertical as = "{\n" <> intercalate "\n,\n" (fmap (justIndent . showPretty) as) <> "\n}"
+showPrettyEnumVertical as = "{\n" <> intercalate "\n,\n" (fmap (indent . showPretty) as) <> "\n}"
 
 instance ShowPretty (Sensitivity) where
   showPretty s = show s
@@ -685,7 +685,7 @@ instance TCConstraint IsTypeOpResult where
 --
 --    But to reiterate: the Haskell type system only allows to add a constraint `c`, via
 --    ```
---    do addConstraint (Solvable (c))
+--    do addConstraintNoMessage (Solvable (c))
 --    ```
 --    if there is an instance of `Solve isT c a` currently in scope.
 --
@@ -722,29 +722,6 @@ data BBKind (t :: * -> *) = BBSimple JuliaType | BBVecLike JuliaType (LocPreDMTe
 deriving instance (forall a. Show a => Show (t a)) => Show (BBKind t)
 deriving instance (forall a. Eq a => Eq (t a)) => Eq (BBKind t)
 
-data SourceLoc = SourceLoc
-  {
-    getLocFile  :: String
-  , getLocBegin :: (Int,Int)
-  , getLocEnd   :: (Int,Int)
-  }
-  deriving (Eq, Show)
-
-data SourceLocExt = ExactLoc SourceLoc | RelatedLoc String SourceLocExt | UnknownLoc | NotImplementedLoc String
-  deriving (Eq, Show)
-
-data Located a = Located
-  {
-    getLocation :: SourceLocExt
-  , getLocated :: a
-}
-  deriving (Functor, Foldable, Traversable, Eq, Show)
-
-downgradeToRelated :: String -> SourceLocExt -> SourceLocExt
-downgradeToRelated = RelatedLoc
-
-notLocated :: a -> Located a
-notLocated = Located UnknownLoc
 
 type LocPreDMTerm t = Located (PreDMTerm t)
 
@@ -828,6 +805,9 @@ pattern SmpLet a b c = TLetBase SampleLet a b c
 
 deriving instance (forall a. Show a => Show (t a)) => Show (PreDMTerm t)
 deriving instance (forall a. Eq a => Eq (t a)) => Eq (PreDMTerm t)
+
+instance Monad m => Normalize m (PreDMTerm t) where
+  normalize e x = pure x
 
 
 --------------------------------------------------------------------------
@@ -1045,9 +1025,6 @@ freeVarsOfProcDMTerm t = fst $ recDMTermMSameExtension_Loc f (Located UnknownLoc
 --------------------------------------------------------------------------
 -- pretty printing
 
-class ShowPretty a where
-  showPretty :: a -> String
-
 instance ShowPretty a => ShowPretty [a] where
   showPretty as = "[" <> intercalate ", " (fmap showPretty as) <> "]"
 
@@ -1055,23 +1032,6 @@ instance ShowPretty a => ShowPretty (Maybe a) where
       showPretty (Just v) = "Just " <> (showPretty v)
       showPretty Nothing = "Nothing"
 
-newlineIndentIfLong :: String -> String
-newlineIndentIfLong xs = case '\n' `elem` xs of
-  False -> xs
-  True -> "\n" <> justIndent xs
-
-parenIndent :: String -> String
-parenIndent s = "\n(\n" <> unlines (fmap ("  " <>) (lines s)) <> ")"
-
-braceIndent :: String -> String
-braceIndent s = "\n{\n" <> unlines (fmap ("  " <>) (lines s)) <> "}"
-
-
-justIndent :: String -> String
-justIndent s = unlines (fmap ("  " <>) (lines s))
-
-indent :: String -> String
-indent s = unlines (fmap ("  " <>) (lines s))
 
 instance ShowPretty (TeVar) where
   showPretty (v) = show v
@@ -1202,99 +1162,6 @@ instance ShowPretty (EmptyExtension a) where
 
 
 
---------------------------------------------------------------------------
--- DMException
---
--- The different kinds of errors we can throw.
-
-data DMException where
-  UnsupportedError        :: String -> DMException
-  UnsupportedTermError    :: DMTerm -> DMException
-  UnificationError        :: Show a => a -> a -> DMException
-  WrongNumberOfArgs       :: Show a => a -> a -> DMException
-  WrongNumberOfArgsOp     :: Show a => a -> Int -> DMException
-  ImpossibleError         :: String -> DMException
-  InternalError           :: String -> DMException
-  VariableNotInScope      :: Show a => a -> DMException
-  UnsatisfiableConstraint :: String -> DMException
-  TypeMismatchError       :: String -> DMException
-  NoChoiceFoundError      :: String -> DMException
-  UnblockingError         :: String -> DMException
-  DemutationError         :: String -> DMException
-  DemutationDefinitionOrderError :: Show a => a -> DMException
-  DemutationVariableAccessTypeError :: String -> DMException
-  BlackBoxError           :: String -> DMException
-  FLetReorderError        :: String -> DMException
-  UnificationShouldWaitError :: DMTypeOf k -> DMTypeOf k -> DMException
-  TermColorError          :: AnnotationKind -> DMTerm -> DMException
-  ParseError              :: String -> String -> Int -> DMException -- error message, filename, line number
-  DemutationMovedVariableAccessError :: Show a => a -> DMException
-  DemutationNonAliasedMutatingArgumentError :: String -> DMException
-  DemutationSplitMutatingArgumentError :: String -> DMException
-
-instance Show DMException where
-  show (UnsupportedError t) = "The term '" <> t <> "' is currently not supported."
-  show (UnsupportedTermError t) = "The term '" <> show t <> "' is currently not supported."
-  show (UnificationError a b) = "Could not unify '" <> show a <> "' with '" <> show b <> "'."
-  show (WrongNumberOfArgs a b) = "While unifying: the terms '" <> show a <> "' and '" <> show b <> "' have different numbers of arguments"
-  show (WrongNumberOfArgsOp op n) = "The operation " <> show op <> " was given a wrong number (" <> show n <> ") of args."
-  show (ImpossibleError e) = "Something impossible happened: " <> e
-  show (InternalError e) = "Internal error: " <> e
-  show (VariableNotInScope v) = "Variable not in scope: " <> show v
-  show (UnsatisfiableConstraint c) = "The constraint " <> c <> " is not satisfiable."
-  show (TypeMismatchError e) = "Type mismatch: " <> e
-  show (NoChoiceFoundError e) = "No choice found: " <> e
-  show (UnificationShouldWaitError a b) = "Trying to unify types " <> show a <> " and " <> show b <> " with unresolved infimum (∧)."
-  show (UnblockingError e) = "While unblocking, the following error was encountered:\n " <> e
-  show (DemutationError e) = "While demutating, the following error was encountered:\n " <> e
-  show (BlackBoxError e) = "While preprocessing black boxes, the following error was encountered:\n " <> e
-  show (FLetReorderError e) = "While processing function signatures, the following error was encountered:\n " <> e
-  show (ParseError e file line) = "Unsupported julia expression in file " <> file <> ", line " <> show line <> ":\n " <> e
-  show (TermColorError color t) = "Expected " <> show t <> " to be a " <> show color <> " expression but it is not."
-  show (DemutationDefinitionOrderError a) = "The variable '" <> show a <> "' has not been defined before being used.\n"
-                                            <> "Note that currently every variable has to be assigned some value prior to its usage.\n"
-                                            <> "Here, 'prior to usage' means literally earlier in the code.\n"
-                                            <> "The actual value of that assignment is irrelevant, e.g., the first line of the following code is only there to fix the error which is currently shown:\n"
-                                            <> ">  a = 0" <> "\n"
-                                            <> ">  function f()" <> "\n"
-                                            <> ">    a" <> "\n"
-                                            <> ">  end" <> "\n"
-                                            <> ">  a = 3" <> "\n"
-                                            <> ">  f()" <> "\n"
-  show (DemutationVariableAccessTypeError e) = "An error regarding variable access types occured:\n" <> e
-  show (DemutationMovedVariableAccessError a) = "Tried to access the variable " <> show a <> ". But this variable is not valid anymore, because it was assigned to something else."
-  show (DemutationNonAliasedMutatingArgumentError a) = "An error regarding non-aliasing of mutating arguments occured:\n" <> a
-  show (DemutationSplitMutatingArgumentError a) = "An error regarding mutating arguments occured:\n" <> a
-
-instance Eq DMException where
-  UnsupportedTermError    a        == UnsupportedTermError    b       = True
-  UnificationError        a a2     == UnificationError        b b2    = True
-  WrongNumberOfArgs       a a2     == WrongNumberOfArgs       b b2    = True
-  WrongNumberOfArgsOp     a a2     == WrongNumberOfArgsOp     b b2    = True
-  ImpossibleError         a        == ImpossibleError         b       = True
-  InternalError           a        == InternalError           b       = True
-  VariableNotInScope      a        == VariableNotInScope      b       = True
-  UnsatisfiableConstraint a        == UnsatisfiableConstraint b       = True
-  TypeMismatchError       a        == TypeMismatchError       b       = True
-  NoChoiceFoundError      a        == NoChoiceFoundError      b       = True
-  UnificationShouldWaitError a a2  == UnificationShouldWaitError b b2 = True
-  ParseError e1 file1 line1        == ParseError e2 file2 line2       = True
-  FLetReorderError        a        == FLetReorderError        b       = True
-  TermColorError      a b          == TermColorError c d              = True
-  DemutationError a                == DemutationError         b       = True
-  DemutationDefinitionOrderError a == DemutationDefinitionOrderError b = True
-  DemutationVariableAccessTypeError a == DemutationVariableAccessTypeError b = True
-  DemutationMovedVariableAccessError a       == DemutationMovedVariableAccessError b = True
-  DemutationNonAliasedMutatingArgumentError a       == DemutationNonAliasedMutatingArgumentError b = True
-  DemutationSplitMutatingArgumentError a       == DemutationSplitMutatingArgumentError b = True
-  _ == _ = False
-
-data LocatedError e = LocatedError e [(String,SourceLocExt)]
-  deriving (Show,Eq)
-type LocatedDMException = LocatedError DMException
-
-throwUnlocatedError e = throwError (LocatedError e [])
--- throwLocatedError e xs = throwError (LocatedError e [(s,)])
 
 --------------------------------------------------------------------------
 -- The environment for executing typechecking

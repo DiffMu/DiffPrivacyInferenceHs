@@ -43,22 +43,30 @@ import Test.Hspec as All
 import Test.Hspec.Core.Runner as All
 
 
-tc :: TC a -> IO (Either LocatedDMException a)
+tc :: TC a -> IO (Either (DMException) a)
 tc r = do
   x <- executeTC (DontShowLog) r
-  return (fst <$> x)
 
-tcl :: TC a -> IO (Either LocatedDMException a)
+  let x' = case x of
+        Left (WithContext e _) -> Left e
+        Right x -> Right x
+
+  return (fst <$> x')
+
+tcl :: TC a -> IO (Either (DMException) a)
 tcl r = do
-
   x <- executeTC (DoShowLog Force []) r
+
+  let x' = case x of
+        Left (WithContext e _) -> Left e
+        Right x -> Right x
   -- x <- executeTC (DoShowLog Force [Location_Constraint , Location_INC, Location_MonadicGraph, Location_Unification]) r
   -- x <- executeTC (DoShowLog Force [Location_Constraint, Location_Subtyping]) r
-  return (fst <$> x)
+  return (fst <$> x')
 
 
 
-tcb :: Bool -> TC a -> IO (Either LocatedDMException a)
+tcb :: Bool -> TC a -> IO (Either (DMException) a)
 tcb True = tcl
 tcb False = tc
 
@@ -73,9 +81,9 @@ sn x = do
   -- return x3
   tres' <- x
 
-  logForce $ "================================================"
-  logForce $ "before solving constraints (1)"
-  logPrintConstraints
+  -- logForce $ "================================================"
+  -- logForce $ "before solving constraints (1)"
+  -- logPrintConstraints
   tres'' <- solveAndNormalize ExactNormalization [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal] tres'
   tres''' <- solveAndNormalize SimplifyingNormalization [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal] tres''
   -- tres'' <- normalize tres'
@@ -233,7 +241,7 @@ parseEval_b_customCheck dolog parse desc term (testBy :: TestBy) customTCCheck =
       TestByEquality expected -> (tcb dolog $ (sn term'' >>= correctEquality expected)) `shouldReturn` (Right (Right ()))
       TestByUnification expected -> (tcb dolog $ (sn term'' >>= correctUnification expected)) `shouldReturn` (Right (Right ()))
       TestByString expected -> (tcb dolog $ (sn term'' >>= correctString)) `shouldReturn` (Right (expected))
-      TestByFail f  -> (tcb dolog $ (sn term'')) `shouldReturn` (Left (LocatedError f []))
+      TestByFail f  -> (tcb dolog $ (sn term'')) `shouldReturn` (Left (f))
       TestByThrows -> (tcb dolog $ (sn term'')) `shouldThrow` anyException
 
 

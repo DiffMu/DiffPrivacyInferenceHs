@@ -63,12 +63,18 @@ executeTC l r = do
         putStrLn "======================== LOG ========================="
         putStrLn realLogs
         putStrLn "======================== End LOG ====================="
-        putStrLn ""
+
     (DontShowLog) -> return ()
 
-  return x
+  putStrLn "======================== Errors ====================="
+  putStrLn (getErrorMessage logs)
+  putStrLn "======================== End Errors ====================="
 
-typecheckFromJExprWithPrinter :: ((DMMain,Full) -> String) -> DoShowLog -> JExpr -> IO ()
+  case getErrors logs of
+    [] -> return x
+    (x:xs) -> return (Left x)
+
+typecheckFromJExprWithPrinter :: ((DMMain,Full (DMPersistentMessage TC)) -> String) -> DoShowLog -> JExpr -> IO ()
 typecheckFromJExprWithPrinter printer logoptions term = do
   let r = do
 

@@ -95,6 +95,7 @@ library:
     - DeriveFunctor
     - DeriveTraversable
     - DeriveFoldable
+    - ExtendedDefaultRules
 
 verbatim: |
   foreign-library diffmu-wrapper

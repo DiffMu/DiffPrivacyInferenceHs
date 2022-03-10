@@ -8,8 +8,13 @@ import DiffMu.Prelude
 import DiffMu.Abstract.Class.IsT
 import DiffMu.Abstract.Class.Log
 import DiffMu.Abstract.Class.Term
+import DiffMu.Abstract.Data.Error
+import DiffMu.Abstract.Data.ErrorReporting
+import DiffMu.Core.Logging
 -- import DiffMu.Abstract.Class.MonadTerm
 import Debug.Trace
+
+default (Text)
 
 data SolvingMode = SolveExact | SolveAssumeWorst | SolveGlobal | SolveFinal | SolveSpecial
   deriving (Eq)
@@ -61,6 +66,9 @@ instance (isT t, Monad (t)) => Normalize (t) (Solvable eC eC2 isT) where
 instance Show (Solvable eC eC2 isT) where
   show (Solvable c) = show c
 
+instance ShowPretty (Solvable eC eC2 isT) where
+  showPretty = show
+
 data CloseConstraintSetResult = ConstraintSet_WasEmpty | ConstraintSet_WasNotEmpty
 
 class (Monad t) => MonadConstraint isT t | t -> isT where
@@ -68,8 +76,8 @@ class (Monad t) => MonadConstraint isT t | t -> isT where
   type ContentConstraintOnSolvable t :: * -> Constraint
   type ConstraintOnSolvable t :: * -> Constraint
   type ConstraintBackup t
-  addConstraint :: Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT -> t Symbol
-  getUnsolvedConstraintMarkNormal :: [SolvingMode] -> t (Maybe (Symbol , Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT, SolvingMode))
+  addConstraint :: (Normalize t a, ShowPretty a, Show a) => Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT -> a -> t Symbol
+  getUnsolvedConstraintMarkNormal :: [SolvingMode] -> t (Maybe (Symbol , Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT, SolvingMode, DMPersistentMessage t))
   dischargeConstraint :: Symbol -> t ()
   failConstraint :: Symbol -> t ()
   updateConstraint :: Symbol -> Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT -> t ()
@@ -80,16 +88,16 @@ class (Monad t) => MonadConstraint isT t | t -> isT where
   getConstraintsByType :: (Typeable c, Typeable a) => Proxy (c a) -> t [(Symbol, c a)]
   getAllConstraints :: t [(Symbol, Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT)]
   clearSolvingEvents :: t [String]
-  -- clearConstraints :: t (ConstraintBackup t)
-  -- restoreConstraints :: ConstraintBackup t -> t ()
+
+addConstraintNoMessage solvable = addConstraint solvable ()
 
 
 (==!) :: (MonadConstraint isT t, Solve isT IsEqual (a,a), (HasNormalize isT a), Show (a), Typeable a, IsT isT t, ContentConstraintOnSolvable t (a,a), ConstraintOnSolvable t (IsEqual (a,a))) => a -> a -> t ()
-(==!) a b = addConstraint (Solvable (IsEqual (a,b))) >> pure ()
+(==!) a b = addConstraintNoMessage (Solvable (IsEqual (a,b))) >> pure ()
 
 -- An abbreviation for adding a less equal constraint.
 (≤!) :: (MonadConstraint isT t, Solve isT IsLessEqual (a,a), (HasNormalize isT a), Show (a), Typeable a, IsT isT t, ContentConstraintOnSolvable t (a,a), ConstraintOnSolvable t (IsLessEqual (a,a))) => a -> a -> t ()
-(≤!) a b = addConstraint (Solvable (IsLessEqual (a,b))) >> pure ()
+(≤!) a b = addConstraintNoMessage (Solvable (IsLessEqual (a,b))) >> pure ()
 
 
 -- Basic constraints
@@ -154,7 +162,7 @@ instance TCConstraint IsFunction where
 -- Returns if no "changed" constraints remains.
 -- An unchanged constraint is marked "changed", if it is affected by a new substitution.
 -- A changed constraint is marked "unchanged" if it is read by a call to `getUnsolvedConstraintMarkNormal`.
-solveAllConstraints :: forall isT t eC. (MonadImpossible t, MonadLog t, MonadConstraint isT t, MonadNormalize t, IsT isT t) => NormalizationType -> [SolvingMode] -> t ()
+solveAllConstraints :: forall isT t eC e. (MonadDMError e t, MonadImpossible t, MonadLog t, MonadConstraint isT t, MonadNormalize t, IsT isT t) => NormalizationType -> [SolvingMode] -> t ()
 solveAllConstraints nt modes = withLogLocation "Constr" $ do
 
   -- get events which came before us
@@ -166,16 +174,42 @@ solveAllConstraints nt modes = withLogLocation "Constr" $ do
       log $ intercalate "\n" (fmap ("           - " <>) xs)
       log ""
 
+
   normalizeState nt
   openConstr <- getUnsolvedConstraintMarkNormal modes
 
   case openConstr of
     Nothing -> return ()
-    Just (name, constr, mode) -> do
+    Just (name, constr, mode, constr_desc) -> do
       -- debug $ "[Solver]: Notice: BEFORE solving (" <> show mode <> ") " <> show name <> " : " <> show constr
       -- logPrintConstraints
       -- logPrintSubstitutions
-      solve mode name constr
+
+      catchAndPersist (solve mode name constr) $ \msg -> do
+        dischargeConstraint name
+        let msg' = "The constraint" :<>: name :<>: ":" :<>: constr
+                  :\\:
+                  constr_desc
+                  :\\:
+                  "could not be solved:"
+                  :\\:
+                  msg
+        return ((),msg')
+      -- catchError (solve mode name constr) $ \(WithContext err ctx) -> do
+      --   crit <- isCritical err
+      --   case crit of
+      --     True -> throwError err
+      --     False -> do
+      --       let changeMsg :: DMPersistentMessage t -> DMPersistentMessage t
+      --           changeMsg (DMPersistentMessage msg) = DMPersistentMessage $ 
+      --             "The constraint" :<>: name :<>: ":" :<>: constr
+      --             :\\:
+      --             "could not be solved:"
+      --             :\\:
+      --             msg
+      --       persistentError (changeMsg (getPersistentErrorMessage err))
+      --       dischargeConstraint name
+
       -- debug $ "[Solver]: Notice: AFTER solving (" <> show mode <> ") " <> show name <> " : " <> show constr
 
       -- check whether constraint disappeared
@@ -199,7 +233,7 @@ solveAllConstraints nt modes = withLogLocation "Constr" $ do
 
       solveAllConstraints nt modes
 
-solvingAllNewConstraints :: (MonadImpossible t, MonadLog t, MonadConstraint isT t, MonadNormalize t, IsT isT t) => NormalizationType -> [SolvingMode] -> t a -> t (CloseConstraintSetResult, a)
+solvingAllNewConstraints :: (MonadDMError e t, MonadImpossible t, MonadLog t, MonadConstraint isT t, MonadNormalize t, IsT isT t) => NormalizationType -> [SolvingMode] -> t a -> t (CloseConstraintSetResult, a)
 solvingAllNewConstraints nt modes f = withLogLocation "Constr" $ do
   log ""
   log "============ BEGIN solve all new constraints >>>>>>>>>>>>>>>>"
@@ -216,7 +250,7 @@ solvingAllNewConstraints nt modes f = withLogLocation "Constr" $ do
   return (closeRes, res)
 
 
-solveAndNormalize :: forall a isT t eC. (MonadImpossible t, MonadLog t, MonadConstraint isT t, MonadNormalize t, IsT isT t, Normalize t a, Show a) => NormalizationType -> [SolvingMode] -> a -> t a
+solveAndNormalize :: forall a isT t eC e. (MonadDMError e t, MonadImpossible t, MonadLog t, MonadConstraint isT t, MonadNormalize t, IsT isT t, Normalize t a, Show a) => NormalizationType -> [SolvingMode] -> a -> t a
 solveAndNormalize nt modes value = f 4 value
   where
     f :: Int -> a -> t a
