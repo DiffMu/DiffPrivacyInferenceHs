@@ -7,6 +7,7 @@ module DiffMu.Core.TC where
 
 import DiffMu.Prelude
 import DiffMu.Abstract
+import DiffMu.Abstract.Data.ErrorReporting
 import DiffMu.Core.Definitions
 import DiffMu.Core.Symbolic
 import DiffMu.Core.Logging
@@ -587,7 +588,8 @@ data TCState = TCState
     _watcher :: Watcher,
     _logger :: DMLogger,
     _solvingEvents :: [SolvingEvent],
-    _persistingCounter :: Int
+    _persistingCounter :: Int,
+    _currentSourceLocation :: Maybe SourceLocExt
   }
   deriving (Generic)
 
@@ -684,7 +686,7 @@ instance Show Watcher where
   show (Watcher changed) = show changed
 
 instance Show (TCState) where
-  show (TCState w l _ _) = "- watcher: " <> show w <> "\n"
+  show (TCState w l _ _ _) = "- watcher: " <> show w <> "\n"
                          <> "- messages: " <> show l <> "\n"
 
 instance Show m => Show (Full m) where
@@ -797,9 +799,14 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
   type ContentConstraintOnSolvable (TCT m) = GoodConstraintContent
   type ConstraintOnSolvable (TCT m) = GoodConstraint
   addConstraint (Solvable c) constr_desc = do
+      -- Add location to message
+      curloc <- use (tcstate.currentSourceLocation)
+      let constr_desc' = case curloc of
+            Nothing -> DMPersistentMessage $ constr_desc
+            Just sle -> DMPersistentMessage $ curloc :\\: (constr_desc)
 
       -- add the constraint to the constraint list
-      name <- meta.constraints %%= (newAnnName "constr" (Watched (NormalForMode []) (Solvable c), DMPersistentMessage constr_desc))
+      name <- meta.constraints %%= (newAnnName "constr" (Watched (NormalForMode []) (Solvable c), constr_desc'))
 
       -- compute the fixed vars of this constraint
       -- and add them to the cached list

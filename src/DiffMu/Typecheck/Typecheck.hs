@@ -71,7 +71,9 @@ checkPriv scope t = do
   types .= Right def -- cast to privacy context.
 
   -- The checking itself
+  tcstate.currentSourceLocation .= Just (getLocation t)
   res <- catchNoncriticalError t (withLogLocation "Check" $ checkPri' scope t)
+  tcstate.currentSourceLocation .= Nothing
 
   -- The computation to do after checking
   γ <- use types
@@ -94,7 +96,9 @@ checkSens scope t = do
 
 
   -- get the delayed value of the sensititivty checking
+  tcstate.currentSourceLocation .= Just (getLocation t)
   res <- catchNoncriticalError t (withLogLocation "Check" $ checkSen' scope t)
+  tcstate.currentSourceLocation .= Nothing
 
   -- The computation to do after checking
   γ <- use types
