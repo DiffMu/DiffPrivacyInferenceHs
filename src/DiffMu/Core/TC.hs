@@ -915,6 +915,13 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
     events <- tcstate.solvingEvents %%= (\ev -> (ev,[]))
     return (show <$> (reverse events))
 
+  getConstraintMessage name = do
+    (AnnNameCtx _ ctrs) <- use (meta.constraints) 
+    case getValue name ctrs of
+      Just (_,descr) -> return descr
+      Nothing -> internalError $ "Expected a constraint with the name " <> show name <> " to exist."
+    
+
 
 instance FreeVars TVarOf Int where
   freeVars _ = mempty

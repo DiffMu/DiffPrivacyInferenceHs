@@ -86,6 +86,7 @@ class (Monad t) => MonadConstraint isT t | t -> isT where
   logPrintConstraints :: t ()
   logPrintSubstitutions :: t ()
   getConstraintsByType :: (Typeable c, Typeable a) => Proxy (c a) -> t [(Symbol, c a)]
+  getConstraintMessage :: Symbol -> t (DMPersistentMessage t)
   getAllConstraints :: t [(Symbol, Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT)]
   clearSolvingEvents :: t [String]
 
