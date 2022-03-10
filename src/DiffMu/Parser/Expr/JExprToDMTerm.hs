@@ -341,8 +341,8 @@ pJCall (JESymbol (Symbol sym)) args = do
     (t@"above_threshold", [a1, a2, a3, a4]) -> AboveThresh <$> pSingle_Loc a1 <*> pSingle_Loc a2 <*> pSingle_Loc a3 <*> pSingle_Loc a4
     (t@"above_threshold", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 4 arguments, but has been given " <> show (length args)
 
-    (t@"exponential", [a1, a2, a3, a4]) -> Exponential <$> pSingle_Loc a1 <*> pSingle_Loc a2 <*> pSingle_Loc a3 <*> pSingle_Loc a4
-    (t@"exponential", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 4 arguments, but has been given " <> show (length args)
+    (t@"exponential_mechanism", [a1, a2, a3, a4]) -> Exponential <$> pSingle_Loc a1 <*> pSingle_Loc a2 <*> pSingle_Loc a3 <*> pSingle_Loc a4
+    (t@"exponential_mechanism", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 4 arguments, but has been given " <> show (length args)
 
     -- 3 arguments
     (t@"index", [a1, a2, a3]) -> Index <$> pSingle_Loc a1 <*> pSingle_Loc a2 <*> pSingle_Loc a3

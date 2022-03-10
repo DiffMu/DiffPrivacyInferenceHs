@@ -44,6 +44,7 @@ data JTree =
    | JNothing
    | JReturn [JTree]
    | JImport [String]
+   | JModule [JTree]
    | JUnsupported String
    deriving Show
 
@@ -104,6 +105,7 @@ pTree =     try pTLineNumber
         <|> try ((JInteger . fromIntegral) <$> (wskip decimal))
         <|> try (":import"   `with` (JImport <$> between (wskipc '(') (wskipc ')') (some (noneOf @[] "()\n,") `sepBy` sep)))
         <|> try (":import"   `with` (JImport <$> some pAny))
+        <|> try (":module"   `pWithCtor` JModule)
         <|> try (":return"   `pWithCtor` JReturn)
         <|> try (":call"     `pWithCtor` JCall)
         <|> try (":curly"    `pWithCtor` JCurly)
@@ -119,7 +121,10 @@ pTree =     try pTLineNumber
         <|> try (":for"      `pWithCtor` JLoop)
         <|> try (":block"    `pWithCtor` JBlock)
         <|> try (":tuple"    `pWithCtor` JTup)
+        <|> try ((wskip (string "true")) >> return (JUnsupported "true"))
+        <|> try ((wskip (string "false")) >> return (JUnsupported "false"))
         <|> JUnsupported <$> pAny
+
 
 parseJTreeFromString :: String -> Either DMException JTree
 parseJTreeFromString input =
@@ -311,12 +316,18 @@ pTreeToJExpr tree = case tree of
      JCurly _        -> jParseError ("Did not expect a julia type but got " <> show tree)
      JSubtype _        -> jParseError ("Did not expect a julia type but got " <> show tree)
      JTypeAssign _   -> jParseError ("Type annotations are not supported here: " <> show tree)
+     JModule _ -> jParseError ("You can have only one module that contains all the code you want to typecheck.")
 
-     
+
+pModuleToJExpr :: JTree -> JEParseState JExpr
+pModuleToJExpr (JBlock [_,m]) = pModuleToJExpr m
+pModuleToJExpr (JModule [_,_,m]) = pTreeToJExpr m
+pModuleToJExpr t = jParseError ("All typechecked code must be within a module! Instead got " <> show t)
+
 
 parseJExprFromJTree :: JTree -> Either DMException JExpr
 parseJExprFromJTree tree =
-  let x = runStateT (pTreeToJExpr tree) ("unknown", 0)
+  let x = runStateT (pModuleToJExpr tree) ("unknown", 0)
       y = case runExcept x of
         Left err -> Left err
         Right (term, _) -> Right term

@@ -205,6 +205,16 @@ testSample pp = describe "Sample" $ do
         cs = ""
     parseEvalString_l_customCheck pp "" ex (ty, cs) (pure $ Right ())
 
+testExponential pp = describe "Exponential mechanism" $ do
+    let ex = "function foo(x,v)::Priv() \n\
+              \  function bar(y) \n\
+              \    x+y \n\
+              \  end \n\
+              \  exponential_mechanism(2,0.1,v,bar) \n\
+              \end"
+        ty = " Fun([([NoFun(Num(τ_15[--])) @ (0.1,∑∅),NoFun(Vector<n: τ_9, c: τ_10>[s_5](NoFun(Num(τ_16[--])))) @ (∞,∞)] ->* NoFun(Num(τ_16[--]))) @ Just [Any,Any]])"
+        cs = "constr_8 : [final,worst,global,exact,special] IsSupremum (τ_15,τ_16) :=: Real"
+    parseEvalString_l_customCheck pp "" ex (ty, cs) (pure $ Right ())
 
 testAboveThresh pp = describe "Above threshold" $ do
     let ex = "function test(qs, d) :: Priv() \n\
