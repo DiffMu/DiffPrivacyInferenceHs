@@ -1633,9 +1633,9 @@ checkPri' scope (Located l (Loop niter cs' (xi, xc) body)) =
       -- (except Const-ness, actually. we'll figure that out at some point)
 
       addConstraint (Solvable (IsNonConst (τbody_out, τbody_in)))
-        (l :\\: "Loop captures input must be non-const version of loop output.")
+         (l :\\: "Loop captures input must be non-const version of loop output.")
       addConstraint (Solvable (UnifyWithConstSubtype (τloop_in, τbody_out)))
-        (l :\\: "Initial loop captures must match loop output.")
+         (l :\\: "Initial loop captures must match loop output.")
 
       return τbody_in
 

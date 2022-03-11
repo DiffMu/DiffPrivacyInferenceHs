@@ -167,36 +167,36 @@ instance Typeable k => Solve MonadDMTC UnifyWithConstSubtype (DMTypeOf k, DMType
 
           ----------
           -- induction step
-          Numeric dto -> do dto' <- newVar ; unify (Numeric dto') b ; dischargeConstraint name ; addConstraintFromName name (Solvable (UnifyWithConstSubtype (dto, dto'))) ; pure ()
+          Numeric dto -> do dto' <- newVar ; unify (Numeric dto') b ; addConstraintFromName name (Solvable (UnifyWithConstSubtype (dto, dto'))) ; dischargeConstraint name ; pure ()
           (:->:) xs dto -> do
             xs' <- mapM (\a -> (:@ a) <$> newVar) ((\(_ :@ a) -> a) <$> xs)
             dto' <- newVar
             unify (xs' :->: dto') b
-            dischargeConstraint name
             mapM (addConstraintFromName name . Solvable . UnifyWithConstSubtype) (zip (fstAnn <$> xs) (fstAnn <$> xs'))
             addConstraintFromName name (Solvable (UnifyWithConstSubtype (dto, dto')))
+            dischargeConstraint name
             pure ()
           (:->*:) xs dto -> do
             xs' <- mapM (\a -> (:@ a) <$> newVar) ((\(_ :@ a) -> a) <$> xs)
             dto' <- newVar
             unify (xs' :->*: dto') b
-            dischargeConstraint name
             mapM (addConstraintFromName name . Solvable . UnifyWithConstSubtype) (zip (fstAnn <$> xs) (fstAnn <$> xs'))
             addConstraintFromName name (Solvable (UnifyWithConstSubtype (dto, dto')))
+            dischargeConstraint name
             pure ()
           DMTup dtos -> do
             dtos' <- mapM (\() -> newVar) ((\_ -> ()) <$> dtos)
             unify (DMTup dtos') b
-            dischargeConstraint name
             mapM (addConstraintFromName name . Solvable . UnifyWithConstSubtype) (zip dtos dtos')
+            dischargeConstraint name
             pure ()
-          DMContainer dto dto1 dto2 sk dto3 -> do dto3' <- newVar ; unify (DMContainer dto dto1 dto2 sk dto3') b ; dischargeConstraint name ; addConstraintFromName name (Solvable (UnifyWithConstSubtype (dto3, dto3'))) ; pure ()
-          NoFun dto -> do dto' <- newVar ; unify (NoFun dto') b ; dischargeConstraint name ; addConstraintFromName name (Solvable (UnifyWithConstSubtype (dto, dto'))) ; pure ()
+          DMContainer dto dto1 dto2 sk dto3 -> do dto3' <- newVar ; unify (DMContainer dto dto1 dto2 sk dto3') b ; addConstraintFromName name (Solvable (UnifyWithConstSubtype (dto3, dto3'))) ; dischargeConstraint name ; pure ()
+          NoFun dto -> do dto' <- newVar ; unify (NoFun dto') b ; addConstraintFromName name (Solvable (UnifyWithConstSubtype (dto, dto'))) ; dischargeConstraint name ; pure ()
           Fun xs -> do
             xs' <- mapM (\a -> (:@ a) <$> newVar) ((\(_ :@ a) -> a) <$> xs)
             unify (Fun xs') b
-            dischargeConstraint name
             mapM (addConstraintFromName name . Solvable . UnifyWithConstSubtype) (zip (fstAnn <$> xs) (fstAnn <$> xs'))
+            dischargeConstraint name
             pure ()
           (:∧:) dto dto' -> pure ()
 
@@ -222,36 +222,36 @@ instance Typeable k => Solve MonadDMTC UnifyWithConstSubtype (DMTypeOf k, DMType
             --------
             --
             -- induction cases
-            Numeric dto -> do dto' <- newVar ; unify (Numeric dto') a ; dischargeConstraint name ; addConstraintFromName name (Solvable (UnifyWithConstSubtype (dto, dto'))) ; pure ()
+            Numeric dto -> do dto' <- newVar ; unify (Numeric dto') a ; addConstraintFromName name (Solvable (UnifyWithConstSubtype (dto, dto'))) ; dischargeConstraint name ; pure ()
             (:->:) xs dto -> do
               xs' <- mapM (\a -> (:@ a) <$> newVar) ((\(_ :@ a) -> a) <$> xs)
               dto' <- newVar
               unify (xs' :->: dto') a
-              dischargeConstraint name
               mapM (addConstraintFromName name . Solvable . UnifyWithConstSubtype) (zip (fstAnn <$> xs) (fstAnn <$> xs'))
               addConstraintFromName name (Solvable (UnifyWithConstSubtype (dto, dto')))
+              dischargeConstraint name
               pure ()
             (:->*:) xs dto -> do
               xs' <- mapM (\a -> (:@ a) <$> newVar) ((\(_ :@ a) -> a) <$> xs)
               dto' <- newVar
               unify (xs' :->*: dto') a
-              dischargeConstraint name
               mapM (addConstraintFromName name . Solvable . UnifyWithConstSubtype) (zip (fstAnn <$> xs) (fstAnn <$> xs'))
               addConstraintFromName name (Solvable (UnifyWithConstSubtype (dto, dto')))
+              dischargeConstraint name
               pure ()
             DMTup dtos -> do
               dtos' <- mapM (\() -> newVar) ((\_ -> ()) <$> dtos)
               unify (DMTup dtos') a
-              dischargeConstraint name
               mapM (addConstraintFromName name . Solvable . UnifyWithConstSubtype) (zip dtos dtos')
+              dischargeConstraint name
               pure ()
-            DMContainer dto dto1 dto2 sk dto3 -> do dto3' <- newVar ; unify (DMContainer dto dto1 dto2 sk dto3') a ; dischargeConstraint name ; addConstraintFromName name (Solvable (UnifyWithConstSubtype (dto3, dto3'))) ; pure ()
-            NoFun dto -> do dto' <- newVar ; unify (NoFun dto') a ; dischargeConstraint name ; addConstraintFromName name (Solvable (UnifyWithConstSubtype (dto, dto'))) ; pure ()
+            DMContainer dto dto1 dto2 sk dto3 -> do dto3' <- newVar ; unify (DMContainer dto dto1 dto2 sk dto3') a ; addConstraintFromName name (Solvable (UnifyWithConstSubtype (dto3, dto3'))) ; dischargeConstraint name ; pure ()
+            NoFun dto -> do dto' <- newVar ; unify (NoFun dto') a ; addConstraintFromName name (Solvable (UnifyWithConstSubtype (dto, dto'))) ; dischargeConstraint name ; pure ()
             Fun xs -> do
               xs' <- mapM (\a -> (:@ a) <$> newVar) ((\(_ :@ a) -> a) <$> xs)
               unify (Fun xs') a
-              dischargeConstraint name
               mapM (addConstraintFromName name . Solvable . UnifyWithConstSubtype) (zip (fstAnn <$> xs) (fstAnn <$> xs'))
+              dischargeConstraint name
               pure ()
 
             TVar so' -> pure ()

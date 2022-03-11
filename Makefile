@@ -50,6 +50,23 @@ wrapperlib-install: ffisrc/Wrapper.hs package.yaml stack.yaml
 
 # ------------------------------------
 
+# --------------------------------------
+# install with profiling
+
+
+install-profile: wrapperlib-install
+
+wrapperlib-install-profile: ffisrc/Wrapper.hs package.yaml stack.yaml
+	rm -f DiffPrivacyInferenceHs.cabal
+	stack build --profile --ghc-options -j
+
+	mkdir -p ${LIB_INSTALL_DIR}
+	/usr/bin/find .stack-work/ -name ${LIB_INSTALL_NAME} -exec cp {} ${LIB_INSTALL_DIR} \;
+
+
+# ------------------------------------
+
+
 clean:
 	rm -f wrapper.cabal
 	rm -fr dist-newstyle
