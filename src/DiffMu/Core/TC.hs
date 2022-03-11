@@ -625,19 +625,19 @@ data MetaCtx m = MetaCtx
   }
   deriving (Generic, Functor)
 
-data TCState = TCState
+data TCState m = TCState
   {
     _watcher :: Watcher,
     _logger :: DMLogger,
     _solvingEvents :: [SolvingEvent],
     _persistingCounter :: Int,
-    _currentSourceLocation :: Maybe SourceLocExt
+    _currentConstraintMessage :: Maybe m
   }
-  deriving (Generic)
+  deriving (Generic, Functor)
 
 data Full m = Full
   {
-    _tcstate :: TCState,
+    _tcstate :: TCState m,
     _meta :: MetaCtx m,
     _types :: TypeCtxSP
   }
@@ -727,7 +727,7 @@ instance Show m => Show (MetaCtx m) where
 instance Show Watcher where
   show (Watcher changed) = show changed
 
-instance Show (TCState) where
+instance Show (TCState m) where
   show (TCState w l _ _ _) = "- watcher: " <> show w <> "\n"
                          <> "- messages: " <> show l <> "\n"
 
@@ -738,7 +738,7 @@ instance Show m => Show (Full m) where
 instance Default (CtxStack v a) where
   def = CtxStack def []
 instance Default (Watcher) where
-instance Default (TCState) where
+instance Default (TCState m) where
 instance Default (MetaCtx m) where
 instance Default (Full m) where
   def = Full def def (Left def)
@@ -842,7 +842,7 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
   type ConstraintOnSolvable (TCT m) = GoodConstraint
   addConstraint (Solvable c) constr_desc = do
       -- Add location to message
-      curloc <- use (tcstate.currentSourceLocation)
+      curloc <- use (tcstate.currentConstraintMessage)
       let constr_desc' = case curloc of
             Nothing -> DMPersistentMessage $ constr_desc
             Just sle -> DMPersistentMessage $ sle :\\: (constr_desc)
