@@ -77,11 +77,11 @@ instance Typeable k => Solve MonadDMTC MakeNonConst (DMTypeOf k, SolvingMode) wh
      let makeVarNonConst v = do
                     --  k <- newVar
                      τv <- newVar
-                     unify (TVar v) (Num τv NonConst)
+                     unify () (TVar v) (Num τv NonConst)
 
      mapM makeVarNonConst freev3
 
-     let makeCVarNonConst v = do unify (TVar v) (NonConst)
+     let makeCVarNonConst v = do unify () (TVar v) (NonConst)
      mapM makeCVarNonConst freev4
 
 
