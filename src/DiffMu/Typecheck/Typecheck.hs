@@ -1149,7 +1149,7 @@ checkPri' scope (Rnd t) = do
   return (NoFun (Numeric (NonConst τ)))
 -}
 
-checkPri' scope (Located l (Apply f args)) =
+checkPri' scope term@(Located l (Apply f args)) =
   let
     -- check the argument in the given scope,
     -- and scale scope by new variable, return both
@@ -1157,6 +1157,9 @@ checkPri' scope (Located l (Apply f args)) =
     checkArg scope arg = do
       τ <- checkSens scope arg
       restrictAll oneId -- sensitivity of everything in context must be <= 1
+        ("In the privacy function application: " :<>: term :\\:
+         "The argument" :<>: arg :<>: "has to be 1-sensitive in every variable which occurs within."
+        )
       p <- newPVar
       mtruncateP p
       return (τ :@ p)
@@ -1324,7 +1327,7 @@ checkPri' (TLet xs term body) scope = do
 -}
 
 checkPri' scope (Located l (MutGauss rp εp δp f)) = checkPri' scope (Located l (Gauss rp εp δp f))
-checkPri' scope (Located l (Gauss rp εp δp f)) =
+checkPri' scope term@(Located l (Gauss rp εp δp f)) =
   let
    setParam :: TC DMMain -> Sensitivity -> TC ()
    setParam dt v = do -- parameters must be const numbers.
@@ -1339,6 +1342,10 @@ checkPri' scope (Located l (Gauss rp εp δp f)) =
       τf <- df
       -- interesting input variables must have sensitivity <= r
       restrictInteresting r
+        ("In the gauss call" :\\->: term :\\: 
+         "All variables which are *NOT* annotated as 'NoData' and are used in the body" :\\->: f :\\:
+         "Have to have sensitivity <= " :<>: r
+        )
       -- interesting output variables are set to (ε, δ), the rest is truncated to ∞
       ctxBeforeTrunc <- use types
       debug $ "[Gauss] Before truncation, context is:\n" <> show ctxBeforeTrunc
@@ -1388,7 +1395,7 @@ checkPri' scope (Located l (Gauss rp εp δp f)) =
 
 
 checkPri' scope (Located l (MutLaplace rp εp f)) = checkPri' scope (Located l (Laplace rp εp f))
-checkPri' scope (Located l (Laplace rp εp f)) =
+checkPri' scope term@(Located l (Laplace rp εp f)) =
   let
    setParam :: TC DMMain -> Sensitivity -> TC ()
    setParam dt v = do -- parameters must be const numbers.
@@ -1403,6 +1410,10 @@ checkPri' scope (Located l (Laplace rp εp f)) =
       τf <- df
       -- interesting input variables must have sensitivity <= r
       restrictInteresting r
+        ("In the laplace call" :\\->: term :\\: 
+         "All variables which are *NOT* annotated as 'NoData' and are used in the body" :\\->: f :\\:
+         "Have to have sensitivity <= " :<>: r
+        )
       -- interesting output variables are set to (ε, δ), the rest is truncated to ∞
       mtruncateP inftyP
       (ivars, itypes) <- getInteresting
@@ -1468,7 +1479,7 @@ checkPri' scope (Located l (AboveThresh qs e d t)) = do
 
       return (NoFun (Numeric (Num DMInt NonConst)))
 
-checkPri' scope (Located l (Exponential rp εp xs f)) = do
+checkPri' scope term@(Located l (Exponential rp εp xs f)) = do
 
   let
    setParamConst :: TC DMMain -> Sensitivity -> TC ()
@@ -1504,6 +1515,11 @@ checkPri' scope (Located l (Exponential rp εp xs f)) = do
       -- interesting input variables must have sensitivity <= r
       --
       restrictInteresting r
+        ("In the exponential call" :\\->: term :\\: 
+         "All variables which are *NOT* annotated as 'NoData' and are used in the body" :\\->: f :\\:
+         "Have to have sensitivity <= " :<>: r
+        )
+        
 
       -- interesting output variables are set to (ε, 0), the rest is truncated to ∞
       --
@@ -1646,13 +1662,16 @@ checkPri' scope (Located l (Loop niter cs' (xi, xc) body)) =
 --   return ρ
 
 
-checkPri' scope (Located l (SmpLet xs (Located l2 (Sample n m1_in m2_in)) tail)) =
+checkPri' scope term@(Located l (SmpLet xs (Located l2 (Sample n m1_in m2_in)) tail)) =
   let checkArg :: LocDMTerm -> (TC (DMMain, Privacy))
       checkArg arg = do
          -- check the argument in the given scope,
          -- and scale scope by new variable, return both
          τ <- checkSens scope arg
          restrictAll oneId -- sensitivity of everything in context must be <= 1
+           ("In the sample call: " :<>: term :\\:
+           "The argument" :<>: arg :<>: "has to be 1-sensitive in every variable which occurs within."
+           )
          p <- newPVar
          mtruncateP p
          return (τ, p)
