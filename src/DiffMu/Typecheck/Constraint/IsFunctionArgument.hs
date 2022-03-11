@@ -72,12 +72,12 @@ solveIsFunctionArgument name (TVar a, Fun xs) = addSub (a := Fun xs) >> discharg
 
 -- if we expect a non-function, the given argument must be a non-function.
 solveIsFunctionArgument name (NoFun a1, b) = do
-  unify (NoFun a1) b
+  unifyFromName name (NoFun a1) b
   dischargeConstraint name
 
 -- if the given argument is a non-function, we must expect some non-function type.
 solveIsFunctionArgument name (b, NoFun a1) = do
-  unify b (NoFun a1)
+  unifyFromName name b (NoFun a1)
   dischargeConstraint name
 
 -- if both sides are variables or ∧ terms of variables
@@ -182,10 +182,10 @@ resolveChoiceHash name (sign, (method, matches)) = do
    let resolveAnn :: (DMTypeOf FunKind) -> t (DMMain, [DMMain])
        resolveAnn match = case (match, method) of
                                  (matchxs :->: τmatch, methxs :->: τmeth) -> do
-                                    mapM (\(x, y) -> unify (sndAnn x) (sndAnn y)) (zip matchxs methxs) -- unify sensitivities
+                                    mapM (\(x, y) -> (unifyFromName name) (sndAnn x) (sndAnn y)) (zip matchxs methxs) -- unify sensitivities
                                     return (τmatch, [t | (t :@ _) <- matchxs])
                                  (matchxs :->*: τmatch, methxs :->*: τmeth) -> do
-                                    mapM (\((_:@x), (_:@y)) -> unify x y) (zip matchxs methxs) -- unify privacies
+                                    mapM (\((_:@x), (_:@y)) -> (unifyFromName name) x y) (zip matchxs methxs) -- unify privacies
                                     return (τmatch, [t | (t :@ _) <- matchxs])
                                  -- this is the case where checkPriv was called on the application of a -> arrow.
                                  (matchxs :->*: τmatch, methxs :->: τmeth) -> do
@@ -225,7 +225,7 @@ resolveChoiceHash name (sign, (method, matches)) = do
    --       it is only slightly stronger (inf{Const,NonConst} is possible, while unification is not).
    --
    let (r:rs) = map fst methsigs -- do the same for the return type
-   s <- foldM unify r rs
+   s <- foldM (unifyFromName name) r rs
    addConstraintFromName name (Solvable (IsFunctionArgument (methr, s)))
 
    return ()

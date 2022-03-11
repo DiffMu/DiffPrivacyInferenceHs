@@ -46,7 +46,7 @@ instance Typeable k => Solve MonadDMTC MakeConst (DMTypeOf k) where
       DMTup ts -> (mapM (\t -> (addConstraintFromName name) (Solvable (MakeConst t))) ts) >> dischargeConstraint name
       Numeric (Num _ (TVar k)) -> do
                      ck <- newVar
-                     unify () (TVar k) (Const ck)
+                     unifyFromName name (TVar k) (Const ck)
                      dischargeConstraint name
       Numeric (TVar _) -> pure ()
       _ -> dischargeConstraint name 
@@ -77,11 +77,11 @@ instance Typeable k => Solve MonadDMTC MakeNonConst (DMTypeOf k, SolvingMode) wh
      let makeVarNonConst v = do
                     --  k <- newVar
                      τv <- newVar
-                     unify (TVar v) (Num τv NonConst)
+                     unifyFromName name (TVar v) (Num τv NonConst)
 
      mapM makeVarNonConst freev3
 
-     let makeCVarNonConst v = do unify (TVar v) (NonConst)
+     let makeCVarNonConst v = do unifyFromName name (TVar v) (NonConst)
      mapM makeCVarNonConst freev4
 
 
@@ -129,15 +129,15 @@ instance Solve MonadDMTC IsLoopResult ((Sensitivity, Sensitivity, Sensitivity), 
      let SensitivityAnnotation s = sa
      case τ_iter of
         NoFun (Numeric (Num _ (Const η))) -> do
-           unify s1 zeroId
-           unify s2 (exp s η)
-           unify s3 η
+           unifyFromName name s1 zeroId
+           unifyFromName name s2 (exp s η)
+           unifyFromName name s3 η
            dischargeConstraint name
         NoFun (Numeric (Num _ NonConst)) -> do
-           unify s oneId
-           unify s1 oneId
-           unify s2 oneId
-           unify s3 inftyS
+           unifyFromName name s oneId
+           unifyFromName name s1 oneId
+           unifyFromName name s2 oneId
+           unifyFromName name s3 inftyS
            dischargeConstraint name
         _ -> return ()
 
@@ -170,15 +170,15 @@ instance Solve MonadDMTC IsAdditiveNoiseResult (DMTypeOf MainKind, DMTypeOf Main
            -- input type gets a LessEqual so convert can happen implicitly if necessary
            -- (convert is implemented as a special subtyping rule, see there)
            addConstraintFromName name (Solvable(IsLessEqual(τin, (NoFun (DMContainer k L2 iclp n (NoFun (Numeric τv)))))))
-           unify τgauss (NoFun (DMContainer k LInf U n (NoFun (Numeric (Num DMReal NonConst)))))
+           unifyFromName name τgauss (NoFun (DMContainer k LInf U n (NoFun (Numeric (Num DMReal NonConst)))))
 
            dischargeConstraint @MonadDMTC name
         _ -> do -- regular gauss or unification errpr later
            τ <- newVar -- input type can be anything (as long as it's numeric)
 
            -- set in- and output types as given in the gauss rule
-           unify τin (NoFun (Numeric τ))
-           unify τgauss (NoFun (Numeric (Num DMReal NonConst)))
+           unifyFromName name τin (NoFun (Numeric τ))
+           unifyFromName name τgauss (NoFun (Numeric (Num DMReal NonConst)))
 
            dischargeConstraint @MonadDMTC name
 
@@ -235,13 +235,13 @@ instance Solve MonadDMTC IsTProject ((Int, DMTypeOf MainKind) :=: DMTypeOf MainK
     where
       f :: MonadDMTC t => DMTypeOf MainKind -> t ()
       f (TVar _) = pure ()
-      f (a :∧: b) = unify a b >> pure () -- since we know that the lhs is going to be a tuple (and thus NoFun) eventually, we can merge the values
+      f (a :∧: b) = unifyFromName name a b >> pure () -- since we know that the lhs is going to be a tuple (and thus NoFun) eventually, we can merge the values
       f (NoFun (TVar _)) = pure ()
       f (NoFun (DMTup ρs)) = do
         let ρ' = ρs ^? element i
         case ρ' of
           Just ρ' -> do
-            unify ρ (NoFun ρ')
+            unifyFromName name ρ (NoFun ρ')
             dischargeConstraint name
             pure ()
           Nothing -> internalError $ "tuple index out of range\nwhere index: " <> show i <> ",tuple type: " <> show ρs
@@ -290,7 +290,7 @@ instance TCConstraint IsBlackBoxReturn where
 instance Solve MonadDMTC IsBlackBoxReturn (DMMain, (DMMain, Sensitivity)) where
     solve_ Dict _ name (IsBlackBoxReturn (ret, (argt, args))) =
      let discharge s = do
-                          unify args s
+                          unifyFromName name args s
                           dischargeConstraint @MonadDMTC name
      in case ret of
           TVar _ -> pure ()
@@ -299,14 +299,14 @@ instance Solve MonadDMTC IsBlackBoxReturn (DMMain, (DMMain, Sensitivity)) where
           NoFun (DMContainer _ _ _ _ (NoFun (TVar _))) -> pure ()
           
           NoFun (DMContainer kind nret cret dret (NoFun (Numeric tret))) -> do
-              unify ret (NoFun (DMContainer kind LInf U dret (NoFun (Numeric (Num DMData NonConst)))))
+              unifyFromName name ret (NoFun (DMContainer kind LInf U dret (NoFun (Numeric (Num DMData NonConst)))))
               case argt of
                    TVar _ -> pure ()
                    NoFun (TVar _) -> pure ()
                    NoFun (DMContainer _ _ _ _ (TVar _)) -> pure ()
                    NoFun (DMContainer _ _ _ _ (NoFun (TVar _))) -> pure ()
                    NoFun (DMContainer _ _ _ _ (NoFun (Numeric targ))) -> do
-                       unify targ (Num DMData NonConst)
+                       unifyFromName name targ (Num DMData NonConst)
                        discharge oneId
                    _ -> discharge inftyS
                    
@@ -320,7 +320,7 @@ instance Solve MonadDMTC IsBlackBoxReturn (DMMain, (DMMain, Sensitivity)) where
 instance Solve MonadDMTC IsBlackBoxReturn (DMMain, (DMMain, Sensitivity)) where
     solve_ Dict SolveSpecial name (IsBlackBoxReturn (ret, (argt, args))) =
      let discharge s = do
-                          unify args s
+                          unifyFromName name args s
                           dischargeConstraint @MonadDMTC name
      in case ret of
           TVar _ -> pure ()
@@ -342,7 +342,7 @@ instance Solve MonadDMTC IsBlackBoxReturn (DMMain, (DMMain, Sensitivity)) where
                            _ -> discharge inftyS
                         _ -> discharge inftyS
               _ -> do
-                      unify cret U -- output type cannot be clipped
+                      unifyFromName name cret U -- output type cannot be clipped
                       return ()
           _ -> discharge inftyS
 -- if the blackbox output is a vector, the black boxes sensitivity is 1 when measured using the (L_inf, Data) norm on
@@ -351,8 +351,8 @@ instance Solve MonadDMTC IsBlackBoxReturn (DMMain, (DMMain, Sensitivity)) where
 -- risking unification errors but giving us sensitivity 1 on the black box...
     solve_ Dict SolveFinal name (IsBlackBoxReturn (ret, (argt, args))) = case (ret, argt) of
           (NoFun (DMContainer vret nret cret dret tret), (NoFun (DMContainer varg narg carg darg targ))) -> do
-              unify ret (NoFun (DMContainer vret LInf U dret (Numeric (Num DMData NonConst))))
-              unify targ (Numeric (Num DMData NonConst))
+              unifyFromName name ret (NoFun (DMContainer vret LInf U dret (Numeric (Num DMData NonConst))))
+              unifyFromName name targ (Numeric (Num DMData NonConst))
               return ()
           _ -> pure ()
           
@@ -407,13 +407,13 @@ instance Solve MonadDMTC IsClone (DMMain, DMMain) where
   solve_ Dict _ name (IsClone (NoFun (TVar v), _)) = return ()
   solve_ Dict _ name (IsClone (NoFun (DMTup ts), tv)) = do
      nvs <- mapM (\_ -> newVar) ts
-     unify tv (NoFun (DMTup nvs))
+     unifyFromName name tv (NoFun (DMTup nvs))
      mapM (\(tt, nv) -> addConstraintNoMessage (Solvable (IsClone ((NoFun tt), (NoFun nv))))) (zip ts nvs)
      dischargeConstraint name
   solve_ Dict _ name (IsClone (NoFun (DMModel _ _), _)) = failConstraint name
   solve_ Dict _ name (IsClone (NoFun (DMContainer _ _ _ _ _), _)) = failConstraint name
-  solve_ Dict _ name (IsClone (NoFun (Cloned v), t)) = unify (NoFun v) t >> dischargeConstraint name
-  solve_ Dict _ name (IsClone (ti, tv)) = unify ti tv >> dischargeConstraint name
+  solve_ Dict _ name (IsClone (NoFun (Cloned v), t)) = unifyFromName name (NoFun v) t >> dischargeConstraint name
+  solve_ Dict _ name (IsClone (ti, tv)) = unifyFromName name ti tv >> dischargeConstraint name
 -}
 
 
@@ -435,8 +435,8 @@ instance Solve MonadDMTC IsVecOrMat (VecKind, Sensitivity) where
     solve_ Dict _ name (IsVecOrMat (k, s)) =
      case k of
         TVar _ -> pure ()
-        Vector -> unify oneId s >> dischargeConstraint name
-        Matrix r -> unify r s >> dischargeConstraint name
+        Vector -> unifyFromName name oneId s >> dischargeConstraint name
+        Matrix r -> unifyFromName name r s >> dischargeConstraint name
         _ -> failConstraint name
 
 --------------------------------------------------
@@ -458,7 +458,7 @@ instance Solve MonadDMTC IsVecLike VecKind where
         TVar _ -> pure ()
         Vector -> dischargeConstraint name
         Gradient -> dischargeConstraint name
-        Matrix r -> unify r oneId >> dischargeConstraint name
+        Matrix r -> unifyFromName name r oneId >> dischargeConstraint name
 
 
 --------------------------------------------------
@@ -482,10 +482,10 @@ instance Solve MonadDMTC SetIfTypesEqual (Sensitivity, DMMain, DMMain, Sensitivi
        case (and [null f1, null f2]) of -- no free variables in any of the types
             True -> case t1 == t2 of
                          True -> do
-                           unify target strue
+                           unifyFromName name target strue
                            dischargeConstraint name
                          False -> do
-                           unify target sfalse
+                           unifyFromName name target sfalse
                            dischargeConstraint name
             False -> pure ()
 
