@@ -544,6 +544,9 @@ instance (Cast a b) => Cast (Maybe a) (Maybe b) where
 instance (MonadDMTC t) => Normalize t (WithRelev e) where
   normalize nt (WithRelev i x) = WithRelev i <$> normalize nt x
 
+instance (MonadDMTC t) => Normalize t (TeVar) where
+  normalize nt v = pure v
+
 
 
 type TypeCtx extra = Ctx TeVar (WithRelev extra)

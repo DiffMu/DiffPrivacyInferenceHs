@@ -60,8 +60,8 @@ solveIsFunctionArgument name (Fun xs, Fun ys) = do
   case [f | (f :@ Nothing) <- xs] of
     [] -> do
       -- replace the IFA constraint by an IsChoice constraint   
+      addConstraintFromName name (Solvable (IsChoice ((H.fromListWith (\_ _ -> error "Duplicate Method!") existingFunctions), wantedFunctions)))
       dischargeConstraint name
-      addConstraintNoMessage (Solvable (IsChoice ((H.fromListWith (\_ _ -> error "Duplicate Method!") existingFunctions), wantedFunctions)))
       return ()
 
     -- if there were functions without annotation, error out
@@ -164,7 +164,7 @@ solveIsChoice name (provided, required) = do
         [] -> do -- complete resolution! set counters, discard.
                 debug $ "[IFA]: Done, newdict is:"
                 debug $ show newdict
-                mapM resolveChoiceHash (H.toList newdict)
+                mapM (resolveChoiceHash name) (H.toList newdict)
                 dischargeConstraint name
         cs | (length required > length newcs) -> do
                 -- still not all choices resolved, just kick the resolved ones out of the constraint.
@@ -176,9 +176,9 @@ solveIsChoice name (provided, required) = do
    return ()
 
 
-resolveChoiceHash :: forall t. IsT MonadDMTC t => ([JuliaType], (DMTypeOf FunKind, [DMTypeOf FunKind])) -> t ()
-resolveChoiceHash (sign, (method, [])) = pure () -- no matches were found for this method.
-resolveChoiceHash (sign, (method, matches)) = do
+resolveChoiceHash :: forall t. IsT MonadDMTC t => Symbol -> ([JuliaType], (DMTypeOf FunKind, [DMTypeOf FunKind])) -> t ()
+resolveChoiceHash name (sign, (method, [])) = pure () -- no matches were found for this method.
+resolveChoiceHash name (sign, (method, matches)) = do
    let resolveAnn :: (DMTypeOf FunKind) -> t (DMMain, [DMMain])
        resolveAnn match = case (match, method) of
                                  (matchxs :->: τmatch, methxs :->: τmeth) -> do
@@ -211,7 +211,8 @@ resolveChoiceHash (sign, (method, matches)) = do
        addC ([], _, _) = pure ()
        addC ((a:as), m, ann) = do
            s <- foldM supremum a as -- get supremum of all things the current argument was applied to
-           addConstraintNoMessage (Solvable (IsFunctionArgument (s, m))) -- make sure it fits the type requred by the method
+
+           addConstraintFromName name (Solvable (IsFunctionArgument (s, m))) -- make sure it fits the type requred by the method
            addJuliaSubtypeConstraint s ann -- make sure it fits the given julia signature
 
    mapM addC (zip3 argtypes methxs sign) -- do it for the arguments
@@ -225,7 +226,7 @@ resolveChoiceHash (sign, (method, matches)) = do
    --
    let (r:rs) = map fst methsigs -- do the same for the return type
    s <- foldM unify r rs
-   addConstraintNoMessage (Solvable (IsFunctionArgument (methr, s)))
+   addConstraintFromName name (Solvable (IsFunctionArgument (methr, s)))
 
    return ()
 
