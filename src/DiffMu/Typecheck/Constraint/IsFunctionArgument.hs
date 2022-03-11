@@ -210,7 +210,7 @@ resolveChoiceHash name (sign, (method, matches)) = do
    let addC :: forall t. IsT MonadDMTC t => ([DMMain], DMMain, JuliaType) -> t ()
        addC ([], _, _) = pure ()
        addC ((a:as), m, ann) = do
-           s <- foldM supremum a as -- get supremum of all things the current argument was applied to
+           s <- foldM (supremumFromName name) a as -- get supremum of all things the current argument was applied to
 
            addConstraintFromName name (Solvable (IsFunctionArgument (s, m))) -- make sure it fits the type requred by the method
            addJuliaSubtypeConstraint s ann -- make sure it fits the given julia signature

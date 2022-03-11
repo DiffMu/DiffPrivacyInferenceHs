@@ -43,7 +43,7 @@ instance Typeable k => FixedVars TVarOf (MakeConst (DMTypeOf k)) where
 instance Typeable k => Solve MonadDMTC MakeConst (DMTypeOf k) where
   solve_ Dict _ name (MakeConst τ) = case τ of
       TVar _ -> pure ()
-      DMTup ts -> (mapM (\t -> addConstraintNoMessage (Solvable (MakeConst t))) ts) >> dischargeConstraint name
+      DMTup ts -> (mapM (\t -> (addConstraintFromName name) (Solvable (MakeConst t))) ts) >> dischargeConstraint name
       Numeric (Num _ (TVar k)) -> do
                      ck <- newVar
                      unify (TVar k) (Const ck)
@@ -169,7 +169,7 @@ instance Solve MonadDMTC IsAdditiveNoiseResult (DMTypeOf MainKind, DMTypeOf Main
            -- set in- and output types as given in the mgauss rule
            -- input type gets a LessEqual so convert can happen implicitly if necessary
            -- (convert is implemented as a special subtyping rule, see there)
-           addConstraintNoMessage (Solvable(IsLessEqual(τin, (NoFun (DMContainer k L2 iclp n (NoFun (Numeric τv)))))))
+           addConstraintFromName name (Solvable(IsLessEqual(τin, (NoFun (DMContainer k L2 iclp n (NoFun (Numeric τv)))))))
            unify τgauss (NoFun (DMContainer k LInf U n (NoFun (Numeric (Num DMReal NonConst)))))
 
            dischargeConstraint @MonadDMTC name
