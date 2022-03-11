@@ -685,7 +685,7 @@ instance TCConstraint IsTypeOpResult where
 --
 --    But to reiterate: the Haskell type system only allows to add a constraint `c`, via
 --    ```
---    do addConstraintNoMessage (Solvable (c))
+--    do addConstraint (Solvable (c))
 --    ```
 --    if there is an instance of `Solve isT c a` currently in scope.
 --
