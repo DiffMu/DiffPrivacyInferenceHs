@@ -3,6 +3,7 @@ module DiffMu.Abstract.Class.Unify where
 
 import DiffMu.Prelude
 import DiffMu.Abstract.Class.Term
+import DiffMu.Abstract.Data.Error
 import DiffMu.Abstract.Class.IsT
 -- import DiffMu.Abstract.Class.MonadTerm
 
@@ -15,9 +16,9 @@ import DiffMu.Abstract.Class.IsT
 -- unify a b = (chainM2 unify_ (normalize a) (normalize b))
 
 class Monad t => Unify t a where
-  unify_ :: a -> a -> t a
+  unify_ :: (MessageLike t msg) => msg -> a -> a -> t a
 
-unify :: (Unify t a, Normalize (t) a) => a -> a -> t a
-unify a b = (chainM2 unify_ (normalizeExact a) (normalizeExact b))
+unify :: (Unify t a, Normalize (t) a, MessageLike t msg) => msg -> a -> a -> t a
+unify name a b = (chainM2 (unify_ name) (normalizeExact a) (normalizeExact b))
 
 

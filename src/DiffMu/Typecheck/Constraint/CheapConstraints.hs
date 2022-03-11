@@ -46,7 +46,7 @@ instance Typeable k => Solve MonadDMTC MakeConst (DMTypeOf k) where
       DMTup ts -> (mapM (\t -> (addConstraintFromName name) (Solvable (MakeConst t))) ts) >> dischargeConstraint name
       Numeric (Num _ (TVar k)) -> do
                      ck <- newVar
-                     unify (TVar k) (Const ck)
+                     unify () (TVar k) (Const ck)
                      dischargeConstraint name
       Numeric (TVar _) -> pure ()
       _ -> dischargeConstraint name 

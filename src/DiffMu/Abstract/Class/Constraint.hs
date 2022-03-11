@@ -91,6 +91,14 @@ class (Monad t) => MonadConstraint isT t | t -> isT where
   getAllConstraints :: t [(Symbol, Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT)]
   clearSolvingEvents :: t [String]
 
+inheritanceMessageFromName name = do
+    (c,msg) <- getConstraint name
+    return
+      (("Inherited from the constraint:" :: Text) :\\:
+       ("  " :: Text) :<>: c :\\:
+       msg
+      )
+
 addConstraintNoMessage solvable = addConstraint solvable ()
 addConstraintFromName name solvable = do
     (c,msg) <- getConstraint name
@@ -100,13 +108,18 @@ addConstraintFromName name solvable = do
        msg
       )
 
+addConstraintFromNameMaybe (Just name) = addConstraintFromName name
+addConstraintFromNameMaybe (Nothing)   = addConstraintNoMessage
 
-(==!) :: (MonadConstraint isT t, Solve isT IsEqual (a,a), (HasNormalize isT a), Show (a), Typeable a, IsT isT t, ContentConstraintOnSolvable t (a,a), ConstraintOnSolvable t (IsEqual (a,a))) => a -> a -> t ()
-(==!) a b = addConstraintNoMessage (Solvable (IsEqual (a,b))) >> pure ()
+
+
+
+(==!) :: (MessageLike t msg, MonadConstraint isT t, Solve isT IsEqual (a,a), (HasNormalize isT a), Show (a), Typeable a, IsT isT t, ContentConstraintOnSolvable t (a,a), ConstraintOnSolvable t (IsEqual (a,a))) => a -> a -> msg -> t ()
+(==!) a b msg = addConstraint (Solvable (IsEqual (a,b))) msg >> pure ()
 
 -- An abbreviation for adding a less equal constraint.
-(≤!) :: (MonadConstraint isT t, Solve isT IsLessEqual (a,a), (HasNormalize isT a), Show (a), Typeable a, IsT isT t, ContentConstraintOnSolvable t (a,a), ConstraintOnSolvable t (IsLessEqual (a,a))) => a -> a -> t ()
-(≤!) a b = addConstraintNoMessage (Solvable (IsLessEqual (a,b))) >> pure ()
+(≤!) :: (MessageLike t msg, MonadConstraint isT t, Solve isT IsLessEqual (a,a), (HasNormalize isT a), Show (a), Typeable a, IsT isT t, ContentConstraintOnSolvable t (a,a), ConstraintOnSolvable t (IsLessEqual (a,a))) => a -> a -> msg -> t ()
+(≤!) a b msg = addConstraint (Solvable (IsLessEqual (a,b))) msg >> pure ()
 
 
 -- Basic constraints

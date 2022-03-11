@@ -82,9 +82,10 @@ instance ShowPretty SourceLocExt where
     NotImplementedLoc s -> "This location is currently ineffable. (" <> showPretty s <> ")"
 
 -------------------------------------------------------------------------
+type MessageLike t a = (Normalize t a, ShowPretty a, Show a)
 
 data DMPersistentMessage t where
-  DMPersistentMessage :: (Normalize t a, ShowPretty a, Show a) => a -> DMPersistentMessage t
+  DMPersistentMessage :: MessageLike t a => a -> DMPersistentMessage t
 
 instance ShowPretty (DMPersistentMessage t) where
   showPretty (DMPersistentMessage msg) = showPretty msg

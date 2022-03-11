@@ -20,6 +20,8 @@ import qualified Prelude as P
 import Debug.Trace
 import DiffMu.Core.Symbolic (normalizeSensSpecial)
 
+default (Text)
+
 --------------------------------------------------------------------------------
 -- TC.hs
 --
@@ -1201,17 +1203,17 @@ instance FixedVars (TVarOf) (IsLess (Sensitivity,Sensitivity)) where
 -- is shown in Abstract.Data.MonadicPolynomial.
 --
 instance MonadDMTC t => Unify t Sensitivity where
-  unify_ s1 s2 = do
-    c <- addConstraintNoMessage (Solvable (IsEqual (s1, s2)))
+  unify_ msg s1 s2 = do
+    c <- addConstraint (Solvable (IsEqual (s1, s2))) msg
     return s1
 
 instance (Monad t, Unify t a, Unify t b) => Unify t (a,b) where
-  unify_ (a1,b1) (a2,b2) = (,) <$> (unify_ a1 a2) <*> (unify_ b1 b2)
+  unify_ name (a1,b1) (a2,b2) = (,) <$> (unify_ name a1 a2) <*> (unify_ name b1 b2)
 
 instance (MonadDMTC t, Show a, Unify t a) => Unify t (Maybe a) where
-  unify_ Nothing Nothing = pure Nothing
-  unify_ (Just a) (Just b) = Just <$> unify_ a b
-  unify_ t s = throwUnlocatedError (UnificationError t s)
+  unify_ name Nothing Nothing = pure Nothing
+  unify_ name (Just a) (Just b) = Just <$> unify_ name a b
+  unify_ name t s = throwUnlocatedError (UnificationError t s)
 
 
 
@@ -1259,7 +1261,7 @@ normalizeAnn nt (a :∧: b) = do
         -- return (NoFun z)
         -- addConstraintNoMessage (Solvable (IsEqual (x,y)))
 
-        unify x y
+        unify ("During normalization of the type " :<>: (a :∧: b)) x y
         return (NoFun x)
 
   case (a', b') of
