@@ -614,8 +614,8 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsLessEqual (DMTypeOf k, DMTyp
         alloweda <- checkContractionAllowed [a,b] (a,b) a
         allowedb <- checkContractionAllowed [a,b] (a,b) a
         case (alloweda , allowedb) of
-          (ContractionAllowed, _) -> unify a b >> return ()
-          (_, ContractionAllowed) -> unify a b >> return ()
+          (ContractionAllowed, _) -> unify "diamond contraction" a b >> return ()
+          (_, ContractionAllowed) -> unify "diamond contraction" a b >> return ()
           _ -> return ()
 
 
@@ -641,19 +641,23 @@ solveSupremumSpecial :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => Gr
 -- if one input is equal to the output we can skip the supremum computation,
 -- then we only have to create a subtyping constraint
 solveSupremumSpecial graph name ((a,b) :=: x) | a == x = do
-  b ≤! x
+  msg <- inheritanceMessageFromName name
+  (b ≤! x) msg
   dischargeConstraint name
 
 solveSupremumSpecial graph name ((a,b) :=: x) | b == x = do
-  a ≤! x
+  msg <- inheritanceMessageFromName name
+  (a ≤! x) msg
   dischargeConstraint name
 
 solveSupremumSpecial graph name ((a,b) :=: x) | elem a (getBottoms @k) = do
-  unify b x
+  msg <- inheritanceMessageFromName name
+  unify msg b x
   dischargeConstraint name
 
 solveSupremumSpecial graph name ((a,b) :=: x) | elem b (getBottoms @k) = do
-  unify a x
+  msg <- inheritanceMessageFromName name
+  unify msg a x
   dischargeConstraint name
 
 solveSupremumSpecial graph name ((a,b) :=: x) | otherwise = return ()
@@ -662,19 +666,23 @@ solveSupremumSpecial graph name ((a,b) :=: x) | otherwise = return ()
 -- infimum
 solveInfimumSpecial :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> Symbol -> ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) -> t ()
 solveInfimumSpecial graph name ((a,b) :=: x) | a == x = do
-  x ≤! b
+  msg <- inheritanceMessageFromName name
+  (x ≤! b) msg
   dischargeConstraint name
 
 solveInfimumSpecial graph name ((a,b) :=: x) | b == x = do
-  x ≤! a
+  msg <- inheritanceMessageFromName name
+  (x ≤! a) msg
   dischargeConstraint name
 
 solveInfimumSpecial graph name ((a,b) :=: x) | elem a (getTops @k) = do
-  unify b x
+  msg <- inheritanceMessageFromName name
+  unify msg b x
   dischargeConstraint name
 
 solveInfimumSpecial graph name ((a,b) :=: x) | elem b (getTops @k) = do
-  unify a x
+  msg <- inheritanceMessageFromName name
+  unify msg a x
   dischargeConstraint name
 
 solveInfimumSpecial graph name ((a,b) :=: x) | otherwise = return ()
@@ -710,12 +718,12 @@ callMonadicGraphSupremum graph name ((a,b) :=: x) = do
                          <> show e))
 
 
-unifyAll :: (Typeable k, IsT MonadDMTC t) => [DMTypeOf k] -> t ()
-unifyAll ([]) = return ()
-unifyAll (x:[]) = return ()
-unifyAll (x:y:vars) = do
-  unify x y
-  unifyAll (y:vars)
+unifyAll :: (Typeable k, IsT MonadDMTC t, MessageLike t msg) => msg -> [DMTypeOf k] -> t ()
+unifyAll _ ([]) = return ()
+unifyAll _ (x:[]) = return ()
+unifyAll msg (x:y:vars) = do
+  unify msg x y
+  unifyAll msg (y:vars)
 
 -- TODO: Check whether this does the correct thing.
 instance (SingI k, Typeable k) => Solve MonadDMTC IsSupremum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) where
@@ -728,6 +736,8 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsSupremum ((DMTypeOf k, DMTyp
 
   solve_ Dict SolveFinal name (IsSupremum ((a,b) :=: y)) = do
     debug $ "Computing supremum (final solving mode): " <> show ((a,b) :=: y)
+    msg <- inheritanceMessageFromName name
+    let msg' = "Diamond contraction (from supremum)" :\\: msg
 
     graph <- getCurrentConstraintSubtypingGraph
     let contrCandidates = completeDiamondUpstream graph (a,b)
@@ -737,8 +747,8 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsSupremum ((DMTypeOf k, DMTyp
               allowedy <- checkContractionAllowed (y:contrVars) (x,y) y
               allowedx <- checkContractionAllowed (y:contrVars) (x,y) x
               case (allowedy, allowedx) of
-                (ContractionAllowed, _) -> unifyAll (y:contrVars) >> return True
-                (_, ContractionAllowed) -> unifyAll (y:contrVars) >> return True
+                (ContractionAllowed, _) -> unifyAll msg' (y:contrVars) >> return True
+                (_, ContractionAllowed) -> unifyAll msg' (y:contrVars) >> return True
                 _ -> return False
 
     let g f [] = return ()
@@ -763,6 +773,10 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsInfimum ((DMTypeOf k, DMType
 
   solve_ Dict SolveFinal name (IsInfimum ((a,b) :=: x)) = do
     debug $ "Computing infimum (final solving): " <> show ((a,b) :=: x)
+
+    msg <- inheritanceMessageFromName name
+    let msg' = "Diamond contraction (from infimum)" :\\: msg
+
     graph <- getCurrentConstraintSubtypingGraph
 
     let contrCandidates = completeDiamondDownstream graph (a,b)
@@ -772,8 +786,8 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsInfimum ((DMTypeOf k, DMType
               allowedx <- checkContractionAllowed (x:contrVars) (x,y) x
               allowedy <- checkContractionAllowed (x:contrVars) (x,y) y
               case (allowedx , allowedy) of
-                (ContractionAllowed, _) -> unifyAll (x:contrVars) >> return True
-                (_, ContractionAllowed) -> unifyAll (x:contrVars) >> return True
+                (ContractionAllowed, _) -> unifyAll msg' (x:contrVars) >> return True
+                (_, ContractionAllowed) -> unifyAll msg' (x:contrVars) >> return True
                 _ -> return False
 
     let g f [] = return ()
@@ -806,6 +820,6 @@ collapseSubtypingCycles (start, end) = withLogLocation "Subtyping" $ do
   debug $ ("~~~~ found cycles " <> show cycles <> " unifying with " <> show end <> "\n")
 
   -- unify all types in all cycles with the end type
-  unifyAll (concat cycles)
+  unifyAll "Subtyping cycles collapse" (concat cycles)
 
   return ()
