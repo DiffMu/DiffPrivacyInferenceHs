@@ -134,7 +134,7 @@ solveBinary name op (τ1, τ2) = f op τ1 τ2
     f DMOpMul (Numeric (Num t1 NonConst)) (Numeric (Num t2 NonConst)) = do
         s :: Sensitivity <- newVar
         t <- supremumFromName name t1 t2
-        addConstraintNoMessage (Solvable (SetIfTypesEqual (s, NoFun (Numeric (Num t NonConst)), NoFun (Numeric (Num DMData NonConst)), oneId::Sensitivity, inftyS))) -- if t is data the coeff is 1, else it's inf
+        addConstraintFromName name (Solvable (SetIfTypesEqual (s, NoFun (Numeric (Num t NonConst)), NoFun (Numeric (Num DMData NonConst)), oneId::Sensitivity, inftyS))) -- if t is data the coeff is 1, else it's inf
         return (Just (s, s, Numeric (Num t NonConst)))
     f DMOpMul (Numeric τs) (DMMat n cl r c t) = do
                                                   tt <- makeNoFunNumeric t
@@ -159,7 +159,7 @@ solveBinary name op (τ1, τ2) = f op τ1 τ2
     f DMOpDiv (Numeric (Num t1 NonConst)) (Numeric (Num t2 NonConst)) = do
         s :: Sensitivity <- newVar
         t <- supremumFromName name t1 t2
-        addConstraintNoMessage (Solvable (SetIfTypesEqual (s, NoFun (Numeric (Num t NonConst)), NoFun (Numeric (Num DMData NonConst)), oneId::Sensitivity, inftyS))) -- if t is data the coeff is 1, else it's inf
+        addConstraintFromName name (Solvable (SetIfTypesEqual (s, NoFun (Numeric (Num t NonConst)), NoFun (Numeric (Num DMData NonConst)), oneId::Sensitivity, inftyS))) -- if t is data the coeff is 1, else it's inf
         return (Just (s, s, Numeric (Num t NonConst)))
     f DMOpDiv (Numeric t) (TVar a)                            = matchType a (Numeric t)
     f DMOpDiv (TVar a) (Numeric t)                            = matchType a (Numeric t)
@@ -250,7 +250,7 @@ solveop name (IsTypeOpResult (Unary op (τa :@ s) τr)) = do
       -- unification would lead to an error then so we do subtyping in that case
       -- see issue #124
       case τr of
-          (Numeric (Num _ NonConst)) -> addConstraintNoMessage (Solvable (IsLessEqual (val_τr ,τr))) >> return val_τr
+          (Numeric (Num _ NonConst)) -> addConstraintFromName name (Solvable (IsLessEqual (val_τr ,τr))) >> return val_τr
           _ -> unify τr val_τr
       dischargeConstraint @MonadDMTC name
 
