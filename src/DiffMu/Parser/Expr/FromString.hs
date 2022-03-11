@@ -44,6 +44,7 @@ data JTree =
    | JNothing
    | JReturn [JTree]
    | JImport [String]
+   | JUse [String]
    | JModule [JTree]
    | JUnsupported String
    deriving Show
@@ -105,6 +106,7 @@ pTree =     try pTLineNumber
         <|> try ((JInteger . fromIntegral) <$> (wskip decimal))
         <|> try (":import"   `with` (JImport <$> between (wskipc '(') (wskipc ')') (some (noneOf @[] "()\n,") `sepBy` sep)))
         <|> try (":import"   `with` (JImport <$> some pAny))
+        <|> try (":using"   `with` (JUse <$> some pAny))
         <|> try (":module"   `pWithCtor` JModule)
         <|> try (":return"   `pWithCtor` JReturn)
         <|> try (":call"     `pWithCtor` JCall)
@@ -181,6 +183,7 @@ data JExpr =
    | JEIfElse JExpr JExpr (Maybe JExpr)
    | JERef JExpr [JExpr]
    | JEImport
+   | JEUse
    | JEReturn
    deriving Show
 
@@ -309,6 +312,9 @@ pTreeToJExpr tree = case tree of
      JImport v -> case v of
          [":.",s] -> pure JEImport -- just ignore imports
          v -> jParseError ("Only standalone imports are allowed. You tried to import specific names: " <> show v)
+     JUse v -> case v of
+         [":., :DiffPrivacyInference"] -> pure JEUse -- ignore `using DiffPrivacyInference`, all other using is forbidden.
+         v -> jParseError ("You tried to load a module except DiffPrivacyInference with `using`. Please use standalone imports instead.: " <> show v)
      JLoop as        -> case as of
          [(JAssign [ivar, JCall (JColon: iter)]), body] -> JELoop <$> pTreeToJExpr ivar <*> pIter iter <*> pTreeToJExpr body
          [(JAssign [_, iter]), _] -> jParseError ("Iterator has to be a range! Not like " <> show iter)
@@ -323,6 +329,8 @@ pModuleToJExpr :: JTree -> JEParseState JExpr
 pModuleToJExpr (JBlock [_,m]) = pModuleToJExpr m
 pModuleToJExpr (JModule [_,_,m]) = pTreeToJExpr m
 pModuleToJExpr t = jParseError ("All typechecked code must be within a module! Instead got " <> show t)
+
+
 
 
 parseJExprFromJTree :: JTree -> Either DMException JExpr

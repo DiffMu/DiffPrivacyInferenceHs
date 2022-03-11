@@ -116,6 +116,7 @@ pList :: [JExpr] -> ParseTC [LocProcDMTerm]
 pList [] = pure []
 pList (JEBlock stmts : tail) = pList (stmts ++ tail) -- handle nested blocks
 pList (JEImport : tail) = pList tail -- ignore imports
+pList (JEUse : tail) = pList tail -- ignore "using DiffPrivacyInference"
 pList (s : tail) = do
     ps <- case s of
                JELineNumber file line -> location .= (file, line) >> return Nothing
