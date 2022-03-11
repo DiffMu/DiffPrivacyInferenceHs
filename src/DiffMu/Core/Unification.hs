@@ -47,6 +47,9 @@ instance Show a => Show (WrapMessageINCRev e a) where show (WrapMessageINCRev a)
 instance ShowPretty a => ShowPretty (WrapMessageINCRev e a) where showPretty (WrapMessageINCRev a) = showPretty a
 
 instance (Show e, MonadInternalError m, MonadLog m, Normalize m a) => Normalize (INCResT e m) (WrapMessageINCRev e a) where
+  normalize e (WrapMessageINCRev x) =
+    let y = normalize @m e x
+    in INCResT (ExceptT (fmap (Right . WrapMessageINCRev) y))
 
 
 -------------------------------------------
