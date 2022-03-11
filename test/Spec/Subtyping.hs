@@ -11,7 +11,7 @@ testSubtyping = do
   let testsub x (a :: DMTypeOf k) b c = do
         it ("computes " <> show a <> " ≤ " <> show b <> " as [" <> show c <> "]") $ do
           (tcb x $ do
-              sn_EW (a ≤! b)
+              sn_EW ((a ≤! b) ())
               res <- (getUnsolvedConstraintMarkNormal [SolveExact])
               return (fmap (\_ -> ()) res)
             )
@@ -381,15 +381,15 @@ testSubtyping_ContractEdge = do
             (c :: DMMain) <- newVar
             (d :: DMMain) <- newVar
 
-            a ≤! c
-            b ≤! c
+            (a ≤! c) ()
+            (b ≤! c) ()
 
-            d ≤! a
-            d ≤! b
+            (d ≤! a) ()
+            (d ≤! b) ()
 
             -- the additional constraints
-            int ≤! d
-            c ≤! real
+            (int ≤! d) ()
+            (c ≤! real) ()
 
             return (d,a,b,c)
       let checkres (d,a,b,c) = (a == c, b == c, a == d, b == d, isGood a)
@@ -408,16 +408,16 @@ testSubtyping_ContractEdge = do
             (c :: DMMain) <- newVar
             (d :: DMMain) <- newVar
 
-            a ≤! c
-            b ≤! c
+            (a ≤! c) ()
+            (b ≤! c) ()
 
-            d ≤! a
-            d ≤! b
+            (d ≤! a) ()
+            (d ≤! b) ()
 
 
             -- the additional constraint
             x <- newVar
-            x ≤! a
+            (x ≤! a) ()
 
             return (d,a,b,c)
       let checkres (d,a,b,c) | let f = [a,b,c,d]
@@ -437,11 +437,11 @@ testSubtyping_ContractEdge = do
             (c :: DMMain) <- newVar
             (d :: DMMain) <- newVar
 
-            a ≤! c
-            b ≤! c
+            (a ≤! c)()
+            (b ≤! c)()
 
-            d ≤! a
-            d ≤! b
+            (d ≤! a)()
+            (d ≤! b)()
 
             -- the additional constraint
             addConstraintNoMessage (Solvable (IsJuliaEqual (a, int)))

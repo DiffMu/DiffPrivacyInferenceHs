@@ -74,7 +74,7 @@ testSupremum = do
             a <- newVar
             b <- newVar
             c <- supremum a b
-            unify c DMInt
+            unify () c DMInt
             return (a,b)
       let check :: (DMTypeOf BaseNumKind, DMTypeOf BaseNumKind) -> TC _
           check (DMInt, DMInt) = pure (Right ())
@@ -110,7 +110,7 @@ testSupremum = do
           test = do
             a <- newVar
             b <- supremum a DMReal
-            unify b DMInt
+            unify () b DMInt
             return ()
       (tc $ (sn_EW test)) `shouldReturn` (Left ((UnsatisfiableConstraint "test")))
 
@@ -131,7 +131,7 @@ testSupremum = do
             a <- newVar
             b <- newVar
             c <- supremum a b
-            unify c DMReal
+            unify () c DMReal
             return (a,b)
       let check (TVar a, TVar b) | a /= b = pure (Right ())
           check x                         = pure (Left x)
@@ -163,7 +163,7 @@ testSupremum = do
           test = do
             a <- newVar
             b <- supremum a DMReal
-            unify a b
+            unify () a b
             return a
       (tc $ (sn test)) `shouldReturn` (Right (DMReal))
 

@@ -56,13 +56,6 @@ solveUnary op τ = f op τ
 
 
 
-makeNoFunNumeric :: forall t. IsT MonadDMTC t =>  DMMain -> t (DMTypeOf NumKind)
-makeNoFunNumeric t = case t of
-    NoFun (Numeric v) -> return v
-    _ -> do
-           v <- newVar
-           unify t (NoFun (Numeric v))
-           return v
 
 -- We can solve a binary typeop constraint.
 solveBinary :: forall t. IsT MonadDMTC t => Symbol -> DMTypeOps_Binary -> (DMType, DMType) -> t (Maybe (Sensitivity , Sensitivity, DMType))
@@ -72,31 +65,40 @@ solveBinary name op (τ1, τ2) = f op τ1 τ2
     ret s1 s2 τ = do
       τ' <- τ
       return (Just (s1, s2, τ'))
+
+
+    makeNoFunNumeric :: forall t. IsT MonadDMTC t =>  DMMain -> t (DMTypeOf NumKind)
+    makeNoFunNumeric t = case t of
+        NoFun (Numeric v) -> return v
+        _ -> do
+              v <- newVar
+              unifyFromName name t (NoFun (Numeric v))
+              return v
       
     matchType :: SymbolOf NoFunKind -> DMType -> t (Maybe (Sensitivity, Sensitivity, DMType))
     matchType a m = case m of
         (Numeric _) -> do
            v <- newVar
-           unify (TVar a) (Numeric v)
+           unifyFromName name (TVar a) (Numeric v)
            return Nothing
         (DMVec n cl r t) -> do
            makeNoFunNumeric t
            clv <- newVar
            τ <- newVar
-           unify (TVar a) (DMVec n clv r τ)
+           unifyFromName name (TVar a) (DMVec n clv r τ)
            return Nothing
         (DMMat n cl r c t) -> do
            makeNoFunNumeric t
            clv <- newVar
            τ <- newVar
-           unify (TVar a) (DMMat n clv r c τ)
+           unifyFromName name (TVar a) (DMMat n clv r c τ)
            return Nothing
         _ -> return Nothing
 
     applyOp op (k1, n1, c1, t1) (k2, n2, c2, t2) = do
-           unify k1 k2
-           unify n1 n2
-           unify c1 c2
+           unifyFromName name k1 k2
+           unifyFromName name n1 n2
+           unifyFromName name c1 c2
            tt1 <- makeNoFunNumeric t1
            tt2 <- makeNoFunNumeric t2
            s <- solveBinary name op (Numeric tt1, Numeric tt2)
@@ -205,7 +207,7 @@ makeNonConstType myConstrName (Numeric (TVar a)) = do
     -- otherwise we do nothing
     False -> return (Numeric (TVar a))
 
-makeNonConstType name (Numeric (Num t (TVar c))) = unify (TVar c) NonConst >> pure (Numeric (Num t NonConst))
+makeNonConstType name (Numeric (Num t (TVar c))) = unifyFromName name (TVar c) NonConst >> pure (Numeric (Num t NonConst))
 makeNonConstType name (Numeric (Num t NonConst)) = pure $ Numeric (Num t NonConst)
 makeNonConstType name (Numeric (Num t (Const s))) = pure $ Numeric (Num t (Const s))
 makeNonConstType name (Numeric (Num DMData NonConst)) = pure $ (Numeric (Num DMData NonConst)) -- TODO: Check, we do nothing with (Num DMData NonConst)?
@@ -251,7 +253,7 @@ solveop name (IsTypeOpResult (Unary op (τa :@ s) τr)) = do
       -- see issue #124
       case τr of
           (Numeric (Num _ NonConst)) -> addConstraintFromName name (Solvable (IsLessEqual (val_τr ,τr))) >> return val_τr
-          _ -> unify τr val_τr
+          _ -> unifyFromName name τr val_τr
       dischargeConstraint @MonadDMTC name
 
 ----------------------------------------
@@ -259,11 +261,11 @@ solveop name (IsTypeOpResult (Unary op (τa :@ s) τr)) = do
 -- if we know the result type is a number all operands need to be numbers as well.
 solveop name (IsTypeOpResult (Binary op ((TVar τa1) :@ _, _) (Numeric τr))) = do
     t1 <- newVar
-    unify (TVar τa1) (Numeric t1)
+    unifyFromName name (TVar τa1) (Numeric t1)
     return ()
 solveop name (IsTypeOpResult (Binary op (_, (TVar τa2) :@ _) (Numeric τr))) = do
     t2 <- newVar
-    unify (TVar τa2) (Numeric t2)
+    unifyFromName name (TVar τa2) (Numeric t2)
     return ()
 solveop name (IsTypeOpResult (Binary op (τa1 :@ s1 , τa2 :@ s2) τr)) = do
   solveres <- solveBinary name op (τa1, τa2)
@@ -275,8 +277,8 @@ solveop name (IsTypeOpResult (Binary op (τa1 :@ s1 , τa2 :@ s2) τr)) = do
       --       it might be that the variables on the LHS already have been substituted
       --       with something elsewhere. Thus we would have two subs for the same var
       --       in the sub context.
-      unify (svar s1) val_s1
-      unify (svar s2) val_s2
+      unifyFromName name (svar s1) val_s1
+      unifyFromName name (svar s2) val_s2
 
       -- if the return type already is non-const, that's bc we non-constified some types
       -- earlier to perssimistically resolve constraints we could not have otherwise.
@@ -284,8 +286,8 @@ solveop name (IsTypeOpResult (Binary op (τa1 :@ s1 , τa2 :@ s2) τr)) = do
       -- the number types instead
       -- see issue #124
       case (τr, val_τr) of
-          (Numeric (Num tr NonConst), Numeric (Num tr_val (Const _))) -> unify tr tr_val >> return τr
-          _ -> unify τr val_τr
+          (Numeric (Num tr NonConst), Numeric (Num tr_val (Const _))) -> unifyFromName name tr tr_val >> return τr
+          _ -> unifyFromName name τr val_τr
       dischargeConstraint @MonadDMTC name
 
 instance FixedVars TVarOf (IsTypeOpResult DMTypeOp) where

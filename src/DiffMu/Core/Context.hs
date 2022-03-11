@@ -225,12 +225,12 @@ setVarP k v = types %=~ setValueM k (Right v :: Either (WithRelev SensitivityK) 
 
 
 -- add constraints that make sure all current context entries have sensitivity <= s.
-restrictAll :: Sensitivity -> TC ()
-restrictAll s = let
+restrictAll :: MessageLike TC msg => Sensitivity -> msg -> TC ()
+restrictAll s msg = let
    addC :: Sensitivity -> TC ()
    addC sv = do
       -- make constraints that say sv <= s and sv is the sensitivity of τ
-      addConstraintNoMessage (Solvable (IsLessEqual (sv, s)))
+      addConstraint (Solvable (IsLessEqual (sv, s))) msg
       return ()
    in do
       γ <- use types
@@ -240,14 +240,14 @@ restrictAll s = let
       return ()
 
 -- add constraints that make sure all interesting context entries have sensitivity <= s.
-restrictInteresting :: Sensitivity -> TC ()
-restrictInteresting s = let
+restrictInteresting :: MessageLike TC msg => Sensitivity -> msg -> TC ()
+restrictInteresting s msg = let
    addC :: WithRelev SensitivityK -> TC ()
    addC (WithRelev rel (_ :@ SensitivityAnnotation sv)) = do
       case rel of
          IsRelevant -> do
             -- make constraints that say sv <= s and sv is the sensitivity of τ
-            addConstraintNoMessage (Solvable (IsLessEqual (sv, s)))
+            addConstraint (Solvable (IsLessEqual (sv, s))) msg
             return ()
          _ -> return ()
    in do

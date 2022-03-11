@@ -379,7 +379,10 @@ instance Solve MonadDMTC IsLess (Sensitivity, Sensitivity) where
       solveLessSensitivity a b = case getVal a of
          Just av -> case getVal b of
                          Just bv -> case av == Infty of
-                                         True -> b ==! constCoeff Infty >> dischargeConstraint name
+                                         True -> do
+                                           msg <- inheritanceMessageFromName name
+                                           (b ==! constCoeff Infty) name
+                                           dischargeConstraint name
                                          False -> case (av < bv) of
                                                        True -> dischargeConstraint name
                                                        False -> failConstraint name
