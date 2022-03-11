@@ -134,7 +134,7 @@ checkSen' scope (Located l (Op op args)) = do
   -- typecheck, make the appropriate unification and scaling, then sum the contexts.
   let handleOpArg (t_arg, (τ, s)) = do
                                   τ_arg <- checkSens scope t_arg
-                                  unify (NoFun τ) τ_arg
+                                  unify (l :\\: "Operands of " :<>: op) (NoFun τ) τ_arg
                                   mscale (svar s)
                                   return τ_arg
                                   
@@ -354,7 +354,7 @@ checkSen' scope (Located l (MMap f m)) = do
     nrm <- newVar -- variable for norm
     clp <- newVar -- variable for clip
     k <- newVar -- variable for container kind
-    unify τm (NoFun (DMContainer k nrm clp mv τ_in))
+    unify (l :\\: "MMap argument type") τm (NoFun (DMContainer k nrm clp mv τ_in))
 
     -- only matrices or vectors (not gradients) are allowed.
     addConstraint (Solvable (IsVecOrMat (k, mr))) (l :\\: "MMap is only allowed on vectors and matrices, so " :<>: m :<>: " has to be one.")
@@ -380,7 +380,7 @@ checkSen' scope (Located l (MapRows f m)) = do
     clp₁ <- newVar -- variable for clip
     nrm₂ <- newVar -- variable for norm
     clp₂ <- newVar -- variable for clip
-    unify τm (NoFun (DMMat nrm₁ clp₁ ηm ηn₁ τ_in))
+    unify (l :\\: "MapRows argument type") τm (NoFun (DMMat nrm₁ clp₁ ηm ηn₁ τ_in))
 
     -- set the type of the function using IFA
     addConstraint (Solvable (IsFunctionArgument (τf, (Fun [([NoFun (DMVec nrm₁ clp₁ ηn₁ τ_in) :@ s] :->: NoFun (DMVec nrm₂ clp₂ ηn₂ τ_out)) :@ Nothing]))))
@@ -403,7 +403,7 @@ checkSen' scope (Located l (MapCols f m)) = do
     clp₁ <- newVar -- variable for clip
     nrm₂ <- newVar -- variable for norm
     clp₂ <- newVar -- variable for clip
-    unify τm (NoFun (DMMat nrm₁ clp₁ ηm₁ r τ_in))
+    unify (l :\\: "MapCols argument type") τm (NoFun (DMMat nrm₁ clp₁ ηm₁ r τ_in))
 
     -- set the type of the function using IFA
     --
@@ -437,8 +437,8 @@ checkSen' scope (Located l (MapCols2 f m₁ m₂)) = do
     clp₂ <- newVar -- variable for clip
     nrm₃ <- newVar -- variable for norm
     clp₃ <- newVar -- variable for clip
-    unify τm₁ (NoFun (DMMat LInf clp₁ ηm₁ r τ_in₁))
-    unify τm₂ (NoFun (DMMat LInf clp₂ ηm₂ r τ_in₂))
+    unify (l :\\: "Binary MapCols2 first argument type") τm₁ (NoFun (DMMat LInf clp₁ ηm₁ r τ_in₁))
+    unify (l :\\: "Binary MapCols2 second argument type") τm₂ (NoFun (DMMat LInf clp₂ ηm₂ r τ_in₂))
 
     -- set the type of the function using IFA
     addConstraint (Solvable (IsFunctionArgument (τf, (Fun [([NoFun (DMVec nrm₁ clp₁ ηm₁ τ_in₁) :@ ς₁, NoFun (DMVec nrm₂ clp₂ ηm₂ τ_in₂) :@ ς₂] :->: NoFun (DMVec L1 clp₃ ηm₃ τ_out)) :@ Nothing]))))
@@ -462,7 +462,7 @@ checkSen' scope (Located l (MFold f acc₀ m)) = do
     τbody_in <- newVar -- a type var for the function input / matrix element type
     τbody_out <- newVar -- a type var for the function output type
     clp₁ <- newVar -- variable for clip
-    unify τm (NoFun (DMMat L1 clp₁ ηm ηn τ_content))
+    unify (l :\\: "MFold argument type") τm (NoFun (DMMat L1 clp₁ ηm ηn τ_content))
 
     -- set the type of the function using IFA
     addConstraint (Solvable (IsFunctionArgument (τf, (Fun [([τ_content :@ s₁, τbody_in :@ s₂] :->: τbody_out :@ Nothing)]))))
@@ -518,7 +518,7 @@ checkSen' scope (Located l (Phi cond ifbr elsebr)) = do
   addConstraint (Solvable (IsJuliaEqual (τif, τelse)))
     (l :\\: "Both branches of a conditional statement must yield the same julia type.")
 
-  unify τcond (NoFun DMBool)
+  unify (l :\\: "If condition must be boolean") τcond (NoFun DMBool)
 
   -- once we know they are julia-equal, we can safely make the Phi return their supremum.
   τ <- newVar
@@ -535,7 +535,7 @@ checkSen' scope (Located l (Tup ts)) = do
 
   -- ensure nothing that is put in a tuple is a function
   let makeNoFun ty = do v <- newVar
-                        unify (NoFun v) ty
+                        unify (l :\\: "Tuple elements cannot be functions") (NoFun v) ty
                         return v
   τnf <- mapM makeNoFun τsum
 
@@ -579,7 +579,7 @@ checkSen' original_scope (Located l (TLet xs term body)) = do
 
   -- helper function for making sure that type is a nofun, returning the nofun component
   let makeNoFun ty = do v <- newVar
-                        unify (NoFun v) ty
+                        unify (l :\\: "Tuple assignees cannot be functions") (NoFun v) ty
                         return v
 
   -- here we use `makeNoFun`
@@ -587,7 +587,7 @@ checkSen' original_scope (Located l (TLet xs term body)) = do
   xs_types' <- mapM makeNoFun xs_types
 
   -- and require that the type of the term is actually this tuple type
-  unify τterm (NoFun (DMTup xs_types'))
+  unify (l :\\: "Set tuple type of assignment") τterm (NoFun (DMTup xs_types'))
 
   -- finally we need make sure that our scaling factor `s` is the maximum of the tuple sensitivities
   s ==! maxS xs_sens
@@ -643,10 +643,10 @@ checkSen' scope (Located l (Loop niter cs' (xi, xc) body)) = do
   -- τbcs = type of the capture variable xc inferred in the body
   (τit, τloop_in, (τbody_out, (τbit, sbit), (τbody_in, sbcs))) <- msum3Tup (cniter <* mscale sit, ccs <* mscale scs, cbody' <* mscale sb)
 
-  unify (NoFun (Numeric (Num DMInt NonConst))) τbit -- number of iterations must match type requested by body
+  unify (l :\\: "Iterator must be integer.") (NoFun (Numeric (Num DMInt NonConst))) τbit
 
   τcsnf <- newVar
-  unify (NoFun τcsnf) τloop_in -- functions cannot be captured.
+  unify (l :\\: "Loop captures cannot be functions") (NoFun τcsnf) τloop_in -- functions cannot be captured.
 
 
 {-
@@ -680,7 +680,7 @@ checkSen' scope (Located l (MCreate n m (x1, x2) body)) =
    let setDim :: TC DMMain -> Sensitivity -> TC DMMain
        setDim tm s = do
           τ <- tm -- check dimension term
-          unify τ (NoFun (Numeric (Num DMInt (Const s)))) -- dimension must be const integral
+          unify (l :\\: "Matrix dimension must be const in mcreate") τ (NoFun (Numeric (Num DMInt (Const s)))) -- dimension must be const integral
           mscale zeroId
           return τ
 
@@ -728,7 +728,7 @@ checkSen' scope (Located l (Size m)) = do
 
   nrm <- newVar -- variable for norm
   clp <- newVar -- variable for clip
-  unify mt (NoFun (DMMat nrm clp nv mv τ))
+  unify (l :\\: "Argument of `size` must be a matrix") mt (NoFun (DMMat nrm clp nv mv τ))
 
   mscale zeroId
 
@@ -743,7 +743,7 @@ checkSen' scope (Located l (Length m)) = do
 
   nrm <- newVar -- variable for norm
   clp <- newVar -- variable for clip
-  unify mt (NoFun (DMVec nrm clp nv τ))
+  unify (l :\\: "Arguemtn of `length` must be a vector.") mt (NoFun (DMVec nrm clp nv τ))
 
   mscale zeroId
 
@@ -766,7 +766,7 @@ checkSen' scope (Located l (ClipM c m)) = do
     (l :\\: "Clip can only be used on 1-dimensional things.")
 
   -- set correct matrix type
-  unify τb (NoFun (DMContainer k LInf clp n (NoFun (Numeric (Num DMData NonConst)))))
+  unify (l :\\: "Argument of `clip` must be an (LInf, Data)-Matrix.") τb (NoFun (DMContainer k LInf clp n (NoFun (Numeric (Num DMData NonConst)))))
 
   -- change clip parameter to input
   return (NoFun (DMContainer k LInf c n (NoFun (Numeric (Num DMData NonConst)))))
@@ -779,9 +779,9 @@ checkSen' scope (Located l (ClipN value upper lower)) = do
   tk <- newVar
   tu <- newVar
   tl <- newVar
-  unify τv (NoFun (Numeric (Num tv tk)))
-  unify τu (NoFun (Numeric (Num tv tu)))
-  unify τl (NoFun (Numeric (Num tv tl)))
+  unify (l :\\: "Parameter of `clip` must be a number.") τv (NoFun (Numeric (Num tv tk)))
+  unify (l :\\: "Upper bound parameter of `clip` must be a number.") τu (NoFun (Numeric (Num tv tu)))
+  unify (l :\\: "Lower bound parameter of `clip` must be a number.") τl (NoFun (Numeric (Num tv tl)))
 
   return (NoFun (Numeric (Num tv NonConst)))
 
@@ -798,8 +798,8 @@ checkSen' scope (Located l (Count f m)) = let
     r <- newVar
     s <- newVar
         
-    unify tm (NoFun (DMVec n cl r (NoFun (Numeric (Num DMData NonConst)))))
-    unify tf (Fun [[(NoFun (Numeric (Num DMData NonConst))) :@ s] :->: (NoFun DMBool) :@ (Just [JTAny])])
+    unify (l :\\: "Parameter of `count` must be a Data vector.") tm (NoFun (DMVec n cl r (NoFun (Numeric (Num DMData NonConst)))))
+    unify (l :\\: "Parameter of `count` must be a function from Data to Bool.") tf (Fun [[(NoFun (Numeric (Num DMData NonConst))) :@ s] :->: (NoFun DMBool) :@ (Just [JTAny])])
     
     return (NoFun (Numeric (Num DMInt NonConst)))
 
@@ -822,7 +822,7 @@ checkSen' scope (Located l (ConvertM m)) = do
   k <- newVar
 
   -- set correct matrix type
-  unify τb (NoFun (DMContainer k nrm (Clip clp) n (NoFun (Numeric (Num DMData NonConst)))))
+  unify (l :\\: "Parameter of `norm_convert` must be a container with Data elements and bounded clip parameter.") τb (NoFun (DMContainer k nrm (Clip clp) n (NoFun (Numeric (Num DMData NonConst)))))
 
   -- we have to scale by two unlike in the paper...see the matrixnorms pdf in julia docs
   mscale (oneId ⋆! oneId)
@@ -876,7 +876,7 @@ checkSen' scope  (Located l (Index m i j)) = do
       m <- newVar
 
       -- set matrix type
-      unify τm (NoFun (DMMat nrm clp n m τ))
+      unify (l :\\: "Index parameter must be matrix") τm (NoFun (DMMat nrm clp n m τ))
 
       -- we don't restrict matrix dimension or index size, but leave that to the runtime errors...
 
@@ -903,7 +903,7 @@ checkSen' scope (Located l (VIndex v i))  = do
       n <- newVar
 
       -- set vector type
-      unify τv (NoFun (DMVec nrm clp n τ))
+      unify (l :\\: "single-index parameter must be vector") τv (NoFun (DMVec nrm clp n τ))
 
       -- we don't restrict vector dimension or index size, but leave that to the runtime errors...
 
@@ -929,7 +929,7 @@ checkSen' scope (Located l (Row m i)) = do
       m <- newVar
 
       -- set matrix type
-      unify τm (NoFun (DMMat nrm clp n m τ))
+      unify (l :\\: "Rows can only be taken of matrices") τm (NoFun (DMMat nrm clp n m τ))
 
       -- we don't restrict matrix dimension or index size, but leave that to the runtime errors...
 
@@ -948,8 +948,8 @@ checkSen' scope (Located l (SubGrad ps gs)) = do
       m <- newVar
 
       -- set argument types
-      unify ps (NoFun (DMModel m))
-      unify gs (NoFun (DMGrads nrm clp m (NoFun (Numeric τgs))))
+      unify (l :\\: "The thing that the gradient is subtracted from must be a model") ps (NoFun (DMModel m))
+      unify (l :\\: "The thing that is subtracted from the model must be a gradient") gs (NoFun (DMGrads nrm clp m (NoFun (Numeric τgs))))
 
       return (NoFun (DMModel m))
 
@@ -957,7 +957,7 @@ checkSen' scope term@(Located l (ScaleGrad scalar grad)) = do
 
   let makeNumeric t = do
           tn <- newVar
-          unify t (Numeric tn)
+          unify (l :\\: "Scalar for gradient must be a number") t (Numeric tn)
 
   let dscalar = checkSens scope scalar
   let dgrad = checkSens scope grad
@@ -984,18 +984,18 @@ checkSen' scope term@(Located l (ScaleGrad scalar grad)) = do
 
   -- set τ1 to the actual type of the scalar
   makeNumeric τ1
-  unify tscalar (NoFun τ1)
+  unify (l :\\: "Set scalar type") tscalar (NoFun τ1)
 
   -- and τ2 to the actual content type of the dmgrads
   -- (we allow any kind of annotation on the dmgrads here)
   makeNumeric τ2
-  unify tgrad (NoFun (DMGrads nrm clp m (NoFun τ2)))
+  unify (l :\\: "Set gradient type") tgrad (NoFun (DMGrads nrm clp m (NoFun τ2)))
 
   -- the return type is the same matrix, but
   -- the clipping is now changed to unbounded
   -- and the content type is the result of the multiplication
   τresnum <- newVar
-  unify (Numeric τresnum) τres
+  unify (l :\\: "Set element type of scaled gradient") (Numeric τresnum) τres
   return (NoFun (DMGrads nrm U m (NoFun τres)))
 
 -- checkSen' scope (Reorder σ t) = do
@@ -1020,7 +1020,7 @@ checkSen' scope (Located l (ZeroGrad m)) = do
    clp <- newVar -- actually variable, as all entries are zero
 
    -- input must be a model
-   unify tm (NoFun (DMModel n))
+   unify (l :\\: "Input for `zero_gradient` must be a model") tm (NoFun (DMModel n))
 
    -- we could return const here but it'll probably be trouble
    return (NoFun (DMGrads nrm clp n (NoFun (Numeric (Num DMReal NonConst)))))
@@ -1054,10 +1054,10 @@ checkSen' scope term@(Located l (SumGrads g1 g2)) = do
   -- (we allow any kind of annotation on the dmgrads here but they gotta match)
   τ1num <- newVar
   τ2num <- newVar
-  unify τ1 (Numeric τ1num)
-  unify τ2 (Numeric τ2num)
-  unify tg1 (NoFun (DMGrads nrm clp1 m (NoFun τ1)))
-  unify tg2 (NoFun (DMGrads nrm clp2 m (NoFun τ2)))
+  unify (l :\\: "First gradient elements must be numbers") τ1 (Numeric τ1num)
+  unify (l :\\: "Second gradient elements must be numbers") τ2 (Numeric τ2num)
+  unify (l :\\: "Set first gradient") tg1 (NoFun (DMGrads nrm clp1 m (NoFun τ1)))
+  unify (l :\\: "Set second gradient") tg2 (NoFun (DMGrads nrm clp2 m (NoFun τ2)))
 
   -- the return type is the same matrix, but
   -- the clipping is now changed to unbounded
@@ -1074,7 +1074,7 @@ checkSen' scope term@(Located l (InternalExpectConst a)) = do
   res <- checkSens scope a
   sa <- newVar
   ta <- newVar
-  res' <- unify res (NoFun (Numeric (Num ta (Const sa))))
+  res' <- unify (l :\\: "From explicit `internal_expect_const`") res (NoFun (Numeric (Num ta (Const sa))))
 
   return res'
 
@@ -1097,7 +1097,7 @@ checkSen' scope term@(Located l (Clone t)) = checkSen' scope t -- do
 checkSen' scope term@(Located l (Disc t)) = do
   tt <- checkSen' scope t <* mtruncateS inftyS
   v <- newVar
-  unify (NoFun (Numeric v)) tt
+  unify (l :\\: "Input for `disc` must be numeric") (NoFun (Numeric v)) tt
   return (NoFun (Numeric (Num DMData NonConst)))
 
 checkSen' scope term@(Located l (MakeVec m)) = do
@@ -1110,7 +1110,7 @@ checkSen' scope term@(Located l (MakeVec m)) = do
   cols <- newVar
 
   -- set 1-row matrix type
-  unify mtype (NoFun (DMMat nrm clp oneId cols τ))
+  unify (l :\\: "`vec_from_row` expects one-row matrix") mtype (NoFun (DMMat nrm clp oneId cols τ))
 
   return (NoFun (DMVec nrm clp cols τ))
 
@@ -1125,7 +1125,7 @@ checkSen' scope term@(Located l (MakeRow m)) = do
   cols <- newVar
 
   -- set 1-row matrix type
-  unify mtype (NoFun (DMVec nrm clp cols τ))
+  unify (l :\\: "`row_from_vec` expects vector") mtype (NoFun (DMVec nrm clp cols τ))
 
   return (NoFun (DMMat nrm clp oneId cols τ))
 
@@ -1221,7 +1221,7 @@ checkPri' scope (Located l (SBind (x :- dτ) term body)) = do
   ((τbody, τx), τterm) <- msumTup (mbody, dterm)
 
   -- unify type of x in the body with inferred type of the assignee term
-  unify τx τterm
+  unify (l :\\: "Assignee term must have same type as the inferred type of the variable in following code.") τx τterm
 
   -- make sure that τterm is not a functiontype
   -- this is necessary because elsewise it might be capturing variables
@@ -1230,7 +1230,7 @@ checkPri' scope (Located l (SBind (x :- dτ) term body)) = do
   -- of an arg representing it. But this would not work with the bind rule.)
   -- See https://github.com/DiffMu/DiffPrivacyInferenceHs/issues/18
   τnofun <- newVar
-  unify τbody (NoFun τnofun)
+  unify (l :\\: "Term after a bind cannot be a function") τbody (NoFun τnofun)
 
   log $ "checking privacy SLet: " <> show (x :- dτ) <> " = " <> show term <> " in " <> show body<> "\n ==> inferred type is " <> show τx <> ", term type is " <> show τterm <> ", body types is " <> show τbody
   -- return the type of this bind expression
@@ -1330,7 +1330,7 @@ checkPri' scope (Located l (Gauss rp εp δp f)) =
    setParam dt v = do -- parameters must be const numbers.
       τ <- dt
       τv <- newVar
-      unify τ (NoFun (Numeric (Num τv (Const v))))
+      unify (l :\\: "Gauss parameters must be const (NoData) numbers.") τ (NoFun (Numeric (Num τv (Const v))))
       mtruncateP zeroId
       return ()
 
@@ -1394,7 +1394,7 @@ checkPri' scope (Located l (Laplace rp εp f)) =
    setParam dt v = do -- parameters must be const numbers.
       τ <- dt
       τv <- newVar
-      unify τ (NoFun (Numeric (Num τv (Const v))))
+      unify (l :\\: "Laplace parameters must be const (NoData) numbers.") τ (NoFun (Numeric (Num τv (Const v))))
       mtruncateP zeroId
       return ()
 
@@ -1459,7 +1459,7 @@ checkPri' scope (Located l (AboveThresh qs e d t)) = do
       tfun <- newVar
       addConstraint (Solvable (IsFunctionArgument (tfun, Fun([([τd :@ (oneId :: Sensitivity)] :->: (NoFun (Numeric (Num DMReal NonConst)))) :@ Nothing]))))
         (l :\\: "AboveThreshold query vector must contain functions of the right type.")
-      unify τqs (NoFun (DMVec nrm clp n tfun))
+      unify (l :\\: "Set AboveThreshold query vector type") τqs (NoFun (DMVec nrm clp n tfun))
       
       addConstraint (Solvable (IsLessEqual (τe, (NoFun (Numeric (Num DMReal (Const eps)))))))
         (l :\\: "AboveThreshold epsilon parameter must be const (NoData).")
@@ -1475,14 +1475,14 @@ checkPri' scope (Located l (Exponential rp εp xs f)) = do
    setParamConst dt v = do -- parameters must be const numbers.
       τ <- dt
       τv <- newVar
-      unify τ (NoFun (Numeric (Num τv (Const v))))
+      unify (l :\\: "Exponential mechanism parameters must be const (NoData) numbers.") τ (NoFun (Numeric (Num τv (Const v))))
       return ()
 
    setParamVecLike :: TC DMMain -> DMMain -> TC ()
    setParamVecLike dt v = do
       t_actual <- dt
       t_required <- NoFun <$> (DMVec <$> newVar <*> newVar <*> newVar <*> pure v)
-      unify t_actual t_required
+      unify (l :\\: "Exponential mechanism expects a vector") t_actual t_required
       return ()
 
    -- the function (given as "body") needs to take the content type of the vector
@@ -1499,7 +1499,7 @@ checkPri' scope (Located l (Exponential rp εp xs f)) = do
       --
       s_input <- newVar
       let t_f_required = Fun ([([t_x :@ s_input] :->: (NoFun (Numeric (Num DMReal NonConst)))) :@ Just [JTAny]])
-      unify t_f_actual t_f_required
+      unify (l :\\: "Exponential mechanism expects a function from element type to the reals.") t_f_actual t_f_required
 
       -- interesting input variables must have sensitivity <= r
       --
@@ -1609,11 +1609,11 @@ checkPri' scope (Located l (Loop niter cs' (xi, xc) body)) =
       -- τbcs = type of the capture variable xc inferred in the body
       (τit, τloop_in, (τbody_out, n, τbit, τbody_in)) <- msum3Tup (cniter, mcaps, cbody')
 
-      unify τit (NoFun (Numeric (Num DMInt (Const n)))) -- number of iterations must be constant integer
-      unify (NoFun (Numeric (Num DMInt NonConst))) τbit -- number of iterations must match type requested by body
+      unify (l :\\: "Number of iterations in private loop must be const (NoData) integer.") τit (NoFun (Numeric (Num DMInt (Const n)))) -- number of iterations must be constant integer
+      unify (l :\\: "Iterator in private loop must be integer") (NoFun (Numeric (Num DMInt NonConst))) τbit -- number of iterations must match type requested by body
 
       τcsnf <- newVar
-      unify (NoFun τcsnf) τloop_in -- functions cannot be captured.
+      unify (l :\\: "Loop captures cannot be functions.") (NoFun τcsnf) τloop_in -- functions cannot be captured.
 
 {-
       -- TODO loops with Const captures/output don't work yet.
@@ -1695,19 +1695,19 @@ checkPri' scope (Located l (SmpLet xs (Located l2 (Sample n m1_in m2_in)) tail))
       n2 <- newVar
     
       -- set number of samples to const m2 and truncate context with 0
-      unify tn (NoFun (Numeric (Num DMInt (Const m2))))
-      unify pn (zeroId, zeroId)
+      unify (l :\\: "Number of samples must be const (NoData) integer") tn (NoFun (Numeric (Num DMInt (Const m2))))
+      unify (l :\\: "Truncate context of number of samples with 0") pn (zeroId, zeroId)
       
       -- set input matrix types and truncate contexts to what it says in the rule
-      unify tm1 (NoFun (DMMat LInf clp m1 n1 (NoFun (Numeric (Num DMData NonConst)))))
-      unify tm2 (NoFun (DMMat LInf clp m1 n2 (NoFun (Numeric (Num DMData NonConst)))))
+      unify (l :\\: "Sample input matrix must be (LInf, Data)") tm1 (NoFun (DMMat LInf clp m1 n1 (NoFun (Numeric (Num DMData NonConst)))))
+      unify (l :\\: "Sample input matrix must be (LInf, Data)") tm2 (NoFun (DMMat LInf clp m1 n2 (NoFun (Numeric (Num DMData NonConst)))))
       let two = oneId ⋆! oneId
-      unify pm1 (divide (two ⋅! (m2 ⋅! e1)) m1, divide (m2 ⋅! d1) m1)
-      unify pm2 (divide (two ⋅! (m2 ⋅! e2)) m1, divide (m2 ⋅! d2) m1)
+      unify (l :\\: "Truncate first sample matrix context") pm1 (divide (two ⋅! (m2 ⋅! e1)) m1, divide (m2 ⋅! d1) m1)
+      unify (l :\\: "Truncate second sample matrix context") pm2 (divide (two ⋅! (m2 ⋅! e2)) m1, divide (m2 ⋅! d2) m1)
 
       -- set correct types for sample results in the tail
-      unify tm1 t1
-      unify tm2 t2
+      unify (l :\\: "Set type of first sample result") tm1 t1
+      unify (l :\\: "Set type of second sample result") tm2 t2
 
       -- expression has type of the tail
       return ttail
@@ -1722,10 +1722,11 @@ checkPri' scope (Located l (PReduceCols f m)) = do
     let mf = checkSens scope f <* mtruncateP inftyP
     (τf :: DMMain, τm) <- msumTup (mf, mm) -- sum args and f's context
 
-    τ_out <- newVar -- a type var for the function output type
-    unify τm (NoFun (DMMat LInf U ηm r (NoFun (Numeric (Num DMData NonConst)))))
+    c <- newVar -- input clipping parameter is free
+    unify (l :\\: "Parameter of `reduce_cols` must be (Linf,Data)-Matrix") τm (NoFun (DMMat LInf c ηm r (NoFun (Numeric (Num DMData NonConst)))))
 
     -- set the type of the function using IFA
+    τ_out <- newVar -- a type var for the function output type
     addConstraint (Solvable (IsFunctionArgument (τf, (Fun [([NoFun (DMMat LInf U ηm oneId (NoFun (Numeric (Num DMData NonConst)))) :@ (ε, δ)] :->*: τ_out) :@ Nothing]))))
       (l :\\: "ReduceCols map must have the right type.")
 
@@ -1763,7 +1764,7 @@ checkBBKind scope a = let
     -- make sure that it is const
     pdt_val <- newVar
     pdt_ty <- newVar
-    unify pdt_actual_ty (NoFun $ Numeric $ Num pdt_ty (Const pdt_val))
+    unify () pdt_actual_ty (NoFun $ Numeric $ Num pdt_ty (Const pdt_val))
 
     -- look what type was requested in form of a julia type
     case jt of
@@ -1784,11 +1785,11 @@ checkBBKind scope a = let
     -- make sure they are is const
     pdt1_val <- newVar
     pdt1_ty <- newVar
-    unify pdt1_actual_ty (NoFun $ Numeric $ Num pdt1_ty (Const pdt1_val))
+    unify () pdt1_actual_ty (NoFun $ Numeric $ Num pdt1_ty (Const pdt1_val))
 
     pdt2_val <- newVar
     pdt2_ty <- newVar
-    unify pdt2_actual_ty (NoFun $ Numeric $ Num pdt2_ty (Const pdt2_val))
+    unify () pdt2_actual_ty (NoFun $ Numeric $ Num pdt2_ty (Const pdt2_val))
 
     -- look what type was requested in form of a julia type
     case jt of
