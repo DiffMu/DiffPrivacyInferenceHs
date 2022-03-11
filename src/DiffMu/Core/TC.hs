@@ -431,7 +431,7 @@ instance Show a => Show (Watched a) where
 
 instance ShowPretty a => ShowPretty (Watched a) where
   -- show (Watched NotNormal a) = "*" <> show a
-  showPretty (Watched (NormalForMode m) a) = show m <> " " <> showPretty a
+  showPretty (Watched (NormalForMode m) a) = showPretty a
 
 instance (MonadWatch t, Normalize t a) => Normalize t (Watched a) where
   normalize nt (Watched c a) =
