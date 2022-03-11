@@ -35,6 +35,9 @@ instance (HasMonCom Identity x v) => Monoid (Ctx v x) where
 instance (Show v, Show x, DictKey v) => Show (Ctx v x) where
   show (Ctx γ) = showWith ",\n" (\x τ -> show x <> " : " <> show τ) γ ""
 
+instance (ShowPretty v, ShowPretty x, DictKey v) => ShowPretty (Ctx v x) where
+  showPretty (Ctx γ) = showWith ",\n" (\x τ -> showPretty x <> " : " <> showPretty τ) γ ""
+
 instance Default (Ctx v x)
 
 

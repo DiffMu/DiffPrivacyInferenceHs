@@ -3,6 +3,7 @@ module DiffMu.Typecheck.Operations where
 
 import DiffMu.Prelude
 import DiffMu.Abstract
+import DiffMu.Abstract.Data.Error
 import DiffMu.Core.Definitions
 import DiffMu.Core.Logging
 import DiffMu.Core.TC
@@ -22,22 +23,22 @@ import Debug.Trace
 -- we create an `IsTypeOpResult` constraint, and return the contained types/sensitivities.
 -- the constraint constains sensitivities that are scalars for the operand contexts and will
 -- be determined once enough about the operand types is known.
-makeTypeOp :: (IsT MonadDMTC t) => DMTypeOp_Some -> Int -> t ((DMType) , [(DMType,SVar)])
-makeTypeOp (IsUnary op) 1 =
+makeTypeOp :: (IsT MonadDMTC t) => DMTypeOp_Some -> Int -> DMPersistentMessage t -> t ((DMType) , [(DMType,SVar)])
+makeTypeOp (IsUnary op) 1 msg =
   do s1 <- newSVar "η"
      τ1 <-  TVar <$> newTVar "τa"
      res <- TVar <$> newTVar "τr"
-     addConstraintNoMessage (Solvable (IsTypeOpResult (Unary op (τ1 :@ s1) res)))
+     addConstraint (Solvable (IsTypeOpResult (Unary op (τ1 :@ s1) res))) msg
      return (res , [(τ1, s1)])
-makeTypeOp (IsBinary op) 2 =
+makeTypeOp (IsBinary op) 2 msg =
   do s1 <- newSVar "η"
      s2 <- newSVar "η"
      τ1 <-  TVar <$> newTVar "τa"
      τ2 <-  TVar <$> newTVar "τa"
      res <- TVar <$> newTVar "τr"
-     addConstraintNoMessage (Solvable (IsTypeOpResult (Binary op (τ1:@s1, τ2:@s2) res)))
+     addConstraint (Solvable (IsTypeOpResult (Binary op (τ1:@s1, τ2:@s2) res))) msg
      return (res , [(τ1,s1),(τ2,s2)])
-makeTypeOp op lengthArgs = throwUnlocatedError (WrongNumberOfArgsOp op (lengthArgs))
+makeTypeOp op lengthArgs msg = throwUnlocatedError (WrongNumberOfArgsOp op (lengthArgs))
 
 -- We can solve a unary typeop constraint.
 solveUnary :: forall t e. IsT MonadDMTC t => DMTypeOps_Unary -> DMType -> t (Maybe (Sensitivity, DMType))
@@ -64,8 +65,8 @@ makeNoFunNumeric t = case t of
            return v
 
 -- We can solve a binary typeop constraint.
-solveBinary :: forall t. IsT MonadDMTC t => DMTypeOps_Binary -> (DMType, DMType) -> t (Maybe (Sensitivity , Sensitivity, DMType))
-solveBinary op (τ1, τ2) = f op τ1 τ2
+solveBinary :: forall t. IsT MonadDMTC t => Symbol -> DMTypeOps_Binary -> (DMType, DMType) -> t (Maybe (Sensitivity , Sensitivity, DMType))
+solveBinary name op (τ1, τ2) = f op τ1 τ2
   where
     ret :: Sensitivity -> Sensitivity -> t (DMType) -> t (Maybe (Sensitivity, Sensitivity, DMType))
     ret s1 s2 τ = do
@@ -98,7 +99,7 @@ solveBinary op (τ1, τ2) = f op τ1 τ2
            unify c1 c2
            tt1 <- makeNoFunNumeric t1
            tt2 <- makeNoFunNumeric t2
-           s <- solveBinary op (Numeric tt1, Numeric tt2)
+           s <- solveBinary name op (Numeric tt1, Numeric tt2)
            case s of
               Nothing -> return Nothing
               Just (s1, s2, τ) -> return (Just (s1, s2, (DMContainer k1 n1 U c1 (NoFun τ))))
@@ -106,10 +107,10 @@ solveBinary op (τ1, τ2) = f op τ1 τ2
         
     -- all possible type signatures for arithmetic operations, and the resulting sensitivities and result types
     f :: DMTypeOps_Binary -> (DMType) -> (DMType) -> t (Maybe (Sensitivity , Sensitivity, DMType))
-    f DMOpAdd (Numeric (Num t1 (Const s1))) (Numeric (Num t2 (Const s2))) = ret zeroId zeroId ((Numeric <$> (Num <$> (supremum t1 t2) <*> (Const <$> (s1 ⋆ s2)))))
-    f DMOpAdd (Numeric (Num t1 (Const s1))) (Numeric (Num t2 NonConst)) = ret zeroId oneId  (Numeric <$> (Num <$> supremum t1 t2 <*> pure NonConst))
-    f DMOpAdd (Numeric (Num t1 NonConst)) (Numeric (Num t2 (Const s2))) = ret oneId  zeroId (Numeric <$> (Num <$> supremum t1 t2 <*> pure NonConst))
-    f DMOpAdd (Numeric (Num t1 NonConst)) (Numeric (Num t2 NonConst)) = ret oneId  oneId  (Numeric <$> (Num <$> supremum t1 t2 <*> pure NonConst))
+    f DMOpAdd (Numeric (Num t1 (Const s1))) (Numeric (Num t2 (Const s2))) = ret zeroId zeroId ((Numeric <$> (Num <$> (supremumFromName name t1 t2) <*> (Const <$> (s1 ⋆ s2)))))
+    f DMOpAdd (Numeric (Num t1 (Const s1))) (Numeric (Num t2 NonConst)) = ret zeroId oneId  (Numeric <$> (Num <$> supremumFromName name t1 t2 <*> pure NonConst))
+    f DMOpAdd (Numeric (Num t1 NonConst)) (Numeric (Num t2 (Const s2))) = ret oneId  zeroId (Numeric <$> (Num <$> supremumFromName name t1 t2 <*> pure NonConst))
+    f DMOpAdd (Numeric (Num t1 NonConst)) (Numeric (Num t2 NonConst)) = ret oneId  oneId  (Numeric <$> (Num <$> supremumFromName name t1 t2 <*> pure NonConst))
     f DMOpAdd (DMContainer k1 n1 cl1 c1 t1) (DMContainer k2 n2 cl2 c2 t2) = applyOp DMOpAdd (k1, n1, c1, t1) (k2, n2, c2, t2)
     f DMOpAdd t (TVar a)                            = matchType a t
     f DMOpAdd (TVar a) t                            = matchType a t
@@ -117,33 +118,33 @@ solveBinary op (τ1, τ2) = f op τ1 τ2
 
 
     -- TODO figure out how to handle negative numbers.
-    f DMOpSub (Numeric (Num t1 (Const s1))) (Numeric (Num t2 (Const s2))) = ret zeroId zeroId ((Numeric <$> (Num <$> (supremum t1 t2) <*> pure (Const (minus s1 s2)))))
-    f DMOpSub (Numeric (Num t1 (Const s1))) (Numeric (Num t2 NonConst)) = ret zeroId oneId (Numeric <$> (Num <$> supremum t1 t2 <*> pure NonConst))
-    f DMOpSub (Numeric (Num t1 NonConst)) (Numeric (Num t2 (Const s2))) = ret oneId zeroId (Numeric <$> (Num <$> supremum t1 t2 <*> pure NonConst))
-    f DMOpSub (Numeric (Num t1 NonConst)) (Numeric (Num t2 NonConst)) = ret oneId oneId (Numeric <$> (Num <$> supremum t1 t2 <*> pure NonConst))
+    f DMOpSub (Numeric (Num t1 (Const s1))) (Numeric (Num t2 (Const s2))) = ret zeroId zeroId ((Numeric <$> (Num <$> (supremumFromName name t1 t2) <*> pure (Const (minus s1 s2)))))
+    f DMOpSub (Numeric (Num t1 (Const s1))) (Numeric (Num t2 NonConst)) = ret zeroId oneId (Numeric <$> (Num <$> supremumFromName name t1 t2 <*> pure NonConst))
+    f DMOpSub (Numeric (Num t1 NonConst)) (Numeric (Num t2 (Const s2))) = ret oneId zeroId (Numeric <$> (Num <$> supremumFromName name t1 t2 <*> pure NonConst))
+    f DMOpSub (Numeric (Num t1 NonConst)) (Numeric (Num t2 NonConst)) = ret oneId oneId (Numeric <$> (Num <$> supremumFromName name t1 t2 <*> pure NonConst))
     f DMOpSub (DMContainer k1 n1 cl1 c1 t1) (DMContainer k2 n2 cl2 c2 t2) = applyOp DMOpSub (k1, n1, c1, t1) (k2, n2, c2, t2)
     f DMOpSub t (TVar a)                            = matchType a t
     f DMOpSub (TVar a) t                            = matchType a t
 
 
 
-    f DMOpMul (Numeric (Num t1 (Const s1))) (Numeric (Num t2 (Const s2))) = ret zeroId zeroId ((Numeric <$> (Num <$> (supremum t1 t2) <*> (Const <$> (s1 ⋅ s2)))))
-    f DMOpMul (Numeric (Num t1 (Const s1))) (Numeric (Num t2 NonConst)) = ret zeroId s1 (Numeric <$> (Num <$> supremum t1 t2 <*> pure NonConst))
-    f DMOpMul (Numeric (Num t1 NonConst)) (Numeric (Num t2 (Const s2))) = ret s2 zeroId (Numeric <$> (Num <$> supremum t1 t2 <*> pure NonConst))
+    f DMOpMul (Numeric (Num t1 (Const s1))) (Numeric (Num t2 (Const s2))) = ret zeroId zeroId ((Numeric <$> (Num <$> (supremumFromName name t1 t2) <*> (Const <$> (s1 ⋅ s2)))))
+    f DMOpMul (Numeric (Num t1 (Const s1))) (Numeric (Num t2 NonConst)) = ret zeroId s1 (Numeric <$> (Num <$> supremumFromName name t1 t2 <*> pure NonConst))
+    f DMOpMul (Numeric (Num t1 NonConst)) (Numeric (Num t2 (Const s2))) = ret s2 zeroId (Numeric <$> (Num <$> supremumFromName name t1 t2 <*> pure NonConst))
     f DMOpMul (Numeric (Num t1 NonConst)) (Numeric (Num t2 NonConst)) = do
         s :: Sensitivity <- newVar
-        t <- supremum t1 t2
+        t <- supremumFromName name t1 t2
         addConstraintNoMessage (Solvable (SetIfTypesEqual (s, NoFun (Numeric (Num t NonConst)), NoFun (Numeric (Num DMData NonConst)), oneId::Sensitivity, inftyS))) -- if t is data the coeff is 1, else it's inf
         return (Just (s, s, Numeric (Num t NonConst)))
     f DMOpMul (Numeric τs) (DMMat n cl r c t) = do
                                                   tt <- makeNoFunNumeric t
-                                                  s <- solveBinary op (Numeric τs, Numeric tt)
+                                                  s <- solveBinary name op (Numeric τs, Numeric tt)
                                                   case s of
                                                      Nothing -> return Nothing
                                                      Just (s1, s2, τ) -> return (Just (r ⋅! c ⋅! s1, s2, (DMMat n U r c (NoFun τ))))
     f DMOpMul (Numeric τs) (DMVec n cl r t)   = do
                                                   tt <- makeNoFunNumeric t
-                                                  s <- solveBinary op (Numeric τs, Numeric tt)
+                                                  s <- solveBinary name op (Numeric τs, Numeric tt)
                                                   case s of
                                                      Nothing -> return Nothing
                                                      Just (s1, s2, τ) -> return (Just (r ⋅! s1, s2, (DMVec n U r (NoFun τ))))
@@ -157,14 +158,14 @@ solveBinary op (τ1, τ2) = f op τ1 τ2
     f DMOpDiv (Numeric (Num DMInt NonConst)) (Numeric (Num DMInt NonConst)) = ret inftyS inftyS (return (Numeric (Num DMReal NonConst)))
     f DMOpDiv (Numeric (Num t1 NonConst)) (Numeric (Num t2 NonConst)) = do
         s :: Sensitivity <- newVar
-        t <- supremum t1 t2
+        t <- supremumFromName name t1 t2
         addConstraintNoMessage (Solvable (SetIfTypesEqual (s, NoFun (Numeric (Num t NonConst)), NoFun (Numeric (Num DMData NonConst)), oneId::Sensitivity, inftyS))) -- if t is data the coeff is 1, else it's inf
         return (Just (s, s, Numeric (Num t NonConst)))
     f DMOpDiv (Numeric t) (TVar a)                            = matchType a (Numeric t)
     f DMOpDiv (TVar a) (Numeric t)                            = matchType a (Numeric t)
 
-    f DMOpMod (Numeric (Num t1 NonConst)) (Numeric (Num t2 (Const s2))) = ret s2 zeroId (Numeric <$> (Num <$> supremum t1 t2 <*> pure NonConst))
-    f DMOpMod (Numeric (Num t1 NonConst)) (Numeric (Num t2 NonConst)) = ret (constCoeff Infty) (constCoeff Infty) (Numeric <$> (Num <$> supremum t1 t2 <*> pure NonConst)) -- ((Numeric . NonConst) <$> supremum t1 t2)
+    f DMOpMod (Numeric (Num t1 NonConst)) (Numeric (Num t2 (Const s2))) = ret s2 zeroId (Numeric <$> (Num <$> supremumFromName name t1 t2 <*> pure NonConst))
+    f DMOpMod (Numeric (Num t1 NonConst)) (Numeric (Num t2 NonConst)) = ret (constCoeff Infty) (constCoeff Infty) (Numeric <$> (Num <$> supremumFromName name t1 t2 <*> pure NonConst)) -- ((Numeric . NonConst) <$> supremumFromName name t1 t2)
     f DMOpMod (Numeric t) (TVar a)                            = matchType a (Numeric t)
     f DMOpMod (TVar a) (Numeric t)                            = matchType a (Numeric t)
 
@@ -178,7 +179,7 @@ solveBinary op (τ1, τ2) = f op τ1 τ2
     f DMOpEq (Numeric (Num DMData NonConst)) (Numeric (Num DMData NonConst))               = ret oneId  oneId  (pure $ DMBool)
     f DMOpEq (Numeric (Num _ (Const _))) (Numeric (Num DMData NonConst))          = ret zeroId  oneId (pure $ DMBool)
     f DMOpEq (Numeric (Num DMData NonConst)) (Numeric (Num _ (Const _)))          = ret oneId  zeroId (pure $ DMBool)
-    f DMOpEq (DMContainer k1 n1 cl1 c1 (NoFun t1)) (DMContainer k2 n2 cl2 c2 (NoFun t2)) = solveBinary DMOpEq (t1, t2)
+    f DMOpEq (DMContainer k1 n1 cl1 c1 (NoFun t1)) (DMContainer k2 n2 cl2 c2 (NoFun t2)) = solveBinary name DMOpEq (t1, t2)
 
     f _ _ _                            = return Nothing
 
@@ -265,7 +266,7 @@ solveop name (IsTypeOpResult (Binary op (_, (TVar τa2) :@ _) (Numeric τr))) = 
     unify (TVar τa2) (Numeric t2)
     return ()
 solveop name (IsTypeOpResult (Binary op (τa1 :@ s1 , τa2 :@ s2) τr)) = do
-  solveres <- solveBinary op (τa1, τa2)
+  solveres <- solveBinary name op (τa1, τa2)
   case solveres of
     Nothing -> return ()
     Just (val_s1, val_s2, val_τr) -> do

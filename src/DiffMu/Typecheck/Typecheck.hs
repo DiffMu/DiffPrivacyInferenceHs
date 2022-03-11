@@ -129,6 +129,7 @@ checkSen' scope (Located l (Op op args)) = do
   -- types are to be unified with the actual types of the args
   -- Sensitivities are scalars for the argument's context
   (res, arg_sens) <- makeTypeOp op (length args)
+                      (DMPersistentMessage $ "Constraint on the builtin call:" :\\: (Op op args))
 
   -- typecheck, make the appropriate unification and scaling, then sum the contexts.
   let handleOpArg (t_arg, (τ, s)) = do
@@ -941,6 +942,7 @@ checkSen' scope term@(Located l (ScaleGrad scalar grad)) = do
 
   -- Create sensitivity / type variables for the multiplication
   (τres , types_sens) <- makeTypeOp (IsBinary DMOpMul) 2
+                           (DMPersistentMessage $ "Constraint on the builtin call:" :\\: term)
 
   ((τ1,s1),(τ2,s2)) <- case types_sens of
     [(τ1,s1),(τ2,s2)] -> pure ((τ1,s1),(τ2,s2))
@@ -1006,6 +1008,7 @@ checkSen' scope term@(Located l (SumGrads g1 g2)) = do
 
   -- Create sensitivity / type variables for the addition
   (τres , types_sens) <- makeTypeOp (IsBinary DMOpAdd) 2
+                           (DMPersistentMessage $ "Constraint on the builtin call:" :\\: term)
 
   ((τ1,s1),(τ2,s2)) <- case types_sens of
     [(τ1,s1),(τ2,s2)] -> pure ((τ1,s1),(τ2,s2))

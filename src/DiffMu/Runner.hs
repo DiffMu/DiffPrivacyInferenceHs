@@ -124,7 +124,7 @@ typecheckFromJExpr_Simple term = do
         "\n---------------------------------------------------------------------------\n"
         <> "Type:\n" <> showPretty ty
         <> "\n---------------------------------------------------------------------------\n"
-        <> "Constraints:\n" <> show (_constraints (_meta full))
+        <> "Constraints:\n" <> showPretty (_constraints (_meta full))
   typecheckFromJExprWithPrinter printer (DontShowLog) term
 
 typecheckFromJExpr_Detailed :: JExpr -> IO ()
