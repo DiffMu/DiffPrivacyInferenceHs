@@ -8,7 +8,7 @@ import Spec.Base
 testUnification = do
   describe "unify" $ do
     it "unifies Int = Int" $ do
-      (tc $ unify (DMInt) (DMInt)) `shouldReturn` ((Right DMInt))
+      (tc $ unify () (DMInt) (DMInt)) `shouldReturn` ((Right DMInt))
 
     it "creates a constraint when unification is not yet possible (:∧:)" $ do
       let test = do
@@ -16,7 +16,7 @@ testUnification = do
             b :: DMMain <- newVar
             c :: DMMain <- newVar
             d :: DMMain <- newVar
-            unify (a :∧: b) (c :∧: d)
+            unify () (a :∧: b) (c :∧: d)
             return (a,b,c,d)
       let check (a,b,c,d) = do
             ctrs <- getConstraintsByType (Proxy @(IsEqual (DMMain,DMMain)))
