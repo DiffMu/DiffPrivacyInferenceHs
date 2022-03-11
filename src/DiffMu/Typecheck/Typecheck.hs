@@ -590,7 +590,7 @@ checkSen' original_scope (Located l (TLet xs term body)) = do
   unify (l :\\: "Set tuple type of assignment") τterm (NoFun (DMTup xs_types'))
 
   -- finally we need make sure that our scaling factor `s` is the maximum of the tuple sensitivities
-  s ==! maxS xs_sens
+  (s ==! (maxS xs_sens)) (l :\\: "TLet sensitivity is maximum of entry sensitivities.")
 
   log $ "checking sensitivities TLet: " <> show (xs) <> " = " <> show term <> " in " <> show body <> "\n ==> types are " <> show τbody <> " for term " <> show τterm
   -- and we return the type of the body
