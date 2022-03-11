@@ -23,6 +23,7 @@ import           Foreign.Marshal.Unsafe
 
 import Debug.Trace
 
+default (Text)
 
 ---------------------------------------------------------
 -- getting JuliaType corresponding to DMType
@@ -127,7 +128,7 @@ addJuliaSubtypeConstraint τ JTPFunction = do
     pure ()
 addJuliaSubtypeConstraint τ jt = do
   ι <- createDMType jt
-  τ ≤! (NoFun ι)
+  (τ ≤! (NoFun ι)) "julia subtype constraint"
   pure ()
 
 
