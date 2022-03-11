@@ -429,12 +429,40 @@ instance Show a => Show (Watched a) where
   -- show (Watched NotNormal a) = "*" <> show a
   show (Watched (NormalForMode m) a) = show m <> " " <> show a
 
+instance ShowPretty a => ShowPretty (Watched a) where
+  -- show (Watched NotNormal a) = "*" <> show a
+  showPretty (Watched (NormalForMode m) a) = showPretty a
+
 instance (MonadWatch t, Normalize t a) => Normalize t (Watched a) where
   normalize nt (Watched c a) =
     do resetChanged
        a' <- normalize nt a
        newc <- getChanged
        return (Watched (updateNormalizationLevel newc c) a')
+
+data ConstraintWithMessage m = ConstraintWithMessage (Watched (Solvable GoodConstraint GoodConstraintContent MonadDMTC)) m
+  deriving (Functor,Show)
+
+instance ShowPretty m => ShowPretty (ConstraintWithMessage m) where
+  showPretty (ConstraintWithMessage c m) = showPretty c <> "\n"
+                                          <> indent (showPretty m)
+
+instance (MonadDMTC t, Normalize t m) => Normalize t (ConstraintWithMessage m) where
+  normalize e (ConstraintWithMessage x m) = ConstraintWithMessage <$> (normalize e x) <*> normalize e m
+
+instance (SemigroupM t m) => SemigroupM t (ConstraintWithMessage m) where
+  (⋆) (ConstraintWithMessage x0 m0) (ConstraintWithMessage x1 m1) = ConstraintWithMessage <$> (x0 ⋆ x1) <*> (m0 ⋆ m1)
+
+instance (MonoidM t m) => MonoidM t (ConstraintWithMessage m) where
+  neutral = ConstraintWithMessage <$> neutral <*> neutral
+
+
+instance (CheckNeutral t m) => CheckNeutral t (ConstraintWithMessage m) where
+  checkNeutral (ConstraintWithMessage x m) = do
+    nx <- checkNeutral x
+    nm <- checkNeutral m
+    return (and [nx , nm])
+
 
 data CtxStack v a = CtxStack
   {
@@ -443,7 +471,7 @@ data CtxStack v a = CtxStack
   }
 deriving instance Functor (CtxStack v)
 
-type ConstraintCtx m = AnnNameCtx (CtxStack Symbol (Watched (Solvable GoodConstraint GoodConstraintContent MonadDMTC), m))
+type ConstraintCtx m = AnnNameCtx (CtxStack Symbol (ConstraintWithMessage m))
 instance DictKey v => DictLike v x (CtxStack v x) where
   setValue k v (CtxStack d other) = CtxStack (setValue k v d) other
   getValue k (CtxStack d _) = getValue k d
@@ -463,6 +491,11 @@ instance (Show v, Show a, DictKey v) => Show (CtxStack v a) where
       show (CtxStack top other) = "   - top:\n" <> show top <> "\n"
                               <> "   - others:\n" <> show other
 
+
+instance (ShowPretty v, ShowPretty a, DictKey v) => ShowPretty (CtxStack v a) where
+      showPretty (CtxStack top other) = "   - top:\n" <> showPretty top <> "\n"
+                              <> "   - others:\n" <> showPretty other
+
 -- type ConstraintCtx = AnnNameCtx (Ctx Symbol (Solvable' TC))
 
 instance (MonadWatch t, Normalize t ks) => Normalize t (AnnNameCtx ks) where
@@ -474,6 +507,10 @@ instance (MonadWatch t, Normalize t ks) => Normalize t (AnnNameCtx ks) where
 
 instance Show ks => Show (AnnNameCtx ks) where
   show (AnnNameCtx _ kinds) = show kinds
+
+instance ShowPretty ks => ShowPretty (AnnNameCtx ks) where
+  showPretty (AnnNameCtx _ kinds) = showPretty kinds
+
 instance Default ks => Default (AnnNameCtx ks)
 
 newAnnName :: DictLike Symbol k ks => Text -> k -> AnnNameCtx ks -> (Symbol, AnnNameCtx ks)
@@ -780,7 +817,7 @@ recomputeFixedVars :: MonadDMTC t => t ()
 recomputeFixedVars = do
   (Ctx (MonCom constrs)) <- use (meta.constraints.anncontent.topctx)
   let constrs2 = H.toList constrs
-  let constrs3 = [(c, name) | (name , (Watched _ c,_)) <- constrs2]
+  let constrs3 = [(c, name) | (name , (ConstraintWithMessage (Watched _ c) _)) <- constrs2]
 
   let createSingleCtx (c,name) =
         let vars = getFixedVarsOfSolvable c
@@ -806,10 +843,10 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
       curloc <- use (tcstate.currentSourceLocation)
       let constr_desc' = case curloc of
             Nothing -> DMPersistentMessage $ constr_desc
-            Just sle -> DMPersistentMessage $ curloc :\\: (constr_desc)
+            Just sle -> DMPersistentMessage $ sle :\\: (constr_desc)
 
       -- add the constraint to the constraint list
-      name <- meta.constraints %%= (newAnnName "constr" (Watched (NormalForMode []) (Solvable c), constr_desc'))
+      name <- meta.constraints %%= (newAnnName "constr" (ConstraintWithMessage (Watched (NormalForMode []) (Solvable c)) constr_desc'))
 
       -- compute the fixed vars of this constraint
       -- and add them to the cached list
@@ -828,13 +865,13 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
   getUnsolvedConstraintMarkNormal modes = do
     (Ctx (MonCom constrs)) <- use (meta.constraints.anncontent.topctx)
 
-    let constrs2 :: [(_,(_,DMPersistentMessage (TCT m)))] = H.toList constrs
-    let changedFor curMode = filter (\(a, (Watched (NormalForMode normalModes) constr, _)) -> (curMode `notElem` normalModes)) constrs2
+    let constrs2 = H.toList constrs
+    let changedFor curMode = filter (\(a, (ConstraintWithMessage (Watched (NormalForMode normalModes) constr) _)) -> (curMode `notElem` normalModes)) constrs2
     let changed = join [zip (changedFor m) (repeat m) | m <- modes]
     case changed of
       [] -> return Nothing
-      ((((name,(Watched (NormalForMode normalModes) constr,descr)),newMode):_)) -> do
-        meta.constraints.anncontent.topctx %= (setValue name (Watched (NormalForMode (newMode:normalModes)) constr, descr))
+      ((((name,(ConstraintWithMessage (Watched (NormalForMode normalModes) constr) descr)),newMode):_)) -> do
+        meta.constraints.anncontent.topctx %= (setValue name (ConstraintWithMessage (Watched (NormalForMode (newMode:normalModes)) constr) descr))
         return (Just (name, constr, newMode, descr))
 
   dischargeConstraint name = do
@@ -850,7 +887,7 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
     throwUnlocatedError (UnsatisfiableConstraint (show c))
 
   updateConstraint name c = do
-    meta.constraints %= (\(AnnNameCtx n cs) -> AnnNameCtx n (changeValue name (\(_,descr) -> (Watched (NormalForMode []) c, descr)) cs))
+    meta.constraints %= (\(AnnNameCtx n cs) -> AnnNameCtx n (changeValue name (\(ConstraintWithMessage _ descr) -> ConstraintWithMessage (Watched (NormalForMode []) c) descr) cs))
     recomputeFixedVars
 
     -- log this as event
@@ -888,14 +925,14 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
 
   getConstraintsByType (Proxy :: Proxy (c a)) = do
     (Ctx (MonCom cs)) <- use (meta.constraints.anncontent.topctx)
-    let f :: (Watched (Solvable GoodConstraint GoodConstraintContent MonadDMTC)) -> Maybe (c a)
-        f (Watched _ (Solvable (c :: c' a'))) = case testEquality (typeRep @(c a)) (typeRep @(c' a')) of
+    let f :: (ConstraintWithMessage n) -> Maybe (c a) -- (Watched (Solvable GoodConstraint GoodConstraintContent MonadDMTC)) -> Maybe (c a)
+        f (ConstraintWithMessage (Watched _ (Solvable (c :: c' a'))) _) = case testEquality (typeRep @(c a)) (typeRep @(c' a')) of
           Just Refl -> Just c
           Nothing -> Nothing
 
     let cs' = H.toList cs
-        cs'' = second (first f) <$> cs'
-    return [(name,c) | (name, (Just c, _)) <- cs'' ]
+        cs'' = second f <$> cs'
+    return [(name,c) | (name, (Just c)) <- cs'' ]
 
   logPrintConstraints = do
     ctrs <- use (meta.constraints.anncontent)
@@ -912,7 +949,7 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
   getAllConstraints = do
     (Ctx (MonCom cs)) <- use (meta.constraints.anncontent.topctx)
     let cs' = H.toList cs
-    return [(name,c) | (name, (Watched _ c, _)) <- cs']
+    return [(name,c) | (name, (ConstraintWithMessage (Watched _ c) _)) <- cs']
 
   clearSolvingEvents = do
     events <- tcstate.solvingEvents %%= (\ev -> (ev,[]))
@@ -921,7 +958,13 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
   getConstraintMessage name = do
     (AnnNameCtx _ ctrs) <- use (meta.constraints) 
     case getValue name ctrs of
-      Just (_,descr) -> return descr
+      Just (ConstraintWithMessage _ descr) -> return descr
+      Nothing -> internalError $ "Expected a constraint with the name " <> show name <> " to exist."
+
+  getConstraint name = do
+    (AnnNameCtx _ ctrs) <- use (meta.constraints) 
+    case getValue name ctrs of
+      Just (ConstraintWithMessage (Watched _ a) descr) -> return (a, descr)
       Nothing -> internalError $ "Expected a constraint with the name " <> show name <> " to exist."
     
 
@@ -962,6 +1005,13 @@ supremum :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint i
 supremum x y = do
   (z :: a k) <- newVar
   addConstraintNoMessage (Solvable (IsSupremum ((x, y) :=: z)))
+  return z
+
+
+supremumFromName :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsSupremum ((a k, a k) :=: a k), SingI k, Typeable k, ContentConstraintOnSolvable t ((a k, a k) :=: a k), ConstraintOnSolvable t (IsSupremum ((a k, a k) :=: a k))) => Symbol -> (a k) -> (a k) -> t (a k)
+supremumFromName name x y = do
+  (z :: a k) <- newVar
+  addConstraintFromName name (Solvable (IsSupremum ((x, y) :=: z)))
   return z
 
 infimum :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsInfimum ((a k, a k) :=: a k), SingI k, Typeable k, ContentConstraintOnSolvable t ((a k, a k) :=: a k), ConstraintOnSolvable t (IsInfimum ((a k, a k) :=: a k))) => (a k) -> (a k) -> t (a k)

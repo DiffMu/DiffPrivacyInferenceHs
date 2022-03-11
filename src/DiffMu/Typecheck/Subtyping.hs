@@ -3,6 +3,7 @@ module DiffMu.Typecheck.Subtyping where
 
 import DiffMu.Prelude
 import DiffMu.Abstract
+import DiffMu.Abstract.Data.ErrorReporting
 import DiffMu.Core.Definitions
 import DiffMu.Core.Context
 import DiffMu.Core.Logging
@@ -18,13 +19,11 @@ import Debug.Trace
 import qualified Prelude as P
 
 
+default (Text)
 
 ---------------------------------------------------------------------
 -- "Non strict subtyping"
 
--- An abbreviation for adding a subtyping constraint.
-(⊑!) :: (SingI k, Typeable k, MonadDMTC t) => DMTypeOf k -> DMTypeOf k -> t ()
-(⊑!) a b = addConstraintNoMessage (Solvable (IsLessEqual (a,b))) >> pure ()
 
 
 -- A helper function used below in defining the subtyping graph.
@@ -43,9 +42,14 @@ getTupSize (TVar a) = Wait
 getTupSize _ = Fail (UserError ())
 
 -- The subtyping graph for our type system.
-subtypingGraph :: forall e t k. (SingI k, Typeable k, MonadDMTC t) => EdgeType -> [Edge t (DMTypeOf k)]
-subtypingGraph =
-  let case0 = testEquality (typeRep @k) (typeRep @MainKind)
+subtypingGraph :: forall e t k. (SingI k, Typeable k, MonadDMTC t) => Symbol -> EdgeType -> [Edge t (DMTypeOf k)]
+subtypingGraph name =
+  let 
+      -- An abbreviation for adding a subtyping constraint.
+      (⊑!) :: forall k. (SingI k, Typeable k, MonadDMTC t) => DMTypeOf k -> DMTypeOf k -> t ()
+      (⊑!) a b = addConstraintFromName name (Solvable (IsLessEqual (a,b))) >> pure ()
+
+      case0 = testEquality (typeRep @k) (typeRep @MainKind)
       case1 = testEquality (typeRep @k) (typeRep @FunKind)
       case2 = testEquality (typeRep @k) (typeRep @NoFunKind)
       case3 = testEquality (typeRep @k) (typeRep @NumKind)
@@ -331,6 +335,8 @@ convertSubtypingToSupremum name (lower, TVar upper) = do
                                         name' /= name,
                                         upper' == upper]
 
+            messages <- mapM getConstraintMessage names
+
             -- for the list [β, γ, δ] create supremum constraints sup{β,γ} = u and sup{u,δ} = upper for a new TVar u
             -- as we only have two-argument sup constraints. also discharge the involved subtyping constraints.
             let makeChain lowers = case lowers of
@@ -338,14 +344,20 @@ convertSubtypingToSupremum name (lower, TVar upper) = do
                     (l:[]) -> do
                                 dischargeConstraint name
                                 mapM dischargeConstraint names
-                                addConstraintNoMessage (Solvable (IsSupremum ((lower, l) :=: TVar upper)))
+                                addConstraint (Solvable (IsSupremum ((lower, l) :=: TVar upper)))
+                                  ("Supremum recreated for the following constraints:" :\\:
+                                  messages
+                                  )
                                 logForce "Something very suspicious is happening, at least make sure that this is really the correct approach."
                                 logForce ("What happens is that we convert the subtyping constraint of " <> show (lower, TVar upper) <> " into the supremum " <> show ((lower, l) :=: TVar upper))
                                 logForce "Whyever that is supposed to be correct..."
                                 return ()
                     (l1:l2:ls) -> do
                                 u <- newVar
-                                addConstraintNoMessage (Solvable (IsSupremum ((l1, l2) :=: u)))
+                                addConstraint (Solvable (IsSupremum ((l1, l2) :=: u)))
+                                  ("Supremum recreated for the following constraints:" :\\:
+                                  messages
+                                  )
                                 makeChain (u:ls)
                                 return ()
 
@@ -372,7 +384,7 @@ solveSubtyping name path = withLogLocation "Subtyping" $ do
 
   -- Executing the computation
   enterNonPersisting 
-  (res) <- findPathM @(Full (DMPersistentMessage t)) (\(WithContext e _ ) -> relevance e) (GraphM graph) path
+  (res) <- findPathM @(Full (DMPersistentMessage t)) (\(WithContext e _ ) -> relevance e) (GraphM (graph name)) path
   exitNonPersisting 
 
   -- We look at the result and if necessary throw errors.
@@ -707,8 +719,8 @@ unifyAll (x:y:vars) = do
 
 -- TODO: Check whether this does the correct thing.
 instance (SingI k, Typeable k) => Solve MonadDMTC IsSupremum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) where
-  solve_ Dict SolveExact name (IsSupremum ((a,b) :=: y)) = solveSupremum (GraphM subtypingGraph) name ((a,b) :=: y)
-  solve_ Dict SolveSpecial name (IsSupremum ((a,b) :=: y)) = solveSupremumSpecial (GraphM subtypingGraph) name ((a,b) :=: y)
+  solve_ Dict SolveExact name (IsSupremum ((a,b) :=: y)) = solveSupremum (GraphM (subtypingGraph name)) name ((a,b) :=: y)
+  solve_ Dict SolveSpecial name (IsSupremum ((a,b) :=: y)) = solveSupremumSpecial (GraphM (subtypingGraph name)) name ((a,b) :=: y)
 
   solve_ Dict SolveGlobal name (IsSupremum ((a,b) :=: y)) = do
     collapseSubtypingCycles (a,y)
@@ -743,8 +755,8 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsSupremum ((DMTypeOf k, DMTyp
 
 -- TODO: Check whether this does the correct thing.
 instance (SingI k, Typeable k) => Solve MonadDMTC IsInfimum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) where
-  solve_ Dict SolveExact name (IsInfimum ((a,b) :=: x)) = solveInfimum (GraphM subtypingGraph) name ((a,b) :=: x)
-  solve_ Dict SolveSpecial name (IsInfimum ((a,b) :=: x)) = solveInfimumSpecial (GraphM subtypingGraph) name ((a,b) :=: x)
+  solve_ Dict SolveExact name (IsInfimum ((a,b) :=: x)) = solveInfimum (GraphM (subtypingGraph name)) name ((a,b) :=: x)
+  solve_ Dict SolveSpecial name (IsInfimum ((a,b) :=: x)) = solveInfimumSpecial (GraphM (subtypingGraph name)) name ((a,b) :=: x)
   solve_ Dict SolveGlobal name (IsInfimum ((a,b) :=: x)) = do
     collapseSubtypingCycles (x,a)
     collapseSubtypingCycles (x,b)
@@ -773,7 +785,7 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsInfimum ((DMTypeOf k, DMType
 
     g f contrCandidates
 
-    solveInfimum (GraphM subtypingGraph) name ((a,b) :=: x)
+    solveInfimum (GraphM (subtypingGraph name)) name ((a,b) :=: x)
 
   solve_ Dict SolveAssumeWorst name (IsInfimum ((a,b) :=: x)) = return ()
 

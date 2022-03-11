@@ -87,13 +87,18 @@ class (Monad t) => MonadConstraint isT t | t -> isT where
   logPrintSubstitutions :: t ()
   getConstraintsByType :: (Typeable c, Typeable a) => Proxy (c a) -> t [(Symbol, c a)]
   getConstraintMessage :: Symbol -> t (DMPersistentMessage t)
+  getConstraint :: Symbol -> t (Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT, DMPersistentMessage t)
   getAllConstraints :: t [(Symbol, Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT)]
   clearSolvingEvents :: t [String]
 
 addConstraintNoMessage solvable = addConstraint solvable ()
 addConstraintFromName name solvable = do
-    l <- getConstraintMessage name
-    addConstraint solvable l
+    (c,msg) <- getConstraint name
+    addConstraint solvable
+      (("Inherited from the constraint:" :: Text) :\\:
+       ("  " :: Text) :<>: c :\\:
+       msg
+      )
 
 
 (==!) :: (MonadConstraint isT t, Solve isT IsEqual (a,a), (HasNormalize isT a), Show (a), Typeable a, IsT isT t, ContentConstraintOnSolvable t (a,a), ConstraintOnSolvable t (IsEqual (a,a))) => a -> a -> t ()
