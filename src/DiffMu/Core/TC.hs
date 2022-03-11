@@ -1084,6 +1084,16 @@ instance (Monad m) => Normalize (m) (WrapMessageRevId a) where
     -- liftTC (normalize e x)
 
 
+instance Monad m => Normalize (TCT m) DMTypeOps_Unary where
+  normalize e x = pure x
+
+instance Monad m => Normalize (TCT m) DMTypeOps_Binary where
+  normalize e x = pure x
+
+instance Monad m => Normalize (TCT m) DMTypeOp_Some where
+  normalize e x = pure x
+
+
 instance Monad m => LiftTC (TCT m) where
   liftTC (TCT v) = -- TCT (v >>= (lift . lift . return))
     let g :: DMPersistentMessage (TCT Identity) -> DMPersistentMessage (TCT m)
