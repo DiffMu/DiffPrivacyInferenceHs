@@ -15,6 +15,8 @@ import qualified Data.HashMap.Strict as H
 
 import Debug.Trace
 
+default (Text)
+
 -------------------------------------------------------------------
 -- Operations on contexts / On the current context in the monad.
 --
@@ -242,19 +244,19 @@ restrictAll s msg = let
 -- add constraints that make sure all interesting context entries have sensitivity <= s.
 restrictInteresting :: MessageLike TC msg => Sensitivity -> msg -> TC ()
 restrictInteresting s msg = let
-   addC :: WithRelev SensitivityK -> TC ()
-   addC (WithRelev rel (_ :@ SensitivityAnnotation sv)) = do
+   addC :: (TeVar, WithRelev SensitivityK) -> TC ()
+   addC (v, WithRelev rel (_ :@ SensitivityAnnotation sv)) = do
       case rel of
          IsRelevant -> do
             -- make constraints that say sv <= s and sv is the sensitivity of τ
-            addConstraint (Solvable (IsLessEqual (sv, s))) msg
+            addConstraint (Solvable (IsLessEqual (sv, s))) ("Restricting the variable: " :<>: s :\\: msg)
             return ()
          _ -> return ()
    in do
       γ <- use types
       case γ of
          Right _ -> throwUnlocatedError (ImpossibleError "restrictAll called on privacy context.")
-         Left (Ctx (MonCom h)) -> mapM addC h -- restrict sensitivities of all γ entries
+         Left (Ctx (MonCom h)) -> mapM addC (H.toList h) -- restrict sensitivities of all γ entries
       return ()
 
 -- Look up the types and sensitivities/privacies of the variables in `xτs` from the current context.
