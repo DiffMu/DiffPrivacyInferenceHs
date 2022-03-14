@@ -94,7 +94,8 @@ jobs:
       - name: Build binary
         run: |
           mkdir dist
-          stack install --local-bin-path dist
+          stack build
+          find .stack-work/ -name libdiffmu-wrapper.so -exec cp {} dist \;
           # cabal install exe:stan --install-method=copy --overwrite-policy=always --installdir=dist
 
       - if: matrix.os == 'windows-latest'
