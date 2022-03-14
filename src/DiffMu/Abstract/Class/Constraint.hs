@@ -209,12 +209,11 @@ solveAllConstraints nt modes = withLogLocation "Constr" $ do
 
       catchAndPersist (solve mode name constr) $ \msg -> do
         dischargeConstraint name
-        let msg' = "The constraint" :<>: name :<>: ":" :<>: constr
-                  :\\:
-                  constr_desc
-                  :\\:
+        let msg' = "The constraint" :<>: name :<>: ":" :<>: constr :\\:
                   "could not be solved:"
-                  :\\:
+                  :-----:
+                  constr_desc
+                  :-----:
                   msg
         return ((),msg')
       -- catchError (solve mode name constr) $ \(WithContext err ctx) -> do

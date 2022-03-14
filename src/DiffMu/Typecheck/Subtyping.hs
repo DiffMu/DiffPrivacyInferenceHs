@@ -383,8 +383,9 @@ solveSubtyping name path = withLogLocation "Subtyping" $ do
   -- traceM $ "I have " <> show (length (graph (IsReflexive NotStructural))) <> " candidates."
 
   -- Executing the computation
+  msg <- inheritanceMessageFromName name
   enterNonPersisting 
-  (res) <- findPathM @(Full (DMPersistentMessage t)) (\(WithContext e _ ) -> relevance e) (GraphM (graph name)) path
+  (res) <- findPathM @(Full (DMPersistentMessage t)) (\(WithContext e _ ) -> relevance e) (GraphM (graph name)) path msg
   exitNonPersisting 
 
   -- We look at the result and if necessary throw errors.
@@ -703,9 +704,10 @@ callMonadicGraphSupremum graph name ((a,b) :=: x) = do
   -- let graph = subtypingGraph @t
   -- traceM $ "I have " <> show (length (graph (IsReflexive NotStructural))) <> " candidates."
 
-  enterNonPersisting 
   -- Executing the computation
-  res <- findSupremumM @(Full (DMPersistentMessage t)) (\(WithContext e _) -> relevance e) (graph) ((a,b) :=: x, IsShortestPossiblePath)
+  msg <- inheritanceMessageFromName name
+  enterNonPersisting 
+  res <- findSupremumM @(Full (DMPersistentMessage t)) (\(WithContext e _) -> relevance e) (graph) ((a,b) :=: x, IsShortestPossiblePath) msg
   exitNonPersisting 
 
   -- We look at the result and if necessary throw errors.

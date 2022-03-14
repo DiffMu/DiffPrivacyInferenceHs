@@ -27,6 +27,7 @@ import Data.IORef
 import System.IO.Unsafe
 import DiffMu.Abstract.Data.Error
 import DiffMu.Abstract.Data.ErrorReporting
+import DiffMu.Core.TC (currentConstraintMessage)
 
 default (Text)
 
@@ -71,9 +72,9 @@ checkPriv scope t = do
   types .= Right def -- cast to privacy context.
 
   -- The checking itself
-  tcstate.currentSourceLocation .= Just (getLocation t)
+  tcstate.currentConstraintMessage .= Just (DMPersistentMessage $ getLocation t)
   res <- catchNoncriticalError t (withLogLocation "Check" $ checkPri' scope t)
-  tcstate.currentSourceLocation .= Nothing
+  tcstate.currentConstraintMessage .= Nothing
 
   -- The computation to do after checking
   γ <- use types
@@ -96,9 +97,9 @@ checkSens scope t = do
 
 
   -- get the delayed value of the sensititivty checking
-  tcstate.currentSourceLocation .= Just (getLocation t)
+  tcstate.currentConstraintMessage .= Just (DMPersistentMessage $ getLocation t)
   res <- catchNoncriticalError t (withLogLocation "Check" $ checkSen' scope t)
-  tcstate.currentSourceLocation .= Nothing
+  tcstate.currentConstraintMessage .= Nothing
 
   -- The computation to do after checking
   γ <- use types
@@ -1157,7 +1158,8 @@ checkPri' scope term@(Located l (Apply f args)) =
     checkArg scope arg = do
       τ <- checkSens scope arg
       restrictAll oneId -- sensitivity of everything in context must be <= 1
-        ("In the privacy function application: " :\\->: term :\\:
+        (l :\\:
+         "In the privacy function application: " :\\->: term :\\:
          "The argument" :<>: arg :<>: "has to be 1-sensitive in every variable which occurs within."
         )
       p <- newPVar
@@ -1178,7 +1180,8 @@ checkPri' scope term@(Located l (Apply f args)) =
     (τ_sum :: DMMain, argτs) <- msumTup (f_check , msumP margs) -- sum args and f's context
     τ_ret <- newVar -- a type var for the function return type
     addConstraint (Solvable (IsFunctionArgument (τ_sum, Fun [(argτs :->*: τ_ret) :@ Nothing])))
-      ("In the privacy function application: " :\\->: term)
+      (l :\\:
+        "In the privacy function application: " :\\->: term)
 
     return τ_ret
 
