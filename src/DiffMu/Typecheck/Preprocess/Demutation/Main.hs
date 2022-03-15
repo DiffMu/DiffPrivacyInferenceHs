@@ -820,6 +820,7 @@ elaborateMut scname (Located l (MakeVec t1))              = elaborateNonMut1 scn
 elaborateMut scname (Located l (MakeRow t1))              = elaborateNonMut1 scname l MakeRow t1
 elaborateMut scname (Located l (MMap t1 t2))              = elaborateNonMut2 scname l MMap t1 t2
 elaborateMut scname (Located l (MapRows t1 t2))           = elaborateNonMut2 scname l MapRows t1 t2
+elaborateMut scname (Located l (MapRows2 t1 t2 t3))       = elaborateNonMut3 scname l MapRows2 t1 t2 t3
 elaborateMut scname (Located l (MapCols t1 t2))           = elaborateNonMut2 scname l MapCols t1 t2
 elaborateMut scname (Located l (MapCols2 t1 t2 t3))       = elaborateNonMut3 scname l MapCols2 t1 t2 t3
 elaborateMut scname (Located l (PReduceCols t1 t2))       = elaborateNonMut2 scname l PReduceCols t1 t2

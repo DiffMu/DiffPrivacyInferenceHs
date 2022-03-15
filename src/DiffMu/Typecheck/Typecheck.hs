@@ -449,6 +449,38 @@ checkSen' scope (Located l (MapCols2 f m₁ m₂)) = do
     -- thus nrm₂ is freely choosable
     return (NoFun (DMMat nrm₃ U ηm₃ r τ_out))
 
+checkSen' scope (Located l (MapRows2 f m₁ m₂)) = do
+    ς₁ <- newVar
+    ς₂ <- newVar
+    ηm <- newVar
+    ηn₁ <- newVar
+    ηn₂ <- newVar
+    ηn₃ <- newVar
+    let mf = checkSens scope f <* mscale (ηn₁)
+    let mm₁ = checkSens scope m₁ <* mscale (ς₁)
+    let mm₂ = checkSens scope m₂ <* mscale (ς₂)
+    (τf :: DMMain, τm₁, τm₂) <- msum3Tup (mf, mm₁, mm₂) -- sum args and f's context
+
+    τ_in₁ <- newVar -- a type var for the function input / matrix element type
+    τ_in₂ <- newVar -- a type var for the function input / matrix element type
+    τ_out <- newVar -- a type var for the function output type
+    nrm₁ <- newVar -- variable for norm
+    clp₁ <- newVar -- variable for clip
+    nrm₂ <- newVar -- variable for norm
+    clp₂ <- newVar -- variable for clip
+    nrm₃ <- newVar -- variable for norm
+    clp₃ <- newVar -- variable for clip
+    unify (l :\\: "Binary MapRows2 first argument type") τm₁ (NoFun (DMMat LInf clp₁ ηm ηn₁ τ_in₁))
+    unify (l :\\: "Binary MapRows2 second argument type") τm₂ (NoFun (DMMat LInf clp₂ ηm ηn₂ τ_in₂))
+
+    -- set the type of the function using IFA
+    addConstraint (Solvable (IsFunctionArgument (τf, (Fun [([NoFun (DMVec nrm₁ clp₁ ηn₁ τ_in₁) :@ ς₁, NoFun (DMVec nrm₂ clp₂ ηn₂ τ_in₂) :@ ς₂] :->: NoFun (DMVec nrm₃ clp₃ ηn₃ τ_out)) :@ Nothing]))))
+      (l :\\: "The function applied in binary MapRows2 must have the right type.")
+
+    -- After transposing, since we have L1, we can output every norm,
+    -- thus nrm₂ is freely choosable
+    return (NoFun (DMMat nrm₃ clp₃ ηm ηn₃ τ_out))
+
 checkSen' scope (Located l (MFold f acc₀ m)) = do
     s₁ <- newVar
     s₂ <- newVar

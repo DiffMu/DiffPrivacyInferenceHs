@@ -362,6 +362,9 @@ pJCall (JESymbol (Symbol sym)) args = do
     (t@"map_cols_binary", [a1, a2, a3]) -> MapCols2 <$> pSingle_Loc a1 <*> pSingle_Loc a2 <*> pSingle_Loc a3
     (t@"map_cols_binary", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 3 arguments, but has been given " <> show (length args)
 
+    (t@"map_rows_binary", [a1, a2, a3]) -> MapRows2 <$> pSingle_Loc a1 <*> pSingle_Loc a2 <*> pSingle_Loc a3
+    (t@"map_rows_binary", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 3 arguments, but has been given " <> show (length args)
+
     (t@"clip", [a1, a2, a3]) -> ClipN <$> pSingle_Loc a1 <*> pSingle_Loc a2 <*> pSingle_Loc a3
 
 

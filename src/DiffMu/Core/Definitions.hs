@@ -759,6 +759,7 @@ data PreDMTerm (t :: * -> *) =
   | MapRows (LocPreDMTerm t) (LocPreDMTerm t)
   | MapCols (LocPreDMTerm t) (LocPreDMTerm t)
   | MapCols2 (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t)
+  | MapRows2 (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t)
   | PReduceCols (LocPreDMTerm t) (LocPreDMTerm t)
   | MFold (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t)
   | Count (LocPreDMTerm t) (LocPreDMTerm t)
@@ -798,7 +799,7 @@ pattern TBind a b c = TLetBase BindLet a b c
 pattern SmpLet a b c = TLetBase SampleLet a b c
 
 {-# COMPLETE Extra, Ret, DMTrue, DMFalse, Sng, Var, Arg, Op, Phi, Lam, LamStar, BBLet, BBApply, Disc,
- Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, Gauss, Laplace, Exponential, MutGauss, MutLaplace, AboveThresh, Count, MMap, MapRows, MapCols, MapCols2, PReduceCols, MFold, ConvertM, MCreate, Transpose,
+ Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, Gauss, Laplace, Exponential, MutGauss, MutLaplace, AboveThresh, Count, MMap, MapRows, MapCols, MapCols2, MapRows2, PReduceCols, MFold, ConvertM, MCreate, Transpose,
  Size, Length, Index, VIndex, Row, ClipN, ClipM, MutClipM, Loop, SubGrad, ScaleGrad, TProject, ZeroGrad, SumGrads, SmpLet,
  Sample, InternalExpectConst, InternalMutate #-}
 
@@ -968,6 +969,7 @@ recDMTermM_Loc f h (rest)            = mapM (recDMTermM_Loc_Impl f h) rest -- h 
     recDMTermM_Loc_Impl f h (MapRows a b)     = MapRows <$> (f a) <*> (f b)
     recDMTermM_Loc_Impl f h (MapCols a b)     = MapCols <$> (f a) <*> (f b)
     recDMTermM_Loc_Impl f h (MapCols2 a b c)   = MapCols2 <$> (f a) <*> (f b) <*> (f c)
+    recDMTermM_Loc_Impl f h (MapRows2 a b c)   = MapRows2 <$> (f a) <*> (f b) <*> (f c)
     recDMTermM_Loc_Impl f h (PReduceCols a b)  = PReduceCols <$> (f a) <*> (f b)
     recDMTermM_Loc_Impl f h (MFold a b c)      = MFold <$> (f a) <*> (f b) <*> (f c)
     recDMTermM_Loc_Impl f h (ConvertM a)       = ConvertM <$> (f a)
@@ -1099,6 +1101,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (MapRows a b)     = "MapRows (" <> (showPretty a) <> " to " <> (showPretty b)  <> ")"
   showPretty (MapCols a b)     = "MapCols (" <> (showPretty a) <> " to " <> (showPretty b)  <> ")"
   showPretty (MapCols2 a b c)   = "MapCols2 (" <> (showPretty a) <> " to " <> (showPretty b) <> ", " <> (showPretty c)  <> ")"
+  showPretty (MapRows2 a b c)   = "MapRows2 (" <> (showPretty a) <> " to " <> (showPretty b) <> ", " <> (showPretty c)  <> ")"
   showPretty (PReduceCols a b)  = "PReduceCols (" <> (showPretty a) <> " to " <> (showPretty b)  <> ")"
   showPretty (MFold a b c)      = "MFold (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ")"
   showPretty (ConvertM a)       = "ConvertM (" <> (showPretty a) <> ")"
@@ -1117,6 +1120,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (TProject x a)     = "Proj" <> show x <> " " <>  (showPretty a)
   showPretty (Loop a b x d )    = "Loop (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> show x <> ")" <> parenIndent (showPretty d)
   showPretty (SBind x a b)      = "SBind " <> showPretty x <> " <- " <> newlineIndentIfLong (showPretty a) <> "\n" <> (showPretty b)
+
   showPretty (ZeroGrad a)       = "ZeroGrad " <> (showPretty a)
   showPretty (SumGrads a b)     = "SumGrads (" <> (showPretty a) <> ", " <> (showPretty b) <> ")"
   showPretty (SmpLet v a b)     = "SmpLet " <> showPretty v <> " <- " <> (showPretty a) <> "\n" <> (showPretty b)
