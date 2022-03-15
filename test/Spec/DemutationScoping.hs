@@ -12,7 +12,7 @@ testDemutationScoping pp = do
 
 
 testDScope01 pp = do
-  let ex = " function test()   \n\
+  let exa = " function test()   \n\
            \   a = 3           \n\
            \   function f(b)   \n\
            \     a             \n\
@@ -23,7 +23,24 @@ testDScope01 pp = do
       intc c = NoFun(Numeric (Num DMInt (Const (constCoeff c))))
       ty = Fun([([] :->: intc (Fin 3)) :@ Just []])
 
-  parseEval pp "01 works (capturing variables is allowed)" ex (pure ty)
+  parseEval pp "01a works (capturing variables is allowed)" exa (pure ty)
+
+  let exb = " function test()    \n\
+            \   function f(x)  \n\
+            \     a = x + 1    \n\
+            \     a            \n\
+            \   end            \n\
+            \   function g(x)  \n\
+            \     a = x + 2    \n\
+            \     a            \n\
+            \   end            \n\
+            \   f(1) * f(3)    \n\
+            \ end              "
+
+      intc c = NoFun(Numeric (Num DMInt (Const (constCoeff c))))
+      ty = Fun([([] :->: intc (Fin 8)) :@ Just []])
+
+  parseEval pp "01b works (same named variables in disjunct scopes is allowed)" exb(pure ty)
 
 testDScope02 pp = do
   let exa = " function test()   \n\
