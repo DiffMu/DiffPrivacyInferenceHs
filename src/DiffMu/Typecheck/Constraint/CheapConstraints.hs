@@ -37,18 +37,23 @@ instance TCConstraint MakeConst where
   constr = MakeConst
   runConstr (MakeConst c) = c
 
-instance Typeable k => FixedVars TVarOf (MakeConst (DMTypeOf k)) where
+instance FixedVars TVarOf (MakeConst (DMMain)) where
   fixedVars (MakeConst _) = []
 
-instance Typeable k => Solve MonadDMTC MakeConst (DMTypeOf k) where
+instance Solve MonadDMTC MakeConst (DMMain) where
   solve_ Dict _ name (MakeConst τ) = case τ of
       TVar _ -> pure ()
-      DMTup ts -> (mapM (\t -> (addConstraintFromName name) (Solvable (MakeConst t))) ts) >> dischargeConstraint name
-      Numeric (Num _ (TVar k)) -> do
+      NoFun (TVar _) -> pure ()
+      NoFun (DMTup ts) -> (mapM (\t -> (addConstraintFromName name) (Solvable (MakeConst (NoFun t)))) ts) >> dischargeConstraint name
+      NoFun (Numeric (Num _ (TVar k))) -> do
                      ck <- newVar
                      unifyFromName name (TVar k) (Const ck)
                      dischargeConstraint name
-      Numeric (TVar _) -> pure ()
+      NoFun (Numeric (TVar k)) -> do
+                     cv <- newVar 
+                     ck <- newVar
+                     unifyFromName name (TVar k) (Num cv (Const ck))
+                     dischargeConstraint name
       _ -> dischargeConstraint name 
 
 

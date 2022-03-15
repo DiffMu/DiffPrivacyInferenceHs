@@ -42,7 +42,7 @@ makeTypeOp op lengthArgs msg = throwUnlocatedError (WrongNumberOfArgsOp op (leng
 
 -- We can solve a unary typeop constraint.
 solveUnary :: forall t e. IsT MonadDMTC t => DMTypeOps_Unary -> DMType -> t (Maybe (Sensitivity, DMType))
-solveUnary op τ = f op τ
+solveUnary op τ = traceM ("solving ceil " <> show τ) >> f op τ
   where
     ret :: Sensitivity -> t (DMType) -> t (Maybe (Sensitivity, DMType))
     ret s τ = do
@@ -50,7 +50,8 @@ solveUnary op τ = f op τ
       return (Just (s, τ'))
 
     f :: DMTypeOps_Unary -> DMType -> t (Maybe (Sensitivity, DMType))
-    f DMOpCeil (Numeric (Num t1 (Const s1))) = ret zeroId (return (Numeric (Num DMInt (Const (ceil s1)))))
+    f DMOpCeil (Numeric (Num DMInt (Const s1))) = ret zeroId (return (Numeric (Num DMInt (Const s1))))
+    f DMOpCeil (Numeric (Num DMReal (Const s1))) = ret zeroId (return (Numeric (Num DMInt (Const (ceil s1)))))
     f DMOpCeil (Numeric (Num t2 NonConst)) = ret oneId (return (Numeric (Num DMInt NonConst)))
     f DMOpCeil _             = return Nothing
 

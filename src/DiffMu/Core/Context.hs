@@ -249,7 +249,7 @@ restrictInteresting s msg = let
       case rel of
          IsRelevant -> do
             -- make constraints that say sv <= s and sv is the sensitivity of τ
-            addConstraint (Solvable (IsLessEqual (sv, s))) ("Restricting the variable: " :<>: s :\\: msg)
+            addConstraint (Solvable (IsLessEqual (sv, s))) ("Restricting the variable: " :<>: v :\\: msg)
             return ()
          _ -> return ()
    in do

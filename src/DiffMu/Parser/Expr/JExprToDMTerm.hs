@@ -106,6 +106,7 @@ pSingle e = case e of
                  JENotRelevant _ _ -> parseError "Type annotations are only supported on function arguments."
                  JELineNumber _ _ -> throwUnlocatedError (InternalError "What now?") -- TODO
                  JEImport -> parseError "import statement is not allowed here."
+                 JEUse -> parseError "`using` statement is not allowed here."
 
 
 
