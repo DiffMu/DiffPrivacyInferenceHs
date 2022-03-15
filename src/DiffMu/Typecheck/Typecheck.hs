@@ -510,7 +510,7 @@ checkSen' scope (Located l (MFold f acc₀ m)) = do
     addConstraint (Solvable (UnifyWithConstSubtype (τfold_in, τbody_out)))
       (l :\\: "MFold accumulator type must match map output type (except const-ness).")
 
-    return (NoFun (DMMat L1 U ηm ηn τbody_out))
+    return (NoFun τbody_out)
 
 
 
@@ -842,6 +842,7 @@ checkSen' scope (Located l (Count f m)) = let
 --------------------
 -- NOTE this is different from what is in the paper, as we scale the result context by 2 not by 1
 -- a proof that this is correct is in the matrixnorm pdf, and the authors told me it's correct too
+checkSen' scope (Located l (MutConvertM m)) = checkSens scope (Located l (ConvertM m))
 checkSen' scope (Located l (ConvertM m)) = do
   τb <- checkSens scope m -- check the matrix
 

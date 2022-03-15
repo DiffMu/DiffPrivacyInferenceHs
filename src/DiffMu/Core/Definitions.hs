@@ -764,6 +764,7 @@ data PreDMTerm (t :: * -> *) =
   | MFold (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t)
   | Count (LocPreDMTerm t) (LocPreDMTerm t)
   | MMap (LocPreDMTerm t) (LocPreDMTerm t)
+  | MutConvertM (LocPreDMTerm t)
   | ConvertM (LocPreDMTerm t)
   | MCreate (LocPreDMTerm t) (LocPreDMTerm t) (TeVar, TeVar) (LocPreDMTerm t)
   | Transpose (LocPreDMTerm t)
@@ -799,7 +800,7 @@ pattern TBind a b c = TLetBase BindLet a b c
 pattern SmpLet a b c = TLetBase SampleLet a b c
 
 {-# COMPLETE Extra, Ret, DMTrue, DMFalse, Sng, Var, Arg, Op, Phi, Lam, LamStar, BBLet, BBApply, Disc,
- Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, Gauss, Laplace, Exponential, MutGauss, MutLaplace, AboveThresh, Count, MMap, MapRows, MapCols, MapCols2, MapRows2, PReduceCols, MFold, ConvertM, MCreate, Transpose,
+ Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, Gauss, Laplace, Exponential, MutGauss, MutLaplace, AboveThresh, Count, MMap, MapRows, MapCols, MapCols2, MapRows2, PReduceCols, MFold, MutConvertM, ConvertM, MCreate, Transpose,
  Size, Length, Index, VIndex, Row, ClipN, ClipM, MutClipM, Loop, SubGrad, ScaleGrad, TProject, ZeroGrad, SumGrads, SmpLet,
  Sample, InternalExpectConst, InternalMutate #-}
 
@@ -972,6 +973,7 @@ recDMTermM_Loc f h (rest)            = mapM (recDMTermM_Loc_Impl f h) rest -- h 
     recDMTermM_Loc_Impl f h (MapRows2 a b c)   = MapRows2 <$> (f a) <*> (f b) <*> (f c)
     recDMTermM_Loc_Impl f h (PReduceCols a b)  = PReduceCols <$> (f a) <*> (f b)
     recDMTermM_Loc_Impl f h (MFold a b c)      = MFold <$> (f a) <*> (f b) <*> (f c)
+    recDMTermM_Loc_Impl f h (MutConvertM a)       = MutConvertM <$> (f a)
     recDMTermM_Loc_Impl f h (ConvertM a)       = ConvertM <$> (f a)
     recDMTermM_Loc_Impl f h (MCreate a b x c ) = MCreate <$> (f a) <*> (f b) <*> pure x <*> (f c)
     recDMTermM_Loc_Impl f h (Transpose a)      = Transpose <$> (f a)
@@ -1104,6 +1106,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (MapRows2 a b c)   = "MapRows2 (" <> (showPretty a) <> " to " <> (showPretty b) <> ", " <> (showPretty c)  <> ")"
   showPretty (PReduceCols a b)  = "PReduceCols (" <> (showPretty a) <> " to " <> (showPretty b)  <> ")"
   showPretty (MFold a b c)      = "MFold (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ")"
+  showPretty (MutConvertM a)       = "MutConvertM (" <> (showPretty a) <> ")"
   showPretty (ConvertM a)       = "ConvertM (" <> (showPretty a) <> ")"
   showPretty (MCreate a b x c ) = "MCreate (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> show x <> ", " <> (showPretty c) <> ")"
   showPretty (Transpose a)      = "Transpose (" <> (showPretty a) <> ")"

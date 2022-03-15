@@ -400,8 +400,11 @@ pJCall (JESymbol (Symbol sym)) args = do
     (t@"count", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 argument, but has been given " <> show (length args)
 
     -- 1 argument
-    (t@"norm_convert!", [a1]) -> ConvertM <$> pSingle_Loc a1
+    (t@"norm_convert!", [a1]) -> MutConvertM <$> pSingle_Loc a1
     (t@"norm_convert!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
+
+    (t@"norm_convert", [a1]) -> ConvertM <$> pSingle_Loc a1
+    (t@"norm_convert", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)
 
     (t@"transpose", [a1]) -> Transpose <$> pSingle_Loc a1
     (t@"transpose", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 1 arguments, but has been given " <> show (length args)

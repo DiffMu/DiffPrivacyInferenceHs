@@ -780,10 +780,10 @@ elaborateMut scname (Located l (MutLaplace t1 t2 t3)) = do
     [newT1, newT2, newT3] -> demutTLetStatement l PureLet mutVars (Located l (Laplace newT1 newT2 newT3))
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
-elaborateMut scname (Located l (ConvertM t1)) = do
+elaborateMut scname (Located l (MutConvertM t1)) = do
   (argTerms, mutVars) <- elaborateMutList "convert" scname [(Mutated , t1)]
   case argTerms of
-    [newT1] -> demutTLetStatement l PureLet mutVars (Located l (ConvertM newT1))
+    [newT1] -> demutTLetStatement l PureLet mutVars (Located l (MutConvertM newT1))
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 
@@ -810,6 +810,7 @@ elaborateMut scname (Located l (Sample t1 t2 t3))         = elaborateNonMut3 scn
 elaborateMut scname (Located l (InternalExpectConst t1))  = elaborateNonMut1 scname l InternalExpectConst t1
 elaborateMut scname (Located l (Clone t1))                = elaborateNonMut1 scname l Clone t1
 elaborateMut scname (Located l (ClipM c t1))              = elaborateNonMut1 scname l (ClipM c) t1
+elaborateMut scname (Located l (ConvertM  t1))            = elaborateNonMut1 scname l ConvertM t1
 elaborateMut scname (Located l (Gauss t1 t2 t3 t4))       = elaborateNonMut4 scname l Gauss t1 t2 t3 t4
 elaborateMut scname (Located l (Laplace t1 t2 t3))        = elaborateNonMut3 scname l Laplace t1 t2 t3
 elaborateMut scname (Located l (AboveThresh t1 t2 t3 t4)) = elaborateNonMut4 scname l AboveThresh t1 t2 t3 t4
