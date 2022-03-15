@@ -26,6 +26,7 @@ import Debug.Trace
 import qualified Data.HashMap.Strict as H
 import qualified Prelude as P
 
+default (Text)
 
 -------------------------------------------------------------------
 -- set the a type to a variable const, in case it's numeric or a tuple.
@@ -272,7 +273,7 @@ instance Solve MonadDMTC IsBlackBox (DMMain, [DMMain]) where
         BlackBox jts -> do -- its a box!
            case length jts == length args of
                 True -> let setArg :: IsT MonadDMTC t => (JuliaType, DMMain) -> t ()
-                            setArg (jt, arg) = addJuliaSubtypeConstraint arg jt
+                            setArg (jt, arg) = addJuliaSubtypeConstraint arg jt ("Black box argument user type annotation.")
                         in do
                             mapM setArg (zip jts args)
                             dischargeConstraint @MonadDMTC name
@@ -385,7 +386,6 @@ instance Solve MonadDMTC IsLess (Sensitivity, Sensitivity) where
          Just av -> case getVal b of
                          Just bv -> case av == Infty of
                                          True -> do
-                                           msg <- inheritanceMessageFromName name
                                            (b ==! constCoeff Infty) name
                                            dischargeConstraint name
                                          False -> case (av < bv) of

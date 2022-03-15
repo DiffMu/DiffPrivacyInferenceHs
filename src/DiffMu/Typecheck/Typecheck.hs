@@ -151,7 +151,7 @@ checkSen' scope (Located l (Arg x jτ i)) = do
   τs <- newVar
   logForce $ "checking arg:" <> show (x :- jτ) <> ", dmtype is " <> show τs
   -- the inferred type must be a subtype of the user annotation, if given.
-  addJuliaSubtypeConstraint τs jτ
+  addJuliaSubtypeConstraint τs jτ (l :\\: "Function argument " :<>: x :<>: " user type annotation.")
 
   -- put the variable in the Γ context with sensitivity 1
   setVarS x (WithRelev i (τs :@ SensitivityAnnotation oneId))
@@ -169,7 +169,7 @@ checkSen' scope (Located l (Var (x :- dτ))) =  -- get the term that corresponds
                      τ <- jτ -- extract the type of x
                      -- if the user has given an annotation
                      -- inferred type must be a subtype of the user annotation
-                     addJuliaSubtypeConstraint τ dτ
+                     addJuliaSubtypeConstraint τ dτ (l :\\: "Variable " :<>: x :<>: " user type annotation.")
                      return τ
 
 checkSen' scope (Located l (Lam xτs body)) = do
@@ -510,7 +510,7 @@ checkSen' scope (Located l (MFold f acc₀ m)) = do
     addConstraint (Solvable (UnifyWithConstSubtype (τfold_in, τbody_out)))
       (l :\\: "MFold accumulator type must match map output type (except const-ness).")
 
-    return (NoFun τbody_out)
+    return τbody_out
 
 
 

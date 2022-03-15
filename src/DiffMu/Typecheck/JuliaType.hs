@@ -118,17 +118,17 @@ createDMType (t)  = throwUnlocatedError (TypeMismatchError $ "expected " <> show
 --
 -- Adds a subtype constraint corresponding to the given julia type, e.g. for annotated things.
 -- But does nothing if the julia type cannot be mapped to a dmtype, e.g. if it is `Any`
-addJuliaSubtypeConstraint :: IsT MonadDMTC t => DMMain -> JuliaType -> t ()
-addJuliaSubtypeConstraint τ JTAny = pure ()
-addJuliaSubtypeConstraint τ JTFunction = do
-    addConstraintNoMessage (Solvable (IsFunction (SensitivityK, τ)))
+addJuliaSubtypeConstraint :: (IsT MonadDMTC t, MessageLike t msg)  => DMMain -> JuliaType -> msg -> t ()
+addJuliaSubtypeConstraint τ JTAny _ = pure ()
+addJuliaSubtypeConstraint τ JTFunction msg = do
+    addConstraint (Solvable (IsFunction (SensitivityK, τ))) msg
     pure ()
-addJuliaSubtypeConstraint τ JTPFunction = do
-    addConstraintNoMessage (Solvable (IsFunction (PrivacyK, τ)))
+addJuliaSubtypeConstraint τ JTPFunction msg= do
+    addConstraint (Solvable (IsFunction (PrivacyK, τ))) msg
     pure ()
-addJuliaSubtypeConstraint τ jt = do
+addJuliaSubtypeConstraint τ jt msg = do
   ι <- createDMType jt
-  (τ ≤! (NoFun ι)) "julia subtype constraint"
+  (τ ≤! (NoFun ι)) msg
   pure ()
 
 
