@@ -62,7 +62,7 @@ demutate term = do
 
   topscname <- newScopeVar "toplevel"
 
-  res <- elaborateTopLevel topscname term
+  res <- elaborateTopLevel (Scope [topscname]) term
   resterm <- termTypeAsTerm res
   logForce $ "-----------------------------------"
   logForce $ "Mutation elaborated term is:\n" <> showPretty resterm
@@ -74,7 +74,7 @@ demutate term = do
   return resterm
 
 
-elaborateValue :: ScopeVar -> LocProcDMTerm -> MTC (ImmutType , LocMoveType)
+elaborateValue :: Scope -> LocProcDMTerm -> MTC (ImmutType , LocMoveType)
 elaborateValue scname te = do
   (te1type) <- elaborateMut scname te
   case te1type of
@@ -86,7 +86,7 @@ elaborateValue scname te = do
     --   ((Value Pure mt1,tt1), (Value Pure mt2,tt2)) -> pure $ (Pure, (PhiMove cond (mt1,tt1) (mt2,tt2)))
     --   other -> demutationError $ "Expected a term to be a value, but found an if statement where the branches had term types: " <> show other
 
-elaboratePureValue :: ScopeVar -> LocProcDMTerm -> MTC (LocMoveType)
+elaboratePureValue :: Scope -> LocProcDMTerm -> MTC (LocMoveType)
 elaboratePureValue scname te = do
   (te1type) <- elaborateMut scname te
   case te1type of
@@ -160,7 +160,7 @@ makeTermListAndCancelAppend ts = do
 --
 -- Here we allow moving return types
 --
-elaborateTopLevel :: ScopeVar -> LocProcDMTerm -> MTC (TermType)
+elaborateTopLevel :: Scope -> LocProcDMTerm -> MTC (TermType)
 elaborateTopLevel scname (Located l (Extra (Block ts))) = do
   ts' <- mapM (elaborateMut scname) ts
   (last_val, ts'') <- makeTermListAndAppend ts'
@@ -182,7 +182,7 @@ elaborateTopLevel scname t = elaborateMut scname t
 --
 -- The main elaboration function
 --
-elaborateMut :: ScopeVar -> LocProcDMTerm -> MTC (TermType)
+elaborateMut :: Scope -> LocProcDMTerm -> MTC (TermType)
 
 elaborateMut scname term@(Located l (Extra (Block ts))) = do
   ts' <- mapM (elaborateMut scname) ts
@@ -327,12 +327,12 @@ elaborateMut scname fullterm@(Located l (Extra (ProcTLetBase ltype vars term))) 
 
 
 elaborateMut scname (Located l (Extra (ProcLamStar args body))) = do
-  bodyscname <- newScopeVar "lamstar"
+  bodyscname <- appendNewScopeVar "lamstar" scname
   (newBody, newBodyType) <- elaborateLambda bodyscname [(v ::- x) | (v ::- (x , _)) <- args] body
   return (Value newBodyType (Located l (NoMove (LamStar [(UserTeVar v) :- x | (v ::- x) <- args] newBody))))
 
 elaborateMut scname (Located l (Extra (ProcLam args body))) = do
-  bodyscname <- newScopeVar "lam"
+  bodyscname <- appendNewScopeVar "lam" scname
   (newBody, newBodyType) <- elaborateLambda bodyscname [(v ::- x) | (v ::- x) <- args] body
   return (Value newBodyType (Located l (NoMove (Lam [(UserTeVar v) :- x | (v ::- x) <- args] newBody))))
 
@@ -844,26 +844,26 @@ elaborateMut scname term@_    = throwUnlocatedError (UnsupportedError ("When mut
 --
 
 -- non mutating
-elaborateNonMut1 :: ScopeVar -> SourceLocExt -> (LocDemutDMTerm -> DemutDMTerm) -> (LocProcDMTerm -> MTC TermType)
+elaborateNonMut1 :: Scope -> SourceLocExt -> (LocDemutDMTerm -> DemutDMTerm) -> (LocProcDMTerm -> MTC TermType)
 elaborateNonMut1 scname l ctr = elaborateHelper1 scname l (NoMove . ctr)
 elaborateNonMut2 scname l ctr = elaborateHelper2 scname l (((.).(.)) NoMove ctr)
 elaborateNonMut3 scname l ctr = elaborateHelper3 scname l (((.).(.).(.)) NoMove ctr)
 elaborateNonMut4 scname l ctr = elaborateHelper4 scname l (((.).(.).(.).(.)) NoMove ctr)
 
 -- refMove
-elaborateRefMove1 :: ScopeVar -> SourceLocExt -> (LocDemutDMTerm -> DemutDMTerm) -> (LocProcDMTerm -> MTC TermType)
+elaborateRefMove1 :: Scope -> SourceLocExt -> (LocDemutDMTerm -> DemutDMTerm) -> (LocProcDMTerm -> MTC TermType)
 elaborateRefMove1 scname l ctr = elaborateHelper1 scname l (RefMove . ctr)
 elaborateRefMove2 scname l ctr = elaborateHelper2 scname l (((.).(.)) RefMove ctr)
 elaborateRefMove3 scname l ctr = elaborateHelper3 scname l (((.).(.).(.)) RefMove ctr)
 elaborateRefMove4 scname l ctr = elaborateHelper4 scname l (((.).(.).(.).(.)) RefMove ctr)
 
-elaborateHelper1 :: ScopeVar -> SourceLocExt -> (LocDemutDMTerm -> MoveType) -> LocProcDMTerm -> MTC TermType
+elaborateHelper1 :: Scope -> SourceLocExt -> (LocDemutDMTerm -> MoveType) -> LocProcDMTerm -> MTC TermType
 elaborateHelper1 scname l ctr t1 = do
   (newT1) <- moveTypeAsTerm_Loc =<< elaboratePureValue scname (t1)
   return (Value Pure (Located l (ctr newT1)))
 
 
-elaborateHelper2 :: ScopeVar
+elaborateHelper2 :: Scope
                     -> SourceLocExt
                     -> (LocDemutDMTerm -> LocDemutDMTerm -> MoveType)
                     -> LocProcDMTerm -> LocProcDMTerm
@@ -874,7 +874,7 @@ elaborateHelper2 scname l ctr t1 t2 = do
   return (Value Pure (Located l (ctr newT1 newT2)))
 
 
-elaborateHelper3 :: ScopeVar
+elaborateHelper3 :: Scope
                     -> SourceLocExt
                     -> (LocDemutDMTerm -> LocDemutDMTerm -> LocDemutDMTerm -> MoveType)
                     -> LocProcDMTerm -> LocProcDMTerm -> LocProcDMTerm
@@ -886,7 +886,7 @@ elaborateHelper3 scname l ctr t1 t2 t3 = do
   return (Value Pure (Located l (ctr newT1 newT2 newT3)))
 
 
-elaborateHelper4 :: ScopeVar
+elaborateHelper4 :: Scope
                     -> SourceLocExt
                     -> (LocDemutDMTerm -> LocDemutDMTerm -> LocDemutDMTerm -> LocDemutDMTerm -> MoveType)
                     -> LocProcDMTerm -> LocProcDMTerm -> LocProcDMTerm -> LocProcDMTerm
@@ -902,7 +902,7 @@ elaborateHelper4 scname l ctr t1 t2 t3 t4 = do
 ---------------------------------------------------
 -- list elaboration
 
-elaborateAsList :: ScopeVar -> LocProcDMTerm -> MTC (SourceLocExt, (LastValue, Maybe LocDemutDMTerm, [LocDemutDMTerm]))
+elaborateAsList :: Scope -> LocProcDMTerm -> MTC (SourceLocExt, (LastValue, Maybe LocDemutDMTerm, [LocDemutDMTerm]))
 elaborateAsList scname (Located l (Extra (Block ts))) = do
   ts' <- mapM (elaborateMut scname) ts
   res <- makeTermList ts'
@@ -912,7 +912,7 @@ elaborateAsList scname (Located l t) = do
   res <- makeTermList [t']
   return (l,res)
 
-elaborateAsListAndAppend :: ScopeVar -> LocProcDMTerm -> MTC (SourceLocExt, (LastValue, [LocDemutDMTerm]))
+elaborateAsListAndAppend :: Scope -> LocProcDMTerm -> MTC (SourceLocExt, (LastValue, [LocDemutDMTerm]))
 elaborateAsListAndAppend scname (Located l (Extra (Block ts))) = do
   ts' <- mapM (elaborateMut scname) ts
   res <- makeTermListAndAppend ts'
@@ -923,7 +923,7 @@ elaborateAsListAndAppend scname t@(Located l _) = do
   return (l, res)
 
 
-elaborateAsListAndCancelAppend :: ScopeVar -> LocProcDMTerm -> MTC (LastValue, [LocDemutDMTerm])
+elaborateAsListAndCancelAppend :: Scope -> LocProcDMTerm -> MTC (LastValue, [LocDemutDMTerm])
 elaborateAsListAndCancelAppend scname (Located l (Extra (Block ts))) = do
   ts' <- mapM (elaborateMut scname) ts
   makeTermListAndCancelAppend ts'
@@ -934,7 +934,7 @@ elaborateAsListAndCancelAppend scname t = do
 ---------------------------------------------------
 -- bbkind elaboration
 
-elaborateBBKind :: ScopeVar -> BBKind ProceduralExtension -> MTC (BBKind DemutatedExtension)
+elaborateBBKind :: Scope -> BBKind ProceduralExtension -> MTC (BBKind DemutatedExtension)
 elaborateBBKind scname = \case
   BBSimple jt -> return $ BBSimple jt
   BBVecLike jt pdt -> do
@@ -954,7 +954,7 @@ elaborateBBKind scname = \case
 -- elaborating a lambda term
 --
 
-elaborateLambda :: ScopeVar -> [ProcAsgmt JuliaType] -> LocProcDMTerm -> MTC (LocDemutDMTerm , ImmutType)
+elaborateLambda :: Scope -> [ProcAsgmt JuliaType] -> LocProcDMTerm -> MTC (LocDemutDMTerm , ImmutType)
 elaborateLambda scname args body = do
   --
   -- Regarding Movetypes: We do not need to do anything here
@@ -1139,7 +1139,7 @@ elaborateLambda scname args body = do
 -- elaborating a list of terms which are used in individually either mutating, or not mutating places
 --
 
-elaborateMutList :: String -> ScopeVar -> [(IsMutated , LocProcDMTerm)] -> MTC ([LocDemutDMTerm] , [ProcVar])
+elaborateMutList :: String -> Scope -> [(IsMutated , LocProcDMTerm)] -> MTC ([LocDemutDMTerm] , [ProcVar])
 elaborateMutList f scname mutargs = do
   ---------------------------------------
   -- Regarding MoveTypes (#171)
