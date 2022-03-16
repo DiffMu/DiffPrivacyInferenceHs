@@ -969,6 +969,7 @@ checkSen' scope (Located l (Row m i)) = do
 
       return (NoFun (DMVec nrm clp m τ)) -- returns Vector type to accomodate julia behaviour
 
+checkSen' scope (Located l (MutSubGrad ps gs)) = checkSen' scope (Located l (SubGrad ps gs))
 checkSen' scope (Located l (SubGrad ps gs)) = do
       -- check model and gradient
       let dps = checkSens scope ps

@@ -780,6 +780,7 @@ data PreDMTerm (t :: * -> *) =
   -- Loop (DMTerm : "Number of iterations") ([TeVar] : "Captured variables") (TeVar : "name of iteration var", TeVar : "name of capture variable") (DMTerm : "body")
   | Loop (LocPreDMTerm t) [TeVar] (TeVar, TeVar) (LocPreDMTerm t)
 -- Special NN builtins
+  | MutSubGrad (LocPreDMTerm t) (LocPreDMTerm t)
   | SubGrad (LocPreDMTerm t) (LocPreDMTerm t)
   | ScaleGrad (LocPreDMTerm t) (LocPreDMTerm t) -- scale (a : Scalar) (g : Mutating Gradient)
 -- Special Tuple terms
@@ -802,7 +803,7 @@ pattern SmpLet a b c = TLetBase SampleLet a b c
 
 {-# COMPLETE Extra, Ret, DMTrue, DMFalse, Sng, Var, Arg, Op, Phi, Lam, LamStar, BBLet, BBApply, Disc,
  Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, Gauss, Laplace, Exponential, MutGauss, MutLaplace, AboveThresh, Count, MMap, MapRows, MapCols, MapCols2, MapRows2, PReduceCols, PFoldRows, MFold, MutConvertM, ConvertM, MCreate, Transpose,
- Size, Length, Index, VIndex, Row, ClipN, ClipM, MutClipM, Loop, SubGrad, ScaleGrad, TProject, ZeroGrad, SumGrads, SmpLet,
+ Size, Length, Index, VIndex, Row, ClipN, ClipM, MutClipM, Loop, SubGrad, MutSubGrad, ScaleGrad, TProject, ZeroGrad, SumGrads, SmpLet,
  Sample, InternalExpectConst, InternalMutate #-}
 
 
@@ -989,6 +990,7 @@ recDMTermM_Loc f h (rest)            = mapM (recDMTermM_Loc_Impl f h) rest -- h 
     recDMTermM_Loc_Impl f h (MutClipM c a)     = MutClipM c <$> (f a)
     recDMTermM_Loc_Impl f h (Loop a b x d )    = Loop <$> (f a) <*> pure b <*> pure x <*> (f d)
     recDMTermM_Loc_Impl f h (SubGrad a b)      = SubGrad <$> (f a) <*> (f b)
+    recDMTermM_Loc_Impl f h (MutSubGrad a b)      = MutSubGrad <$> (f a) <*> (f b)
     recDMTermM_Loc_Impl f h (ScaleGrad a b)    = ScaleGrad <$> (f a) <*> (f b)
     recDMTermM_Loc_Impl f h (TProject x a)     = TProject x <$> f a
     recDMTermM_Loc_Impl f h (ZeroGrad a)       = ZeroGrad <$> (f a)
@@ -1122,6 +1124,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (ClipM c a)        = "ClipM (" <> show c <> ", " <> (showPretty a) <> ")"
   showPretty (MutClipM c a)     = "MutClipM (" <> show c <> ", " <> (showPretty a) <> ")"
   showPretty (SubGrad a b)      = "SubGrad (" <> (showPretty a) <> ", " <> (showPretty b) <>  ")"
+  showPretty (MutSubGrad a b)      = "MutSubGrad (" <> (showPretty a) <> ", " <> (showPretty b) <>  ")"
   showPretty (ScaleGrad a b)    = "ScaleGrad (" <> (showPretty a) <> ", " <> (showPretty b) <>  ")"
   showPretty (TProject x a)     = "Proj" <> show x <> " " <>  (showPretty a)
   showPretty (Loop a b x d )    = "Loop (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> show x <> ")" <> parenIndent (showPretty d)

@@ -373,8 +373,11 @@ pJCall (JESymbol (Symbol sym)) args = do
 
 --   2 arguments
 
-    (t@"subtract_gradient!", [a1, a2]) -> SubGrad <$> pSingle_Loc a1 <*> pSingle_Loc a2
+    (t@"subtract_gradient!", [a1, a2]) -> MutSubGrad <$> pSingle_Loc a1 <*> pSingle_Loc a2
     (t@"subtract_gradient!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
+
+    (t@"subtract_gradient", [a1, a2]) -> SubGrad <$> pSingle_Loc a1 <*> pSingle_Loc a2
+    (t@"subtract_gradient", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)
 
     (t@"scale_gradient!", [a1, a2]) -> ScaleGrad <$> pSingle_Loc a1 <*> pSingle_Loc a2
     (t@"scale_gradient!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 2 arguments, but has been given " <> show (length args)

@@ -750,10 +750,10 @@ elaborateMut scname (Located l (Row t1 t2))      = elaborateRefMove2 scname l Ro
 ----
 -- the mutating builtin cases
 
-elaborateMut scname (Located l (SubGrad t1 t2)) = do
+elaborateMut scname (Located l (MutSubGrad t1 t2)) = do
   (argTerms, mutVars) <- elaborateMutList "subgrad" scname [(Mutated , t1), (NotMutated , t2)]
   case argTerms of
-    [newT1, newT2] -> demutTLetStatement l PureLet mutVars (Located l (SubGrad newT1 newT2))
+    [newT1, newT2] -> demutTLetStatement l PureLet mutVars (Located l (MutSubGrad newT1 newT2))
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 elaborateMut scname (Located l (ScaleGrad scalar grads)) = do
@@ -806,6 +806,7 @@ elaborateMut scname (Located l (Size t1))                 = elaborateNonMut1 scn
 elaborateMut scname (Located l (Length t1))               = elaborateNonMut1 scname l Length t1
 elaborateMut scname (Located l (ZeroGrad t1))             = elaborateNonMut1 scname l ZeroGrad t1
 elaborateMut scname (Located l (SumGrads t1 t2))          = elaborateNonMut2 scname l SumGrads t1 t2
+elaborateMut scname (Located l (SubGrad t1 t2))           = elaborateNonMut2 scname l SubGrad t1 t2
 elaborateMut scname (Located l (Sample t1 t2 t3))         = elaborateNonMut3 scname l Sample t1 t2 t3
 elaborateMut scname (Located l (InternalExpectConst t1))  = elaborateNonMut1 scname l InternalExpectConst t1
 elaborateMut scname (Located l (Clone t1))                = elaborateNonMut1 scname l Clone t1
