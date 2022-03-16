@@ -42,6 +42,7 @@ juliatypes (DMData) = [JTInt, JTReal]
 juliatypes (DMVec _ _ _ τ) = (juliatypesInContainer JTVector τ)
 juliatypes (DMMat _ _ _ _ τ) = (juliatypesInContainer JTMatrix τ)
 juliatypes (DMGrads _ _ _ _) = [JTGrads]
+juliatypes (DMModel _) = [JTModel]
 juliatypes (DMContainer _ _ _ _ τ) = JTGrads : ((juliatypesInContainer JTVector τ) ++ (juliatypesInContainer JTMatrix τ))
 juliatypes (TVar x) = [JTBot] -- TVars fit everywhere
 juliatypes (Num t c) = juliatypes t
