@@ -1788,6 +1788,52 @@ checkPri' scope (Located l (PReduceCols f m)) = do
 
     return (NoFun (DMVec LInf U r τ_out))
 
+checkPri' scope (Located l (PFoldRows f acc m₁ m₂)) = do
+    ε <- newVar
+    δ <- newVar
+    ηm <- newVar
+    ηn₁ <- newVar
+    ηn₂ <- newVar
+    l₁ <- newVar
+    l₂ <- newVar
+    c₁ <- newVar
+    c₂ <- newVar
+    let mf = checkSens scope f <* mtruncateP inftyP
+    let macc = checkSens scope acc <* mtruncateP inftyP
+    let mm₁ = checkSens scope m₁ <* mtruncateP (ε, δ)
+    let mm₂ = checkSens scope m₂ <* mtruncateP (ε, δ)
+    (τf :: DMMain, τfold_in, τm₁, τm₂) <- msum4Tup (mf, macc, mm₁, mm₂) -- sum args and f's context
+
+    unify (l :\\: "The term " :<>: m₁ :\\: "Parameter of `parallel_private_fold_rows` must be a Data-Matrix")
+      τm₁ (NoFun (DMMat l₁ c₁ ηm ηn₁ (NoFun (Numeric (Num DMData NonConst)))))
+
+    unify (l :\\: "The term " :<>: m₂ :\\: "Parameter of `parallel_private_fold_rows` must be a Data-Matrix")
+      τm₂ (NoFun (DMMat l₂ c₂ ηm ηn₂ (NoFun (Numeric (Num DMData NonConst)))))
+
+    -- type variables for the accumulator (body input/output)
+    τbody_in  <- newVar
+    τbody_out <- newVar
+
+    -- the body function may be anything private in the accumulator
+    accε <- newVar
+    accδ <- newVar
+
+    -- set the type of the function using IFA
+    addConstraint (Solvable (IsFunctionArgument (τf,
+                                                 (Fun [([NoFun (DMVec l₁ c₁ ηn₁ (NoFun (Numeric (Num DMData NonConst)))) :@ (ε, δ)
+                                                        ,NoFun (DMVec l₂ c₂ ηn₂ (NoFun (Numeric (Num DMData NonConst)))) :@ (ε, δ)
+                                                        ,τbody_in :@ (accε,accδ)]
+                                                        :->*:
+                                                        τbody_out) :@ Nothing]))))
+      (l :\\: "The term " :<>: f :\\: "Function parameter of `parallel_private_fold_rows` must have the right type.")
+
+    addConstraint (Solvable (IsNonConst (τbody_out, τbody_in)))
+      (l :\\: "MFold map input and output types must match (except const-ness).")
+    addConstraint (Solvable (UnifyWithConstSubtype (τfold_in, τbody_out)))
+      (l :\\: "MFold accumulator type must match map output type (except const-ness).")
+
+    return τbody_out
+
 
 checkPri' scope t = throwUnlocatedError (TermColorError PrivacyK (showPretty $ getLocated t))
 

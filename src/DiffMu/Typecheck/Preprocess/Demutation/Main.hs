@@ -282,7 +282,7 @@ elaborateMut scname (Located l (Extra (ProcSLetBase ltype (x ::- τ) term))) = d
 -- Tuple terms
 --
 elaborateMut scname (Located l (Tup t1s)) = do
-  -- 
+  --
   -- We need to make sure that everything put into
   -- the tuple is pure, as this is expected when we
   -- take those things out of the tuple again.
@@ -826,6 +826,7 @@ elaborateMut scname (Located l (MapCols t1 t2))           = elaborateNonMut2 scn
 elaborateMut scname (Located l (MapCols2 t1 t2 t3))       = elaborateNonMut3 scname l MapCols2 t1 t2 t3
 elaborateMut scname (Located l (PReduceCols t1 t2))       = elaborateNonMut2 scname l PReduceCols t1 t2
 elaborateMut scname (Located l (MFold t1 t2 t3))          = elaborateNonMut3 scname l MFold t1 t2 t3
+elaborateMut scname (Located l (PFoldRows t1 t2 t3 t4))   = elaborateNonMut4 scname l PFoldRows t1 t2 t3 t4
 
 
 -- the unsupported terms
