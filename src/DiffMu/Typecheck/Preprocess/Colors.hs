@@ -234,6 +234,7 @@ transformLets reqc (Located l_term (term)) = do
                                        AboveThresh _ _ _ _ -> retPriv_Loc tterm
                                        Exponential _ _ _ _ -> retPriv_Loc tterm
                                        PReduceCols _ _     -> retPriv_Loc tterm
+                                       PFoldRows _ _ _ _   -> retPriv_Loc tterm
                                        _                   -> retPriv_Loc (Located l_term (Ret (tterm)))
              _ -> do
                              tterm <- recDMTermMSameExtension_Loc handleSensTerm_Loc (Located l_term term)
@@ -245,5 +246,6 @@ transformLets reqc (Located l_term (term)) = do
                                  AboveThresh _ _ _ _ -> retPriv_Loc tterm
                                  Exponential _ _ _ _ -> retPriv_Loc tterm
                                  PReduceCols _ _     -> retPriv_Loc tterm
+                                 PFoldRows _ _ _ _   -> retPriv_Loc tterm
                                  _                   -> retSens_Loc tterm
 
