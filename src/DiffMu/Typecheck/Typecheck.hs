@@ -1789,6 +1789,7 @@ checkPri' scope (Located l (PReduceCols f m)) = do
 
     return (NoFun (DMVec LInf U r τ_out))
 
+checkPri' scope (Located l (MutPFoldRows f acc m₁ m₂)) = checkPri' scope (Located l (PFoldRows f acc m₁ m₂))
 checkPri' scope (Located l (PFoldRows f acc m₁ m₂)) = do
     ε <- newVar
     δ <- newVar

@@ -34,6 +34,8 @@ data IsMutated = Mutated | NotMutated
 data IsLocalMutation = LocalMutation | NotLocalMutation
   deriving (Show, Eq)
 
+data MutationArgumentType = MutatedArg | NotMutatedArg ImmutType
+
 --
 -- NOTE: We later sort `VarAccessType`s,
 -- and we do not want that the `IsLocalMutation`

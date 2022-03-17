@@ -349,6 +349,9 @@ pJCall (JESymbol (Symbol sym)) args = do
     (t@"parallel_private_fold_rows", [a1, a2, a3, a4]) -> PFoldRows <$> pSingle_Loc a1 <*> pSingle_Loc a2 <*> pSingle_Loc a3 <*> pSingle_Loc a4
     (t@"parallel_private_fold_rows", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 4 arguments, but has been given " <> show (length args)
 
+    (t@"parallel_private_fold_rows!", [a1, a2, a3, a4]) -> MutPFoldRows <$> pSingle_Loc a1 <*> pSingle_Loc a2 <*> pSingle_Loc a3 <*> pSingle_Loc a4
+    (t@"parallel_private_fold_rows!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 4 arguments, but has been given " <> show (length args)
+
     -- 3 arguments
     (t@"index", [a1, a2, a3]) -> Index <$> pSingle_Loc a1 <*> pSingle_Loc a2 <*> pSingle_Loc a3
     (t@"index", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 3 arguments, but has been given " <> show (length args)

@@ -1,5 +1,6 @@
 
 {-# LANGUAGE TemplateHaskell #-}
+{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 
 module DiffMu.Typecheck.Preprocess.Demutation.Main where
 
@@ -27,7 +28,7 @@ import Test.QuickCheck.Property (Result(expect))
 import Control.Monad.Trans.Class
 import qualified GHC.RTS.Flags as LHS
 import Control.Exception (throw)
-import DiffMu.Typecheck.Preprocess.Demutation.Definitions (getAllMemVarsOfMemState, procVarAsTeVarInMutCtx)
+import DiffMu.Typecheck.Preprocess.Demutation.Definitions (getAllMemVarsOfMemState, procVarAsTeVarInMutCtx, MutationArgumentType)
 
 
 
@@ -405,7 +406,11 @@ elaborateMut scname term@(Located l (Apply f args)) = do
           True -> pure ()
           False -> throwUnlocatedError (DemutationError $ "Trying to call the function '" <> showPretty f <> "' with a wrong number of arguments.")
 
-        let mutargs = zip muts args
+        let mutsToOtherMuts mut = case mut of
+              Mutated -> MutatedArg
+              NotMutated -> NotMutatedArg Pure
+
+        let mutargs = zip (mutsToOtherMuts <$> muts) args
         (newArgs , muts) <- elaborateMutList (showPretty f) scname mutargs
 
         movetype' <- (moveTypeAsTerm_Loc movetype)
@@ -418,7 +423,7 @@ elaborateMut scname term@(Located l (Apply f args)) = do
     -- case II : A pure function call
     --
     Pure -> do
-        let mutargs = zip (repeat NotMutated) args
+        let mutargs = zip (repeat (NotMutatedArg Pure)) args
         (newArgs , muts) <- elaborateMutList (showPretty f) scname mutargs
 
         movetype' <- (moveTypeAsTerm_Loc movetype)
@@ -455,7 +460,7 @@ elaborateMut scname term@(Located l (Extra (ProcBBApply f args bbkind))) = do
         glvars <- globalNames <$> (use topLevelInfo)
 
         -- since the box is pure, we say so to `elaborateMutList`
-        let mutargs = zip (repeat NotMutated) args
+        let mutargs = zip (repeat (NotMutatedArg Pure)) args
         (newArgs , muts) <- elaborateMutList (showPretty f) scname mutargs
 
         movetype' <- (moveTypeAsTerm_Loc movetype)
@@ -727,6 +732,14 @@ elaborateMut scname term@(Located l (Extra (ProcPhi cond tr fs))) = do
 
 
 
+-- Special builtins
+elaborateMut scname (Located l (MutPFoldRows t1 t2 t3 t4))   = do
+
+  (argTerms, mutVars) <- elaborateMutList "pfoldrows!" scname [(NotMutatedArg (Mutating [NotMutated, NotMutated, Mutated]) , t1), (MutatedArg , t2), (NotMutatedArg Pure, t3), (NotMutatedArg Pure, t4)]
+  case argTerms of
+    [newT1, newT2, newT3, newT4] -> demutTLetStatement l PureLet mutVars (Located l (MutSubGrad newT1 newT2))
+    _ -> internalError ("Wrong number of terms after elaborateMutList")
+
 
 
 
@@ -751,44 +764,44 @@ elaborateMut scname (Located l (Row t1 t2))      = elaborateRefMove2 scname l Ro
 -- the mutating builtin cases
 
 elaborateMut scname (Located l (MutSubGrad t1 t2)) = do
-  (argTerms, mutVars) <- elaborateMutList "subgrad" scname [(Mutated , t1), (NotMutated , t2)]
+  (argTerms, mutVars) <- elaborateMutList "subgrad" scname [(MutatedArg , t1), (NotMutatedArg Pure , t2)]
   case argTerms of
     [newT1, newT2] -> demutTLetStatement l PureLet mutVars (Located l (MutSubGrad newT1 newT2))
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 elaborateMut scname (Located l (ScaleGrad scalar grads)) = do
-  (argTerms, mutVars) <- elaborateMutList "scalegrad" scname [(NotMutated , scalar), (Mutated , grads)]
+  (argTerms, mutVars) <- elaborateMutList "scalegrad" scname [(NotMutatedArg Pure , scalar), (MutatedArg , grads)]
   case argTerms of
     [newT1, newT2] -> demutTLetStatement l PureLet mutVars (Located l (ScaleGrad newT1 newT2))
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 elaborateMut scname (Located l (MutClipM c t)) = do
-  (argTerms, mutVars) <- elaborateMutList "clip" scname [(Mutated , t)]
+  (argTerms, mutVars) <- elaborateMutList "clip" scname [(MutatedArg , t)]
   case argTerms of
     [newT] -> demutTLetStatement l PureLet mutVars (Located l (MutClipM c newT))
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 elaborateMut scname (Located l (MutGauss t1 t2 t3 t4)) = do
-  (argTerms, mutVars) <- elaborateMutList "gauss" scname [(NotMutated , t1), (NotMutated , t2), (NotMutated , t3), (Mutated , t4)]
+  (argTerms, mutVars) <- elaborateMutList "gauss" scname [(NotMutatedArg Pure , t1), (NotMutatedArg Pure , t2), (NotMutatedArg Pure , t3), (MutatedArg , t4)]
   case argTerms of
     [newT1, newT2, newT3, newT4] -> demutTLetStatement l PureLet mutVars (Located l (Gauss newT1 newT2 newT3 newT4))
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 elaborateMut scname (Located l (MutLaplace t1 t2 t3)) = do
-  (argTerms, mutVars) <- elaborateMutList "laplace" scname [(NotMutated , t1), (NotMutated , t2), (Mutated , t3)]
+  (argTerms, mutVars) <- elaborateMutList "laplace" scname [(NotMutatedArg Pure , t1), (NotMutatedArg Pure , t2), (MutatedArg , t3)]
   case argTerms of
     [newT1, newT2, newT3] -> demutTLetStatement l PureLet mutVars (Located l (Laplace newT1 newT2 newT3))
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 elaborateMut scname (Located l (MutConvertM t1)) = do
-  (argTerms, mutVars) <- elaborateMutList "convert" scname [(Mutated , t1)]
+  (argTerms, mutVars) <- elaborateMutList "convert" scname [(MutatedArg , t1)]
   case argTerms of
     [newT1] -> demutTLetStatement l PureLet mutVars (Located l (MutConvertM newT1))
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 
 elaborateMut scname (Located l (InternalMutate t1)) = do
-  (argTerms, mutVars) <- elaborateMutList "internal_mutate" scname [(Mutated , t1)]
+  (argTerms, mutVars) <- elaborateMutList "internal_mutate" scname [(MutatedArg , t1)]
   case argTerms of
     [newT1] -> demutTLetStatement l PureLet mutVars (Located l (InternalMutate newT1))
     _ -> internalError ("Wrong number of terms after elaborateMutList")
@@ -826,8 +839,8 @@ elaborateMut scname (Located l (MapRows2 t1 t2 t3))       = elaborateNonMut3 scn
 elaborateMut scname (Located l (MapCols t1 t2))           = elaborateNonMut2 scname l MapCols t1 t2
 elaborateMut scname (Located l (MapCols2 t1 t2 t3))       = elaborateNonMut3 scname l MapCols2 t1 t2 t3
 elaborateMut scname (Located l (PReduceCols t1 t2))       = elaborateNonMut2 scname l PReduceCols t1 t2
-elaborateMut scname (Located l (MFold t1 t2 t3))          = elaborateNonMut3 scname l MFold t1 t2 t3
 elaborateMut scname (Located l (PFoldRows t1 t2 t3 t4))   = elaborateNonMut4 scname l PFoldRows t1 t2 t3 t4
+elaborateMut scname (Located l (MFold t1 t2 t3))          = elaborateNonMut3 scname l MFold t1 t2 t3
 
 
 -- the unsupported terms
@@ -1141,7 +1154,7 @@ elaborateLambda scname args body = do
 -- elaborating a list of terms which are used in individually either mutating, or not mutating places
 --
 
-elaborateMutList :: String -> Scope -> [(IsMutated , LocProcDMTerm)] -> MTC ([LocDemutDMTerm] , [ProcVar])
+elaborateMutList :: String -> Scope -> [(MutationArgumentType , LocProcDMTerm)] -> MTC ([LocDemutDMTerm] , [ProcVar])
 elaborateMutList f scname mutargs = do
   ---------------------------------------
   -- Regarding MoveTypes (#171)
@@ -1155,8 +1168,8 @@ elaborateMutList f scname mutargs = do
   --
 
   -- function for typechecking a single argument
-  let checkArg :: (IsMutated , LocProcDMTerm) -> MTC (LocDemutDMTerm , LocMoveType, Maybe (ProcVar))
-      checkArg (Mutated , (Located l (arg))) = do
+  let checkArg :: (MutationArgumentType , LocProcDMTerm) -> MTC (LocDemutDMTerm , LocMoveType, Maybe (ProcVar))
+      checkArg (MutatedArg , (Located l (arg))) = do
         -- if the argument is given in a mutable position,
         -- it _must_ be a var
         case arg of
@@ -1177,18 +1190,17 @@ elaborateMutList f scname mutargs = do
           -- if argument is not a var, throw error
           _ -> throwUnlocatedError (DemutationError $ "When calling the mutating function " <> f <> " found the term " <> showPretty arg <> " as argument in a mutable-argument-position. Only variables are allowed here.")
 
-      checkArg (NotMutated , arg) = do
+      checkArg (NotMutatedArg reqty , arg) = do
         -- if the argument is given in an immutable position,
         -- we allow to use the full immut checking
         (itype , movetype) <- elaborateValue scname arg
 
-        -- we require the argument to be of pure type
-        case itype of
-          Pure -> pure ()
-          Mutating _ -> demutationError $ "It is not allowed to pass mutating functions as arguments. "
-                        <> "\nWhen checking " <> f <> "(" <> showPretty (fmap snd mutargs) <> ")"
-          PureBlackBox -> demutationError $ "It is not allowed to pass black boxes as arguments. "
-                        <> "\nWhen checking " <> f <> "(" <> showPretty (fmap snd mutargs) <> ")"
+        -- we require the argument to be of the right type
+        case itype == reqty of
+          True -> pure ()
+          False -> demutationError $ "While checking the argument " <> show arg <> " of the function " <> f <> ":"
+                                    <> "Expected it to have demutation type " <> show reqty
+                                    <> "But found type " <> show itype
 
         movetype' <- moveTypeAsTerm_Loc movetype
 
