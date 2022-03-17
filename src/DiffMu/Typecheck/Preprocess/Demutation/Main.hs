@@ -737,7 +737,7 @@ elaborateMut scname (Located l (MutPFoldRows t1 t2 t3 t4))   = do
 
   (argTerms, mutVars) <- elaborateMutList "pfoldrows!" scname [(NotMutatedArg (Mutating [NotMutated, NotMutated, Mutated]) , t1), (MutatedArg , t2), (NotMutatedArg Pure, t3), (NotMutatedArg Pure, t4)]
   case argTerms of
-    [newT1, newT2, newT3, newT4] -> demutTLetStatement l PureLet mutVars (Located l (MutSubGrad newT1 newT2))
+    [newT1, newT2, newT3, newT4] -> demutTLetStatement l PureLet mutVars (Located l (MutPFoldRows newT1 newT2 newT3 newT4))
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 

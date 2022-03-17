@@ -227,25 +227,27 @@ transformLets reqc (Located l_term (term)) = do
              Just PrivacyK -> do
                                    tterm <- recDMTermMSameExtension_Loc handleAnyTerm_Loc (Located l_term term)
                                    case term of
-                                       Gauss _ _ _ _       -> retPriv_Loc tterm
-                                       MutGauss _ _ _ _    -> retPriv_Loc tterm
-                                       Laplace _ _ _       -> retPriv_Loc tterm
-                                       MutLaplace _ _ _    -> retPriv_Loc tterm
-                                       AboveThresh _ _ _ _ -> retPriv_Loc tterm
-                                       Exponential _ _ _ _ -> retPriv_Loc tterm
-                                       PReduceCols _ _     -> retPriv_Loc tterm
-                                       PFoldRows _ _ _ _   -> retPriv_Loc tterm
-                                       _                   -> retPriv_Loc (Located l_term (Ret (tterm)))
+                                       Gauss _ _ _ _        -> retPriv_Loc tterm
+                                       MutGauss _ _ _ _     -> retPriv_Loc tterm
+                                       Laplace _ _ _        -> retPriv_Loc tterm
+                                       MutLaplace _ _ _     -> retPriv_Loc tterm
+                                       AboveThresh _ _ _ _  -> retPriv_Loc tterm
+                                       Exponential _ _ _ _  -> retPriv_Loc tterm
+                                       PReduceCols _ _      -> retPriv_Loc tterm
+                                       MutPFoldRows _ _ _ _ -> retPriv_Loc tterm
+                                       PFoldRows _ _ _ _    -> retPriv_Loc tterm
+                                       _                    -> retPriv_Loc (Located l_term (Ret (tterm)))
              _ -> do
                              tterm <- recDMTermMSameExtension_Loc handleSensTerm_Loc (Located l_term term)
                              case term of
-                                 Gauss _ _ _ _       -> retPriv_Loc tterm
-                                 MutGauss _ _ _ _    -> retPriv_Loc tterm
-                                 Laplace _ _ _       -> retPriv_Loc tterm
-                                 MutLaplace _ _ _    -> retPriv_Loc tterm
-                                 AboveThresh _ _ _ _ -> retPriv_Loc tterm
-                                 Exponential _ _ _ _ -> retPriv_Loc tterm
-                                 PReduceCols _ _     -> retPriv_Loc tterm
-                                 PFoldRows _ _ _ _   -> retPriv_Loc tterm
-                                 _                   -> retSens_Loc tterm
+                                 Gauss _ _ _ _        -> retPriv_Loc tterm
+                                 MutGauss _ _ _ _     -> retPriv_Loc tterm
+                                 Laplace _ _ _        -> retPriv_Loc tterm
+                                 MutLaplace _ _ _     -> retPriv_Loc tterm
+                                 AboveThresh _ _ _ _  -> retPriv_Loc tterm
+                                 Exponential _ _ _ _  -> retPriv_Loc tterm
+                                 PReduceCols _ _      -> retPriv_Loc tterm
+                                 MutPFoldRows _ _ _ _ -> retPriv_Loc tterm
+                                 PFoldRows _ _ _ _    -> retPriv_Loc tterm
+                                 _                    -> retSens_Loc tterm
 
