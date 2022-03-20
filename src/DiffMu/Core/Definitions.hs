@@ -737,8 +737,8 @@ data PreDMTerm (t :: * -> *) =
   | Arg TeVar JuliaType Relevance
   | Op DMTypeOp_Some [(LocPreDMTerm t)]
   | Phi (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t)
-  | Lam     [Asgmt JuliaType] (LocPreDMTerm t)
-  | LamStar [(Asgmt (JuliaType, Relevance))] (LocPreDMTerm t)
+  | Lam     [Asgmt JuliaType] JuliaType (LocPreDMTerm t)
+  | LamStar [(Asgmt (JuliaType, Relevance))] JuliaType (LocPreDMTerm t)
   | BBLet TeVar [JuliaType] (LocPreDMTerm t) -- name, arguments, tail
   | BBApply (LocPreDMTerm t) [(LocPreDMTerm t)] [TeVar] (BBKind t) -- term containing the application, list of captured variables, return type.
   | Apply (LocPreDMTerm t) [(LocPreDMTerm t)]
@@ -850,8 +850,8 @@ data ProceduralExtension a =
   | ProcPreLoop a (ProcVar) a
   | ProcReturn
   | ProcVarTerm (ProcVar)
-  | ProcLam     [ProcAsgmt JuliaType] a
-  | ProcLamStar [(ProcAsgmt (JuliaType, Relevance))] a
+  | ProcLam     [ProcAsgmt JuliaType] JuliaType a
+  | ProcLamStar [(ProcAsgmt (JuliaType, Relevance))] JuliaType a
   | Block [a]
   deriving (Show, Eq, Functor, Foldable, Traversable)
 
@@ -949,8 +949,8 @@ recDMTermM_Loc f h (rest)            = mapM (recDMTermM_Loc_Impl f h) rest -- h 
     recDMTermM_Loc_Impl f h (Arg v jt r)       = pure $ Arg v jt r
     recDMTermM_Loc_Impl f h (Op op ts)         = Op op <$> (mapM (f) ts)
     recDMTermM_Loc_Impl f h (Phi a b c)        = Phi <$> (f a) <*> (f b) <*> (f c)
-    recDMTermM_Loc_Impl f h (Lam     jts a)    = Lam jts <$> (f a)
-    recDMTermM_Loc_Impl f h (LamStar jts a)    = LamStar jts <$> (f a)
+    recDMTermM_Loc_Impl f h (Lam     jts jt a)    = Lam jts jt <$> (f a)
+    recDMTermM_Loc_Impl f h (LamStar jts jt a)    = LamStar jts jt <$> (f a)
     recDMTermM_Loc_Impl f h (BBLet n jts b)    = (BBLet n jts <$> f b)
     recDMTermM_Loc_Impl f h (BBApply a as bs k)  = BBApply <$> (f a) <*> (mapM (f) as) <*> pure bs <*> recKindM f k
     recDMTermM_Loc_Impl f h (Apply a bs)       = Apply <$> (f a) <*> (mapM (f) bs)
@@ -1010,8 +1010,8 @@ freeVarsOfDMTerm_Loc = freeVarsOfDMTerm . getLocated
 
 freeVarsOfDMTerm :: DMTerm -> [TeVar]
 freeVarsOfDMTerm (Var v) = [v]
-freeVarsOfDMTerm (Lam jts body) = freeVarsOfDMTerm_Loc body \\ [v | (v :- _) <- jts]
-freeVarsOfDMTerm (LamStar jts body) = freeVarsOfDMTerm_Loc body \\ [v | (v :- _) <- jts]
+freeVarsOfDMTerm (Lam jts jt body) = freeVarsOfDMTerm_Loc body \\ [v | (v :- _) <- jts]
+freeVarsOfDMTerm (LamStar jts jt body) = freeVarsOfDMTerm_Loc body \\ [v | (v :- _) <- jts]
 freeVarsOfDMTerm t = fst $ recDMTermMSameExtension_Loc f (Located UnknownLoc t)
   where
     f :: LocDMTerm -> ([TeVar] , LocDMTerm)
@@ -1024,8 +1024,8 @@ freeVarsOfProcDMTerm_Loc = freeVarsOfProcDMTerm . getLocated
 
 freeVarsOfProcDMTerm :: ProcDMTerm -> [ProcVar]
 freeVarsOfProcDMTerm (Extra (ProcVarTerm v)) = [v]
-freeVarsOfProcDMTerm (Extra (ProcLam jts body)) = freeVarsOfProcDMTerm_Loc body \\ [v | (v ::- _) <- jts]
-freeVarsOfProcDMTerm (Extra (ProcLamStar jts body)) = freeVarsOfProcDMTerm_Loc body \\ [v | (v ::- _) <- jts]
+freeVarsOfProcDMTerm (Extra (ProcLam jts _ body)) = freeVarsOfProcDMTerm_Loc body \\ [v | (v ::- _) <- jts]
+freeVarsOfProcDMTerm (Extra (ProcLamStar jts _ body)) = freeVarsOfProcDMTerm_Loc body \\ [v | (v ::- _) <- jts]
 freeVarsOfProcDMTerm t = fst $ recDMTermMSameExtension_Loc f (Located UnknownLoc t)
   where
     f :: LocProcDMTerm -> ([ProcVar] , LocProcDMTerm)
@@ -1083,8 +1083,8 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
                                   <> parenIfMultiple (showPretty t2)
   showPretty (Op op ts)         = showPretty op <> " " <> showPretty ts
   showPretty (Phi a b c)        = "Phi (" <> showPretty a <> ")" <> parenIndent (showPretty b) <> parenIndent (showPretty c)
-  showPretty (Lam     jts a)    = "Lam (" <> showPretty jts <> ")" <> parenIndent (showPretty a)
-  showPretty (LamStar jts a)    = "LamStar (" <> showPretty jts <> ")" <> parenIndent (showPretty a)
+  showPretty (Lam     jts ret a) = "Lam (" <> showPretty jts <> " -> " <> show ret <> ")" <> parenIndent (showPretty a)
+  showPretty (LamStar jts ret a) = "LamStar (" <> showPretty jts <> " -> " <> show ret <> ")" <> parenIndent (showPretty a)
   showPretty (BBLet n jts b)    = "BBLet " <> showPretty n <> " = (" <> show jts <> " -> ?)\n" <> showPretty b
   showPretty (BBApply t as cs k)  = "BBApply (" <> showPretty t <> ")[" <> showPretty cs <> "](" <> showPretty as <> ") -> " <> showPretty k
   showPretty (Apply a bs)       = (showPretty a) <> (showPretty bs)
@@ -1149,8 +1149,8 @@ instance ShowPretty a => ShowPretty (ProceduralExtension a) where
     ProcPreLoop a x d   -> "PLoop (" <> (showPretty a) <> ", " <> show x <> ")" <> parenIndent (showPretty d)
     ProcReturn          -> "PReturn"
     ProcVarTerm pa  -> showPretty pa
-    ProcLam jts a       -> "PLam (" <> showPretty jts <> ")" <> parenIndent (showPretty a)
-    ProcLamStar jts a   -> "PLamStar (" <> showPretty jts <> ")" <> parenIndent (showPretty a)
+    ProcLam jts ret a       -> "PLam (" <> showPretty jts <> " -> " <> show ret <> ")" <> parenIndent (showPretty a)
+    ProcLamStar jts ret a   -> "PLamStar (" <> showPretty jts <> " ->* " <> show ret <> ")" <> parenIndent (showPretty a)
     ProcBBApply t as k  -> "PBBApply (" <> showPretty t <> ") (" <> showPretty as <> ") -> " <> showPretty k
     Block as -> braceIndent $ intercalate "\n" $ showPretty <$> as
 

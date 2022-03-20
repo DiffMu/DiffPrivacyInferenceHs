@@ -171,7 +171,7 @@ checkSen' scope (Located l (Var x)) =  -- get the term that corresponds to this 
                      -- addJuliaSubtypeConstraint τ dτ (l :\\: "Variable " :<>: x :<>: " user type annotation.")
                      return τ
 
-checkSen' scope (Located l (Lam xτs body)) = do
+checkSen' scope (Located l (Lam xτs retτ body)) = do
 
     -- put a special term to mark x as a function argument. those get special treatment
     -- because we're interested in their privacy. put the relevance given in the function signature, too.
@@ -181,6 +181,9 @@ checkSen' scope (Located l (Lam xτs body)) = do
 
     -- check the body in the modified scope
     btype <- checkSens scope' body
+
+    -- make sure the return/body type is subtype of the given julia type
+    addJuliaSubtypeConstraint btype retτ (l :\\: "The inferred return type of the function " :<>: btype :\\: "is subtype of the annotated return type " :<>: retτ)
 
     -- extract julia signature
     let sign = (sndA <$> xτs)
@@ -203,7 +206,7 @@ checkSen' scope (Located l (Lam xτs body)) = do
     return (Fun [τ :@ (Just sign)])
 
 
-checkSen' scope (Located l (LamStar xτs body)) = do
+checkSen' scope (Located l (LamStar xτs retτ body)) = do
     -- put a special term to mark x as a function argument. those get special treatment
     -- because we're interested in their sensitivity
     let f s sc (x :- (τ , rel)) = setValue x (checkSens s (Located (RelatedLoc "argument of this function" l) (Arg x τ rel))) sc
@@ -212,6 +215,9 @@ checkSen' scope (Located l (LamStar xτs body)) = do
 
     -- check the body in the modified scope
     btype <- checkPriv scope' body
+
+    -- make sure the return/body type is subtype of the given julia type
+    addJuliaSubtypeConstraint btype retτ (l :\\: "The inferred return type of the function " :<>: btype :\\: "is subtype of the annotated return type " :<>: retτ)
 
     -- extract julia signature
     let sign = (fst <$> sndA <$> xτs)

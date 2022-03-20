@@ -164,12 +164,12 @@ pArgRel arg = case arg of
 pJLam args body = do
                    dargs <- mapM pArg args
                    dbody <- pSingle_Loc body
-                   return (Extra (ProcLam dargs dbody))
+                   return (Extra (ProcLam dargs JTAny dbody))
 
 pJLamStar args body = do
                        dargs <- mapM pArgRel args
                        dbody <- pSingle_Loc body
-                       return (Extra (ProcLamStar dargs dbody))
+                       return (Extra (ProcLamStar dargs JTAny dbody))
 
 
 

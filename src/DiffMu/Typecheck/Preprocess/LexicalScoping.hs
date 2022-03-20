@@ -57,18 +57,18 @@ substituteNames names (Located l term) = let
     ret x = return $ Located l x
   in case term of
    -- function argument variables are renamed to sth unique and substituted in the body
-   Lam args body -> do
+   Lam args retjt body -> do
        let argnames = [x | (x :- _) <- args]
        newnames <- mapM newTeVar argnames -- generate new names for all argument variables
        let names' = H.union (H.fromList (zip [n | n <- argnames] [n | n <- newnames])) names -- overwrite hashmap with new names
        newbody <- substituteNames names' body -- substitute new names in the body
-       ret (Lam [(x :- t) | (x, (_ :- t)) <- (zip newnames args)] newbody)
-   LamStar args body -> do
+       ret (Lam [(x :- t) | (x, (_ :- t)) <- (zip newnames args)] retjt newbody)
+   LamStar args retjt body -> do
        let argnames = [x | (x :- _) <- args]
        newnames <- mapM newTeVar argnames -- generate new names for all argument variables
        let names' = H.union (H.fromList (zip [n | n <- argnames] [n | n <- newnames])) names -- overwrite hashmap with new names
        newbody <- substituteNames names' body -- substitute new names in the body
-       ret (LamStar [(x :- t) | (x, (_ :- t)) <- (zip newnames args)] newbody)
+       ret (LamStar [(x :- t) | (x, (_ :- t)) <- (zip newnames args)] retjt newbody)
    -- args/vars are simply substituted
    Arg x t r -> case H.lookup x names of
        Nothing -> ret term
