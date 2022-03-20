@@ -183,9 +183,8 @@ getLogMessages (DMMessages messages _) sevR locsR =
 getErrors :: DMMessages t -> [LocatedDMException t]
 getErrors (DMMessages _ errs) = errs
 
-getErrorMessage :: DMMessages t -> String
-getErrorMessage (DMMessages _ errs) = intercalate ("\n\n")
-                                            (fmap (\e -> red "Error:\n" <> showPretty e) errs)
+getErrorMessage :: [LocatedDMException t] -> String
+getErrorMessage (errs) = intercalate ("\n\n") (fmap (\e -> red "Error:\n" <> showPretty e) errs)
 
 
 

@@ -48,8 +48,9 @@ tc r = do
   x <- executeTC (DontShowLog) r
 
   let x' = case x of
-        Left (WithContext e _) -> Left e
-        Right x -> Right x
+        ((WithContext e _ : _), res) -> Left e
+        (_ , Just res) -> Right res
+        (_,_) -> Left (ImpossibleError "Got no errors, but also no result... ?")
 
   return (fst <$> x')
 
@@ -58,8 +59,9 @@ tcl r = do
   x <- executeTC (DoShowLog Force []) r
 
   let x' = case x of
-        Left (WithContext e _) -> Left e
-        Right x -> Right x
+        ((WithContext e _ : _), res) -> Left e
+        (_ , Just res) -> Right res
+        (_,_) -> Left (ImpossibleError "Got no errors, but also no result... ?")
   -- x <- executeTC (DoShowLog Force [Location_Constraint , Location_INC, Location_MonadicGraph, Location_Unification]) r
   -- x <- executeTC (DoShowLog Force [Location_Constraint, Location_Subtyping]) r
   return (fst <$> x')

@@ -66,13 +66,19 @@ executeTC l r = do
 
     (DontShowLog) -> return ()
 
+  let (errs,res) = case (getErrors logs, x) of
+                    (errs, Left err) -> (err:errs, Nothing)
+                    (errs, Right res) -> (errs, Just res)
+
   putStrLn "======================== Errors ====================="
-  putStrLn (getErrorMessage logs)
+  putStrLn (getErrorMessage errs)
   putStrLn "======================== End Errors ====================="
 
-  case getErrors logs of
-    [] -> return x
-    (x:xs) -> return (Left x)
+  return (errs,res)
+
+  -- case errs of
+  --   [] -> return x
+  --   (x:xs) -> return (Left x)
 
 typecheckFromJExprWithPrinter :: ((DMMain,Full (DMPersistentMessage TC)) -> String) -> DoShowLog -> JExpr -> IO ()
 typecheckFromJExprWithPrinter printer logoptions term = do
@@ -112,8 +118,8 @@ typecheckFromJExprWithPrinter printer logoptions term = do
   x <- executeTC logoptions r
 
   case x of
-    Left err -> putStrLn $ "Encountered error: " <> show err
-    Right x -> putStrLn $ printer x
+    (_, Nothing) -> putStrLn $ "No type could be inferred"
+    (_, Just x) -> putStrLn $ printer x
 
 
 -- (DoShowLog Warning logging_locations)
