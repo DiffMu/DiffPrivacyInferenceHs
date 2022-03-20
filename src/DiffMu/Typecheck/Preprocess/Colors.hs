@@ -143,16 +143,16 @@ transformLets reqc (Located l_term (term)) = do
 
   case term of
 
-   SLetBase PureLet (x :- t) body tail -> do
+   SLetBase PureLet x body tail -> do
        tbody <- handleAnyTerm_Loc body
        cbody <- getColor
        case cbody of
             SensitivityK -> do
                 ttail <- transformLets_Loc reqc tail
-                return (Located l_term (SLetBase PureLet (x :- t) tbody ttail))
+                return (Located l_term (SLetBase PureLet x tbody ttail))
             PrivacyK -> do
                 ttail <- handlePrivTerm_Loc tail
-                return (Located l_term (SLetBase BindLet (x :- t) tbody ttail))
+                return (Located l_term (SLetBase BindLet x tbody ttail))
 
    TLetBase PureLet ns body tail -> do
        tbody <- handleAnyTerm_Loc body
@@ -205,7 +205,7 @@ transformLets reqc (Located l_term (term)) = do
    Apply f xs -> do
        txs <- mapM handleSensTerm_Loc xs
        case getLocated f of
-            Var (fn :- _) -> do
+            Var fn -> do
                                     isP <- isPFunction fn
                                     case isP of
                                        True  -> retPriv (Apply f txs)

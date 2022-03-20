@@ -712,9 +712,9 @@ coequalizeTeVarMutTrace :: TeVarMutTrace -> TeVarMutTrace -> WriterT ([LocDemutD
 coequalizeTeVarMutTrace (TeVarMutTrace pv1 split1 ts1) (TeVarMutTrace pv2 split2 ts2) | and [ts1 == ts2, pv1 == pv2, split1 == split2] = pure $ TeVarMutTrace pv1 split1 ts1
 coequalizeTeVarMutTrace (TeVarMutTrace pv1 split1 ts1) (TeVarMutTrace pv2 split2 ts2)  = do
   t3 <- newTeVarOfMut "phi" Nothing
-  let makeProj (Just pv) []     = pure $ Extra (DemutSLetBase PureLet (t3 :- JTAny) (notLocated $ Var (UserTeVar pv :- JTAny)))
+  let makeProj (Just pv) []     = pure $ Extra (DemutSLetBase PureLet (t3) (notLocated $ Var (UserTeVar pv)))
       makeProj Nothing   []     = lift $ demutationError $ "While demutating phi encountered a branch where a proc-var-less memory location is mutated. This cannot be done."
-      makeProj _         (t:ts) = pure $ Extra (DemutSLetBase PureLet (t3 :- JTAny) (notLocated $ Var (t :- JTAny)))
+      makeProj _         (t:ts) = pure $ Extra (DemutSLetBase PureLet (t3) (notLocated $ Var (t)))
 
   proj1 <- makeProj pv1 ts1 
   proj2 <- makeProj pv2 ts2
@@ -829,7 +829,7 @@ moveTypeAsTerm = \case
   TupleMove mts -> do
     terms <- mapM moveTypeAsTerm_Loc mts
     pure $ (Tup terms)
-  SingleMove pv -> do tv <- procVarAsTeVar pv ; pure $ Var $ (tv :- JTAny)
+  SingleMove pv -> do tv <- procVarAsTeVar pv ; pure $ Var $ (tv)
   PhiMove cond (_,tt1) (_,tt2) -> return (Extra (DemutPhi cond tt1 tt2))
   RefMove pdt   -> pure pdt
   NoMove pdt    -> pure pdt

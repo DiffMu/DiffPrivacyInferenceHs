@@ -43,7 +43,7 @@ unblockStatements last (Located l (Extra (DemutTLetBase k a b))       : xs) = un
 unblockStatements last (Located l (Extra (DemutFLet a b))             : xs) = unblockStatementsM (Located l <$> (FLet a <$> (unblock b) <*> pure last)) xs
 unblockStatements last (Located l (Extra (DemutBBLet a b))            : xs) = unblockStatements (Located l $ BBLet a b last) xs
 unblockStatements last (Located l (Extra (DemutLoop n cvars cvars' it body)) : xs) =
-        unblockStatementsM (Located l <$> (TLet [s :- JTAny | s <- cvars'] <$> (Located l <$> (Loop <$> (unblock n) <*> pure cvars <*> pure it <*> (unblock body))) <*> pure last)) xs
+        unblockStatementsM (Located l <$> (TLet cvars' <$> (Located l <$> (Loop <$> (unblock n) <*> pure cvars <*> pure it <*> (unblock body))) <*> pure last)) xs
 
 unblockStatements last (x                                   : xs) = unblockingError $ "Expected a statement, but encountered a term:"
                                                                                    <> showPretty x

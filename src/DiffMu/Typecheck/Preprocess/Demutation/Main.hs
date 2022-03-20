@@ -38,11 +38,11 @@ demutTLetStatement :: SourceLocExt -> LetKind -> [ProcVar] -> LocDemutDMTerm -> 
 demutTLetStatement l ltype vars term = case vars of
   [var] -> do
             var' <- (procVarAsTeVar var)
-            return (Statement l (Extra (DemutSLetBase ltype (var' :- JTAny) term))
+            return (Statement l (Extra (DemutSLetBase ltype var' term))
                    (SingleMove var))
   vars -> do
             vars' <- mapM procVarAsTeVar vars
-            return (Statement l (Extra (DemutTLetBase ltype ([v :- JTAny | v <- vars']) term))
+            return (Statement l (Extra (DemutTLetBase ltype (vars') term))
                    (TupleMove [(Located l (SingleMove v)) | v <- vars]))
 
 ---
@@ -219,7 +219,7 @@ elaborateMut scname (Located l (DMFalse)) = do
 
 elaborateMut scname term@(Located l (Var _)) = demutationError $ "Unsupported term: " <> showPretty term
 
-elaborateMut scname (Located l (Extra (ProcVarTerm (x ::- j)))) = do
+elaborateMut scname (Located l (Extra (ProcVarTerm x))) = do
   mx <- expectNotMoved x
   itype <- expectImmutType scname x
 
@@ -241,7 +241,7 @@ elaborateMut scname (Located l (Extra (ProcBBLet procx args))) = do
   return (Statement l (Extra (DemutBBLet tevarx args)) (SingleMove procx))
 
 
-elaborateMut scname (Located l (Extra (ProcSLetBase ltype (x ::- τ) term))) = do
+elaborateMut scname (Located l (Extra (ProcSLetBase ltype x term))) = do
   (newTermType, Located l_moveType moveType) <- elaborateValue scname term
 
   case newTermType of
@@ -271,10 +271,9 @@ elaborateMut scname (Located l (Extra (ProcSLetBase ltype (x ::- τ) term))) = d
   logmem <- use memCtx
   debug $ "The memctx is now:\n"
   debug $ show logmem
-  
 
 
-  return (Statement l (Extra (DemutSLetBase ltype (x' :- τ) (Located l_moveType moveType')))
+  return (Statement l (Extra (DemutSLetBase ltype x' (Located l_moveType moveType')))
           (SingleMove x))
 
 
@@ -312,7 +311,7 @@ elaborateMut scname fullterm@(Located l (Extra (ProcTLetBase ltype vars term))) 
   --
   -- we set the immuttype of every element on the LHS to Pure
   --
-  mapM (\(x ::- _) -> setImmutType scname x Pure) vars
+  mapM (\x -> setImmutType scname x Pure) vars
 
   moveType' <- (moveTypeAsTerm_Loc moveType)
 
@@ -321,9 +320,9 @@ elaborateMut scname fullterm@(Located l (Extra (ProcTLetBase ltype vars term))) 
 
   -- write the list of possible memory types into the
   -- variables of the lhs
-  setMemTupleInManyMems scname ([v | (v ::- _) <- vars]) mem
+  setMemTupleInManyMems scname vars mem
 
-  demutTLetStatement l ltype [v | (v ::- _) <- vars] moveType'
+  demutTLetStatement l ltype vars moveType'
 
 
 
@@ -584,8 +583,8 @@ elaborateMut scname (Located l (Extra (ProcPreLoop iters iterVar body))) = do --
   captureVar <- newTeVarOfMut "loop_capture" Nothing
   let s1 = "capture reading in loop body" 
   let s2 = "capture returning in loop body" 
-  let capture_assignment   = ld s1 l $ Extra (DemutTLetBase PureLet [v :- JTAny | v <- capturesBefore] (ld s1 l (Var (captureVar :- JTAny))))
-  let capture_return       = ld s2 l $ Tup [ld s2 l (Var (v :- JTAny)) | v <- capturesAfter]
+  let capture_assignment   = ld s1 l $ Extra (DemutTLetBase PureLet capturesBefore (ld s1 l (Var captureVar)))
+  let capture_return       = ld s2 l $ Tup [ld s2 l (Var v) | v <- capturesAfter]
   let demutated_body_terms = [capture_return] <> bodyTerms <> [capture_assignment]
   let demutated_loop = Extra (DemutLoop (newIters') capturesBefore capturesAfter ((UserTeVar iterVar, captureVar))
                              (Located l $ Extra (DemutBlock demutated_body_terms)))
@@ -1107,8 +1106,8 @@ elaborateLambda scname args body = do
     (MutatingFunctionEndValue, mvs) -> do
       let s1 = "Auto generated return tuple (or single value) of mutating function"
       let last_tuple = case mvs of
-              [v] -> Var (v :- JTAny)
-              vs  -> Tup [(Located (RelatedLoc s1 l) (Var (v :- JTAny))) | v <- mvs]
+              [v] -> Var (v)
+              vs  -> Tup [(Located (RelatedLoc s1 l) (Var (v))) | v <- mvs]
       return (Mutating mut_states, Extra (DemutBlock ((Located (downgradeToRelated s1 l) (last_tuple)) : new_body_terms)))
 
     (NoLastValue, _) -> demutationError $ "Found a function which has no last value, that is not allowed."
@@ -1173,7 +1172,7 @@ elaborateMutList f scname mutargs = do
         -- if the argument is given in a mutable position,
         -- it _must_ be a var
         case arg of
-          Extra (ProcVarTerm (x ::- a)) -> do 
+          Extra (ProcVarTerm (x)) -> do 
             -- say that this variable is being reassigned (VAT)
             setImmutType scname x Pure
 
@@ -1185,7 +1184,7 @@ elaborateMutList f scname mutargs = do
             -- and say that the memory location is mutated
             markMutated x
 
-            return ((Located l (Var (x' :- a))), (Located l (SingleMove x)), Just x)
+            return ((Located l (Var (x'))), (Located l (SingleMove x)), Just x)
 
           -- if argument is not a var, throw error
           _ -> throwUnlocatedError (DemutationError $ "When calling the mutating function " <> f <> " found the term " <> showPretty arg <> " as argument in a mutable-argument-position. Only variables are allowed here.")
