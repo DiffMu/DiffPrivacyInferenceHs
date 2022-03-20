@@ -581,7 +581,7 @@ elaborateMut scname (Located l (Extra (ProcPreLoop iters iterVar body))) = do --
   -- We have to add the capture assignment and the capture return
   -- to the body. Note that the order of `bodyTerms` is already
   -- reversed, hence the reversed appending.
-  captureVar <- newTeVarOfMut "loop_capture"
+  captureVar <- newTeVarOfMut "loop_capture" Nothing
   let s1 = "capture reading in loop body" 
   let s2 = "capture returning in loop body" 
   let capture_assignment   = ld s1 l $ Extra (DemutTLetBase PureLet [v :- JTAny | v <- capturesBefore] (ld s1 l (Var (captureVar :- JTAny))))

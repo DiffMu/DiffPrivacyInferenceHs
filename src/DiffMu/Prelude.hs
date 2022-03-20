@@ -103,18 +103,26 @@ instance Hashable ProcVar
 instance Show ProcVar where
   show (UserProcVar x) = show x
   show (GenProcVar x) =  show x
+instance ShowPretty ProcVar where
+  showPretty (UserProcVar x) = showPretty x
+  showPretty (GenProcVar x) =  showPretty x
 
 instance DictKey ProcVar
 
 -- term variables
 
-data TeVar = UserTeVar ProcVar | GenTeVar Symbol
+data TeVar = UserTeVar ProcVar | GenTeVar Symbol (Maybe TeVar)
   deriving (Eq,Generic, Ord)
 
 instance Hashable TeVar
 instance Show TeVar where
   show (UserTeVar x) = show x
-  show (GenTeVar x) = "gen_" <> show x
+  show (GenTeVar x pv) = "gen_" <> show x
+instance ShowPretty TeVar where
+  showPretty (UserTeVar x) = showPretty x
+  showPretty (GenTeVar x pv) = case pv of
+    Just pv -> showPretty pv
+    Nothing -> showPretty x
 
 instance DictKey TeVar
 

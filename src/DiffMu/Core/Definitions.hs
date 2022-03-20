@@ -1043,11 +1043,6 @@ instance ShowPretty a => ShowPretty (Maybe a) where
       showPretty Nothing = "Nothing"
 
 
-instance ShowPretty (TeVar) where
-  showPretty (v) = show v
-
-instance ShowPretty (ProcVar) where
-  showPretty (v) = show v
 
 instance ShowPretty a => ShowPretty (Asgmt a) where
   showPretty (a :- x) = showPretty a <> " :- " <> showPretty x
@@ -1080,9 +1075,13 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (DMFalse)          = "DMFalse"
   showPretty (DMTrue)           = "DMTrue"
   showPretty (Sng g jt)         = show g
-  showPretty (Var (v :- jt))    = show v
+  showPretty (Var (v :- jt))    = showPretty v
 --  showPretty (Rnd jt)           = "Rnd"
-  showPretty (Arg v jt r)       = show v
+  showPretty (Arg v jt r)       = showPretty v
+  showPretty (Op op [t1])       = showPretty op <> " " <> parenIfMultiple (showPretty t1)
+  showPretty (Op op [t1,t2])    = parenIfMultiple (showPretty t1)
+                                  <> " " <> showPretty op <> " "
+                                  <> parenIfMultiple (showPretty t2)
   showPretty (Op op ts)         = showPretty op <> " " <> showPretty ts
   showPretty (Phi a b c)        = "Phi (" <> showPretty a <> ")" <> parenIndent (showPretty b) <> parenIndent (showPretty c)
   showPretty (Lam     jts a)    = "Lam (" <> showPretty jts <> ")" <> parenIndent (showPretty a)

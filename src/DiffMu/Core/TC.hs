@@ -1192,7 +1192,7 @@ newPVar = do
    return (p1, p2)
 
 newTeVar :: (MonadDMTC m) => Text -> m (TeVar)
-newTeVar hint = meta.termVars %%= (first GenTeVar . (newName hint))
+newTeVar hint = meta.termVars %%= (first (\x -> GenTeVar x Nothing) . (newName hint))
 
 ------------------------------------------------------------------------
 -- unification of sensitivities
