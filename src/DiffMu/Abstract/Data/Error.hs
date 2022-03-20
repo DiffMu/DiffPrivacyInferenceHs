@@ -175,15 +175,8 @@ instance Show DMException where
   show (ParseError e file line) = "Unsupported julia expression in file " <> file <> ", line " <> show line <> ":\n " <> e
   show (TermColorError color t) = "Expected " <> show t <> " to be a " <> show color <> " expression but it is not."
   show (DemutationDefinitionOrderError a) = "The variable '" <> show a <> "' has not been defined before being used.\n"
-                                            <> "Note that currently every variable has to be assigned some value prior to its usage.\n"
-                                            <> "Here, 'prior to usage' means literally earlier in the code.\n"
-                                            <> "The actual value of that assignment is irrelevant, e.g., the first line of the following code is only there to fix the error which is currently shown:\n"
-                                            <> ">  a = 0" <> "\n"
-                                            <> ">  function f()" <> "\n"
-                                            <> ">    a" <> "\n"
-                                            <> ">  end" <> "\n"
-                                            <> ">  a = 3" <> "\n"
-                                            <> ">  f()" <> "\n"
+                                            <> "Note that every variable has to be assigned some value prior to its usage.\n"
+                                            <> "Here, 'prior to usage' means literally earlier in the code."
   show (DemutationVariableAccessTypeError e) = "An error regarding variable access types occured:\n" <> e
   show (DemutationMovedVariableAccessError a) = "Tried to access the variable " <> show a <> ". But this variable is not valid anymore, because it was assigned to something else."
   show (DemutationNonAliasedMutatingArgumentError a) = "An error regarding non-aliasing of mutating arguments occured:\n" <> a
