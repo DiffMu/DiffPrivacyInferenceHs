@@ -66,8 +66,8 @@ testScope03 pp = do
            \   function scope(z)      \n\
            \      y = 100             \n\
            \      g() = 0             \n\
-           \      h(x) = g(2)         \n\
            \      g(x) = x*y          \n\
+           \      h(x) = g(2)         \n\
            \      y2 = h(1)           \n\
            \      g(z)                \n\
            \   end                    \n\
@@ -93,6 +93,9 @@ testScope04 pp = do
            \            i(b) = 2*b + a         \n\
            \            i(b*5)                 \n\
            \        end                        \n\
+           \        function h(b)              \n\
+           \            a*11                   \n\
+           \        end                        \n\
            \        function g(h,a)            \n\
            \            x = h(a*7)             \n\
            \            y = h(a*7)             \n\
@@ -100,9 +103,6 @@ testScope04 pp = do
            \        end                        \n\
            \        a = g(h,a)                 \n\
            \        a = g(h,a)                 \n\
-           \        function h(b)              \n\
-           \            a*11                   \n\
-           \        end                        \n\
            \        a = g(h,a)                 \n\
            \        a                          \n\
            \    end                            \n\
@@ -115,6 +115,9 @@ testScope04 pp = do
            \            i(b) = 2*b + a         \n\
            \            i(b*5)                 \n\
            \        end                        \n\
+           \        function h(b::Integer)     \n\
+           \            a*11                   \n\
+           \        end                        \n\
            \        function g(h,a)            \n\
            \            x = h(a*7)             \n\
            \            y = h(a*7)             \n\
@@ -122,9 +125,6 @@ testScope04 pp = do
            \        end                        \n\
            \        a1 = g(h,a)                \n\
            \        a2 = g(h,a1)               \n\
-           \        function h(b::Integer)     \n\
-           \            a*11                   \n\
-           \        end                        \n\
            \        a3 = g(h,a2)               \n\
            \        a3                         \n\
            \    end                            \n\
