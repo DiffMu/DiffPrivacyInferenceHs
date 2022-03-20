@@ -281,7 +281,7 @@ instance Show (DMTypeOf k) where
   show (DMTup ts) = "Tupl(" <> show ts <> ")"
   show L1 = "L1"
   show L2 = "L2"
-  show LInf = "L∞"
+  show LInf = "LInf"
   show U = "U"
   show Vector = "Vector"
   show Gradient = "Gradient"
@@ -335,7 +335,7 @@ instance ShowPretty (DMTypeOf k) where
   showPretty (DMTup ts) = showPretty ts
   showPretty L1 = "L1"
   showPretty L2 = "L2"
-  showPretty LInf = "L∞"
+  showPretty LInf = "LInf"
   showPretty U = "U"
   showPretty Vector = "Vector"
   showPretty Gradient = "Gradient"
@@ -420,7 +420,8 @@ instance Eq (DMTypeOf k) where
 
 
 
--- instance Ord (DMTypeOf ClipKind) where
+--instance Ord (DMTypeOf ClipKind) where
+instance Ord (DMTypeOf NormKind) where
 
 --------------------
 -- 3. Additional Notation
@@ -536,11 +537,14 @@ data JuliaType =
     | JTBool
     | JTInt
     | JTReal
+    | JTData
     | JTFunction
     | JTPFunction
     | JTTuple [JuliaType]
     | JTVector JuliaType
     | JTMatrix JuliaType
+    | JTMetricVector JuliaType (DMTypeOf NormKind)
+    | JTMetricMatrix JuliaType (DMTypeOf NormKind)
     | JTModel
     | JTGrads
   deriving (Generic, Eq, Ord)
@@ -558,6 +562,8 @@ instance Show JuliaType where
   show (JTTuple as) = "Tuple{" ++ (intercalate "," (show <$> as)) ++ "}"
   show (JTVector t) = "Vector{<:" ++ show t ++ "}"
   show (JTMatrix t) = "Matrix{<:" ++ show t ++ "}"
+  show (JTMetricVector t nrm) = "MetricVector(" ++ show t ++ "," ++ show nrm ++ ")"
+  show (JTMetricMatrix t nrm) = "MetricMatrix(" ++ show t ++ "," ++ show nrm ++ ")"
   show (JTModel) = "DMModel"
   show (JTGrads) = "DMGrads"
   show (JTBot) = "Union{}"

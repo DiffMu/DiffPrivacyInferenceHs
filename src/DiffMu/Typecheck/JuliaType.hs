@@ -39,11 +39,8 @@ juliatypes (Numeric (TVar _)) = [JTInt, JTReal]
 juliatypes DMInt = [JTInt]
 juliatypes DMReal = [JTReal]
 juliatypes (DMData) = [JTInt, JTReal]
-juliatypes (DMVec _ _ _ τ) = (juliatypesInContainer JTVector τ)
-juliatypes (DMMat _ _ _ _ τ) = (juliatypesInContainer JTMatrix τ)
 juliatypes (DMGrads _ _ _ _) = [JTGrads]
 juliatypes (DMModel _) = [JTModel]
-juliatypes (DMContainer _ _ _ _ τ) = JTGrads : ((juliatypesInContainer JTVector τ) ++ (juliatypesInContainer JTMatrix τ))
 juliatypes (TVar x) = [JTBot] -- TVars fit everywhere
 juliatypes (Num t c) = juliatypes t
 juliatypes (_ :->: _) = [JTFunction]
@@ -55,6 +52,10 @@ juliatypes (DMTup xs) =
   in f <$> jss
 juliatypes (Fun ((τ :@ _):_)) = juliatypes τ -- TODO i am lazy and assume that the list is homogeneous. see issue #161
 juliatypes (NoFun τ) = juliatypes τ
+-- matrices etc are not mapped to the version with type annotation, as the metric annotations are just aliases for regular julia types
+juliatypes (DMVec _ _ _ τ) = (juliatypesInContainer JTVector τ)
+juliatypes (DMMat _ _ _ _ τ) = (juliatypesInContainer JTMatrix τ)
+juliatypes (DMContainer _ _ _ _ τ) = JTGrads : ((juliatypesInContainer JTVector τ) ++ (juliatypesInContainer JTMatrix τ))
 juliatypes τ = error $ "juliatypes(" <> show τ <> ") not implemented."
 
 juliatypesInContainer constr t = map constr (juliatypes t)
@@ -95,9 +96,20 @@ createDMType (JTVector t) = do
   clp <- newVar
   n <- newVar
   return (DMVec nrm clp n dt)
+createDMType (JTMetricVector t nrm) = do
+  dt <- createDMTypeNum t
+  clp <- newVar
+  n <- newVar
+  return (DMVec nrm clp n dt)
 createDMType (JTMatrix t) = do
   dt <- createDMTypeNum t
   nrm <- newVar
+  clp <- newVar
+  n <- newVar
+  m <- newVar
+  return (DMMat nrm clp m n dt)
+createDMType (JTMetricMatrix t nrm) = do
+  dt <- createDMTypeNum t
   clp <- newVar
   n <- newVar
   m <- newVar

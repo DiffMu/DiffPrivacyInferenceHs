@@ -202,7 +202,14 @@ pJuliaType (JSym name) = case name of
     "DMGrads"         -> pure JTGrads
     _                 -> jParseError ("Unsupported julia type " <> show name)
 pJuliaType (JCurly (name : args)) = pJuliaCurly (name:args)
+pJuliaType (JCall [JSym "MetricMatrix", t, n]) = JTMetricMatrix <$> pJuliaType t <*> pNorm n
+pJuliaType (JCall [JSym "MetricVector", t, n]) = JTMetricVector <$> pJuliaType t <*> pNorm n
 pJuliaType t = jParseError ("Expected a julia type, got " <> show t)
+
+pNorm (JSym "L1") = pure L1
+pNorm (JSym "L2") = pure L2
+pNorm (JSym "LInf") = pure LInf
+pNorm t = jParseError ("Expected a Norm (L1, L2 or LInf), got " <> show t)
 
 pJuliaSubtype (JSubtype [t]) = pJuliaType t
 pJuliaSubtype (JSubtype t) = jParseError ("Invalid subtype statement " <> show t)
