@@ -17,6 +17,11 @@ newlineIndentIfLong xs = case '\n' `elem` xs of
   False -> xs
   True -> "\n" <> indent xs
 
+parenIfMultiple :: String -> String
+parenIfMultiple xs = case ' ' `elem` xs of
+  False -> xs
+  True -> "(" <> xs <> ")"
+
 parenIndent :: String -> String
 parenIndent s = "\n(\n" <> unlines (fmap ("  " <>) (lines s)) <> ")"
 

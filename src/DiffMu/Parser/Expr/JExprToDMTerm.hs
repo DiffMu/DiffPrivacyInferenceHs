@@ -81,7 +81,7 @@ pSingle e = case e of
                  JETrue -> pure $ DMTrue
                  JEFalse -> pure $ DMFalse
                  JEReal r -> pure $ Sng r JTReal
-                 JESymbol s -> return  (Extra (ProcVarTerm ((UserProcVar s) ::- JTAny)))
+                 JESymbol s -> return  (Extra (ProcVarTerm (UserProcVar s)))
                  JETup elems -> (Tup <$> (mapM pSingle_Loc elems))
                  JERef name refs -> pJRef name refs
                  JECall name args -> pJCall name args
@@ -164,12 +164,12 @@ pArgRel arg = case arg of
 pJLam args body = do
                    dargs <- mapM pArg args
                    dbody <- pSingle_Loc body
-                   return (Extra (ProcLam dargs dbody))
+                   return (Extra (ProcLam dargs JTAny dbody))
 
 pJLamStar args body = do
                        dargs <- mapM pArgRel args
                        dbody <- pSingle_Loc body
-                       return (Extra (ProcLamStar dargs dbody))
+                       return (Extra (ProcLamStar dargs JTAny dbody))
 
 
 
@@ -204,8 +204,8 @@ pJLet assignee assignment = do
                    dasgmt <- pSingle_Loc assignment
                    exitAssignment
                    case assignee of
-                        JEHole     -> (\p -> Extra (ProcSLetBase PureLet (p ::- JTAny) dasgmt)) <$> newProcVar "hole"
-                        JESymbol s -> return (Extra (ProcSLetBase PureLet ((UserProcVar s) ::- JTAny) dasgmt))
+                        JEHole     -> (\p -> Extra (ProcSLetBase PureLet p dasgmt)) <$> newProcVar "hole"
+                        JESymbol s -> return (Extra (ProcSLetBase PureLet (UserProcVar s) dasgmt))
                         JETypeAnnotation _ _ -> parseError "Type annotations on variables are not supported."
                         JENotRelevant _ _    -> parseError "Type annotations on variables are not supported."
                         _                    -> parseError ("Invalid assignee " <> (show assignee) <> ", must be a variable.")
@@ -222,8 +222,8 @@ pJTLet assignees assignment = let
                     _ -> parseError ("Invalid number of arguments for sample, namely " <> (show (length args)) <> " instead of 2.")
                     
    -- make sure that all assignees are simply symbols
-   ensureSymbol (JESymbol s) = return ((UserProcVar s) ::- JTAny)
-   ensureSymbol JEHole = (::- JTAny) <$> newProcVar "hole"
+   ensureSymbol (JESymbol s) = return ((UserProcVar s))
+   ensureSymbol JEHole = newProcVar "hole"
    ensureSymbol (JETypeAnnotation _ _) = parseError "Type annotations on variables are not supported."
    ensureSymbol (JENotRelevant _ _) = parseError "Type annotations on variables are not supported."
    ensureSymbol x = parseError ("Invalid assignee " <> (show x) <> ", must be a variable.")
@@ -481,7 +481,7 @@ pJCall (JESymbol (Symbol sym)) args = do
     (sym, args) -> do
         inside <- use outerFuncNames
         case ((Symbol sym) `elem` inside) of
-           False -> (Apply (Located myloc (Extra (ProcVarTerm ((UserProcVar (Symbol sym)) ::- JTAny)))) <$> mapM pSingle_Loc args)
+           False -> (Apply (Located myloc (Extra (ProcVarTerm (UserProcVar (Symbol sym))))) <$> mapM pSingle_Loc args)
            True -> parseError $ "Recursive call of " <> show sym <> " is not permitted."
 
 -- all other terms turn into calls

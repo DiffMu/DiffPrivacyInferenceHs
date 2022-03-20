@@ -143,16 +143,16 @@ transformLets reqc (Located l_term (term)) = do
 
   case term of
 
-   SLetBase PureLet (x :- t) body tail -> do
+   SLetBase PureLet x body tail -> do
        tbody <- handleAnyTerm_Loc body
        cbody <- getColor
        case cbody of
             SensitivityK -> do
                 ttail <- transformLets_Loc reqc tail
-                return (Located l_term (SLetBase PureLet (x :- t) tbody ttail))
+                return (Located l_term (SLetBase PureLet x tbody ttail))
             PrivacyK -> do
                 ttail <- handlePrivTerm_Loc tail
-                return (Located l_term (SLetBase BindLet (x :- t) tbody ttail))
+                return (Located l_term (SLetBase BindLet x tbody ttail))
 
    TLetBase PureLet ns body tail -> do
        tbody <- handleAnyTerm_Loc body
@@ -169,16 +169,16 @@ transformLets reqc (Located l_term (term)) = do
 --        tt <- handleAnyTerm t
 --        return (Reorder σ tt)
 
-   Lam args body -> do
+   Lam args ret body -> do
        pushFunctionArgs args
        tbody <- handleSensTerm_Loc body
-       return (Located l_term (Lam args tbody))
+       return (Located l_term (Lam args ret tbody))
 
-   LamStar args body -> do
+   LamStar args ret body -> do
        pushFunctionArgsRel args
        fn <- use functionNames
        tbody <- handlePrivTerm_Loc body
-       retSens (LamStar args tbody) -- while the body is a priv term, the LamStar is a sens term
+       retSens (LamStar args ret tbody) -- while the body is a priv term, the LamStar is a sens term
 
    TLetBase SampleLet ns body tail -> do
        tbody <- handleSensTerm_Loc body
@@ -186,14 +186,14 @@ transformLets reqc (Located l_term (term)) = do
        setColor PrivacyK
        return (Located l_term (TLetBase SampleLet ns tbody ttail))
 
-   FLet name (Located l (LamStar args body)) tail -> do
+   FLet name (Located l (LamStar args ret body)) tail -> do
        pushFunction name -- collect privacy function names, all other functions are assumed to be sens functions
-       tf <- handleAnyTerm_Loc (Located l (LamStar args body))
+       tf <- handleAnyTerm_Loc (Located l (LamStar args ret body))
        ttail <- handleAnyTerm_Loc tail
        return (Located l_term (FLet name tf ttail))
 
-   FLet name (Located l (Lam args body)) tail -> do
-       tf <- handleAnyTerm_Loc (Located l (Lam args body))
+   FLet name (Located l (Lam args ret body)) tail -> do
+       tf <- handleAnyTerm_Loc (Located l (Lam args ret body))
        ttail <- handleAnyTerm_Loc tail
        return (Located l_term (FLet name tf ttail))
 
@@ -205,7 +205,7 @@ transformLets reqc (Located l_term (term)) = do
    Apply f xs -> do
        txs <- mapM handleSensTerm_Loc xs
        case getLocated f of
-            Var (fn :- _) -> do
+            Var fn -> do
                                     isP <- isPFunction fn
                                     case isP of
                                        True  -> retPriv (Apply f txs)

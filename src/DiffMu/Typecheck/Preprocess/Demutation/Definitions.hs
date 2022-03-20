@@ -278,8 +278,8 @@ $(makeLenses ''MFull)
 
 
 -- new variables
-newTeVarOfMut :: (MonadState MFull m) => Text -> m (TeVar)
-newTeVarOfMut hint = termVarsOfMut %%= (first GenTeVar . (newName hint))
+newTeVarOfMut :: (MonadState MFull m) => Text -> Maybe ProcVar -> m (TeVar)
+newTeVarOfMut hint original = termVarsOfMut %%= (first (\x -> GenTeVar x (UserTeVar <$> original)) . (newName hint))
 
 newScopeVar :: (MonadState MFull m) => Text -> m (ScopeVar)
 newScopeVar hint = scopeNames %%= (first ScopeVar . (newName hint))
@@ -448,7 +448,7 @@ cleanupVACtxAfterScopeEnd vaCtxBefore = do
 markMutated :: ProcVar -> MTC TeVar
 markMutated pv = do
   mv <- expectSingleMem =<< expectNotMoved pv
-  tevar <- newTeVarOfMut (T.pack $ show mv)
+  tevar <- newTeVarOfMut (T.pack $ show mv) (Just pv)
   let f ctx = do
         case getValue mv ctx of
           Nothing -> impossible $ "Wanted to mark the memvar " <> show mv <> " as mutated, but it was not in the mutctx."
@@ -711,10 +711,10 @@ getMemVarMutationStatus mv = do
 coequalizeTeVarMutTrace :: TeVarMutTrace -> TeVarMutTrace -> WriterT ([LocDemutDMTerm],[LocDemutDMTerm]) MTC TeVarMutTrace
 coequalizeTeVarMutTrace (TeVarMutTrace pv1 split1 ts1) (TeVarMutTrace pv2 split2 ts2) | and [ts1 == ts2, pv1 == pv2, split1 == split2] = pure $ TeVarMutTrace pv1 split1 ts1
 coequalizeTeVarMutTrace (TeVarMutTrace pv1 split1 ts1) (TeVarMutTrace pv2 split2 ts2)  = do
-  t3 <- newTeVarOfMut "phi"
-  let makeProj (Just pv) []     = pure $ Extra (DemutSLetBase PureLet (t3 :- JTAny) (notLocated $ Var (UserTeVar pv :- JTAny)))
+  t3 <- newTeVarOfMut "phi" Nothing
+  let makeProj (Just pv) []     = pure $ Extra (DemutSLetBase PureLet (t3) (notLocated $ Var (UserTeVar pv)))
       makeProj Nothing   []     = lift $ demutationError $ "While demutating phi encountered a branch where a proc-var-less memory location is mutated. This cannot be done."
-      makeProj _         (t:ts) = pure $ Extra (DemutSLetBase PureLet (t3 :- JTAny) (notLocated $ Var (t :- JTAny)))
+      makeProj _         (t:ts) = pure $ Extra (DemutSLetBase PureLet (t3) (notLocated $ Var (t)))
 
   proj1 <- makeProj pv1 ts1 
   proj2 <- makeProj pv2 ts2
@@ -829,7 +829,7 @@ moveTypeAsTerm = \case
   TupleMove mts -> do
     terms <- mapM moveTypeAsTerm_Loc mts
     pure $ (Tup terms)
-  SingleMove pv -> do tv <- procVarAsTeVar pv ; pure $ Var $ (tv :- JTAny)
+  SingleMove pv -> do tv <- procVarAsTeVar pv ; pure $ Var $ (tv)
   PhiMove cond (_,tt1) (_,tt2) -> return (Extra (DemutPhi cond tt1 tt2))
   RefMove pdt   -> pure pdt
   NoMove pdt    -> pure pdt

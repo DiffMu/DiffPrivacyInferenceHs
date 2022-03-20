@@ -102,7 +102,7 @@ checkTopLevelStatement (Extra (ProcBBLet v body)) = do
   return ()
 
 -- if we have something else top level
-checkTopLevelStatement (Extra (ProcSLetBase _ (v ::- vt) body)) = do
+checkTopLevelStatement (Extra (ProcSLetBase _ v body)) = do
   checkNonTopLevelBB body
 
   (TopLevelInformation bbvars glvars) <- use tlinfo
@@ -133,7 +133,7 @@ checkTopLevelStatement (Extra (ProcTLetBase _ (vs) body)) = do
 
   (TopLevelInformation bbvars glvars) <- use tlinfo
 
-  let letvars = [v | v ::- _ <- vs]
+  let letvars = vs
 
   let checkname v = case v `elem` (bbvars) of
         True -> throwUnlocatedError (BlackBoxError $ "Found a black box definition for the name " <> show v <> ". This is not allowed since there already is a global variable with that name.")
