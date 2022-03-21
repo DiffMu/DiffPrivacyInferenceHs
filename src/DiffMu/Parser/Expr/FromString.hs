@@ -194,6 +194,7 @@ pJuliaType (JSym name) = case name of
     "Bool"            -> pure JTBool
     "Integer"         -> pure JTInt
     "Real"            -> pure JTReal
+    "Data"            -> pure JTData
     "Function"        -> pure JTFunction
     "PrivacyFunction" -> pure JTPFunction
     "Vector"          -> pure (JTVector JTAny)
@@ -204,6 +205,7 @@ pJuliaType (JSym name) = case name of
 pJuliaType (JCurly (name : args)) = pJuliaCurly (name:args)
 pJuliaType (JCall [JSym "MetricMatrix", t, n]) = JTMetricMatrix <$> pJuliaType t <*> pNorm n
 pJuliaType (JCall [JSym "MetricVector", t, n]) = JTMetricVector <$> pJuliaType t <*> pNorm n
+pJuliaType (JCall [JSym "MetricGradient", t, n]) = JTMetricGradient <$> pJuliaType t <*> pNorm n
 pJuliaType t = jParseError ("Expected a julia type, got " <> show t)
 
 pNorm (JSym "L1") = pure L1

@@ -289,7 +289,7 @@ checkSen' scope (Located l (BBApply app args cs k)) =
       let τ = checkSens scope arg
       τ' <- τ
       s <- newVar
-      mscale s -- all args get infinite sensitivity
+      mscale s -- all args get a sensitivity scalar that will be set to inf except if a very special case holds
       return (τ', s)
 
     checkCap :: TeVar -> TC ()
@@ -302,20 +302,85 @@ checkSen' scope (Located l (BBApply app args cs k)) =
                                setVarS c (WithRelev NotRelevant (τ :@ SensitivityAnnotation inftyS))
                                return ()
 
+    -- find out if the (LInf,Data)-trick can be applied. That is, all functions from (*,Data)-containers to (LInf,Data)-vectors
+    -- are 1-sensitive. So if the return type is an (LInf,Data)-vector (or gradient), we can have a constraint on the arguments
+    -- that sets the sensitivity to 1 in case they turn out to be (*,Data).
+    checkBBKind :: BBKind EmptyExtension -> TC (DMMain, Bool)
+    checkBBKind a = let
+
+        err jt form = throwUnlocatedError $ TypeMismatchError $ "The type " <> show jt <> " is not allowed as return type of this black boxe call.\n"
+                                                                <> form <> "See documentation of `unbox` for more information."
+                                                            
+        -- check the user-given return type dimension and make sure it's const
+        checkSize pdt = do
+           pdt_actual_ty <- checkSens scope pdt <* mscale zeroId
+           pdt_val <- newVar
+           pdt_ty <- newVar
+           unify () pdt_actual_ty (NoFun $ Numeric $ Num pdt_ty (Const pdt_val))
+           return pdt_val
+           
+      in case a of
+         BBSimple jt -> case jt `elem` [JTInt, JTReal, JTData, JTBool] of
+                             True -> do
+                                 tt <- createDMType jt
+                                 return (NoFun tt, False)
+                             False -> err jt "It must be either one of [Integer, Real, Bool, Data] or you need to specify the size.\n"
+
+         BBVecLike jt pdt -> do
+    
+           pdt_val <- checkSize pdt -- typecheck the length term
+
+           tt <- createDMType jt -- get return dmtype
+           case tt of -- set dimension, return return type
+                DMMat _ _ _ _ _ -> err jt ("you gave 1 dim but matrix"<>show tt)
+                DMContainer k nrm clp d et -> do
+                    unify (l :\\: "Setting black box return container dimension") d pdt_val
+                    let niceType = (NoFun $ DMContainer k LInf clp d (NoFun $ Numeric $ Num DMData NonConst))
+                    case (nrm, et) of -- distinguish the container cases where we can apply the (LInf,Data)-trick
+                         (LInf, DMAny)   -> return (niceType, True)
+                         (TVar _, DMAny) -> return (niceType, True)
+                         (LInf, (NoFun (Numeric (Num DMData NonConst))))   -> return (niceType, True)
+                         (TVar _, (NoFun (Numeric (Num DMData NonConst)))) -> return (niceType, True)
+                         _ -> return (NoFun tt, False)
+                DMModel d -> do
+                    unify (l :\\: "Setting black box return model dimension") d pdt_val
+                    return (NoFun tt, False)
+                _ -> err jt "It must be one of [Vector, DMModel, DMGrads, MetricVector, MetricGradient].\n"
+                
+         BBMatrix jt pdt1 pdt2 -> do
+
+           (pdt1_val,pdt2_val) <- msumTup (checkSize pdt1, checkSize  pdt2) -- typecheck the size terms
+           
+           tt <- createDMType jt -- get return dmtype
+           case tt of
+               DMMat nrm clp rws cls et -> do -- set dimensions, return best return type
+                   unify (l :\\: "Setting black box return matrix number of rows") rws pdt1_val
+                   unify (l :\\: "Setting black box return matrix number of cols") cls pdt2_val
+                   return (NoFun tt, False)
+               _ -> err jt "It must be a Matrix.\n"
+
+
     margs = checkArg <$> args
     mf = checkSens scope app
 
   in do
     -- we merge the different TC's into a single result TC
     let caps = checkCap <$> cs
-    (τ_box :: DMMain, argτs, _, τ_ret) <- msum4Tup (mf , msumS margs, msumS caps, checkBBKind scope k) -- sum args and f's context
-    -- the return type is constructed from the bbkind
-    -- τ_ret <- checkBBKind scope k
-    logForce $ "blackbox return tyoe is " <> show τ_ret
+    (τ_box :: DMMain, argτs, _, (τ_ret, isNice)) <- msum4Tup (mf , msumS margs, msumS caps, checkBBKind k) -- sum args and f's context
 
     addConstraint (Solvable (IsBlackBox (τ_box, fst <$> argτs))) -- constraint makes sure the signature matches the args
        (l :\\: "The signature of function " :<>: app :<>: " matches the arguments.")
-    mapM (\s -> addConstraintNoMessage (Solvable (IsBlackBoxReturn (τ_ret, s)))) argτs -- constraint sets the sensitivity to the right thing
+
+    -- constraint sets the sensitivity to the right thing
+    case isNice of
+        True -> mapM (\s -> addConstraintNoMessage (Solvable (IsBlackBoxReturn s))) argτs >> return () -- trick might by applicable
+        False -> -- (LInf,Data) trick is not applicable, set arg sensitivity to inf
+          let
+            unifyBad (_, s) = unify (l :\\: "Black box return is not a (LInf,Data)-container type, setting all args sensitivity to inf") s inftyS
+          in do
+            mapM unifyBad argτs
+            return ()
+        
     return τ_ret
 
 
@@ -930,6 +995,7 @@ checkSen' scope (Located l (VIndex v i))  = do
       let dv = checkSens scope v -- check the vector
 
       (τv, _) <- msumTup (dv, dx)
+
 
       -- variables for element type, norm and clip parameters and dimension
       τ <- newVar
@@ -1829,70 +1895,5 @@ checkPri' scope (Located l (PFoldRows f acc m₁ m₂)) = do
 
 
 checkPri' scope t = throwUnlocatedError (TermColorError PrivacyK (showPretty $ getLocated t))
-
-
-
-
-
----------------------------------------------------------
--- julia type conversion for black boxes
-
-checkBBKind :: DMScope -> BBKind EmptyExtension -> TC DMMain
-checkBBKind scope a = let
- getFloat :: TC (DMTypeOf NumKind)
- getFloat = do
-                v <- newVar
-                addConstraintNoMessage (Solvable (IsFloat $ NoFun (Numeric v)))
-                return v
- in case a of
-  BBSimple jt -> case jt of
-    JTInt  -> return $ NoFun $ Numeric $ Num DMInt NonConst
-    JTBool -> return $ NoFun $ DMBool
-    JTReal -> do v <- getFloat; return $ NoFun $ Numeric $ v
-    _      -> throwUnlocatedError $ TypeMismatchError $ "The type " <> show jt <> " is not allowed as return type of black boxes.\n"
-                                              <> "You can only have annotations of the following form:\n"
-                                              <> "[redacted]"
-  BBVecLike jt pdt -> do
-    -- typecheck the term 
-    pdt_actual_ty <- checkSens scope pdt <* mscale zeroId
-
-    -- make sure that it is const
-    pdt_val <- newVar
-    pdt_ty <- newVar
-    unify () pdt_actual_ty (NoFun $ Numeric $ Num pdt_ty (Const pdt_val))
-
-    -- look what type was requested in form of a julia type
-    case jt of
-      JTVector JTInt -> do n <- newVar ; return $ NoFun $ DMVec n U pdt_val (NoFun $ Numeric $ Num DMInt NonConst)
-      JTVector JTBool -> do n <- newVar ; return $ NoFun $ DMVec n U pdt_val (NoFun $ DMBool)
-      JTVector JTReal -> do n <- newVar ; r <- getFloat; return $ NoFun $ DMVec n U pdt_val (NoFun $ Numeric r)
-      JTModel -> return $ NoFun $ DMModel pdt_val
-      JTGrads -> do n <- newVar; r <- getFloat;  return $ NoFun $ DMGrads n U pdt_val (NoFun $ Numeric $ r)
-      _ -> throwUnlocatedError $ TypeMismatchError $ "The type " <> show jt <> " is not allowed as return type of black boxes.\n"
-                                              <> "You can only have annotations of the following form:\n"
-                                              <> "[redacted]"
-
-
-  BBMatrix jt pdt1 pdt2 -> do
-    -- typecheck the terms
-    (pdt1_actual_ty,pdt2_actual_ty) <- msumTup (checkSens scope pdt1, checkSens scope pdt2) <* mscale zeroId
-
-    -- make sure they are is const
-    pdt1_val <- newVar
-    pdt1_ty <- newVar
-    unify () pdt1_actual_ty (NoFun $ Numeric $ Num pdt1_ty (Const pdt1_val))
-
-    pdt2_val <- newVar
-    pdt2_ty <- newVar
-    unify () pdt2_actual_ty (NoFun $ Numeric $ Num pdt2_ty (Const pdt2_val))
-
-    -- look what type was requested in form of a julia type
-    case jt of
-      JTMatrix JTBool -> do n <- newVar ; return $ NoFun $ DMMat n U pdt1_val pdt2_val (NoFun $ DMBool)
-      JTMatrix JTInt -> do n <- newVar ; return $ NoFun $ DMMat n U pdt1_val pdt2_val (NoFun $ Numeric $ Num DMInt NonConst)
-      JTMatrix JTReal -> do n <- newVar ; r <- getFloat; return $ NoFun $ DMMat n U pdt1_val pdt2_val (NoFun $ Numeric $ r)
-      _ -> throwUnlocatedError $ TypeMismatchError $ "The type " <> show jt <> " is not allowed as return type of black boxes.\n"
-                                              <> "You can only have annotations of the following form:\n"
-                                              <> "[redacted]"
 
 

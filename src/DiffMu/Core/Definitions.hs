@@ -422,6 +422,7 @@ instance Eq (DMTypeOf k) where
 
 --instance Ord (DMTypeOf ClipKind) where
 instance Ord (DMTypeOf NormKind) where
+  a <= b = (show a) <= (show b)
 
 --------------------
 -- 3. Additional Notation
@@ -545,6 +546,7 @@ data JuliaType =
     | JTMatrix JuliaType
     | JTMetricVector JuliaType (DMTypeOf NormKind)
     | JTMetricMatrix JuliaType (DMTypeOf NormKind)
+    | JTMetricGradient JuliaType (DMTypeOf NormKind)
     | JTModel
     | JTGrads
   deriving (Generic, Eq, Ord)
@@ -557,6 +559,7 @@ instance Show JuliaType where
   show JTBool = "Bool"
   show JTInt = "Integer"
   show JTReal = "Real"
+  show JTData = "Data"
   show JTFunction = "Function"
   show JTPFunction = "PrivacyFunction"
   show (JTTuple as) = "Tuple{" ++ (intercalate "," (show <$> as)) ++ "}"
@@ -564,6 +567,7 @@ instance Show JuliaType where
   show (JTMatrix t) = "Matrix{<:" ++ show t ++ "}"
   show (JTMetricVector t nrm) = "MetricVector(" ++ show t ++ "," ++ show nrm ++ ")"
   show (JTMetricMatrix t nrm) = "MetricMatrix(" ++ show t ++ "," ++ show nrm ++ ")"
+  show (JTMetricGradient t nrm) = "MetricGradient(" ++ show t ++ "," ++ show nrm ++ ")"
   show (JTModel) = "DMModel"
   show (JTGrads) = "DMGrads"
   show (JTBot) = "Union{}"

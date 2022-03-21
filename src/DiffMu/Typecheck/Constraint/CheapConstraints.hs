@@ -285,7 +285,7 @@ instance Solve MonadDMTC IsBlackBox (DMMain, [DMMain]) where
 
 newtype IsBlackBoxReturn a = IsBlackBoxReturn a deriving Show
 
-instance FixedVars TVarOf (IsBlackBoxReturn ((DMTypeOf MainKind, (DMTypeOf MainKind, Sensitivity)))) where
+instance FixedVars TVarOf (IsBlackBoxReturn (DMTypeOf MainKind, Sensitivity)) where
   fixedVars (IsBlackBoxReturn (b, args)) = []
 
 instance TCConstraint IsBlackBoxReturn where
@@ -293,29 +293,19 @@ instance TCConstraint IsBlackBoxReturn where
   runConstr (IsBlackBoxReturn c) = c
 
 
-instance Solve MonadDMTC IsBlackBoxReturn (DMMain, (DMMain, Sensitivity)) where
-    solve_ Dict _ name (IsBlackBoxReturn (ret, (argt, args))) =
+instance Solve MonadDMTC IsBlackBoxReturn (DMMain, Sensitivity) where
+    solve_ Dict _ name (IsBlackBoxReturn (argt, args)) = do
      let discharge s = do
                           unifyFromName name args s
                           dischargeConstraint @MonadDMTC name
-     in case ret of
+     case argt of
           TVar _ -> pure ()
           NoFun (TVar _) -> pure ()
           NoFun (DMContainer _ _ _ _ (TVar _)) -> pure ()
           NoFun (DMContainer _ _ _ _ (NoFun (TVar _))) -> pure ()
-          
-          NoFun (DMContainer kind nret cret dret (NoFun (Numeric tret))) -> do
-              unifyFromName name ret (NoFun (DMContainer kind LInf U dret (NoFun (Numeric (Num DMData NonConst)))))
-              case argt of
-                   TVar _ -> pure ()
-                   NoFun (TVar _) -> pure ()
-                   NoFun (DMContainer _ _ _ _ (TVar _)) -> pure ()
-                   NoFun (DMContainer _ _ _ _ (NoFun (TVar _))) -> pure ()
-                   NoFun (DMContainer _ _ _ _ (NoFun (Numeric targ))) -> do
-                       unifyFromName name targ (Num DMData NonConst)
-                       discharge oneId
-                   _ -> discharge inftyS
-                   
+          NoFun (DMContainer _ _ _ _ (NoFun (Numeric targ))) -> do
+              unifyFromName name targ (Num DMData NonConst)
+              discharge oneId
           _ -> discharge inftyS
 
 {-

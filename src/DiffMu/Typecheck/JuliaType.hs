@@ -35,11 +35,10 @@ default (Text)
 -- potentially match any method.
 juliatypes :: DMTypeOf k -> [JuliaType]
 juliatypes (Numeric (Num t c)) = juliatypes t
-juliatypes (Numeric (TVar _)) = [JTInt, JTReal]
+juliatypes (Numeric (TVar _)) = [JTInt, JTReal, JTData]
 juliatypes DMInt = [JTInt]
 juliatypes DMReal = [JTReal]
-juliatypes (DMData) = [JTInt, JTReal]
-juliatypes (DMGrads _ _ _ _) = [JTGrads]
+juliatypes DMData = [JTData]
 juliatypes (DMModel _) = [JTModel]
 juliatypes (TVar x) = [JTBot] -- TVars fit everywhere
 juliatypes (Num t c) = juliatypes t
@@ -55,6 +54,7 @@ juliatypes (NoFun τ) = juliatypes τ
 -- matrices etc are not mapped to the version with type annotation, as the metric annotations are just aliases for regular julia types
 juliatypes (DMVec _ _ _ τ) = (juliatypesInContainer JTVector τ)
 juliatypes (DMMat _ _ _ _ τ) = (juliatypesInContainer JTMatrix τ)
+juliatypes (DMGrads _ _ _ _) = [JTGrads]
 juliatypes (DMContainer _ _ _ _ τ) = JTGrads : ((juliatypesInContainer JTVector τ) ++ (juliatypesInContainer JTMatrix τ))
 juliatypes τ = error $ "juliatypes(" <> show τ <> ") not implemented."
 
@@ -67,26 +67,23 @@ juliatypesInContainer constr t = map constr (juliatypes t)
 createDMTypeBaseNum :: MonadDMTC t => JuliaType -> t (DMTypeOf BaseNumKind)
 createDMTypeBaseNum (JTInt) = pure DMInt
 createDMTypeBaseNum (JTReal) = pure DMReal
+createDMTypeBaseNum (JTData) = pure DMData
 createDMTypeBaseNum (t) = pure DMAny
 
 -- get a NumKind DMType corresponding to the given JuliaType
 createDMTypeNum :: MonadDMTC t => JuliaType -> t DMMain
 createDMTypeNum (JTInt) = pure (NoFun (Numeric (Num DMInt NonConst)))
-createDMTypeNum (JTReal)  = do
-    v <- newVar -- could be data!
-    addConstraintNoMessage (Solvable (IsFloat $ NoFun (Numeric v)))
-    return (NoFun (Numeric v))
+createDMTypeNum (JTReal) = pure (NoFun (Numeric (Num DMReal NonConst)))
+createDMTypeNum (JTData) = pure (NoFun (Numeric (Num DMData NonConst)))
 createDMTypeNum (t) = pure DMAny
 
 -- get the DMType corresponding to a given JuliaType
 -- used to make DMType subtyping constraints for annotated things
 createDMType :: MonadDMTC t => JuliaType -> t DMType
-createDMType (JTInt) = do
-  return (Numeric (Num DMInt NonConst))
-createDMType (JTReal) = do
-  v <- newVar
-  addConstraintNoMessage (Solvable (IsFloat $ NoFun (Numeric v)))
-  return (Numeric v)
+createDMType (JTBool) = pure DMBool
+createDMType (JTInt) = pure (Numeric (Num DMInt NonConst))
+createDMType (JTReal) = pure (Numeric (Num DMReal NonConst))
+createDMType (JTData) = pure (Numeric (Num DMData NonConst))
 createDMType (JTTuple ts) = do
   dts <- mapM createDMType ts
   return (DMTup (dts))
@@ -122,6 +119,11 @@ createDMType (JTGrads) = do
   clp <- newVar
   n <- newVar
   return (DMGrads nrm clp n DMAny)
+createDMType (JTMetricGradient t nrm) = do
+  dt <- createDMTypeNum t
+  clp <- newVar
+  n <- newVar
+  return (DMGrads nrm clp n dt)
 createDMType JTAny = return DMAny
 createDMType (t)  = throwUnlocatedError (TypeMismatchError $ "expected " <> show t <> " to not be a function.")
 
@@ -170,33 +172,7 @@ instance PartialOrd JuliaSignature where
   leq (JuliaSignature a) (JuliaSignature b) = and (zipWith leq a b)
 
 
-
-
---------------------------------------------------
--- real or data
---
-
-newtype IsFloat a = IsFloat a deriving Show
-
-instance FixedVars TVarOf (IsFloat DMMain) where
-    fixedVars (IsFloat _) = []
-
-instance TCConstraint IsFloat where
-    constr = IsFloat
-    runConstr (IsFloat a) = a
-
-instance Solve MonadDMTC IsFloat DMMain where
-    solve_ Dict _ name (IsFloat a) =
-        case a of
-             TVar _ -> pure ()
-             NoFun (TVar _) -> pure ()
-             NoFun (Numeric (TVar _)) -> pure ()
-             (NoFun (Numeric (Num (TVar _) _))) -> pure ()
-             (NoFun (Numeric (Num DMReal _))) -> dischargeConstraint name
-             (NoFun (Numeric (Num DMData _))) -> dischargeConstraint name
-             _ -> failConstraint name
-
---------------------------------------------------
+----------------------------------------------------------------
 -- Things that should be functions
 
 instance FixedVars TVarOf (IsFunction (AnnotationKind, DMTypeOf MainKind)) where

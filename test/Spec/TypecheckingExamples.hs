@@ -195,13 +195,13 @@ testSample pp = describe "Sample" $ do
     let ex = "foo(d::Vector) :: BlackBox() = d \n\
               \function bar(data, b, x::Integer) :: Priv() \n\
               \  D, L = sample(b, data, data) \n\
-              \  gs = unbox(foo(D[1,:]), Vector{<:Real}, length(D[1,:])) \n\
+              \  gs = unbox(foo(D[1,:]), Vector{<:Data}, length(D[1,:])) \n\
               \  clip!(L2,gs) \n\
               \  norm_convert!(gs) \n\
               \  gaussian_mechanism!(2, 0.2, 0.3, gs)  \n\
               \  clone(x * gs) \n\
               \end"
-        ty = "Fun([([NoFun(Matrix<n: L∞, c: τ_39>[s_14 × s_23](NoFun(Num(Data[--])))) @ (0.4⋅(1 / s_14)⋅s_21,0.3⋅(1 / s_14)⋅s_21),NoFun(Num(Int[s_21 ©])) @ (∑∅,∑∅),NoFun(Num(Int[--])) @ (∞,∞)] ->* NoFun(Vector<n: L∞, c: U>[s_23](NoFun(Num(Real[--]))))) @ Just [Any,Any,Integer]])"
+        ty = "Fun([([NoFun(Matrix<n: LInf, c: τ_39>[s_14 × s_24](NoFun(Num(Data[--])))) @ (0.4⋅s_22⋅(1 / s_14),0.3⋅s_22⋅(1 / s_14)),NoFun(Num(Int[s_22 ©])) @ (∑∅,∑∅),NoFun(Num(Int[--])) @ (∞,∞)] ->* NoFun(Vector<n: LInf, c: U>[s_24](NoFun(Num(Real[--]))))) @ Just [Any,Any,Integer]])"
         cs = ""
     parseEvalString_l_customCheck pp "" ex (ty, cs) (pure $ Right ())
 
