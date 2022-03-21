@@ -14,6 +14,8 @@ import qualified Data.Text as T
 
 import Debug.Trace
 
+default (Text)
+
 type FLetTC = LightTC Location_PrePro_FLetReorder ()
 
 findDuplicates :: Eq a => [a] -> [a]
@@ -27,8 +29,8 @@ findDuplicates = findDuplicates' []
 
 collectAllFLets :: LocDMTerm -> FLetTC LocDMTerm
 collectAllFLets (Located l (FLet var def rest)) = do
-  let FindFLetsResult defs rest' = findFLets var rest
-      alldefs = ((l,def):defs)
+  FindFLetsResult defs rest' <- findFLets var rest [l]
+  let alldefs = ((l,def):defs)
 
   -- we derive the julia type from the term, appending the corresponding julia types to their definitions
   allsigs <- mapM (getJuliaSig . getLocated . snd) alldefs
@@ -71,18 +73,31 @@ data FindFLetsResult = FindFLetsResult
   , restOfTerm :: LocDMTerm
   }
 
-findFLets :: TeVar -> LocDMTerm -> FindFLetsResult
-findFLets target (Located l (FLet var def rest)) | target == var = let FindFLetsResult others rest' = findFLets target rest
-                                                                   in FindFLetsResult ((l,def):others) rest'
-findFLets target (Located l (FLet var def rest)) | otherwise     = let FindFLetsResult others rest' = findFLets target rest
-                                                                   in FindFLetsResult (others) (Located l (FLet var def rest'))
-findFLets target (Located l (SLet var def rest)) = let FindFLetsResult others rest' = findFLets target rest
-                                                   in FindFLetsResult (others) (Located l $ SLet var def rest')
-findFLets target (Located l (TLet var def rest)) = let FindFLetsResult others rest' = findFLets target rest
-                                                   in FindFLetsResult (others) (Located l $ TLet var def rest')
-findFLets target (Located l (BBLet var args rest)) = let FindFLetsResult others rest' = findFLets target rest
-                                                     in FindFLetsResult (others) (Located l $ BBLet var args rest')
-findFLets target t = FindFLetsResult [] t
+requireEmptyResult :: TeVar -> [SourceLocExt] -> FindFLetsResult -> FLetTC FindFLetsResult
+requireEmptyResult target l res@(FindFLetsResult [] _) = return res
+requireEmptyResult target l res@(FindFLetsResult others _) = throwError $ (WithContext (FLetReorderError $ "Non-sequential implementations for " <> show target)
+                                                                           (DMPersistentMessage (l :\\:
+                                                                                                 "" :\\:
+                                                                                                 "Found multiple implementations for the function" :<>: target :<>: "which are not strictly next to each other" :\\:
+                                                                                                 "" :\\:
+                                                                                                 "The Julia runtime reorders all implementations of a function in a given scope to be at the location of the first implementation." :\\:
+                                                                                                 "To mitigate any confusion about the order of statements, we do not allow implementations to be non-sequential." :\\:
+                                                                                                 "" :\\:
+                                                                                                 "Please put all definitions of" :<>: target :<>: "next to each other."
+                                                                                                )))
+
+findFLets :: TeVar -> LocDMTerm -> [SourceLocExt] -> FLetTC FindFLetsResult
+findFLets target (Located l (FLet var def rest)) ls | target == var = do FindFLetsResult others rest' <- findFLets target rest (l:ls)
+                                                                         return $ FindFLetsResult ((l,def):others) rest'
+findFLets target (Located l (FLet var def rest)) ls | otherwise     = do FindFLetsResult others rest' <- requireEmptyResult target (l:ls) =<< findFLets target rest (ls)
+                                                                         return $ FindFLetsResult (others) (Located l (FLet var def rest'))
+findFLets target (Located l (SLet var def rest)) ls = do FindFLetsResult others rest' <- requireEmptyResult target (l:ls) =<< findFLets target rest (ls)
+                                                         return $ FindFLetsResult (others) (Located l $ SLet var def rest')
+findFLets target (Located l (TLet var def rest)) ls = do FindFLetsResult others rest' <- requireEmptyResult target (l:ls) =<< findFLets target rest (ls)
+                                                         return $ FindFLetsResult (others) (Located l $ TLet var def rest')
+findFLets target (Located l (BBLet var args rest)) ls = do FindFLetsResult others rest' <- requireEmptyResult target (l:ls) =<< findFLets target rest (ls)
+                                                           return $ FindFLetsResult (others) (Located l $ BBLet var args rest')
+findFLets target t ls = return $ FindFLetsResult [] t
 
 
 getJuliaSig ::  ISing_DMLogLocation l => DMTerm -> LightTC l s JuliaSig

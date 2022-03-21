@@ -28,10 +28,8 @@ test21 pp = describe "issue 21 (FLet collection)" $ do
          \      x               \n\
          \  end                 "
 
-      intc c = NoFun(Numeric (Num DMInt (Const (constCoeff c))))
-      ty = Fun([([] :->: intc (Fin 2)) :@ Just []])
-
-  parseEval pp "example variant 1" ex_1 (pure ty)
+  -- This one has to fail since #139
+  parseEvalFail pp "example variant 1" ex_1 (FLetReorderError "")
 
   let ex_2 =
          "  function test()     \n\
