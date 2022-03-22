@@ -173,9 +173,8 @@ instance Solve MonadDMTC IsAdditiveNoiseResult (DMTypeOf MainKind, DMTypeOf Main
            τv <- newVar -- input matrix element type can be anything (as long as it's numeric)
 
            -- set in- and output types as given in the mgauss rule
-           -- input type gets a LessEqual so convert can happen implicitly if necessary
-           -- (convert is implemented as a special subtyping rule, see there)
-           addConstraintFromName name (Solvable(IsLessEqual(τin, (NoFun (DMContainer k L2 iclp n (NoFun (Numeric τv)))))))
+           -- input type gets a LessEqual so we can put Integer or Real (but not Data)
+           addConstraintFromName name (Solvable(IsLessEqual(τin, (NoFun (DMContainer k L2 iclp n (NoFun (Numeric (Num DMReal τv))))))))
            unifyFromName name τgauss (NoFun (DMContainer k LInf U n (NoFun (Numeric (Num DMReal NonConst)))))
 
            dischargeConstraint @MonadDMTC name
@@ -183,7 +182,7 @@ instance Solve MonadDMTC IsAdditiveNoiseResult (DMTypeOf MainKind, DMTypeOf Main
            τ <- newVar -- input type can be anything (as long as it's numeric)
 
            -- set in- and output types as given in the gauss rule
-           unifyFromName name τin (NoFun (Numeric τ))
+           addConstraintFromName name (Solvable(IsLessEqual(τin, (NoFun (Numeric (Num DMReal τ))))))
            unifyFromName name τgauss (NoFun (Numeric (Num DMReal NonConst)))
 
            dischargeConstraint @MonadDMTC name

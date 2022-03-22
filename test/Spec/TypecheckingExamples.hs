@@ -105,18 +105,18 @@ testPriv pp = describe "privacies" $ do
     let ret = "function f(x :: Integer) :: Priv() \n\
                \ x + x                 \n\
                \ end"
-        inv = "function g(x :: DMGrads) :: Priv() \n\
+        inv = "function g(x :: MetricGradient(Integer,L2)) :: Priv() \n\
                \ scale_gradient!(0.1, x) \n\
                \ gaussian_mechanism!(0.1, 0.1, 0.1, x)  \n\
                \ scale_gradient!(100, x) \n\
                \ return \n\
                \ end"
-        invv = "function g(x :: Vector) :: Priv() \n\
+        invv = "function g(x :: MetricVector(Integer,L2)) :: Priv() \n\
                \ x = 0.1 * x \n\
                \ gaussian_mechanism!(0.1, 0.1, 0.1, x)  \n\
                \ clone(200 * x) \n\
                \ end"
-        lap = "function g(x :: DMGrads) :: Priv() \n\
+        lap = "function g(x :: MetricGradient(Integer,L2)) :: Priv() \n\
                \    scale_gradient!(0.1, x) \n\
                \    laplacian_mechanism!(0.1, 0.1, x)  \n\
                \    scale_gradient!(100, x) \n\
@@ -128,24 +128,21 @@ testPriv pp = describe "privacies" $ do
         ty_i :: TC DMMain = do
             c <- newVar
             n <- newVar
-            nt <- newVar
-            let gradin = NoFun (DMGrads L2 c n (NoFun (Numeric nt)))
+            let gradin = NoFun (DMGrads L2 c n (NoFun (Numeric (Num DMInt NonConst))))
             let gradout = NoFun (DMGrads LInf U n (NoFun (Numeric real)))
-            return (Fun ([([gradin :@ (constCoeff (Fin 0.1), constCoeff (Fin 0.1))] :->*: gradout) :@ Just [JTGrads]]))
+            return (Fun ([([gradin :@ (constCoeff (Fin 0.1), constCoeff (Fin 0.1))] :->*: gradout) :@ Just [JTMetricGradient JTInt L2]]))
         ty_iv :: TC DMMain = do
             c <- newVar
             n <- newVar
-            nt <- newVar
-            let gradin = NoFun (DMVec L2 c n (NoFun (Numeric nt)))
+            let gradin = NoFun (DMVec L2 c n (NoFun (Numeric (Num DMInt NonConst))))
             let gradout = NoFun (DMVec LInf U n (NoFun (Numeric real)))
-            return (Fun ([([gradin :@ (constCoeff (Fin 0.1), constCoeff (Fin 0.1))] :->*: gradout) :@ Just [JTVector JTAny]]))
+            return (Fun ([([gradin :@ (constCoeff (Fin 0.1), constCoeff (Fin 0.1))] :->*: gradout) :@ Just [JTMetricVector JTInt L2]]))
         ty_l :: TC DMMain = do
             c <- newVar
             n <- newVar
-            nt <- newVar
-            let gradin = NoFun (DMGrads L2 c n (NoFun (Numeric (Num nt NonConst))))
+            let gradin = NoFun (DMGrads L2 c n (NoFun (Numeric (Num DMInt NonConst))))
             let gradout = NoFun (DMGrads LInf U n (NoFun (Numeric real)))
-            return (Fun ([([gradin :@ (constCoeff (Fin 0.1), constCoeff (Fin 0))] :->*: gradout) :@ Just [JTGrads]]))
+            return (Fun ([([gradin :@ (constCoeff (Fin 0.1), constCoeff (Fin 0))] :->*: gradout) :@ Just [JTMetricGradient JTInt L2]]))
     parseEval pp "return" ret (pure ty_r)
     parseEvalUnify pp "robust" inv (ty_i) -- this is issue #157
     parseEvalUnify pp "robust" invv (ty_iv)
