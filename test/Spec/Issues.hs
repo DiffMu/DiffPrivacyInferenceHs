@@ -167,7 +167,7 @@ test59 pp = describe "issue 59" $ do
 test60 pp = describe "issue 60" $ do
   let ex_1 = " function test()                  \n\
              \    function f(a)                 \n\
-             \        function h(b)             \n\
+             \        function h(b::Integer)    \n\
              \            a                     \n\
              \        end                       \n\
              \        function g(h,a)           \n\
@@ -349,7 +349,7 @@ test174 pp = describe "issue 174 (count function)" $ do
 
 
 test188 pp = describe "issue 188 (holes)" $ do
-  let ex_1 = "function testScale(_, x, xs)  \n\
+  let ex_1 = "function testScale(_, x::Integer, xs)  \n\
              \    _ = clone(x)              \n\
              \   (dim, _) = size(xs)        \n\
              \   dim + x                    \n\

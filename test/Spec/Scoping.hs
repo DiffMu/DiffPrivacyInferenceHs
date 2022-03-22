@@ -135,9 +135,8 @@ testScope04 pp = do
       intc c = NoFun(Numeric (Num DMInt (Const (constCoeff c))))
       ty = Fun([([] :->: intc (Fin 286)) :@ Just []])
 
-  -- parseEvalFail pp "04 (bad)" ex_bad (FLetReorderError "") -- JULIA EXCEPTION
-  parseEval pp "04 (good)" ex (pure ty)
-
+  parseEvalFail pp "04 (bad)" ex_bad (DemutationVariableAccessTypeError "")
+  parseEvalUnify_customCheck pp "04 (good)" ex (pure ty) (pure $ Right ())
 
 testScope05 pp = do
   let ex1 = "function test()        \n\

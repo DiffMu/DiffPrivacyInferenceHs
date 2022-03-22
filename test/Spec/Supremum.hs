@@ -147,7 +147,7 @@ testSupremum = do
       let check (TVar a, TVar b) | a == b = pure (Right ())
           check x                         = pure (Left x)
       (tc $ (sn test >>= check)) `shouldReturn` (Right (Right ()))
-
+{-  see issue #247
     it "solves 'max{a,Int} = b' since Int is bottom element" $ do
       let test :: TC _
           test = do
@@ -157,7 +157,7 @@ testSupremum = do
       let check (TVar a, TVar b) | a == b = pure (Right ())
           check x                         = pure (Left x)
       (tc $ (sn test >>= check)) `shouldReturn` (Right (Right ()))
-
+-}
     it "solves 'max{a,Real} = a' since input and output are the same" $ do
       let test :: TC _
           test = do
