@@ -239,8 +239,8 @@ pSymbol = (Symbol . T.pack) <$> (try (char ':' *> pIdentifier)
 pArgs :: [JTree] -> JEParseState [JExpr]
 pArgs args = let pArg arg = case arg of
                      JSym _ -> pTreeToJExpr arg
-                     JTypeAssign [s, JCall [JSym "NoData"]] -> JENotRelevant <$> pTreeToJExpr s <*> pure JTAny
-                     JTypeAssign [s, JCall [JSym "NoData", t]] -> JENotRelevant <$> pTreeToJExpr s <*> pJuliaType t
+                     JTypeAssign [s, JCall [JSym "Static"]] -> JENotRelevant <$> pTreeToJExpr s <*> pure JTAny
+                     JTypeAssign [s, JCall [JSym "Static", t]] -> JENotRelevant <$> pTreeToJExpr s <*> pJuliaType t
                      JTypeAssign [s, t] -> JETypeAnnotation <$> pTreeToJExpr s <*> pJuliaType t
                      JHole -> pure JEHole
                      _ -> jParseError ("Invalid function argument " <> show arg)

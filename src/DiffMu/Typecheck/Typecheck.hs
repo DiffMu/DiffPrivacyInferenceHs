@@ -237,7 +237,7 @@ checkSen' scope (Located l (LamStar xτs retτ body)) = do
                          pure ()
                      NotRelevant -> do
                                       addConstraint (Solvable (MakeConst τ))
-                                        (l :\\: "NoData LamStar argument " :<>: x :<>: " can become Const.")
+                                        (l :\\: "Static LamStar argument " :<>: x :<>: " can become Const.")
                                       return ()
                return ()
     mapM addC (zip xrτs xτs)
@@ -1428,7 +1428,7 @@ checkPri' scope term@(Located l (Gauss rp εp δp f)) =
    setParam dt v = do -- parameters must be const numbers.
       τ <- dt
       τv <- newVar
-      unify (l :\\: "Gauss parameters must be const (NoData) numbers.") τ (NoFun (Numeric (Num τv (Const v))))
+      unify (l :\\: "Gauss parameters must be const (Static) numbers.") τ (NoFun (Numeric (Num τv (Const v))))
       mtruncateP zeroId
       return ()
 
@@ -1438,7 +1438,7 @@ checkPri' scope term@(Located l (Gauss rp εp δp f)) =
       -- interesting input variables must have sensitivity <= r
       restrictInteresting r
         ("In the gauss call" :\\->: term :\\: 
-         "All variables which are *NOT* annotated as 'NoData' and are used in the body" :\\->: f :\\:
+         "All variables which are *NOT* annotated as 'Static' and are used in the body" :\\->: f :\\:
          "Have to have sensitivity <= " :<>: r
         )
       -- interesting output variables are set to (ε, δ), the rest is truncated to ∞
@@ -1496,7 +1496,7 @@ checkPri' scope term@(Located l (Laplace rp εp f)) =
    setParam dt v = do -- parameters must be const numbers.
       τ <- dt
       τv <- newVar
-      unify (l :\\: "Laplace parameters must be const (NoData) numbers.") τ (NoFun (Numeric (Num τv (Const v))))
+      unify (l :\\: "Laplace parameters must be const (Static) numbers.") τ (NoFun (Numeric (Num τv (Const v))))
       mtruncateP zeroId
       return ()
 
@@ -1506,7 +1506,7 @@ checkPri' scope term@(Located l (Laplace rp εp f)) =
       -- interesting input variables must have sensitivity <= r
       restrictInteresting r
         ("In the laplace call" :\\->: term :\\: 
-         "All variables which are *NOT* annotated as 'NoData' and are used in the body" :\\->: f :\\:
+         "All variables which are *NOT* annotated as 'Static' and are used in the body" :\\->: f :\\:
          "Have to have sensitivity <= " :<>: r
         )
       -- interesting output variables are set to (ε, δ), the rest is truncated to ∞
@@ -1568,9 +1568,9 @@ checkPri' scope (Located l (AboveThresh qs e d t)) = do
       unify (l :\\: "Set AboveThreshold query vector type") τqs (NoFun (DMVec nrm clp n tfun))
       
       addConstraint (Solvable (IsLessEqual (τe, (NoFun (Numeric (Num DMReal (Const eps)))))))
-        (l :\\: "AboveThreshold epsilon parameter must be const (NoData).")
+        (l :\\: "AboveThreshold epsilon parameter must be const (Static).")
       addConstraint (Solvable (IsLessEqual (τt, (NoFun (Numeric (Num DMReal NonConst))))))
-        (l :\\: "AboveThreshold threshold parameter must be const (NoData).")
+        (l :\\: "AboveThreshold threshold parameter must be const (Static).")
 
       return (NoFun (Numeric (Num DMInt NonConst)))
 
@@ -1581,7 +1581,7 @@ checkPri' scope term@(Located l (Exponential rp εp xs f)) = do
    setParamConst dt v = do -- parameters must be const numbers.
       τ <- dt
       τv <- newVar
-      unify (l :\\: "Exponential mechanism parameters must be const (NoData) numbers.") τ (NoFun (Numeric (Num τv (Const v))))
+      unify (l :\\: "Exponential mechanism parameters must be const (Static) numbers.") τ (NoFun (Numeric (Num τv (Const v))))
       return ()
 
    setParamVecLike :: TC DMMain -> DMMain -> TC ()
@@ -1611,7 +1611,7 @@ checkPri' scope term@(Located l (Exponential rp εp xs f)) = do
       --
       restrictInteresting r
         ("In the exponential call" :\\->: term :\\: 
-         "All variables which are *NOT* annotated as 'NoData' and are used in the body" :\\->: f :\\:
+         "All variables which are *NOT* annotated as 'Static' and are used in the body" :\\->: f :\\:
          "Have to have sensitivity <= " :<>: r
         )
         
@@ -1720,7 +1720,7 @@ checkPri' scope (Located l (Loop niter cs' (xi, xc) body)) =
       -- τbcs = type of the capture variable xc inferred in the body
       (τit, τloop_in, (τbody_out, n, τbit, τbody_in)) <- msum3Tup (cniter, mcaps, cbody')
 
-      unify (l :\\: "Number of iterations in private loop must be const (NoData) integer.") τit (NoFun (Numeric (Num DMInt (Const n)))) -- number of iterations must be constant integer
+      unify (l :\\: "Number of iterations in private loop must be const (Static) integer.") τit (NoFun (Numeric (Num DMInt (Const n)))) -- number of iterations must be constant integer
       unify (l :\\: "Iterator in private loop must be integer") (NoFun (Numeric (Num DMInt NonConst))) τbit -- number of iterations must match type requested by body
 
       τcsnf <- newVar
@@ -1809,7 +1809,7 @@ checkPri' scope term@(Located l (SmpLet xs (Located l2 (Sample n m1_in m2_in)) t
       n2 <- newVar
     
       -- set number of samples to const m2 and truncate context with 0
-      unify (l :\\: "Number of samples must be const (NoData) integer") tn (NoFun (Numeric (Num DMInt (Const m2))))
+      unify (l :\\: "Number of samples must be const (Static) integer") tn (NoFun (Numeric (Num DMInt (Const m2))))
       unify (l :\\: "Truncate context of number of samples with 0") pn (zeroId, zeroId)
       
       -- set input matrix types and truncate contexts to what it says in the rule

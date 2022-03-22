@@ -328,7 +328,7 @@ testPrivFunc pp = describe "PrivacyFunction annotations" $ do
         ty_good = Fun([([] :->*: cint) :@ Just []])
     parseEval pp "proper usage" ex_good (pure ty_good)
     parseEvalFail pp "not annotated" ex_bad (TermColorError PrivacyK (""))
-    parseEvalFail pp "wrong input" ex_ugly (UnsatisfiableConstraint "")
+    parseEvalFail pp "wrong input" ex_ugly (NoChoiceFoundError "")
     parseEvalFail pp "not a privacy function" ex_uglier (TermColorError PrivacyK (""))
     
 
@@ -348,7 +348,7 @@ testDPGD pp = describe "DPGD" $ do
           \          Flux.softmax)) \n\
           \ end \n\
           \ loss(X, y, model) :: BlackBox() = Flux.crossentropy(model.model(X), y) \n\
-          \ function train_dp(data, labels, eps::NoData(), del::NoData(), eta::NoData()) :: Priv() \n\
+          \ function train_dp(data, labels, eps::Static(), del::Static(), eta::Static()) :: Priv() \n\
           \    model = init_model() \n\
           \    (dim, _) = size(data) \n\
           \    for i in 1:dim \n\

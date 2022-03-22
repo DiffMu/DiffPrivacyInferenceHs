@@ -32,7 +32,7 @@ testSingleRun pp = describe "DPGD" $ do
           \          Flux.softmax)) \n\
           \ end \n\
           \ loss(X, y, model) :: BlackBox() = Flux.crossentropy(model.model(X), y) \n\
-          \ function train_dp(data, labels, eps::NoData(), del::NoData(), n::NoData(), eta::NoData()) :: Priv() \n\
+          \ function train_dp(data, labels, eps::Static(), del::Static(), n::Static(), eta::Static()) :: Priv() \n\
           \    model = init_model() \n\
           \    (dim, _) = size(data) \n\
           \    aloss = 0 \n\
