@@ -10,6 +10,7 @@ import DiffMu.Typecheck.Constraint.IsFunctionArgument
 
 testTypecheckingExamples pp = do
   testSens pp
+  testAnnotation pp
   testOps pp
   testPriv pp
   testBlackBox pp
@@ -38,6 +39,24 @@ testSens pp = do
           return $ Fun([([TVar τ :@ oneId] :->: TVar τ) :@ Just [JTAny]])
     parseEvalUnify pp "Checks the identity function" test ty 
 
+
+testAnnotation :: (String -> IO String) -> SpecWith ()
+testAnnotation pp = do
+  describe "checkAnnotation" $ do
+    let one = "function one(x::Integer) :: Real \n\
+             \   1 \n\
+             \ end"
+        two = "function two(x) :: Integer \n\
+             \   2.0 \n\
+             \ end"
+        three = "function three(x :: MetricVector(Data,L1)) :: MetricVector(Data, LInf) \n\
+             \   1*x \n\
+             \ end"
+        oneint = NoFun(Numeric (Num DMInt (Const oneId)))
+        ty = Fun([([oneint :@ zeroId] :->: oneint) :@ Just [JTInt]])
+    parseEvalUnify pp "good type" one (pure ty)
+    parseEvalFail pp "bad type" two (UnsatisfiableConstraint (""))
+    parseEvalFail pp "bad norm" three (UnificationError LInf L1)
 
 testOps :: IsString t => (t -> IO String) -> SpecWith ()
 testOps pp = describe "Ops" $ do
