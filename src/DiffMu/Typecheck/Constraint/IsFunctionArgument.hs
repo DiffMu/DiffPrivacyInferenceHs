@@ -189,13 +189,13 @@ resolveChoiceHash name (sign, (method, matches)) = do
                                     return (τmatch, [t | (t :@ _) <- matchxs])
                                  -- this is the case where checkPriv was called on the application of a -> arrow.
                                  (matchxs :->*: τmatch, methxs :->: τmeth) -> do
-                                     impossible $ "Found application of a sensitivity function " <> show method <> " where a\
-                                                                       \private value was expected. Color preprocessing should\
-                                                                       \have prevented this."
+                                     msg <- inheritanceMessageFromName name
+                                     throwError (WithContext (NoChoiceFoundError $ "Found application of a sensitivity function "
+                                                                  <> show method <> " where a private value was expected") (DMPersistentMessage msg))
                                  (matchxs :->: τmatch, methxs :->*: τmeth) -> do
-                                     impossible $ "Found application of a privacy function " <> show method <> " where a\
-                                                                       \sensitivity value was expected. Color preprocessing should\
-                                                                       \have prevented this."
+                                     msg <- inheritanceMessageFromName name
+                                     throwError (WithContext (NoChoiceFoundError $ "Found application of a privacy function "
+                                                                  <> show method <> " where a senstivity value was expected") (DMPersistentMessage msg))
                                  _ -> impossible $ "reached impossible case in resolving choices: " <> show (match, method)
 
    methsigs <- mapM resolveAnn matches -- set sensitivities of all matches and get their dmtype signatures
