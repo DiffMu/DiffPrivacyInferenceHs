@@ -174,8 +174,8 @@ data JExpr =
    | JENotRelevant JExpr JuliaType
    | JEIter JExpr JExpr JExpr
    | JELoop JExpr JExpr JExpr
-   | JELam [JExpr] JExpr
-   | JELamStar [JExpr] JExpr
+   | JELam [JExpr] JuliaType JExpr
+   | JELamStar [JExpr] JuliaType JExpr
    | JEFunction JExpr JExpr
    | JEAssignment JExpr JExpr
    | JETup [JExpr]
@@ -248,12 +248,12 @@ pArgs args = let pArg arg = case arg of
 
 pFLet :: JTree -> JTree -> JEParseState JExpr
 pFLet call body = case call of
-    JCall (JSym name : args) -> JEFunction <$> pTreeToJExpr (JSym name) <*> (JELam <$> pArgs args <*> pTreeToJExpr body)
-    JTypeAssign [JCall (JSym name : args), JCall [ann]] -> case ann of
-        JSym "BlackBox" -> JEBlackBox <$> pTreeToJExpr (JSym name) <*> pArgs args
-        JSym "Priv"     -> JEFunction <$> pTreeToJExpr (JSym name) <*> (JELamStar <$> pArgs args <*> pTreeToJExpr body)
-        _ -> jParseError ("Function return type annotation not yet supported in " <> show call)
-    JTypeAssign [JCall _, ann] -> jParseError ("Function return type annotation not yet supported in " <> show call)
+    JCall (JSym name : args) -> JEFunction <$> pTreeToJExpr (JSym name) <*> (JELam <$> pArgs args <*> pure JTAny <*> pTreeToJExpr body)
+    JTypeAssign [JCall (JSym name : args), ann] -> case ann of
+        JCall [JSym "BlackBox"] -> JEBlackBox <$> pTreeToJExpr (JSym name) <*> pArgs args
+        JCall [JSym "Priv"] -> JEFunction <$> pTreeToJExpr (JSym name) <*> (JELamStar <$> pArgs args <*> pure JTAny <*> pTreeToJExpr body)
+        JCall [JSym "Priv", annt] -> JEFunction <$> pTreeToJExpr (JSym name) <*> (JELamStar <$> pArgs args <*> pJuliaType annt <*> pTreeToJExpr body)
+        _ -> JEFunction <$> pTreeToJExpr (JSym name) <*> (JELam <$> pArgs args <*> pJuliaType ann <*> pTreeToJExpr body)
     _ -> error ("invalid shape of function definition " <> show call)
 
 pAss :: JTree -> JTree -> JEParseState JExpr
@@ -294,8 +294,8 @@ pTreeToJExpr tree = case tree of
          (callee : args) -> JECall <$> pTreeToJExpr callee <*> mapM pTreeToJExpr args
          []              -> error "empty call"
      JArrow as       -> case as of
-         [JTup args, body] -> JELam <$> pArgs args <*> pTreeToJExpr body
-         [s, body]         -> JELam <$> pArgs [s] <*> pTreeToJExpr body
+         [JTup args, body] -> JELam <$> pArgs args <*> pure JTAny <*> pTreeToJExpr body
+         [s, body]         -> JELam <$> pArgs [s] <*> pure JTAny <*> pTreeToJExpr body
          _                 -> error ("invalid shape or number of args in lam " <> show tree)
      JIf as          -> case as of
          [cond, tr, fs] -> JEIfElse <$> pTreeToJExpr cond <*> (pTreeToJExpr tr) <*> (Just <$> (pTreeToJExpr fs))

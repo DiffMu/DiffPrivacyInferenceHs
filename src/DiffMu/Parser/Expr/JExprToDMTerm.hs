@@ -87,8 +87,8 @@ pSingle e = case e of
                  JECall name args -> pJCall name args
                  
                  JEBlock stmts -> Extra <$> (Block <$> pList stmts)
-                 JELam args body -> pJLam args body
-                 JELamStar args body -> pJLamStar args body
+                 JELam args ret body -> pJLam args ret body
+                 JELamStar args ret body -> pJLamStar args ret  body
                  JEIfElse cond tr fs -> Extra <$> (ProcPhi <$> (pSingle_Loc cond) <*> (pSingle_Loc tr) <*> (mapM pSingle_Loc fs))
                  JELoop ivar iter body -> pJLoop ivar iter body
                  JEAssignment aee amt -> pJLet aee amt
@@ -161,15 +161,15 @@ pArgRel arg = case arg of
                        a -> parseError ("Invalid function argument " <> show a)
 
 
-pJLam args body = do
+pJLam args ret body = do
                    dargs <- mapM pArg args
                    dbody <- pSingle_Loc body
-                   return (Extra (ProcLam dargs JTAny dbody))
+                   return (Extra (ProcLam dargs ret dbody))
 
-pJLamStar args body = do
+pJLamStar args ret body = do
                        dargs <- mapM pArgRel args
                        dbody <- pSingle_Loc body
-                       return (Extra (ProcLamStar dargs JTAny dbody))
+                       return (Extra (ProcLamStar dargs ret dbody))
 
 
 
