@@ -316,7 +316,7 @@ checkSen' scope (Located l (BBApply app args cs k)) =
            pdt_actual_ty <- checkSens scope pdt <* mscale zeroId
            pdt_val <- newVar
            pdt_ty <- newVar
-           unify () pdt_actual_ty (NoFun $ Numeric $ Num pdt_ty (Const pdt_val))
+           unify (l :\\: "Setting user-given return container dimension.") pdt_actual_ty (NoFun $ Numeric $ Num pdt_ty (Const pdt_val))
            return pdt_val
            
       in case a of
