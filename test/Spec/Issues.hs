@@ -310,7 +310,7 @@ test127 pp = describe "issue 127 (TLet in loop)" $ do
 
 
 test174 pp = describe "issue 174 (count function)" $ do
-  let ex_1 = " function count(f:: Function, d::Matrix) :: Priv() \n\
+  let ex_1 = " function countn(f:: Function, d::Matrix) :: Priv() \n\
              \   (dim, _) = size(d)                              \n\
              \   counter = 0                                     \n\
              \   for i in 1:dim                                  \n\
