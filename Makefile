@@ -4,10 +4,10 @@ LIB_INSTALL_DIR = $${HOME}/.local/lib
 
 ifeq ($(OS),Windows_NT)
   #on windows
-  LIB_INSTALL_NAME = 'diffmu-wrapper.*'
+  LIB_INSTALL_NAME = 'diffprivhs.*'
 else
   #on linux
-  LIB_INSTALL_NAME = 'libdiffmu-wrapper.*'
+  LIB_INSTALL_NAME = 'libdiffprivhs.*'
 endif
 
 
@@ -25,7 +25,7 @@ wrapperlib: ffisrc/Wrapper.hs package.yaml stack.yaml
 	rm -f DiffPrivacyInferenceHs.cabal
 	stack build
 # stack build --ghc-options -j
-	find .stack-work/ -name 'libdiffmu-wrapper.*' -exec cp {} ./capp/ \;
+	find .stack-work/ -name 'libdiffprivhs.*' -exec cp {} ./capp/ \;
 
 
 capp: wrapperlib
