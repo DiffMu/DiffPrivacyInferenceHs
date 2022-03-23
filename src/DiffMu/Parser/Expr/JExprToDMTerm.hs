@@ -15,7 +15,7 @@ import qualified Prelude as P
 
 import Debug.Trace
 
-
+import qualified Data.HashMap.Strict as H
 
 data ParseFull = ParseFull
   {
@@ -286,7 +286,98 @@ pJBBCall name args rt size = do
 
     --      | ProcBBApply a [a] (BBKind ProceduralExtension))
 
+builtins = H.fromList
+  [ ("norm_convert!", pUnary MutConvertM)
+  , ("norm_convert", pUnary ConvertM)
+  , ("size", pUnary Size)
+  , ("length", pUnary Length)
+  , ("zero_gradient", pUnary ZeroGrad)
+  , ("internal_expect_const", pUnary InternalExpectConst)
+  , ("internal_mutate!", pUnary InternalMutate)
+  , ("clone", pUnary Clone)
+  , ("row_to_vec", pUnary MakeVec)
+  , ("vec_to_row", pUnary MakeRow)
+  , ("disc", pUnary Disc)
+  , ("ceil", pUnary (\a -> Op (IsUnary DMOpCeil) [a]))
 
+  , ("subtract_gradient!", pBinary MutSubGrad)
+  , ("subtract_gradient", pBinary SubGrad)
+  , ("scale_gradient!", pBinary ScaleGrad)
+  , ("sum_gradients", pBinary SumGrads)
+  , ("map", pBinary MMap)
+  , ("map_rows", pBinary MapRows)
+  , ("map_cols", pBinary MapCols)
+  , ("reduce_cols", pBinary PReduceCols)
+  , ("clip!", pBuiltinClip MutClipM)
+  , ("clip", pBuiltinClip ClipM)
+  , ("count", pBinary Count)
+  , ("/", pBinary (\a b -> Op (IsBinary DMOpDiv) [a,b]))
+  , ("-", pBinary (\a b -> Op (IsBinary DMOpSub) [a,b]))
+  , ("%", pBinary (\a b -> Op (IsBinary DMOpMod) [a,b]))
+  , ("==", pBinary (\a b -> Op (IsBinary DMOpEq) [a,b]))
+  
+  , ("index", pTernary Index)
+  , ("laplacian_mechanism!", pTernary MutLaplace)
+  , ("laplacian_mechanism", pTernary Laplace)
+  , ("fold", pTernary MFold)
+  , ("map_cols_binary", pTernary MapCols2)
+  , ("map_rows_binary", pTernary MapRows2)
+  , ("clip", pTernary ClipN)
+
+  , ("gaussian_mechanism!", pQuaternary MutGauss)
+  , ("gaussian_mechanism", pQuaternary Gauss)
+  , ("above_threshold", pQuaternary AboveThresh)
+  , ("exponential_mechanism", pQuaternary Exponential)
+  , ("parallel_private_fold_rows", pQuaternary PFoldRows)
+  , ("parallel_private_fold_rows!", pQuaternary MutPFoldRows)
+  
+  , ("+", pMultiary (\a b -> Op (IsBinary DMOpAdd) [a,b]))
+  , ("*", pMultiary (\a b -> Op (IsBinary DMOpMul) [a,b]))
+  ]
+
+--multiaryBuiltins = H.fromList [
+--   ("+", \args -> getLocated <$> foldl1 (\a b -> Located myloc (Op (IsBinary DMOpAdd) [a,b])) <$> (mapM pSingle_Loc args)),
+--   ("*", \args -> getLocated <$> foldl1 (\a b -> Located myloc (Op (IsBinary DMOpMul) [a,b])) <$> (mapM pSingle_Loc args))]
+
+builtinErr t n args = parseError $ "The builtin (" <> T.unpack t <> ") requires " <> n <> " arguments, but has been given " <> show (length args)
+
+pQuaternary ctor _ [a1, a2, a3, a4] _ = ctor <$> pSingle_Loc a1 <*> pSingle_Loc a2 <*> pSingle_Loc a3 <*> pSingle_Loc a4
+pQuaternary ctor t args _             = builtinErr t "4" args
+pTernary ctor _ [a1, a2, a3] _ = ctor <$> pSingle_Loc a1 <*> pSingle_Loc a2 <*> pSingle_Loc a3
+pTernary ctor t args _         = builtinErr t "3" args
+pBinary ctor _ [a1, a2] _ = ctor <$> pSingle_Loc a1 <*> pSingle_Loc a2
+pBinary ctor t args _     = builtinErr t "2" args
+pUnary ctor _ [a1] _ = ctor <$> pSingle_Loc a1
+pUnary ctor t args _ = builtinErr t "1" args
+
+pMultiary ctor t [] _       = builtinErr t "at least 2" []
+pMultiary ctor t [a] _      = builtinErr t "at least 2" [a]
+pMultiary ctor _ args myloc = getLocated <$> foldl1 (\a b -> Located myloc (ctor a b)) <$> (mapM pSingle_Loc args)
+
+
+
+pBuiltinClip ctor _ [a1, a2] _ = ctor <$> pClip a1 <*> pSingle_Loc a2
+pBuiltinClip ctor t args _       = builtinErr t "2" args
+
+
+pJCall :: JExpr -> [JExpr] -> ParseTC ProcDMTerm
+-- if the term is a symbol, we check if it
+-- is a builtin/op, if so, we construct the appropriate DMTerm
+pJCall (JESymbol (Symbol sym)) args = do
+  myloc <- getCurrentLoc
+  case H.lookup sym builtins of
+       Just ctor -> ctor sym args myloc
+       Nothing   -> do -- all other symbols turn into calls on TeVars
+                      inside <- use outerFuncNames
+                      case ((Symbol sym) `elem` inside) of
+                         False -> (Apply (Located myloc (Extra (ProcVarTerm (UserProcVar (Symbol sym))))) <$> mapM pSingle_Loc args)
+                         True -> parseError $ "Recursive call of " <> show sym <> " is not permitted."
+
+-- all other terms turn into calls
+pJCall term args = Apply <$> pSingle_Loc term <*> mapM pSingle_Loc args
+
+
+{-
 pJCall :: JExpr -> [JExpr] -> ParseTC ProcDMTerm
 -- if the term is a symbol, we check if it
 -- is a builtin/op, if so, we construct the appropriate DMTerm
@@ -335,7 +426,7 @@ pJCall (JESymbol (Symbol sym)) args = do
 
     -- 4 arguments
     (t@"gaussian_mechanism!", [a1, a2, a3, a4]) -> MutGauss <$> pSingle_Loc a1 <*> pSingle_Loc a2 <*> pSingle_Loc a3 <*> pSingle_Loc a4
-    (t@"gaussian_mechanism!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 4 arguments, but has been given " <> show (length args)
+    (t@"gaussian_mechanismxy!", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 4 arguments, but has been given " <> show (length args)
 
     (t@"gaussian_mechanism", [a1, a2, a3, a4]) -> Gauss <$> pSingle_Loc a1 <*> pSingle_Loc a2 <*> pSingle_Loc a3 <*> pSingle_Loc a4
     (t@"gaussian_mechanism", args) -> parseError $ "The builtin (" <> T.unpack t <> ") requires 4 arguments, but has been given " <> show (length args)
@@ -486,7 +577,7 @@ pJCall (JESymbol (Symbol sym)) args = do
 
 -- all other terms turn into calls
 pJCall term args = Apply <$> pSingle_Loc term <*> mapM pSingle_Loc args
-
+-}
 --(arseDMTermFromJExpr :: JExpr -> Either DMException ProcDMTerm
 --parseDMTermFromJExpr expr = liftLightTC (ParseFull  (\_ -> ()) (pSingle_Loc expr)
 
