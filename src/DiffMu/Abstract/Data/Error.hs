@@ -110,20 +110,21 @@ instance Monad t => MonoidM t (DMPersistentMessage t) where
 instance Monad t => CheckNeutral t (DMPersistentMessage t) where
   checkNeutral b = pure False
 
-data WithContext t e = WithContext e (DMPersistentMessage t)
-  deriving (Functor,Foldable,Traversable)
+data WithContext e t = WithContext e (DMPersistentMessage t)
+  -- deriving (Functor,Foldable,Traversable)
 
-instance ShowPretty e => ShowPretty (WithContext t e) where
+
+instance ShowPretty e => ShowPretty (WithContext e t) where
   showPretty (WithContext e ctx) = showPretty e <> "\n"
                                    <> indent (showPretty ctx)
                                   
-instance ShowPretty e => Show (WithContext t e) where
+instance ShowPretty e => Show (WithContext e t) where
   show (WithContext e ctx) = showPretty e <> "\n"
                             <> indent (showPretty ctx)
 
 withContext e x = WithContext e (DMPersistentMessage x)
 
-type LocatedDMException t = WithContext t DMException
+type LocatedDMException t = WithContext DMException t
 
 
 --------------------------------------------------------------------------
@@ -217,9 +218,31 @@ isCriticalError e = case e of
   _ -> False
 
 
+data WrapMessageNatural s t e a = WrapMessageNatural (forall x. t x -> s (Maybe x)) a
 
-class MonadError e t => MonadDMError e t where
-  isCritical :: e -> t Bool
+instance Show a => Show (WrapMessageNatural s t e a) where show (WrapMessageNatural f a) = show a
+instance ShowPretty a => ShowPretty (WrapMessageNatural s t e a) where showPretty (WrapMessageNatural f a) = showPretty a
+
+instance (Monad s, Normalize t a) => Normalize s (WrapMessageNatural s t e a) where
+  normalize level (WrapMessageNatural f x) = WrapMessageNatural f <$> do
+    x' <- f (normalize level x)
+    case x' of
+      Just x'' -> return x''
+      Nothing -> pure x
+    -- case f (normalize level x) of
+                                                                           -- Just x -> x
+                                                                           -- Nothing -> pure x
+
+instance IsNaturalError (WithContext e) where
+  functionalLift α (WithContext x (DMPersistentMessage msg)) = WithContext x (DMPersistentMessage (WrapMessageNatural α msg))
+
+class IsNaturalError e where
+  -- functionalLiftMaybe :: (Monad t, Monad s) => (forall a. t a -> s (Maybe a)) -> e t -> e s
+  functionalLift :: (Monad t, Monad s) => (forall a. t a -> s (Maybe a)) -> e t -> e s
+
+
+class (IsNaturalError e, MonadError (e t) t) => MonadDMError e t where
+  isCritical :: e t -> t Bool
   persistentError :: LocatedDMException t -> t ()
   catchAndPersist :: (Normalize t x, ShowPretty x, Show x) => t a -> (DMPersistentMessage t -> t (a, x)) -> t a
   enterNonPersisting :: t ()

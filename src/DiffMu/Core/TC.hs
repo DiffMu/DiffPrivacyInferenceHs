@@ -386,7 +386,7 @@ class (MonadImpossible (t), MonadWatch (t), MonadLog t,
        MonadTerm SensitivityOf (t),
        MonadState (Full (DMPersistentMessage t)) (t),
        MonadWriter (DMMessages t) (t),
-       MonadDMError (LocatedDMException t) (t),
+       MonadDMError (WithContext DMException) (t),
        MonadInternalError t,
        MonadUnificationError t,
        -- MonadConstraint' Symbol (TC) (t),
@@ -1030,7 +1030,7 @@ instance Monad m => MonadInternalError (TCT m) where
 instance Monad m => MonadUnificationError (TCT m) where
   unificationError x y = throwUnlocatedError $ UnificationError x y
 
-instance Monad m => MonadDMError (LocatedDMException (TCT m)) (TCT m) where
+instance Monad m => MonadDMError (WithContext DMException) (TCT m) where
   isCritical (WithContext e _)= return (isCriticalError e)
   persistentError e = tell (DMMessages [] [e])
   catchAndPersist x handler = do
@@ -1167,8 +1167,8 @@ instance (MonadDMTC t) => Normalize (t) DMTypeOp where
 instance (MonadDMTC t) => Normalize t DMException where
   normalize nt x = pure x
 
-instance Normalize m x => Normalize m (WithContext m x) where
-  normalize nt = mapM (normalize nt)
+instance Normalize m x => Normalize m (WithContext x m) where
+  normalize nt (WithContext a msg) = WithContext <$> (normalize nt a) <*> pure msg
 
 instance (MonadDMTC t => Normalize (t) a) => MonadDMTC t :=> Normalize (t) a where
   ins = Sub Dict
@@ -1212,15 +1212,15 @@ instance FixedVars (TVarOf) (IsLess (Sensitivity,Sensitivity)) where
 -- constraint is solvable in any class of monads, in particular in MonadDMTC,
 -- is shown in Abstract.Data.MonadicPolynomial.
 --
-instance MonadDMTC t => Unify t Sensitivity where
+instance MonadDMTC t => Unify (WithContext DMException) t Sensitivity where
   unify_ msg s1 s2 = do
     c <- addConstraint (Solvable (IsEqual (s1, s2))) msg
     return s1
 
-instance (Monad t, Unify t a, Unify t b) => Unify t (a,b) where
+instance (Monad t, Unify (WithContext DMException) t a, Unify (WithContext DMException) t b) => Unify (WithContext DMException) t (a,b) where
   unify_ name (a1,b1) (a2,b2) = (,) <$> (unify_ name a1 a2) <*> (unify_ name b1 b2)
 
-instance (MonadDMTC t, Show a, Unify t a) => Unify t (Maybe a) where
+instance (MonadDMTC t, Show a, Unify (WithContext DMException) t a) => Unify (WithContext DMException) t (Maybe a) where
   unify_ name Nothing Nothing = pure Nothing
   unify_ name (Just a) (Just b) = Just <$> unify_ name a b
   unify_ name t s = throwUnlocatedError (UnificationError t s)

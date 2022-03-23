@@ -11,6 +11,7 @@ import DiffMu.Abstract.Data.Error
 
 import Debug.Trace
 
+
 -- Since our nodes/edges live in a monad, the source/target of an edge need not necessarily be *really* equal, for the edge to having to be considered as reflexive.
 -- Thus we add this as annotation.
 data EdgeType = IsReflexive Structurality | NotReflexive
@@ -62,8 +63,8 @@ oppositeGraph (GraphM graph) = GraphM (opp graph)
         opp f (NotReflexive) = oppositeEdge <$> f NotReflexive
         opp f (IsReflexive (sl,sr)) = oppositeEdge <$> f (IsReflexive (sr,sl))
 
--- findPathM :: forall s m e a. (Show e, Show a, MonadError e m, MonadState s m, MonoidM m a, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> (a,a) -> m (INCRes e (a,a))
-findPathM :: forall s m isT e a msg. (MessageLike m msg, Show e, Show a, Eq a, MonadConstraint isT m, IsT isT m, Normalize m a, MonadNormalize m, MonadError e m, MonadState s m, MonadImpossible m, MonadLog m, Unify m a, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> (a,a) -> msg -> m (INCRes e (PathState a))
+-- findPathM :: forall s m e a. (Show e, Show a, MonadError e m, MonadState s m, MonoidM m a, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> (a,a) -> m (INCRes (e m) (a,a))
+findPathM :: forall s m isT e a msg. (MessageLike m msg, Show (e m), Show a, Eq a, MonadConstraint isT m, IsT isT m, Normalize m a, MonadNormalize m, MonadDMError e m, MonadState s m, MonadImpossible m, MonadLog m, Unify e m a, CheckNeutral m a) => (e m -> ErrorRelevance) -> GraphM m a -> (a,a) -> msg -> m (INCRes (e m) (PathState a))
 findPathM relevance (GraphM g) (start,goal) msg | start == goal = return $ Finished ((start,goal),IsShortestPossiblePath)
 findPathM relevance (GraphM g) (start,goal) msg | otherwise     =
   let -- both (Finished a) (Finished b) | a == b = Finished a
@@ -127,7 +128,7 @@ findPathM relevance (GraphM g) (start,goal) msg | otherwise     =
       -- checkByStructurality NotStructural getIdx a b x = checkPair both       getIdx a b x
 
 
-      f_refl :: Eq b => Structurality -> EdgeFamily m a b -> PathState a -> m (INCRes e (PathState a))
+      f_refl :: Eq b => Structurality -> EdgeFamily m a b -> PathState a -> m (INCRes (e m) (PathState a))
       f_refl s (EdgeFamily (getIdx,edge)) ((start,goal),isShortest) =
         checkByStructurality s getIdx start goal $ \idx -> do
           debug $ "[pathfinding from refl] trying to find path" <> show (start, goal)
@@ -137,7 +138,7 @@ findPathM relevance (GraphM g) (start,goal) msg | otherwise     =
           debug $ "[pathfinding from refl] got path " <> show ((n₀'', n₁''),isShortest)
           return (Finished ((n₀'', n₁''),isShortest))
 
-      fromLeft :: Eq b => EdgeFamily m a b -> PathState a -> m (INCRes e (PathState a))
+      fromLeft :: Eq b => EdgeFamily m a b -> PathState a -> m (INCRes (e m) (PathState a))
       fromLeft (EdgeFamily (getIdx,edge)) ((start,goal),_) =
         checkByStructurality NotStructural getIdx start goal $ \idx -> do
           debug $ "[pathfinding from Left] trying to find path" <> show (start, goal)
@@ -146,7 +147,7 @@ findPathM relevance (GraphM g) (start,goal) msg | otherwise     =
           debug $ "[pathfinding from Left] got partial path. Next we want: " <> show ((n₁, goal),NotShortestPossiblePath)
           return (Partial ((n₁, goal),NotShortestPossiblePath))
 
-      fromRight :: Eq b => EdgeFamily m a b -> PathState a -> m (INCRes e (PathState a))
+      fromRight :: Eq b => EdgeFamily m a b -> PathState a -> m (INCRes (e m) (PathState a))
       fromRight (EdgeFamily (getIdx,edge)) ((start,goal),_) =
         checkByStructurality NotStructural getIdx start goal $ \idx -> do
           debug $ "[pathfinding from Right] trying to find path" <> show (start, goal)
@@ -155,7 +156,7 @@ findPathM relevance (GraphM g) (start,goal) msg | otherwise     =
           debug $ "[pathfinding from Right] got partial path. Next we want: " <> show ((start, n₀),NotShortestPossiblePath)
           return (Partial ((start, n₀),NotShortestPossiblePath))
 
-      catchRelevant :: forall a b. (a -> m (INCRes e a)) -> (a -> m (INCRes e a))
+      catchRelevant :: forall a b. (a -> m (INCRes (e m) a)) -> (a -> m (INCRes (e m) a))
       catchRelevant f a =
         catchError (f a) $ \e -> do
           -- log $ "caught error: " <> show e
@@ -192,7 +193,7 @@ findPathM relevance (GraphM g) (start,goal) msg | otherwise     =
 
 type SupState a = ((a,a) :=: a, IsShortestPossiblePath)
 
-findSupremumM :: forall s m isT e a msg. (MessageLike m msg, Show e, Show a, Eq a, MonadDMError e m, MonadConstraint isT m, IsT isT m, Unify m (a), Normalize m a, MonadNormalize m, MonadState s m, MonadImpossible m, MonadLog m, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> SupState a -> msg -> m (INCRes e ((a,a) :=: a))
+findSupremumM :: forall s m isT e a msg. (MessageLike m msg, Show (e m), Show a, Eq a, MonadDMError e m, MonadConstraint isT m, IsT isT m, Unify e m (a), Normalize m a, MonadNormalize m, MonadState s m, MonadImpossible m, MonadLog m, CheckNeutral m a) => (e m -> ErrorRelevance) -> GraphM m a -> SupState a -> msg -> m (INCRes (e m) ((a,a) :=: a))
 findSupremumM relevance (GraphM graph) ((a,b) :=: x,isShortestSup) msg =
   let
     -------------
@@ -239,7 +240,7 @@ findSupremumM relevance (GraphM graph) ((a,b) :=: x,isShortestSup) msg =
       -- checkByStructurality IsStructural  getIdx a b x = checkPair atLeastOne getIdx a b x
       -- checkByStructurality NotStructural getIdx a b x = checkPair both       getIdx a b x
 
-      catchRelevant :: forall a b. (a -> m (INCRes e a)) -> (a -> m (INCRes e a))
+      catchRelevant :: forall a b. (a -> m (INCRes (e m) a)) -> (a -> m (INCRes (e m) a))
       catchRelevant f a =
         catchError (f a) $ \e -> do
           -- log $ "caught error: " <> show e
@@ -266,7 +267,7 @@ findSupremumM relevance (GraphM graph) ((a,b) :=: x,isShortestSup) msg =
    -- end copy paste
    -------------
 
-      fromLeft :: Eq b => EdgeType -> EdgeFamily m a b -> ((a,a) :=: a) -> m (INCRes e ((a,a) :=: a))
+      fromLeft :: Eq b => EdgeType -> EdgeFamily m a b -> ((a,a) :=: a) -> m (INCRes (e m) ((a,a) :=: a))
       fromLeft edgeType (EdgeFamily (getIdx,edge)) ((start₀,start₁) :=: goal) =
         checkPair both getIdx start₀ start₁ $ \idx -> do
           openNewConstraintSet
@@ -307,7 +308,7 @@ findSupremumM relevance (GraphM graph) ((a,b) :=: x,isShortestSup) msg =
                   debug $ " we have:\nsup(" <> show (n₀'', a₀) <> " = " <> show goal'
                   return $ Finished ((n₀'' , a₀) :=: goal')
 
-      fromRight :: Eq b => EdgeType -> EdgeFamily m a b -> ((a,a) :=: a) -> m (INCRes e ((a,a) :=: a))
+      fromRight :: Eq b => EdgeType -> EdgeFamily m a b -> ((a,a) :=: a) -> m (INCRes (e m) ((a,a) :=: a))
       fromRight edgeType (EdgeFamily (getIdx,edge)) ((start₀,start₁) :=: goal) =
         checkPair both getIdx start₀ start₁ $ \idx -> do
           openNewConstraintSet
@@ -393,6 +394,5 @@ findSupremumM relevance (GraphM graph) ((a,b) :=: x,isShortestSup) msg =
           -- only if all reflexive edges fail, then we can look at the non-reflexive ones
           Fail e -> evalINC (INC stepComputations) ((a,b) :=: x)
 
-findInfimumM :: forall s m isT e a msg. (MessageLike m msg, Show e, Show a, Eq a, MonadDMError e m, MonadConstraint isT m, IsT isT m, Unify m (a), Normalize m a, MonadNormalize m, MonadState s m, MonadImpossible m, MonadLog m, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> ((a,a) :=: a) -> msg -> m (INCRes e ((a,a) :=: a))
+findInfimumM :: forall s m isT e a msg. (MessageLike m msg, Show (e m), Show a, Eq a, MonadDMError e m, MonadConstraint isT m, IsT isT m, Unify e m (a), Normalize m a, MonadNormalize m, MonadState s m, MonadImpossible m, MonadLog m, CheckNeutral m a) => (e m -> ErrorRelevance) -> GraphM m a -> ((a,a) :=: a) -> msg -> m (INCRes (e m) ((a,a) :=: a))
 findInfimumM relevance graph z = findSupremumM relevance (oppositeGraph graph) (z,IsShortestPossiblePath)
-

@@ -98,7 +98,7 @@ library:
     - ExtendedDefaultRules
 
 verbatim: |
-  foreign-library diffmu-wrapper
+  foreign-library diffprivhs
     type:                native-shared
 
     if os(Windows)
