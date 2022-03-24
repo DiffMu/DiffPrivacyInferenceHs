@@ -23,6 +23,7 @@ module DiffMu.Prelude
   , ShowPretty (..)
   , throwOriginalError
   , blue, green, yellow, red, magenta
+  , (&&), (||)
   )
   where
 
@@ -34,7 +35,9 @@ import qualified DiffMu.Imports as QUAL (throwError)
 
 import DiffMu.Prelude.MonadicAlgebra as All
 import DiffMu.Prelude.Data as All
+import Data.List.Unicode as All
 
+import Prelude ((&&),(||))
 import qualified Prelude (String)
 import Data.Text as T
 newtype Symbol = Symbol Text

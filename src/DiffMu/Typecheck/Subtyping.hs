@@ -677,6 +677,27 @@ solveInfimumSpecial graph name ((a,b) :=: x) | otherwise = return ()
 
 
 --------------------------------------------
+-- Additional failing message if a probably cause of the error is known
+--
+getFailingHint :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) -> Maybe (DMPersistentMessage t)
+getFailingHint ((a,b) :=: x)=
+  let
+      -- case0 = testEquality (typeRep @k) (typeRep @MainKind)
+      -- case1 = testEquality (typeRep @k) (typeRep @FunKind)
+      -- case2 = testEquality (typeRep @k) (typeRep @NoFunKind)
+      -- case3 = testEquality (typeRep @k) (typeRep @NumKind)
+      case4 = testEquality (typeRep @k) (typeRep @BaseNumKind)
+      -- case5 = testEquality (typeRep @k) (typeRep @ClipKind)
+      -- case6 = testEquality (typeRep @k) (typeRep @NormKind)
+      -- case7 = testEquality (typeRep @k) (typeRep @ConstnessKind)
+  -- in case (case0,case1,case2,case3,case4,case5,case6,case7) of
+  in case case4 of
+        Just Refl -> case (DMInt ∈ [a,b] || DMReal ∈ [a,b]) && (DMData ∈ [a,b]) of
+                       True -> Just $ DMPersistentMessage $ "You might want to use `disc :: [Real :@ ∞] -> Data`."
+                       False -> Nothing
+        Nothing -> Nothing
+
+--------------------------------------------
 -- The actual solving is done here.
 -- we call the `findSupremumM` function from Abstract.Computation.MonadicGraph
 callMonadicGraphSupremum :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> Symbol -> ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) -> t ()
@@ -693,18 +714,23 @@ callMonadicGraphSupremum graph name ((a,b) :=: x) = do
 
   -- Executing the computation
   msg <- inheritanceMessageFromName name
-  enterNonPersisting 
+  enterNonPersisting
   res <- findSupremumM @(Full (DMPersistentMessage t)) (\(WithContext e _) -> relevance e) (graph) ((a,b) :=: x, IsShortestPossiblePath) msg
-  exitNonPersisting 
+  exitNonPersisting
 
   -- We look at the result and if necessary throw errors.
   case res of
     Finished a -> dischargeConstraint @MonadDMTC name
     Partial a  -> updateConstraint name (Solvable (IsSupremum a))
     Wait       -> return ()
-    Fail e     -> throwUnlocatedError (UnsatisfiableConstraint ("sup(" <> show (a) <> ", " <> show b <> ") = " <> show x <> "\n\n"
-                         <> "Got the following errors while search the subtyping graph:\n"
-                         <> show e))
+    Fail e     -> do
+      let msg2 = case getFailingHint @t ((a,b) :=: x) of
+                   Just hint -> DMPersistentMessage (hint :\\: msg)
+                   Nothing -> DMPersistentMessage msg
+      throwError (WithContext (UnsatisfiableConstraint ("sup(" <> show (a) <> ", " <> show b <> ") = " <> show x)) (msg2))
+      -- throwUnlocatedError (UnsatisfiableConstraint ("sup(" <> show (a) <> ", " <> show b <> ") = " <> show x <> "\n\n"
+      --                    <> "Got the following errors while search the subtyping graph:\n"
+      --                    <> show e))
 
 
 unifyAll :: (Typeable k, IsT MonadDMTC t, MessageLike t msg) => msg -> [DMTypeOf k] -> t ()
