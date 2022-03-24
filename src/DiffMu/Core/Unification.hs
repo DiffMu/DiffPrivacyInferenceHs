@@ -15,7 +15,7 @@ import DiffMu.Core.Symbolic
 import Data.HashMap.Strict as H
 import Control.Monad.Trans.Except (throwE)
 
-default (String)
+default (Text)
 
 -------------------------------------------------------------------
 -- Unification of dmtypes
@@ -201,7 +201,7 @@ instance (HasUnificationError t e (Maybe a), MonadLog t, MonadDMError e t, Show 
   unifyᵢ_Msg name t s = throwError (unificationError' (Proxy @t) t s name)
 
 
-instance MonadDMTC t => Unifyᵢ (StoppingReason (WithContext DMException)) (INCResT (WithContext DMException) t) (DMTypeOf k) where
+instance (MonadDMTC t, Typeable k) => Unifyᵢ (StoppingReason (WithContext DMException)) (INCResT (WithContext DMException) t) (DMTypeOf k) where
   unifyᵢ_Msg name DMAny DMAny                   = pure DMAny
   unifyᵢ_Msg name DMReal DMReal                 = pure DMReal
   unifyᵢ_Msg name DMBool DMBool                 = pure DMBool
@@ -244,7 +244,33 @@ instance MonadDMTC t => Unifyᵢ (StoppingReason (WithContext DMException)) (INC
   unifyᵢ_Msg name (Fun _) (v :∧: w)                = throwError Wait'
   unifyᵢ_Msg name (v :∧: w) (Fun _)                = throwError Wait'
   unifyᵢ_Msg name (_ :∧: _) (v :∧: w)              = throwError Wait'
-  unifyᵢ_Msg name t s                              = throwError (Fail' $ WithContext (UnificationError t s) (DMPersistentMessage name))
+  unifyᵢ_Msg name t s                              = do
+    let msg2 = case getUnificationFailingHint @(INCResT ((WithContext DMException)) t) ((t,s)) of
+                   Just hint -> DMPersistentMessage (hint :\\: name)
+                   Nothing -> DMPersistentMessage name
+    throwError (Fail' $ WithContext (UnificationError t s) (msg2))
+
+
+--------------------------------------------
+-- Additional failing message if a probably cause of the error is known
+--
+getUnificationFailingHint :: forall t k. (Typeable k, Monad t) => ((DMTypeOf k, DMTypeOf k)) -> Maybe (DMPersistentMessage t)
+getUnificationFailingHint ((a,b))=
+  let
+      -- case0 = testEquality (typeRep @k) (typeRep @MainKind)
+      -- case1 = testEquality (typeRep @k) (typeRep @FunKind)
+      -- case2 = testEquality (typeRep @k) (typeRep @NoFunKind)
+      -- case3 = testEquality (typeRep @k) (typeRep @NumKind)
+      case4 = testEquality (typeRep @k) (typeRep @BaseNumKind)
+      -- case5 = testEquality (typeRep @k) (typeRep @ClipKind)
+      -- case6 = testEquality (typeRep @k) (typeRep @NormKind)
+      -- case7 = testEquality (typeRep @k) (typeRep @ConstnessKind)
+  -- in case (case0,case1,case2,case3,case4,case5,case6,case7) of
+  in case case4 of
+        Just Refl -> case (DMInt ∈ [a,b] || DMReal ∈ [a,b]) && (DMData ∈ [a,b]) of
+                       True -> Just $ DMPersistentMessage $ "You might want to use `disc :: [Real :@ ∞] -> Data`."
+                       False -> Nothing
+        Nothing -> Nothing
 
 
 instance Monad t => Normalize t JuliaType where
@@ -309,7 +335,7 @@ instance Typeable k => FixedVars TVarOf (IsEqual (DMTypeOf k, DMTypeOf k)) where
   fixedVars _ = mempty
 
 -- Using the unification instance, we implement solving of the `IsEqual` constraint for DMTypes.
-instance Solve MonadDMTC IsEqual (DMTypeOf k, DMTypeOf k) where
+instance (Typeable k) => Solve MonadDMTC IsEqual (DMTypeOf k, DMTypeOf k) where
   solve_ Dict _ name (IsEqual (a,b)) = do
     res <- runExceptT $ runINCResT $ unifyᵢ_Msg @(StoppingReason (WithContext DMException)) (Just name) a b
     case res of
