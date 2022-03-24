@@ -676,6 +676,7 @@ solveInfimumSpecial graph name ((a,b) :=: x) | elem b (getTops @k) = do
 solveInfimumSpecial graph name ((a,b) :=: x) | otherwise = return ()
 
 
+
 --------------------------------------------
 -- The actual solving is done here.
 -- we call the `findSupremumM` function from Abstract.Computation.MonadicGraph
@@ -693,18 +694,23 @@ callMonadicGraphSupremum graph name ((a,b) :=: x) = do
 
   -- Executing the computation
   msg <- inheritanceMessageFromName name
-  enterNonPersisting 
+  enterNonPersisting
   res <- findSupremumM @(Full (DMPersistentMessage t)) (\(WithContext e _) -> relevance e) (graph) ((a,b) :=: x, IsShortestPossiblePath) msg
-  exitNonPersisting 
+  exitNonPersisting
 
   -- We look at the result and if necessary throw errors.
   case res of
     Finished a -> dischargeConstraint @MonadDMTC name
     Partial a  -> updateConstraint name (Solvable (IsSupremum a))
     Wait       -> return ()
-    Fail e     -> throwUnlocatedError (UnsatisfiableConstraint ("sup(" <> show (a) <> ", " <> show b <> ") = " <> show x <> "\n\n"
-                         <> "Got the following errors while search the subtyping graph:\n"
-                         <> show e))
+    Fail e     -> do
+      let msg2 = case getUnificationFailingHint @t ((a,b)) of
+                   Just hint -> DMPersistentMessage (hint :\\: msg)
+                   Nothing -> DMPersistentMessage msg
+      throwError (WithContext (UnsatisfiableConstraint ("sup(" <> show (a) <> ", " <> show b <> ") = " <> show x)) (msg2))
+      -- throwUnlocatedError (UnsatisfiableConstraint ("sup(" <> show (a) <> ", " <> show b <> ") = " <> show x <> "\n\n"
+      --                    <> "Got the following errors while search the subtyping graph:\n"
+      --                    <> show e))
 
 
 unifyAll :: (Typeable k, IsT MonadDMTC t, MessageLike t msg) => msg -> [DMTypeOf k] -> t ()

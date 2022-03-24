@@ -55,6 +55,7 @@ library:
     - hspec-core
     - QuickCheck
     - HUnit
+    - base-unicode-symbols
   default-extensions:
     - QuasiQuotes
     - ConstraintKinds
