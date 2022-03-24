@@ -743,7 +743,7 @@ checkSen' scope (Located l (Loop niter cs' (xi, xc) body)) = do
   -- τbcs = type of the capture variable xc inferred in the body
   (τit, τloop_in, (τbody_out, (τbit, sbit), (τbody_in, sbcs))) <- msum3Tup (cniter <* mscale sit, ccs <* mscale scs, cbody' <* mscale sb)
 
-  unify (l :\\: "Iterator must be integer.") (NoFun (Numeric (Num (IRNum (IRNum DMInt)) NonConst))) τbit
+  unify (l :\\: "Iterator must be integer.") (NoFun (Numeric (Num (IRNum DMInt) NonConst))) τbit
 
   τcsnf <- newVar
   unify (l :\\: "Loop captures cannot be functions") (NoFun τcsnf) τloop_in -- functions cannot be captured.
