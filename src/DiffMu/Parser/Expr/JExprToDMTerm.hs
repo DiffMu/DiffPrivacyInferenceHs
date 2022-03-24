@@ -32,8 +32,14 @@ type ParseTC = LightTC Location_Parse ParseFull
 
 $(makeLenses ''ParseFull)
 
-newProcVar :: (MonadState ParseFull m) => Text -> m (ProcVar)
-newProcVar hint = holeNames %%= (first GenProcVar . (newName hint))
+holeVar :: ParseTC ProcVar
+holeVar = holeNames %%= (first GenProcVar . (newName "hole"))
+
+
+newProcVar :: _ -> ParseTC (ProcVar)
+newProcVar (Symbol name) = case H.member name builtins of
+                                False -> pure (UserProcVar (Symbol name))
+                                True -> parseError $ "Overwriting builtin function name " <> show name <> " is not permitted."
 
 parseError :: String -> ParseTC a
 parseError message = do
@@ -81,7 +87,9 @@ pSingle e = case e of
                  JETrue -> pure $ DMTrue
                  JEFalse -> pure $ DMFalse
                  JEReal r -> pure $ Sng r JTReal
-                 JESymbol s -> return  (Extra (ProcVarTerm (UserProcVar s)))
+                 JESymbol (Symbol s) -> case H.member s builtins of
+                                    False -> return  (Extra (ProcVarTerm (UserProcVar (Symbol s))))
+                                    True  -> parseError $ "Builtin function " <> show s <> " cannot be used as function variables. Please wrap them in a lambda term"
                  JETup elems -> (Tup <$> (mapM pSingle_Loc elems))
                  JERef name refs -> pJRef name refs
                  JECall name args -> pJCall name args
@@ -147,17 +155,17 @@ pJRef name refs = case refs of
                        _ -> parseError ("Only double indexing to matrix elements and single indexing to vector entries supported, but you gave " <> show refs)
 
 pArg arg = case arg of
-                     JEHole -> (::- JTAny) <$> newProcVar "hole"
-                     JESymbol s -> return ((UserProcVar s) ::- JTAny)
-                     JETypeAnnotation (JESymbol s) τ -> return ((UserProcVar s) ::- τ)
+                     JEHole -> (::- JTAny) <$> holeVar
+                     JESymbol s -> (::- JTAny) <$> (newProcVar s)
+                     JETypeAnnotation (JESymbol s) τ -> (::- τ) <$> (newProcVar s)
                      JENotRelevant _ _ -> parseError ("Relevance annotation on a sensitivity function is not permitted.")
                      a -> parseError ("Invalid function argument " <> show a)
 
 pArgRel arg = case arg of
-                       JEHole -> (::- (JTAny, IsRelevant)) <$> newProcVar "hole"
-                       JESymbol s -> return ((UserProcVar s) ::- (JTAny, IsRelevant))
-                       JETypeAnnotation (JESymbol s) τ -> return ((UserProcVar s) ::- (τ, IsRelevant))
-                       JENotRelevant (JESymbol s) τ -> return ((UserProcVar s) ::- (τ, NotRelevant))
+                       JEHole -> (::- (JTAny, IsRelevant)) <$> holeVar
+                       JESymbol s -> (::- (JTAny, IsRelevant)) <$> (newProcVar s)
+                       JETypeAnnotation (JESymbol s) τ -> (::- (τ, IsRelevant)) <$> (newProcVar s)
+                       JENotRelevant (JESymbol s) τ -> (::- (τ, NotRelevant)) <$> (newProcVar s)
                        a -> parseError ("Invalid function argument " <> show a)
 
 
@@ -188,8 +196,8 @@ pJLoop ivar iter body =
                                  dbody <- pSingle_Loc body
                                  nit <- pIter start step end
                                  i <- case ivar of
-                                              JEHole -> newProcVar "hole"
-                                              JESymbol s -> pure $ (UserProcVar $ s)
+                                              JEHole -> holeVar
+                                              JESymbol s -> newProcVar s
                                               i -> parseError ("Invalid iteration variable " <> (show i) <> ".")
                                  return (Extra (ProcPreLoop nit i dbody))
        it -> parseError ("Invalid iterator " <> show it <> ", must be a range.")
@@ -204,8 +212,10 @@ pJLet assignee assignment = do
                    dasgmt <- pSingle_Loc assignment
                    exitAssignment
                    case assignee of
-                        JEHole     -> (\p -> Extra (ProcSLetBase PureLet p dasgmt)) <$> newProcVar "hole"
-                        JESymbol s -> return (Extra (ProcSLetBase PureLet (UserProcVar s) dasgmt))
+                        JEHole     -> (\p -> Extra (ProcSLetBase PureLet p dasgmt)) <$> holeVar
+                        JESymbol s -> do
+                            v <- newProcVar s
+                            return (Extra (ProcSLetBase  PureLet v dasgmt))
                         JETypeAnnotation _ _ -> parseError "Type annotations on variables are not supported."
                         JENotRelevant _ _    -> parseError "Type annotations on variables are not supported."
                         _                    -> parseError ("Invalid assignee " <> (show assignee) <> ", must be a variable.")
@@ -222,8 +232,8 @@ pJTLet assignees assignment = let
                     _ -> parseError ("Invalid number of arguments for sample, namely " <> (show (length args)) <> " instead of 2.")
                     
    -- make sure that all assignees are simply symbols
-   ensureSymbol (JESymbol s) = return ((UserProcVar s))
-   ensureSymbol JEHole = newProcVar "hole"
+   ensureSymbol (JESymbol s) = newProcVar s
+   ensureSymbol JEHole = holeVar
    ensureSymbol (JETypeAnnotation _ _) = parseError "Type annotations on variables are not supported."
    ensureSymbol (JENotRelevant _ _) = parseError "Type annotations on variables are not supported."
    ensureSymbol x = parseError ("Invalid assignee " <> (show x) <> ", must be a variable.")
@@ -338,6 +348,8 @@ builtins = H.fromList
   , ("*", pMultiary (\a b -> Op (IsBinary DMOpMul) [a,b]))
   ]
 
+
+
 builtinErr t n args = parseError $ "The builtin (" <> T.unpack t <> ") requires " <> n <> " arguments, but has been given " <> show (length args)
 
 -- build parser for builtins
@@ -373,7 +385,9 @@ pJCall (JESymbol (Symbol sym)) args = do
        Nothing   -> do -- all other symbols turn into calls on TeVars
                       inside <- use outerFuncNames
                       case ((Symbol sym) `elem` inside) of
-                         False -> (Apply (Located myloc (Extra (ProcVarTerm (UserProcVar (Symbol sym))))) <$> mapM pSingle_Loc args)
+                         False -> do
+                             v <- newProcVar (Symbol sym)
+                             (Apply (Located myloc (Extra (ProcVarTerm v))) <$> mapM pSingle_Loc args)
                          True -> parseError $ "Recursive call of " <> show sym <> " is not permitted."
 
 -- all other terms turn into calls
