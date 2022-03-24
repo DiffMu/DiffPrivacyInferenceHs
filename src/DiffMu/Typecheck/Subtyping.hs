@@ -232,6 +232,7 @@ subtypingGraph name =
                  , SingleEdge $ do
                      a <- newVar
                      b <- newVar
+                     a ⊑! b
                      return (IRNum a, IRNum b)
                  ]
             ; _ -> []
