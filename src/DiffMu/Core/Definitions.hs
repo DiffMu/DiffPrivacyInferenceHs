@@ -101,6 +101,7 @@ data DMKind =
     MainKind
   | NumKind
   | BaseNumKind
+  | IRNumKind
   | ClipKind
   | NormKind
   | FunKind
@@ -119,6 +120,7 @@ instance Show DMKind where
   show MainKind = "*"
   show NumKind = "Num"
   show BaseNumKind = "BaseNum"
+  show IRNumKind = "IRNum"
   show ClipKind = "Clip"
   show NormKind = "Norm"
   show FunKind = "Fun"
@@ -127,7 +129,7 @@ instance Show DMKind where
   show ConstnessKind = "Constness"
 
 -- so we don't get incomplete pattern warnings for them
-{-# COMPLETE DMInt, DMReal, Num, Const, NonConst, DMData, Numeric, TVar, (:->:), (:->*:), DMTup, L1, L2, LInf, U, Clip, Vector, Gradient, Matrix,
+{-# COMPLETE DMInt, DMReal, IRNum, Num, Const, NonConst, DMData, Numeric, TVar, (:->:), (:->*:), DMTup, L1, L2, LInf, U, Clip, Vector, Gradient, Matrix,
  DMContainer, DMVec, DMGrads, DMMat, DMModel, NoFun, Fun, (:∧:), BlackBox, DMBool #-}
 
 --------------------
@@ -163,9 +165,10 @@ data DMTypeOf (k :: DMKind) where
   DMBool :: DMType
 
   -- the base numeric constructors
-  DMInt    :: DMTypeOf BaseNumKind
-  DMReal   :: DMTypeOf BaseNumKind
+  DMInt    :: DMTypeOf IRNumKind
+  DMReal   :: DMTypeOf IRNumKind
   DMData   :: DMTypeOf BaseNumKind
+  IRNum    :: DMTypeOf IRNumKind -> DMTypeOf BaseNumKind
 
   -- a base numeric type can be either constant or non constant or data
 
@@ -271,6 +274,7 @@ instance Show (DMTypeOf k) where
   show DMInt = "Int"
   show DMReal = "Real"
   show DMData = "Data"
+  show (IRNum a) = show a
   show (Num t c) = show t <> "[" <> show c <> "]"
   show (NonConst) = "--"
   show (Const c) = show c <> " ©"
@@ -325,6 +329,7 @@ instance ShowPretty (DMTypeOf k) where
   showPretty DMInt = "Int"
   showPretty DMReal = "Real"
   showPretty DMData = "Data"
+  showPretty (IRNum a) = showPretty a
   showPretty (Num t c) = showPretty t <> "[" <> showPretty c <> "]"
   showPretty (NonConst) = "--"
   showPretty (Const c) = showPretty c <> " ©"
@@ -387,6 +392,7 @@ instance Eq (DMTypeOf k) where
   NonConst == NonConst = True
   DMData   == DMData = True
   Num t1 c1 == Num t2 c2 = and [t1 == t2, c1 == c2]
+  IRNum s == IRNum s2 = s == s2
 
   -- we include numeric types into main types using this constructor
   Numeric t1 == Numeric t2 = t1 == t2
@@ -489,6 +495,7 @@ recDMTypeM typemap sensmap DMBool = pure DMBool
 recDMTypeM typemap sensmap DMInt = pure DMInt
 recDMTypeM typemap sensmap DMReal = pure DMReal
 recDMTypeM typemap sensmap DMData = pure DMData
+recDMTypeM typemap sensmap (IRNum τ) = IRNum <$> typemap τ
 recDMTypeM typemap sensmap (Numeric τ) = Numeric <$> typemap τ
 recDMTypeM typemap sensmap (NonConst) = pure NonConst
 recDMTypeM typemap sensmap (Const t) = Const <$> sensmap t
