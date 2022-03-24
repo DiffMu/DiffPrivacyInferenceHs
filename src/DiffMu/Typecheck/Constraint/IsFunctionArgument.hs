@@ -123,8 +123,8 @@ solveIsChoice name (provided, required) = do
                          -- if we don't know all types we cannot do this, as eg for two methods
                          -- (Int, Int) => T
                          -- (Real, Number) => T
-                         -- and arg types (TVar, DMInt), both methods are in newchoices, but if we later realize the TVar
-                         -- is a DMReal, the first one does not match even though it's less general.
+                         -- and arg types (TVar, (IRNum DMInt)), both methods are in newchoices, but if we later realize the TVar
+                         -- is a (IRNum DMReal), the first one does not match even though it's less general.
                          -- filter Fun arguments, as the all have the same type "Function" in julia/
                          let candidates' = case hasFreeVars of
                                -- if no tvars are in the args

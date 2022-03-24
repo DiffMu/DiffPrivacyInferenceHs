@@ -174,16 +174,16 @@ instance Solve MonadDMTC IsAdditiveNoiseResult (DMTypeOf MainKind, DMTypeOf Main
 
            -- set in- and output types as given in the mgauss rule
            -- input type gets a LessEqual so we can put Integer or Real (but not Data)
-           addConstraintFromName name (Solvable(IsLessEqual(τin, (NoFun (DMContainer k L2 iclp n (NoFun (Numeric (Num DMReal τv))))))))
-           unifyFromName name τgauss (NoFun (DMContainer k LInf U n (NoFun (Numeric (Num DMReal NonConst)))))
+           addConstraintFromName name (Solvable(IsLessEqual(τin, (NoFun (DMContainer k L2 iclp n (NoFun (Numeric (Num (IRNum DMReal) τv))))))))
+           unifyFromName name τgauss (NoFun (DMContainer k LInf U n (NoFun (Numeric (Num (IRNum DMReal) NonConst)))))
 
            dischargeConstraint @MonadDMTC name
         _ -> do -- regular gauss or unification errpr later
            τ <- newVar -- input type can be anything (as long as it's numeric)
 
            -- set in- and output types as given in the gauss rule
-           addConstraintFromName name (Solvable(IsLessEqual(τin, (NoFun (Numeric (Num DMReal τ))))))
-           unifyFromName name τgauss (NoFun (Numeric (Num DMReal NonConst)))
+           addConstraintFromName name (Solvable(IsLessEqual(τin, (NoFun (Numeric (Num (IRNum DMReal) τ))))))
+           unifyFromName name τgauss (NoFun (Numeric (Num (IRNum DMReal) NonConst)))
 
            dischargeConstraint @MonadDMTC name
 

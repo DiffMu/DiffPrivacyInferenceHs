@@ -16,17 +16,17 @@ testSupremum = do
 
     let twoId = oneId ⋆! oneId
 
-    testsup (DMInt) (DMInt) (Right $ DMInt)
-    testsup (DMReal) (DMReal) (Right $ DMReal)
+    testsup ((IRNum DMInt)) ((IRNum DMInt)) (Right $ (IRNum DMInt))
+    testsup ((IRNum DMReal)) ((IRNum DMReal)) (Right $ (IRNum DMReal))
 
-    testsup (Num DMInt NonConst) (Num DMInt NonConst)  (Right $ Num DMInt NonConst)
-    testsup (Num DMInt NonConst) (Num DMReal NonConst) (Right $ Num DMReal NonConst)
+    testsup (Num (IRNum DMInt) NonConst) (Num (IRNum DMInt) NonConst)  (Right $ Num (IRNum DMInt) NonConst)
+    testsup (Num (IRNum DMInt) NonConst) (Num (IRNum DMReal) NonConst) (Right $ Num (IRNum DMReal) NonConst)
 
-    testsup (Num DMInt (Const twoId)) (Num DMInt (Const twoId)) (Right $ Num DMInt (Const twoId)) -- (Right $ Const (twoId)))
-    testsup (Num DMInt (Const (twoId))) (Num DMInt (Const oneId)) (Right $ Num DMInt NonConst)
+    testsup (Num (IRNum DMInt) (Const twoId)) (Num (IRNum DMInt) (Const twoId)) (Right $ Num (IRNum DMInt) (Const twoId)) -- (Right $ Const (twoId)))
+    testsup (Num (IRNum DMInt) (Const (twoId))) (Num (IRNum DMInt) (Const oneId)) (Right $ Num (IRNum DMInt) NonConst)
 
-    testsup (NoFun (Numeric (Num DMInt NonConst)))
-            (Fun [([NoFun (Numeric (Num DMInt NonConst)) :@ oneId] :->: (NoFun (Numeric (Num DMInt NonConst)))) :@ Nothing])
+    testsup (NoFun (Numeric (Num (IRNum DMInt) NonConst)))
+            (Fun [([NoFun (Numeric (Num (IRNum DMInt) NonConst)) :@ oneId] :->: (NoFun (Numeric (Num (IRNum DMInt) NonConst)))) :@ Nothing])
             (Left ((UnsatisfiableConstraint "[test]")))
 
 
@@ -37,12 +37,12 @@ testSupremum = do
 
     let twoId = oneId ⋆! oneId
 
-    testinf (DMInt) (DMInt) (Right $ DMInt)
-    testinf (DMReal) (DMReal) (Right $ DMReal)
-    testinf (DMInt) (DMReal) (Right $ DMInt)
+    testinf ((IRNum DMInt)) ((IRNum DMInt)) (Right $ (IRNum DMInt))
+    testinf ((IRNum DMReal)) ((IRNum DMReal)) (Right $ (IRNum DMReal))
+    testinf ((IRNum DMInt)) ((IRNum DMReal)) (Right $ (IRNum DMInt))
 
-    testinf (Num DMInt (Const twoId)) (Num DMInt (Const twoId)) (Right $ Num DMInt (Const twoId)) -- (Right $ Const (twoId)))
-    testinf (Num DMInt (Const (twoId))) (Num DMInt (Const oneId)) (Left $ (UnsatisfiableConstraint ""))
+    testinf (Num (IRNum DMInt) (Const twoId)) (Num (IRNum DMInt) (Const twoId)) (Right $ Num (IRNum DMInt) (Const twoId)) -- (Right $ Const (twoId)))
+    testinf (Num (IRNum DMInt) (Const (twoId))) (Num (IRNum DMInt) (Const oneId)) (Left $ (UnsatisfiableConstraint ""))
 
 
 
@@ -74,10 +74,10 @@ testSupremum = do
             a <- newVar
             b <- newVar
             c <- supremum a b
-            unify () c DMInt
+            unify () c (IRNum DMInt)
             return (a,b)
       let check :: (DMTypeOf BaseNumKind, DMTypeOf BaseNumKind) -> TC _
-          check (DMInt, DMInt) = pure (Right ())
+          check ((IRNum DMInt), (IRNum DMInt)) = pure (Right ())
           check x              = pure (Left x)
       (tc $ (sn_EW test >>= check)) `shouldReturn` (Right (Right ()))
 
@@ -87,10 +87,10 @@ testSupremum = do
     --   let test :: TC _
     --       test = do
     --         a <- newVar
-    --         b <- supremum a DMReal
+    --         b <- supremum a (IRNum DMReal)
     --         return (a,b)
     --   let check :: (DMTypeOf BaseNumKind, DMTypeOf BaseNumKind) -> TC _
-    --       check (TVar a, DMReal) = pure (Right ())
+    --       check (TVar a, (IRNum DMReal)) = pure (Right ())
     --       check x                = pure (Left x)
     --   (tc $ (sn_EW test >>= check)) `shouldReturn` (Right (Right ()))
 
@@ -98,7 +98,7 @@ testSupremum = do
       let test :: TC _
           test = do
             a <- newVar
-            b <- supremum a DMReal
+            b <- supremum a (IRNum DMReal)
             return (a,b)
       let check :: (DMTypeOf BaseNumKind, DMTypeOf BaseNumKind) -> TC _
           check (TVar a, TVar b) = pure (Right ())
@@ -109,8 +109,8 @@ testSupremum = do
       let test :: TC _
           test = do
             a <- newVar
-            b <- supremum a DMReal
-            unify () b DMInt
+            b <- supremum a (IRNum DMReal)
+            unify () b (IRNum DMInt)
             return ()
       (tc $ (sn_EW test)) `shouldReturn` (Left ((UnsatisfiableConstraint "test")))
 
@@ -119,7 +119,7 @@ testSupremum = do
       let test :: TC _
           test = do
             a <- newVar
-            b <- supremum a DMInt
+            b <- supremum a (IRNum DMInt)
             return (a,b)
       let check (TVar a, TVar b) | a /= b = pure (Right ())
           check x                         = pure (Left x)
@@ -131,7 +131,7 @@ testSupremum = do
             a <- newVar
             b <- newVar
             c <- supremum a b
-            unify () c DMReal
+            unify () c (IRNum DMReal)
             return (a,b)
       let check (TVar a, TVar b) | a /= b = pure (Right ())
           check x                         = pure (Left x)
@@ -152,7 +152,7 @@ testSupremum = do
       let test :: TC _
           test = do
             a <- newVar
-            b <- supremum a DMInt
+            b <- supremum a (IRNum DMInt)
             return (a,b)
       let check (TVar a, TVar b) | a == b = pure (Right ())
           check x                         = pure (Left x)
@@ -162,8 +162,8 @@ testSupremum = do
       let test :: TC _
           test = do
             a <- newVar
-            b <- supremum a DMReal
+            b <- supremum a (IRNum DMReal)
             unify () a b
             return a
-      (tc $ (sn test)) `shouldReturn` (Right (DMReal))
+      (tc $ (sn test)) `shouldReturn` (Right ((IRNum DMReal)))
 
