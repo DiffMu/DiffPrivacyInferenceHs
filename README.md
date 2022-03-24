@@ -22,7 +22,7 @@ In particular, in order to run/build from source, you need:
     ~/DiffPrivacyInferenceHs $ make install
     ```
     > **NOTE**: The makefile is a small wrapper which calls `stack build`, and then copies the built library
-    > `libdiffmu-wrapper` to the location given at the top of the makefile, `LIB_INSTALL_DIR = $${HOME}/.local/lib`.
+    > `libdiffprivhs` to the location given at the top of the makefile, `LIB_INSTALL_DIR = $${HOME}/.local/lib`.
     > This is the location where the julia frontend expects to find the library, but by updating it
     > in both places (makefile and in `DiffPrivacyInference.jl/src/haskell_interface.jl`) it can be changed.
  3. Register `DiffPrivacyInference.jl` as a local package by navigating into the directory you cloned the julia frontend repo into and launching the julia REPL. There, first activate the package by entering
