@@ -424,18 +424,20 @@ instance Typeable k => FixedVars TVarOf (IsInfimum ((DMTypeOf k, DMTypeOf k) :=:
 
 data ContractionAllowed = ContractionAllowed | ContractionDisallowed
 
-{- since we have Dta there is no top and bot for numerics :( see issue #247
+
 getBottoms :: forall k. (SingI k, Typeable k) => [DMTypeOf k]
 getBottoms =
-  case testEquality (typeRep @k) (typeRep @BaseNumKind) of
+  case testEquality (typeRep @k) (typeRep @IRNumKind) of
      Just Refl -> [DMInt]
      _ -> []
--}
 
 getTops :: forall k. (SingI k, Typeable k) => [DMTypeOf k]
-getTops = case testEquality (typeRep @k) (typeRep @ConstnessKind) of
-               Just Refl -> [NonConst]
-               _ -> []
+getTops =
+  case testEquality (typeRep @k) (typeRep @IRNumKind) of
+     Just Refl -> [DMReal]
+     _ -> case testEquality (typeRep @k) (typeRep @ConstnessKind) of
+            Just Refl -> [NonConst]
+            _ -> []
 
 type TypeGraph k = H.HashMap (DMTypeOf k) [DMTypeOf k]
 
