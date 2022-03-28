@@ -646,8 +646,8 @@ data Full m = Full
   }
   deriving (Generic, Functor)
 
-newtype TCT m a = TCT {runTCT :: ((StateT (Full (DMPersistentMessage (TCT m))) (ExceptT (LocatedDMException (TCT m)) (WriterT (DMMessages (TCT m)) (m)))) a)}
-  deriving (Functor, Applicative, Monad, MonadState (Full (DMPersistentMessage (TCT m))), MonadError (LocatedDMException (TCT m)), MonadWriter (DMMessages (TCT m)))
+newtype TCT m a = TCT {runTCT :: ((StateT (Full (DMPersistentMessage (TCT m))) (ExceptT (LocatedDMException (TCT m)) (ReaderT RawSource (WriterT (DMMessages (TCT m)) (m))))) a)}
+  deriving (Functor, Applicative, Monad, MonadState (Full (DMPersistentMessage (TCT m))), MonadError (LocatedDMException (TCT m)), MonadWriter (DMMessages (TCT m)), MonadReader RawSource)
 
 class LiftTC t where
   liftTC :: TC a -> t a
@@ -1117,7 +1117,7 @@ instance Monad m => LiftTC (TCT m) where
         h (Left (WithContext e ctx)) = Left (WithContext e (g ctx))
 
         -- x :: StateT (Full (TCT m)) (ExceptT (LocatedDMException (TCT m)) (WriterT (DMMessages (TCT m)) m)) a
-        x = StateT (\s -> ExceptT (WriterT (return (bimap h f $ runWriter $ runExceptT $ runStateT v (fmap g' s)))))
+        x = StateT (\s -> ExceptT (ReaderT $ \readstate -> (WriterT (return (bimap h f $ runWriter $ runReaderT (runExceptT $ runStateT v (fmap g' s)) readstate)))))
 
     in TCT x
 

@@ -4,6 +4,7 @@ module DiffMu.Prelude
   (
     -- module Prelude
     module All
+  , RawSource (..)
   , Symbol (..)
   , SymbolOf (..)
   , DictKey (..)
@@ -40,6 +41,10 @@ import Data.List.Unicode as All
 import Prelude ((&&),(||))
 import qualified Prelude (String)
 import Data.Text as T
+
+
+newtype RawSource = RawSource String
+
 newtype Symbol = Symbol Text
   deriving (Eq,Ord,Hashable,Semigroup,Monoid)
 

@@ -32,24 +32,24 @@ import Debug.Trace
 run :: IO ()
 run = putStrLn "Hello?"
 
-typecheckFromString_DMTerm_Detailed :: String -> IO ()
-typecheckFromString_DMTerm_Detailed term = do
- let res = parseJTreeFromString term >>= parseJExprFromJTree 
- case res of
-   Left err -> putStrLn $ "Error while parsing DMTerm from string: " <> show err
-   Right term -> typecheckFromJExpr_Detailed term
-
-typecheckFromString_DMTerm_Simple :: String -> IO ()
-typecheckFromString_DMTerm_Simple term = do
+typecheckFromString_DMTerm_Detailed :: String -> String -> IO ()
+typecheckFromString_DMTerm_Detailed term rawsource = do
  let res = parseJTreeFromString term >>= parseJExprFromJTree
  case res of
    Left err -> putStrLn $ "Error while parsing DMTerm from string: " <> show err
-   Right term -> typecheckFromJExpr_Simple term
+   Right term -> typecheckFromJExpr_Detailed term (RawSource rawsource)
+
+typecheckFromString_DMTerm_Simple :: String -> String -> IO ()
+typecheckFromString_DMTerm_Simple term rawsource = do
+ let res = parseJTreeFromString term >>= parseJExprFromJTree
+ case res of
+   Left err -> putStrLn $ "Error while parsing DMTerm from string: " <> show err
+   Right term -> typecheckFromJExpr_Simple term (RawSource rawsource)
 
 data DoShowLog = DoShowLog DMLogSeverity [DMLogLocation] | DontShowLog
 
-executeTC l r = do
-  let (x,logs) = runWriter (runExceptT ((runStateT ((runTCT r)) (Full def def (Right def)))))
+executeTC l r rawsource = do
+  let (x,logs) = runWriter (runReaderT (runExceptT ((runStateT ((runTCT r)) (Full def def (Right def))))) rawsource)
 
   case l of
     (DoShowLog s ls) -> do
@@ -80,8 +80,8 @@ executeTC l r = do
   --   [] -> return x
   --   (x:xs) -> return (Left x)
 
-typecheckFromJExprWithPrinter :: ((DMMain,Full (DMPersistentMessage TC)) -> String) -> DoShowLog -> JExpr -> IO ()
-typecheckFromJExprWithPrinter printer logoptions term = do
+typecheckFromJExprWithPrinter :: ((DMMain,Full (DMPersistentMessage TC)) -> String) -> DoShowLog -> JExpr -> RawSource -> IO ()
+typecheckFromJExprWithPrinter printer logoptions term rawsource = do
   let r = do
 
         log $ "Checking term   : " <> show term
@@ -115,7 +115,7 @@ typecheckFromJExprWithPrinter printer logoptions term = do
         tres'''' <- solveAndNormalize SimplifyingNormalization [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal] tres'''
         return tres''''
 
-  x <- executeTC logoptions r
+  x <- executeTC logoptions r rawsource
 
   case x of
     (_, Nothing) -> putStrLn $ "No type could be inferred"
@@ -124,17 +124,17 @@ typecheckFromJExprWithPrinter printer logoptions term = do
 
 -- (DoShowLog Warning logging_locations)
 
-typecheckFromJExpr_Simple :: JExpr -> IO ()
-typecheckFromJExpr_Simple term = do
+typecheckFromJExpr_Simple :: JExpr -> RawSource -> IO ()
+typecheckFromJExpr_Simple term rawsource = do
   let printer (ty, full) =
         "\n---------------------------------------------------------------------------\n"
         <> "Type:\n" <> showPretty ty
         <> "\n---------------------------------------------------------------------------\n"
         <> "Constraints:\n" <> showPretty (_constraints (_meta full))
-  typecheckFromJExprWithPrinter printer (DontShowLog) term
+  typecheckFromJExprWithPrinter printer (DontShowLog) term rawsource
 
-typecheckFromJExpr_Detailed :: JExpr -> IO ()
-typecheckFromJExpr_Detailed term = do
+typecheckFromJExpr_Detailed :: JExpr -> RawSource -> IO ()
+typecheckFromJExpr_Detailed term rawsource = do
 
   let logging_locations = [
         -- Location_Check,
@@ -152,6 +152,6 @@ typecheckFromJExpr_Detailed term = do
         <> "\n---------------------------------------------------------------------------\n"
         <> "Monad state:\n" <> show full
 
-  typecheckFromJExprWithPrinter printer (DoShowLog Warning logging_locations) term
+  typecheckFromJExprWithPrinter printer (DoShowLog Warning logging_locations) term rawsource
 
 

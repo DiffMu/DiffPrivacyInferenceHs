@@ -16,8 +16,9 @@ import qualified Data.Text as T
 import Debug.Trace
 
 
-newtype LightTC l s a = LightTC {runLightTC :: ((StateT s (ExceptT (LocatedDMException (LightTC l s)) (Writer (DMMessages (LightTC l s) )))) a)}
-  deriving (Functor, Applicative, Monad, MonadState s, MonadError (LocatedDMException (LightTC l s)), MonadWriter (DMMessages (LightTC l s)))
+
+newtype LightTC l s a = LightTC {runLightTC :: ((StateT s (ExceptT (LocatedDMException (LightTC l s)) (ReaderT RawSource (Writer (DMMessages (LightTC l s) ))))) a)}
+  deriving (Functor, Applicative, Monad, MonadState s, MonadError (LocatedDMException (LightTC l s)), MonadWriter (DMMessages (LightTC l s)), MonadReader RawSource)
 
 instance ISing_DMLogLocation l => MonadInternalError (LightTC l s) where
   internalError = throwUnlocatedError . InternalError
@@ -53,7 +54,7 @@ instance Monad m => Normalize m (WrapMessageLight a) where
 
 liftNewLightTC :: Default s => LightTC l s a -> TC a
 liftNewLightTC a =
-  let s = runExceptT $ runStateT (runLightTC a) def
+  let s = runReaderT $ runExceptT $ runStateT (runLightTC a) def
 
       h = \(DMPersistentMessage a) -> DMPersistentMessage (WrapMessageLight a)
 
@@ -66,11 +67,11 @@ liftNewLightTC a =
       f (Left (WithContext e ctx), b) = (Left (WithContext e (h ctx)) , g b)
       f (Right (a, s), b) = (Right (a, def), g b)
 
-  in TCT (StateT (\t -> ExceptT (WriterT (return (f $ runWriter $ s)))))
+  in TCT (StateT (\t -> ExceptT (ReaderT (\readstate -> (WriterT (return (f $ runWriter $ s readstate)))))))
 
 liftLightTC :: forall s t k l a. s -> (s -> t) -> LightTC k s a -> LightTC l t a
 liftLightTC start conv a =
-  let s = runExceptT $ runStateT (runLightTC a) start
+  let s = (runReaderT $ runExceptT $ runStateT (runLightTC a) start)
 
       h = \(DMPersistentMessage a) -> DMPersistentMessage (WrapMessageLight a)
 
@@ -83,6 +84,6 @@ liftLightTC start conv a =
       f (Left (WithContext e ctx), b) = (Left (WithContext e (h ctx)) , g b)
       f (Right (a, s), b) = (Right (a, conv s), g b)
 
-  in LightTC (StateT (\t -> ExceptT (WriterT (return (f $ runWriter $ s)))))
+  in LightTC (StateT (\t -> ExceptT (ReaderT (\readstate -> WriterT (return (f $ runWriter $ s readstate))))))
 
 
