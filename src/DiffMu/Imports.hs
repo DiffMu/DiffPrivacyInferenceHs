@@ -9,6 +9,7 @@ where
 
 import Control.Monad.State.Strict as All
 import Control.Monad.Except as All
+import Control.Monad.Reader as All
 import Control.Monad.Writer as All hiding (getLast, getFirst, Last, First)
 import Control.Monad.Identity as All
 import Control.Monad.Trans as All
