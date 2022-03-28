@@ -43,8 +43,8 @@ indent s = unlines (fmap ("  " <>) (lines s))
 data SourceLoc = SourceLoc
   {
     getLocFile  :: String
-  , getLocBegin :: (Int,Int)
-  , getLocEnd   :: (Int,Int)
+  , getLocBegin :: Int
+  , getLocEnd   :: Int
   }
   deriving (Eq)
 
@@ -74,7 +74,8 @@ instance Monad t => Normalize t SourceLocExt where
   normalize e = pure
 
 instance ShowPretty SourceLoc where
-  showPretty (SourceLoc file (begin,_) _) = file <> ": line " <> show begin
+  showPretty (SourceLoc file begin end) | begin == end  = file <> ": line " <> show begin
+  showPretty (SourceLoc file begin end) = file <> ": between lines " <> show begin <> " and " <> show end
 
 instance Show SourceLocExt where
   show = showPretty
@@ -151,7 +152,7 @@ data DMException where
   FLetReorderError        :: String -> DMException
   UnificationShouldWaitError :: DMTypeOf k -> DMTypeOf k -> DMException
   TermColorError          :: AnnotationKind -> String -> DMException
-  ParseError              :: String -> String -> Int -> DMException -- error message, filename, line number
+  ParseError              :: String -> String -> Int -> Int-> DMException -- error message, filename, line number, line number of next expression
   DemutationMovedVariableAccessError :: Show a => a -> DMException
   DemutationNonAliasedMutatingArgumentError :: String -> DMException
   DemutationSplitMutatingArgumentError :: String -> DMException
@@ -173,7 +174,9 @@ instance Show DMException where
   show (DemutationError e) = "While demutating, the following error was encountered:\n " <> e
   show (BlackBoxError e) = "While preprocessing black boxes, the following error was encountered:\n " <> e
   show (FLetReorderError e) = "While processing function signatures, the following error was encountered:\n " <> e
-  show (ParseError e file line) = "Unsupported julia expression in file " <> file <> ", line " <> show line <> ":\n " <> e
+  show (ParseError e file line nextline) = case line == nextline of
+                                                True -> "Unsupported julia expression in file " <> file <> ", line " <> show line <> ":\n " <> e
+                                                False -> "Unsupported julia expression in file " <> file <> ", between line " <> show line <> " and " <> show nextline <> ":\n " <> e
   show (TermColorError color t) = "Expected " <> show t <> " to be a " <> show color <> " expression but it is not."
   show (DemutationDefinitionOrderError a) = "The variable '" <> show a <> "' has not been defined before being used.\n"
                                             <> "Note that every variable has to be assigned some value prior to its usage.\n"
@@ -198,7 +201,7 @@ instance Eq DMException where
   TypeMismatchError       a        == TypeMismatchError       b       = True
   NoChoiceFoundError      a        == NoChoiceFoundError      b       = True
   UnificationShouldWaitError a a2  == UnificationShouldWaitError b b2 = True
-  ParseError e1 file1 line1        == ParseError e2 file2 line2       = True
+  ParseError e1 file1 line1 nlne1  == ParseError e2 file2 line2 nlne2 = True
   FLetReorderError        a        == FLetReorderError        b       = True
   TermColorError      a b          == TermColorError c d              = True
   DemutationError a                == DemutationError         b       = True

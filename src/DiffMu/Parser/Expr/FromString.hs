@@ -11,6 +11,7 @@ import Text.Megaparsec.Debug
 import Text.Megaparsec.Char.Lexer
 
 import Data.Either
+import Data.HashMap.Strict as H
 
 import qualified Data.Text as T
 import Debug.Trace(trace, traceM)
@@ -49,7 +50,12 @@ data JTree =
    | JUnsupported String
    deriving Show
 
-type Parser = Parsec Void String
+type TreeParseState = (DiffMu.Prelude.State [Int])
+type Parser = ParsecT Void String TreeParseState
+
+-- map a line number to the line number of the next expression, to enable
+-- multi-line error messages.
+type LocMap = H.HashMap Int Int
 
 
 pTLineNumber :: Parser JTree
@@ -60,6 +66,8 @@ pTLineNumber = let pLocation = do
                                 return (filename, n)
               in do
                    (filename, n) <- (char ':') >> (between (string "(#= ") (string " =#)") pLocation)
+                   locas <- get -- collect line numbers in state
+                   put (n : locas)
                    return (JLineNumber filename n)
 
 with :: String -> Parser a -> Parser a
@@ -128,13 +136,18 @@ pTree =     try pTLineNumber
         <|> JUnsupported <$> pAny
 
 
-parseJTreeFromString :: String -> Either DMException JTree
+parseJTreeFromString :: String -> Either DMException (JTree, LocMap)
 parseJTreeFromString input =
-  -- let res = runParser pTree "jl-hs-communication" (trace ("Parsing input:\n------------\n" <> input <> "\n---------------") input)
-  let res = runParser pTree "jl-hs-communication" input
+  let res = runState (runParserT pTree "jl-hs-communication" input) []
   in case res of
-    Left e  -> Left (InternalError $ "Communication Error: Could not parse JExpr from string\n\n----------------------\n" <> input <> "\n---------------------------\n" <> errorBundlePretty e)
-    Right a -> Right a
+    (Left e, _)  -> Left (InternalError $ "Communication Error: Could not parse JExpr from string\n\n----------------------\n" <> input <> "\n---------------------------\n" <> errorBundlePretty e)
+    (Right a, locas) -> do
+        -- make a map from each line number to the line number of the next expression.
+        let addElem (a:b:as) = (a,b) : (addElem (b:as))
+            addElem [a] = [(a,a)]
+            addElem [] = []
+            locmap = H.fromList (addElem (reverse locas))
+        Right (a, locmap)
 
 
 --------------------------------------------------------------------------------------------
@@ -147,14 +160,13 @@ parseJTreeFromString input =
 -- the result gets put into a JExpr so it can be used for proper assignment nesting.
 
 
--- parse state is (filename, line number, are we inside a function)
--- it's also used for the next step, we don't need th
-type JEParseState = (StateT (String,Int) (Except DMException))
+-- parse state is (filename, line number, next line number, map from line number to next line number)
+type JEParseState = (StateT (String,Int,Int,LocMap) (Except DMException))
 
 jParseError :: String -> JEParseState a
 jParseError message = do
-                       (file,line) <- get
-                       throwOriginalError (ParseError message file line)
+                       (file,line,nextline,locs) <- get
+                       throwOriginalError (ParseError message file line nextline)
 
 data JExpr =
      JEInteger Float
@@ -164,7 +176,7 @@ data JExpr =
    | JETrue
    | JEFalse
    | JEColon
-   | JELineNumber String Int
+   | JELineNumber String Int Int
    | JEUnsupported String
    | JECall JExpr [JExpr]
    | JEBlock [JExpr]
@@ -281,8 +293,12 @@ pUnbox a = jParseError $ "Invalid call of `unbox`. Expected a call of a black bo
 pTreeToJExpr :: JTree -> JEParseState JExpr
 pTreeToJExpr tree = case tree of
      JLineNumber f l -> do -- put line number in the state for exquisit error messages
-                                 put (f, l)
-                                 return (JELineNumber f l)
+                                 (_,_,_,locs) <- get
+                                 nl <- case H.lookup l locs of
+                                            Just nl -> return nl
+                                            Nothing -> error $ "this should not happen"
+                                 put (f, l, nl, locs)
+                                 return (JELineNumber f l nl)
      JSym s          -> pure (JESymbol ((Symbol . T.pack) s))
      JInteger i      -> pure $ JEInteger i
      JReal r         -> pure (JEReal r)
@@ -342,9 +358,9 @@ pModuleToJExpr t = jParseError ("All typechecked code must be within a module! I
 
 
 
-parseJExprFromJTree :: JTree -> Either DMException JExpr
-parseJExprFromJTree tree =
-  let x = runStateT (pModuleToJExpr tree) ("unknown", 0)
+parseJExprFromJTree :: (JTree, LocMap) -> Either DMException JExpr
+parseJExprFromJTree (tree, locs) =
+  let x = runStateT (pModuleToJExpr tree) ("unknown", 0, 0, locs)
       y = case runExcept x of
         Left err -> Left err
         Right (term, _) -> Right term

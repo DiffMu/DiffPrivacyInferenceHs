@@ -19,14 +19,14 @@ import qualified Data.HashMap.Strict as H
 
 data ParseFull = ParseFull
   {
-    _location :: (String, Int), -- filename and line number
+    _location :: (String, Int, Int), -- filename and line number and line number of next term
     _outerFuncNames :: [Symbol], -- to error upon non-toplevel back box definitions and simple recursion
     _insideAssignment :: Bool, -- to error upon assignemnts within assignments (like x = y = 100).
     _holeNames :: NameCtx -- generate new names for holes
   }
 
 instance Default ParseFull where
-    def = ParseFull ("unknown",0) [] False def
+    def = ParseFull ("unknown",0,0) [] False def
 
 type ParseTC = LightTC Location_Parse ParseFull
 
@@ -43,10 +43,10 @@ newProcVar (Symbol name) = case H.member name builtins of
 
 parseError :: String -> ParseTC a
 parseError message = do
-                       (file, line) <- use location
+                       (file, line, next) <- use location
                        loc <- getCurrentLoc
 
-                       throwError (withContext (ParseError message file line) loc)
+                       throwError (withContext (ParseError message file line next) loc)
                         
                         -- [("While parsing this line", loc)])
 
@@ -71,8 +71,8 @@ exitAssignment = insideAssignment .= False
 
 getCurrentLoc :: (MonadState ParseFull m) => m SourceLocExt
 getCurrentLoc = do
-  (file,line) <- use location
-  return $ ExactLoc (SourceLoc file (line,0) (line P.+ 1,0))
+  (file,line,nextline) <- use location
+  return $ ExactLoc (SourceLoc file line nextline)
 
 
 pSingle_Loc :: JExpr -> ParseTC LocProcDMTerm
@@ -112,7 +112,7 @@ pSingle e = case e of
                  JEColon -> parseError "Colon (:) can only be used to access matrix rows like in M[1,:]."
                  JETypeAnnotation _ _ -> parseError "Type annotations are only supported on function arguments."
                  JENotRelevant _ _ -> parseError "Type annotations are only supported on function arguments."
-                 JELineNumber _ _ -> throwUnlocatedError (InternalError "What now?") -- TODO
+                 JELineNumber _ _ _ -> throwUnlocatedError (InternalError "What now?") -- TODO
                  JEImport -> parseError "import statement is not allowed here."
                  JEUse -> parseError "`using` statement is not allowed here."
 
@@ -128,7 +128,7 @@ pList (JEImport : tail) = pList tail -- ignore imports
 pList (JEUse : tail) = pList tail -- ignore "using DiffPrivacyInference"
 pList (s : tail) = do
     ps <- case s of
-               JELineNumber file line -> location .= (file, line) >> return Nothing
+               JELineNumber file line nextline -> location .= (file, line, nextline) >> return Nothing
                _ -> Just <$> (pSingle_Loc s)
                
     ptail <- pList tail
