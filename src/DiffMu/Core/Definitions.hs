@@ -274,7 +274,7 @@ instance Show (DMTypeOf k) where
   show DMInt = "Int"
   show DMReal = "Real"
   show DMData = "Data"
-  show (IRNum a) = show a
+  show (IRNum a) = "IR " <> show a
   show (Num t c) = show t <> "[" <> show c <> "]"
   show (NonConst) = "--"
   show (Const c) = show c <> " ©"

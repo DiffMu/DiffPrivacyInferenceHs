@@ -476,7 +476,8 @@ getCurrentConstraintSubtypingGraph = do
 
 
   let graph = foldl addEdge H.empty edges
-  return graph
+  let graph' = foldl addEdge graph [(b, e) | b <- getBottoms @k, e <- (H.keys graph)] -- add edges from bottoms to all other nodes.
+  return graph'
 
 
 
@@ -617,6 +618,7 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsLessEqual (DMTypeOf k, DMTyp
   solve_ Dict SolveExact name (IsLessEqual (a,b)) = solveSubtyping name (a,b)
   solve_ Dict SolveGlobal name (IsLessEqual path) = collapseSubtypingCycles path
   solve_ Dict SolveAssumeWorst name (IsLessEqual (a,b)) = return ()
+  solve_ Dict SolveFinal name (IsLessEqual (a,b))  | a `elem` getBottoms = dischargeConstraint name
   solve_ Dict SolveFinal name (IsLessEqual (a,b))  | b `elem` getTops    = dischargeConstraint name
   solve_ Dict SolveFinal name (IsLessEqual (a,b))  | otherwise = do
     -- if we are in solve final, we try to contract the edge
@@ -658,6 +660,16 @@ solveSupremumSpecial graph name ((a,b) :=: x) | a == x = do
 solveSupremumSpecial graph name ((a,b) :=: x) | b == x = do
   msg <- inheritanceMessageFromName name
   (a ≤! x) msg
+  dischargeConstraint name
+
+solveSupremumSpecial graph name ((a,b) :=: x) | elem a (getBottoms @k) = do
+  msg <- inheritanceMessageFromName name
+  unify msg b x
+  dischargeConstraint name
+
+solveSupremumSpecial graph name ((a,b) :=: x) | elem b (getBottoms @k) = do
+  msg <- inheritanceMessageFromName name
+  unify msg a x
   dischargeConstraint name
 
 solveSupremumSpecial graph name ((a,b) :=: x) | otherwise = return ()
