@@ -268,7 +268,10 @@ getUnificationFailingHint ((a,b))=
   -- in case (case0,case1,case2,case3,case4,case5,case6,case7) of
   in case case4 of
         Just Refl -> case (DMInt ∈ [a,b] || DMReal ∈ [a,b]) && (DMData ∈ [a,b]) of
-                       True -> Just $ DMPersistentMessage $ "You might want to use `disc :: [Real :@ ∞] -> Data`."
+                       True -> Just $ DMPersistentMessage $ "You might want to use one of the following conversion functions:\n" <>
+                                                            "`disc :: [Real :@ ∞] -> Data`\n" <>
+                                                            "`norm_convert :: [MetricMatrix(Data,*) :@ 2] -> MetricMatrix(Real,l)` if your matrix rows" <>
+                                                            " all have row `l`-norm `<=1` (use `clip` for this)\n"
                        False -> Nothing
         Nothing -> Nothing
 
