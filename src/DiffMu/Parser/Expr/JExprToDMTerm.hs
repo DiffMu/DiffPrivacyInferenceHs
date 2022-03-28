@@ -36,7 +36,7 @@ holeVar :: ParseTC ProcVar
 holeVar = holeNames %%= (first GenProcVar . (newName "hole"))
 
 
-newProcVar :: _ -> ParseTC (ProcVar)
+newProcVar :: Symbol -> ParseTC (ProcVar)
 newProcVar (Symbol name) = case H.member name builtins of
                                 False -> pure (UserProcVar (Symbol name))
                                 True -> parseError $ "Overwriting builtin function name " <> show name <> " is not permitted."

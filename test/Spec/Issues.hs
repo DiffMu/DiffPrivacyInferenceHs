@@ -50,7 +50,7 @@ test25 pp = describe "issue 25" $ do
            \   a(1)          \n\
            \ end"
 
-      intc c = NoFun(Numeric (Num DMInt (Const (constCoeff c))))
+      intc c = NoFun(Numeric (Num (IRNum DMInt) (Const (constCoeff c))))
       ty = Fun([([] :->: intc (Fin 2)) :@ Just []])
 
   parseEval pp "seems fixed (the example typechecks)" ex (pure ty)
@@ -61,7 +61,7 @@ test53 pp = describe "issue 53" $ do
            <>  "(theta, mu) = (100,x) \n"
            <>  "theta + mu \n"
            <>  "end"
-      int = NoFun(Numeric (Num DMInt NonConst))
+      int = NoFun(Numeric (Num (IRNum DMInt) NonConst))
       ty = Fun([([int :@ (inftyP)] :->*: int) :@ Just [JTInt]])
 
   parseEval pp "seems fixed (the example typechecks)" ex (pure ty)
@@ -99,7 +99,7 @@ test58 pp = describe "issue 58" $ do
 
            -- computed by julia
 
-      intc c = NoFun(Numeric (Num DMInt (Const (constCoeff c))))
+      intc c = NoFun(Numeric (Num (IRNum DMInt) (Const (constCoeff c))))
       ty = Fun([([] :->: intc (Fin 3)) :@ Just []])
 
   parseEval pp "example variant 1" ex_1 (pure ty)
@@ -137,7 +137,7 @@ test59 pp = describe "issue 59" $ do
            \    f(3)                           \n\
            \ end                               "
 
-      intc c = NoFun(Numeric (Num DMInt (Const (constCoeff c))))
+      intc c = NoFun(Numeric (Num (IRNum DMInt) (Const (constCoeff c))))
       ty = Fun([([] :->: intc (Fin 3)) :@ Just []])
 
   parseEvalFail pp "example variant 1 (bad)" ex_1 (FLetReorderError "")
@@ -178,7 +178,7 @@ test60 pp = describe "issue 60" $ do
              \    f(3)                          \n\
              \ end"
 
-      intc c = NoFun(Numeric (Num DMInt (Const (constCoeff c))))
+      intc c = NoFun(Numeric (Num (IRNum DMInt) (Const (constCoeff c))))
       ty = Fun([([] :->: intc (Fin 6)) :@ Just []])
 
   parseEval pp "example variant 1" ex_1 (pure ty)
@@ -246,7 +246,7 @@ test116 pp = describe "issue 116 (constant assignment in loop)" $ do
               \             x                  \n\
               \         end                    "
 
-      int = NoFun(Numeric (Num DMInt NonConst))
+      int = NoFun(Numeric (Num (IRNum DMInt) NonConst))
       ty = do pure $ Fun([([int :@ (constCoeff (Fin 0))] :->: int) :@ Just [JTInt]])
 
   parseEvalUnify pp "gives non-const input and output" ex_1 (ty)
@@ -262,7 +262,7 @@ test123 pp = describe "issue 123 (Rewind side effects of quick-path-check in sup
               \             end                   \n\
               \          end                      "
 
-      intnc = NoFun(Numeric (Num DMInt NonConst))
+      intnc = NoFun(Numeric (Num (IRNum DMInt) NonConst))
       ty = Fun([([intnc :@ (constCoeff (Fin 2)) , intnc :@ inftyS] :->: intnc) :@ Just [JTAny, JTInt]])
 
   parseEvalUnify_customCheck pp "indirect via code succeeds" ex_1 (pure ty) (return (Right ()))
@@ -286,8 +286,8 @@ test125 pp = describe "issue 125 (Unify in Non-constification)" $ do
               \             x                  \n\
               \         end                    "
 
-      intc_nc c = NoFun(Numeric (Num DMInt c))
-      int = NoFun(Numeric (Num DMInt NonConst))
+      intc_nc c = NoFun(Numeric (Num (IRNum DMInt) c))
+      int = NoFun(Numeric (Num (IRNum DMInt) NonConst))
       ty = do c <- newVar ; pure $ Fun([([intc_nc c :@ (constCoeff (Fin 1024))] :->: int) :@ Just [JTInt]])
 
   parseEvalUnify pp "example variant 1" ex_1 (ty)
@@ -301,8 +301,8 @@ test127 pp = describe "issue 127 (TLet in loop)" $ do
               \      x                                    \n\
               \  end                                      "
 
-      -- intc_nc c = NoFun(Numeric (Num DMInt c))
-      int = NoFun(Numeric (Num DMInt NonConst))
+      -- intc_nc c = NoFun(Numeric (Num (IRNum DMInt) c))
+      int = NoFun(Numeric (Num (IRNum DMInt) NonConst))
 
       ty = do pure $ Fun([([int :@ (constCoeff oneId) , int :@ (inftyS)] :->: int) :@ Just [JTInt,JTInt]])
 
@@ -324,8 +324,8 @@ test174 pp = describe "issue 174 (count function)" $ do
              \   counter                                         \n\
              \ end "
 
-      -- intc_nc c = NoFun(Numeric (Num DMInt c))
-      int = NoFun(Numeric (Num DMInt NonConst))
+      -- intc_nc c = NoFun(Numeric (Num (IRNum DMInt) c))
+      int = NoFun(Numeric (Num (IRNum DMInt) NonConst))
 
       ty = do
         τ_31 <- newVar

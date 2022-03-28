@@ -40,7 +40,7 @@ testAMS01 pp = do
            \   clone(a)           \n\
            \ end                  "
 
-      intc c = NoFun(Numeric (Num DMInt (Const (constCoeff c))))
+      intc c = NoFun(Numeric (Num (IRNum DMInt) (Const (constCoeff c))))
       ty = Fun([([intc (Fin 3) :@ oneId] :->: intc (Fin 3)) :@ Just [JTAny]])
 
 
@@ -114,10 +114,10 @@ testAMS03 pp = do
             \    x                           \n\
             \ end                            "
 
-      intc c = NoFun(Numeric (Num DMInt (Const (constCoeff c))))
-      intnc = NoFun(Numeric (Num DMInt NonConst))
-      intnc' = (Numeric (Num DMInt NonConst))
-      intc' c = Numeric (Num DMInt (Const (constCoeff c)))
+      intc c = NoFun(Numeric (Num (IRNum DMInt) (Const (constCoeff c))))
+      intnc = NoFun(Numeric (Num (IRNum DMInt) NonConst))
+      intnc' = (Numeric (Num (IRNum DMInt) NonConst))
+      intc' c = Numeric (Num (IRNum DMInt) (Const (constCoeff c)))
       bool = NoFun DMBool
 
       tyc = Fun([([intnc :@ zeroId, intnc :@ zeroId] :->: (NoFun $ intc' (Fin 1))) :@ Just [JTAny, JTAny]])
@@ -164,9 +164,9 @@ testAMS04 pp = do
             \  0                   \n\
             \ end                  "
 
-      intnc = NoFun(Numeric (Num DMInt NonConst))
+      intnc = NoFun(Numeric (Num (IRNum DMInt) NonConst))
       bool = NoFun(DMBool)
-      intnc' = (Numeric (Num DMInt NonConst))
+      intnc' = (Numeric (Num (IRNum DMInt) NonConst))
 
       tya = Fun([([intnc :@ (constCoeff $ Fin 2), intnc :@ (zeroId), bool :@ (constCoeff $ Infty)] :->: (NoFun $ intnc')) :@ Just [JTAny, JTAny, JTAny]])
 

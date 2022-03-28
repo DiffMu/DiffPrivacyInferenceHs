@@ -207,6 +207,7 @@ instance (MonadDMTC t, Typeable k) => Unifyᵢ (StoppingReason (WithContext DMEx
   unifyᵢ_Msg name DMBool DMBool                 = pure DMBool
   unifyᵢ_Msg name DMInt DMInt                   = pure DMInt
   unifyᵢ_Msg name DMData DMData                 = pure DMData
+  unifyᵢ_Msg name (IRNum t) (IRNum s)           = IRNum <$> unifyᵢMsg name t s
   unifyᵢ_Msg name (Numeric t) (Numeric s)       = Numeric <$> unifyᵢMsg name t s
   unifyᵢ_Msg name (NonConst) (NonConst)         = pure NonConst
   unifyᵢ_Msg name (Const η₁) (Const η₂)         = Const <$> liftINC (unify (WrapMessageINC @(WithContext DMException) name) η₁ η₂)
@@ -267,7 +268,10 @@ getUnificationFailingHint ((a,b))=
       -- case7 = testEquality (typeRep @k) (typeRep @ConstnessKind)
   -- in case (case0,case1,case2,case3,case4,case5,case6,case7) of
   in case case4 of
-        Just Refl -> case (DMInt ∈ [a,b] || DMReal ∈ [a,b]) && (DMData ∈ [a,b]) of
+
+        Just Refl -> let hasIR (IRNum a) = True
+                         hasIR _ = False
+                     in case (hasIR a || hasIR b) && (DMData ∈ [a,b]) of
                        True -> Just $ DMPersistentMessage $ "You might want to use one of the following conversion functions:\n" <>
                                                             "`disc :: [Real :@ ∞] -> Data`\n" <>
                                                             "`norm_convert :: [MetricMatrix(Data,*) :@ 2] -> MetricMatrix(Real,l)` if your matrix rows" <>

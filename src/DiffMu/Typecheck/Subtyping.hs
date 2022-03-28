@@ -54,12 +54,13 @@ subtypingGraph name =
       case2 = testEquality (typeRep @k) (typeRep @NoFunKind)
       case3 = testEquality (typeRep @k) (typeRep @NumKind)
       case4 = testEquality (typeRep @k) (typeRep @BaseNumKind)
-      case5 = testEquality (typeRep @k) (typeRep @ClipKind)
-      case6 = testEquality (typeRep @k) (typeRep @NormKind)
-      case7 = testEquality (typeRep @k) (typeRep @ConstnessKind)
-  in case (case0,case1,case2,case3,case4,case5,case6,case7) of
+      case5 = testEquality (typeRep @k) (typeRep @IRNumKind)
+      case6 = testEquality (typeRep @k) (typeRep @ClipKind)
+      case7 = testEquality (typeRep @k) (typeRep @NormKind)
+      case8 = testEquality (typeRep @k) (typeRep @ConstnessKind)
+  in case (case0,case1,case2,case3,case4,case5,case6,case7,case8) of
     -- Main Kind
-    (Just Refl, _, _, _, _, _, _, _) ->
+    (Just Refl, _, _, _, _, _, _, _, _) ->
       \case { IsReflexive NotStructural
               -> []
             ; IsReflexive IsStructural
@@ -80,7 +81,7 @@ subtypingGraph name =
               -> []
             }
 
-    (_,Just Refl, _, _, _, _, _, _) ->
+    (_,Just Refl, _, _, _, _, _, _, _) ->
       \case { IsReflexive IsStructural -> []
             ; _ -> []}
               -- -> [ MultiEdge getArrowLength $
@@ -99,7 +100,7 @@ subtypingGraph name =
               --        return (args₀ :->: r₀,  args₁ :->: r₁)
               --    ]}
 
-    (_,_, Just Refl, _, _, _, _, _) ->
+    (_,_, Just Refl, _, _, _, _, _, _) ->
       \case { IsReflexive IsStructural
             -> [
                  (SingleEdge $
@@ -186,7 +187,7 @@ subtypingGraph name =
             }
 
     -- Num Kind
-    (_,_, _, Just Refl, _, _, _, _) ->
+    (_,_, _, Just Refl, _, _, _, _, _) ->
       \case { IsReflexive IsStructural
               -> [
                     -- SingleEdge $ return ((Num DMData NonConst), (Num DMData NonConst))
@@ -225,11 +226,21 @@ subtypingGraph name =
             }
 
     -- BaseNum Kind
-    (_,_, _, _, Just Refl, _, _, _) ->
+    (_,_, _, _, Just Refl, _, _, _, _) ->
       \case { IsReflexive IsStructural
               -> [ SingleEdge $ return (DMData, DMData)
+                 , SingleEdge $ do
+                     a <- newVar
+                     b <- newVar
+                     a ⊑! b
+                     return (IRNum a, IRNum b)
                  ]
-            ; IsReflexive IsRightStructural
+            ; _ -> []
+            }
+
+    -- IRNum Kind
+    (_,_, _, _, _, Just Refl, _, _, _) ->
+      \case { IsReflexive IsRightStructural
               -> [ SingleEdge $ return (DMInt, DMInt)
 
                  -- , SingleEdge $
@@ -245,9 +256,8 @@ subtypingGraph name =
                  ]
             ; _ -> []
             }
-
     -- kind = clip
-    (_, _, _, _, _, Just Refl, _, _) ->
+    (_, _, _, _, _, _, Just Refl, _, _) ->
       \case { IsReflexive IsStructural
               -> [ SingleEdge $ return (U, U)
                  , SingleEdge $ do
@@ -266,7 +276,7 @@ subtypingGraph name =
             }
 
     -- kind = norm
-    (_, _, _, _, _, _, Just Refl, _) ->
+    (_, _, _, _, _, _, _, Just Refl, _) ->
       \case { IsReflexive IsStructural
               -> [ SingleEdge $ return (L1, L1)
                  , SingleEdge $ return (L2, L2)
@@ -279,7 +289,7 @@ subtypingGraph name =
               --    ]
             ; _ -> []
             }
-    (_, _, _, _, _, _, _, Just Refl) ->
+    (_, _, _, _, _, _, _, _, Just Refl) ->
       \case { IsReflexive IsStructural
               -> [ ]
             ; IsReflexive IsLeftStructural
@@ -308,7 +318,7 @@ subtypingGraph name =
             ; _ -> []
             }
 
-    (_, _, _, _, _, _, _, _) -> \_ -> []
+    (_, _, _, _, _, _, _, _, _) -> \_ -> []
 
 
 -- If we have a bunch of subtyping constraints {β ≤ α, γ ≤ α, δ ≤ α} then it
@@ -415,18 +425,20 @@ instance Typeable k => FixedVars TVarOf (IsInfimum ((DMTypeOf k, DMTypeOf k) :=:
 
 data ContractionAllowed = ContractionAllowed | ContractionDisallowed
 
-{- since we have Dta there is no top and bot for numerics :( see issue #247
+
 getBottoms :: forall k. (SingI k, Typeable k) => [DMTypeOf k]
 getBottoms =
-  case testEquality (typeRep @k) (typeRep @BaseNumKind) of
+  case testEquality (typeRep @k) (typeRep @IRNumKind) of
      Just Refl -> [DMInt]
      _ -> []
--}
 
 getTops :: forall k. (SingI k, Typeable k) => [DMTypeOf k]
-getTops = case testEquality (typeRep @k) (typeRep @ConstnessKind) of
-               Just Refl -> [NonConst]
-               _ -> []
+getTops =
+  case testEquality (typeRep @k) (typeRep @IRNumKind) of
+     Just Refl -> [DMReal]
+     _ -> case testEquality (typeRep @k) (typeRep @ConstnessKind) of
+            Just Refl -> [NonConst]
+            _ -> []
 
 type TypeGraph k = H.HashMap (DMTypeOf k) [DMTypeOf k]
 
@@ -464,7 +476,8 @@ getCurrentConstraintSubtypingGraph = do
 
 
   let graph = foldl addEdge H.empty edges
-  return graph
+  let graph' = foldl addEdge graph [(b, e) | b <- getBottoms @k, e <- (H.keys graph)] -- add edges from bottoms to all other nodes.
+  return graph'
 
 
 
@@ -605,6 +618,7 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsLessEqual (DMTypeOf k, DMTyp
   solve_ Dict SolveExact name (IsLessEqual (a,b)) = solveSubtyping name (a,b)
   solve_ Dict SolveGlobal name (IsLessEqual path) = collapseSubtypingCycles path
   solve_ Dict SolveAssumeWorst name (IsLessEqual (a,b)) = return ()
+  solve_ Dict SolveFinal name (IsLessEqual (a,b))  | a `elem` getBottoms = dischargeConstraint name
   solve_ Dict SolveFinal name (IsLessEqual (a,b))  | b `elem` getTops    = dischargeConstraint name
   solve_ Dict SolveFinal name (IsLessEqual (a,b))  | otherwise = do
     -- if we are in solve final, we try to contract the edge
@@ -646,6 +660,16 @@ solveSupremumSpecial graph name ((a,b) :=: x) | a == x = do
 solveSupremumSpecial graph name ((a,b) :=: x) | b == x = do
   msg <- inheritanceMessageFromName name
   (a ≤! x) msg
+  dischargeConstraint name
+
+solveSupremumSpecial graph name ((a,b) :=: x) | elem a (getBottoms @k) = do
+  msg <- inheritanceMessageFromName name
+  unify msg b x
+  dischargeConstraint name
+
+solveSupremumSpecial graph name ((a,b) :=: x) | elem b (getBottoms @k) = do
+  msg <- inheritanceMessageFromName name
+  unify msg a x
   dischargeConstraint name
 
 solveSupremumSpecial graph name ((a,b) :=: x) | otherwise = return ()

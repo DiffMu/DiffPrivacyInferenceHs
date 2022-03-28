@@ -34,6 +34,8 @@ default (Text)
 -- type has not (yet) been inferred, we get a bottom julia type because they could
 -- potentially match any method.
 juliatypes :: DMTypeOf k -> [JuliaType]
+juliatypes (IRNum (TVar _)) = [JTReal, JTInt]
+juliatypes (IRNum t) = juliatypes t
 juliatypes (Numeric (Num t c)) = juliatypes t
 juliatypes (Numeric (TVar _)) = [JTInt, JTReal, JTData]
 juliatypes DMInt = [JTInt]
@@ -65,15 +67,15 @@ juliatypesInContainer constr t = map constr (juliatypes t)
 
 -- get a BaseNumKind DMType corresponding to the given JuliaType
 createDMTypeBaseNum :: MonadDMTC t => JuliaType -> t (DMTypeOf BaseNumKind)
-createDMTypeBaseNum (JTInt) = pure DMInt
-createDMTypeBaseNum (JTReal) = pure DMReal
+createDMTypeBaseNum (JTInt) = pure (IRNum DMInt)
+createDMTypeBaseNum (JTReal) = pure (IRNum DMReal)
 createDMTypeBaseNum (JTData) = pure DMData
 createDMTypeBaseNum (t) = pure DMAny
 
 -- get a NumKind DMType corresponding to the given JuliaType
 createDMTypeNum :: MonadDMTC t => JuliaType -> t DMMain
-createDMTypeNum (JTInt) = pure (NoFun (Numeric (Num DMInt NonConst)))
-createDMTypeNum (JTReal) = pure (NoFun (Numeric (Num DMReal NonConst)))
+createDMTypeNum (JTInt) = pure (NoFun (Numeric (Num (IRNum DMInt) NonConst)))
+createDMTypeNum (JTReal) = pure (NoFun (Numeric (Num (IRNum DMReal) NonConst)))
 createDMTypeNum (JTData) = pure (NoFun (Numeric (Num DMData NonConst)))
 createDMTypeNum (t) = pure DMAny
 
@@ -81,8 +83,8 @@ createDMTypeNum (t) = pure DMAny
 -- used to make DMType subtyping constraints for annotated things
 createDMType :: MonadDMTC t => JuliaType -> t DMType
 createDMType (JTBool) = pure DMBool
-createDMType (JTInt) = pure (Numeric (Num DMInt NonConst))
-createDMType (JTReal) = pure (Numeric (Num DMReal NonConst))
+createDMType (JTInt) = pure (Numeric (Num (IRNum DMInt) NonConst))
+createDMType (JTReal) = pure (Numeric (Num (IRNum DMReal) NonConst))
 createDMType (JTData) = pure (Numeric (Num DMData NonConst))
 createDMType (JTTuple ts) = do
   dts <- mapM createDMType ts

@@ -743,7 +743,7 @@ checkSen' scope (Located l (Loop niter cs' (xi, xc) body)) = do
   -- τbcs = type of the capture variable xc inferred in the body
   (τit, τloop_in, (τbody_out, (τbit, sbit), (τbody_in, sbcs))) <- msum3Tup (cniter <* mscale sit, ccs <* mscale scs, cbody' <* mscale sb)
 
-  unify (l :\\: "Iterator must be integer.") (NoFun (Numeric (Num DMInt NonConst))) τbit
+  unify (l :\\: "Iterator must be integer.") (NoFun (Numeric (Num (IRNum DMInt) NonConst))) τbit
 
   τcsnf <- newVar
   unify (l :\\: "Loop captures cannot be functions") (NoFun τcsnf) τloop_in -- functions cannot be captured.
@@ -780,7 +780,7 @@ checkSen' scope (Located l (MCreate n m (x1, x2) body)) =
    let setDim :: TC DMMain -> Sensitivity -> TC DMMain
        setDim tm s = do
           τ <- tm -- check dimension term
-          unify (l :\\: "Matrix dimension must be const in mcreate") τ (NoFun (Numeric (Num DMInt (Const s)))) -- dimension must be const integral
+          unify (l :\\: "Matrix dimension must be const in mcreate") τ (NoFun (Numeric (Num (IRNum DMInt) (Const s)))) -- dimension must be const integral
           mscale zeroId
           return τ
 
@@ -795,9 +795,9 @@ checkSen' scope (Located l (MCreate n m (x1, x2) body)) =
           WithRelev _ (x2τ :@ _) <- removeVar @SensitivityK x2
 
           -- input vars must be integer
-          addConstraint (Solvable (IsLessEqual (x1τ, NoFun (Numeric (Num DMInt NonConst)))))
+          addConstraint (Solvable (IsLessEqual (x1τ, NoFun (Numeric (Num (IRNum DMInt) NonConst)))))
             (l :\\: "First MCreate creation function argument must be integer.")
-          addConstraint (Solvable (IsLessEqual (x2τ, NoFun (Numeric (Num DMInt NonConst)))))
+          addConstraint (Solvable (IsLessEqual (x2τ, NoFun (Numeric (Num (IRNum DMInt) NonConst)))))
             (l :\\: "Second MCreate creation function argument must be integer.")
 
           return τ
@@ -832,7 +832,7 @@ checkSen' scope (Located l (Size m)) = do
 
   mscale zeroId
 
-  return (NoFun (DMTup [Numeric (Num DMInt (Const nv)), Numeric (Num DMInt (Const mv))]))
+  return (NoFun (DMTup [Numeric (Num (IRNum DMInt) (Const nv)), Numeric (Num (IRNum DMInt) (Const mv))]))
 
 checkSen' scope (Located l (Length m)) = do
   mt <- checkSens scope m
@@ -847,7 +847,7 @@ checkSen' scope (Located l (Length m)) = do
 
   mscale zeroId
 
-  return (NoFun (Numeric (Num DMInt (Const nv))))
+  return (NoFun (Numeric (Num (IRNum DMInt) (Const nv))))
 
 
 checkSen' scope (Located l (MutClipM c m)) = checkSens scope (Located l (ClipM c m))
@@ -901,7 +901,7 @@ checkSen' scope (Located l (Count f m)) = let
     unify (l :\\: "Parameter of `count` must be a Data vector.") tm (NoFun (DMVec n cl r (NoFun (Numeric (Num DMData NonConst)))))
     unify (l :\\: "Parameter of `count` must be a function from Data to Bool.") tf (Fun [[(NoFun (Numeric (Num DMData NonConst))) :@ s] :->: (NoFun DMBool) :@ (Just [JTAny])])
     
-    return (NoFun (Numeric (Num DMInt NonConst)))
+    return (NoFun (Numeric (Num (IRNum DMInt) NonConst)))
 
   
   
@@ -932,8 +932,8 @@ checkSen' scope (Located l (ConvertM m)) = do
   -- and forget about old `nrm
   -- technically the clipping parameter does not change, but we set it to U so it fits with the rest...
   -- see issue 
---  return (NoFun (DMGrads clp (Clip clp) n (Numeric (Num DMReal NonConst))))
-  return (NoFun (DMContainer k clp U n (NoFun (Numeric (Num DMReal NonConst)))))
+--  return (NoFun (DMGrads clp (Clip clp) n (Numeric (Num (IRNum DMReal) NonConst))))
+  return (NoFun (DMContainer k clp U n (NoFun (Numeric (Num (IRNum DMReal) NonConst)))))
 
 --------------------
 
@@ -1126,7 +1126,7 @@ checkSen' scope (Located l (ZeroGrad m)) = do
    unify (l :\\: "Input for `zero_gradient` must be a model") tm (NoFun (DMModel n))
 
    -- we could return const here but it'll probably be trouble
-   return (NoFun (DMGrads nrm clp n (NoFun (Numeric (Num DMReal NonConst)))))
+   return (NoFun (DMGrads nrm clp n (NoFun (Numeric (Num (IRNum DMReal) NonConst)))))
 
 
 checkSen' scope term@(Located l (SumGrads g1 g2)) = do
@@ -1564,16 +1564,16 @@ checkPri' scope (Located l (AboveThresh qs e d t)) = do
       (τqs, (τe, τd, τt)) <- msumTup (mqs, msum3Tup (me, md, mt))
 
       tfun <- newVar
-      addConstraint (Solvable (IsFunctionArgument (tfun, Fun([([τd :@ (oneId :: Sensitivity)] :->: (NoFun (Numeric (Num DMReal NonConst)))) :@ Nothing]))))
+      addConstraint (Solvable (IsFunctionArgument (tfun, Fun([([τd :@ (oneId :: Sensitivity)] :->: (NoFun (Numeric (Num (IRNum DMReal) NonConst)))) :@ Nothing]))))
         (l :\\: "AboveThreshold query vector must contain functions of the right type.")
       unify (l :\\: "Set AboveThreshold query vector type") τqs (NoFun (DMVec nrm clp n tfun))
       
-      addConstraint (Solvable (IsLessEqual (τe, (NoFun (Numeric (Num DMReal (Const eps)))))))
+      addConstraint (Solvable (IsLessEqual (τe, (NoFun (Numeric (Num (IRNum DMReal) (Const eps)))))))
         (l :\\: "AboveThreshold epsilon parameter must be const (Static).")
-      addConstraint (Solvable (IsLessEqual (τt, (NoFun (Numeric (Num DMReal NonConst))))))
+      addConstraint (Solvable (IsLessEqual (τt, (NoFun (Numeric (Num (IRNum DMReal) NonConst))))))
         (l :\\: "AboveThreshold threshold parameter must be const (Static).")
 
-      return (NoFun (Numeric (Num DMInt NonConst)))
+      return (NoFun (Numeric (Num (IRNum DMInt) NonConst)))
 
 checkPri' scope term@(Located l (Exponential rp εp xs f)) = do
 
@@ -1605,7 +1605,7 @@ checkPri' scope term@(Located l (Exponential rp εp xs f)) = do
       --  so we simply use a var and allow any sensitivity.
       --
       s_input <- newVar
-      let t_f_required = Fun ([([t_x :@ s_input] :->: (NoFun (Numeric (Num DMReal NonConst)))) :@ Just [JTAny]])
+      let t_f_required = Fun ([([t_x :@ s_input] :->: (NoFun (Numeric (Num (IRNum DMReal) NonConst)))) :@ Just [JTAny]])
       unify (l :\\: "Exponential mechanism expects a function from element type to the reals.") t_f_actual t_f_required
 
       -- interesting input variables must have sensitivity <= r
@@ -1721,8 +1721,8 @@ checkPri' scope (Located l (Loop niter cs' (xi, xc) body)) =
       -- τbcs = type of the capture variable xc inferred in the body
       (τit, τloop_in, (τbody_out, n, τbit, τbody_in)) <- msum3Tup (cniter, mcaps, cbody')
 
-      unify (l :\\: "Number of iterations in private loop must be const (Static) integer.") τit (NoFun (Numeric (Num DMInt (Const n)))) -- number of iterations must be constant integer
-      unify (l :\\: "Iterator in private loop must be integer") (NoFun (Numeric (Num DMInt NonConst))) τbit -- number of iterations must match type requested by body
+      unify (l :\\: "Number of iterations in private loop must be const (Static) integer.") τit (NoFun (Numeric (Num (IRNum DMInt) (Const n)))) -- number of iterations must be constant integer
+      unify (l :\\: "Iterator in private loop must be integer") (NoFun (Numeric (Num (IRNum DMInt) NonConst))) τbit -- number of iterations must match type requested by body
 
       τcsnf <- newVar
       unify (l :\\: "Loop captures cannot be functions.") (NoFun τcsnf) τloop_in -- functions cannot be captured.
@@ -1810,7 +1810,7 @@ checkPri' scope term@(Located l (SmpLet xs (Located l2 (Sample n m1_in m2_in)) t
       n2 <- newVar
     
       -- set number of samples to const m2 and truncate context with 0
-      unify (l :\\: "Number of samples must be const (Static) integer") tn (NoFun (Numeric (Num DMInt (Const m2))))
+      unify (l :\\: "Number of samples must be const (Static) integer") tn (NoFun (Numeric (Num (IRNum DMInt) (Const m2))))
       unify (l :\\: "Truncate context of number of samples with 0") pn (zeroId, zeroId)
       
       -- set input matrix types and truncate contexts to what it says in the rule

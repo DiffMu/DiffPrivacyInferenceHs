@@ -137,6 +137,7 @@ instance Substitute TVarOf DMTypeOf (DMTypeOf k) where
   substitute σs DMInt = pure DMInt
   substitute σs DMReal = pure DMReal
   substitute σs DMData = pure DMData
+  substitute σs (IRNum τ) = IRNum <$> substitute σs τ
   substitute σs (Numeric τ) = Numeric <$> substitute σs τ
   substitute σs (NonConst) = pure NonConst
   substitute σs (Const c) = Const <$> substitute σs c
@@ -172,6 +173,7 @@ instance Substitute SVarOf SensitivityOf (DMTypeOf k) where
   substitute σs DMInt = pure DMInt
   substitute σs DMReal = pure DMReal
   substitute σs (DMData) = pure DMData
+  substitute σs (IRNum τ) = IRNum <$> substitute σs τ
   substitute σs (Numeric τ) = Numeric <$> substitute σs τ
   substitute σs (NonConst) = pure NonConst
   substitute σs (Const c) = Const <$> substitute σs c
@@ -247,6 +249,7 @@ instance Typeable k => FreeVars TVarOf (DMTypeOf k) where
   freeVars Gradient = []
   freeVars (Matrix τ) = freeVars τ
   freeVars (Clip τ) = freeVars τ
+  freeVars (IRNum τ) = freeVars τ
   freeVars (Numeric τ) = freeVars τ
   freeVars (Const t) = freeVars t
   freeVars (NonConst) = []

@@ -257,11 +257,11 @@ instance Typeable k => Solve MonadDMTC UnifyWithConstSubtype (DMTypeOf k, DMType
             TVar so' -> pure ()
 
             -- the rest are induction base cases, we directly unifyFromName name lhs with rhs
-            -- { DMAny DMInt DMReal (Num DMData NonConst) L1 L2 LInf U (Clip dto) Vector Gradient Matrix (BlackBox jts )}
+            -- { DMAny DMInt (IRNum DMReal) (Num DMData NonConst) L1 L2 LInf U (Clip dto) Vector Gradient Matrix (BlackBox jts )}
             b -> unifyFromName name a b >> dischargeConstraint name
 
           -- the rest are induction base cases, we directly unifyFromName name lhs with rhs
-          -- { DMAny DMInt DMReal (Num DMData NonConst) L1 L2 LInf U (Clip dto) Vector Gradient Matrix (BlackBox jts )}
+          -- { DMAny DMInt (IRNum DMReal) (Num DMData NonConst) L1 L2 LInf U (Clip dto) Vector Gradient Matrix (BlackBox jts )}
           a -> unifyFromName name a b >> dischargeConstraint name
 
 

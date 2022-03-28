@@ -9,10 +9,10 @@ import Spec.Base
   --     let test :: TC _
   --         test = do
   --           a <- newVar
-  --           b <- supremum a DMReal
+  --           b <- supremum a (IRNum DMReal)
   --           return (a,b)
   --     let check :: (DMTypeOf BaseNumKind, DMTypeOf BaseNumKind) -> TC _
-  --         check (TVar a, DMReal) = pure (Right ())
+  --         check (TVar a, (IRNum DMReal)) = pure (Right ())
   --         check x                = pure (Left x)
   --     (tcl $ (sn_EW test >>= check)) `shouldReturn` (Right (Right ()))
 

@@ -174,16 +174,16 @@ instance Solve MonadDMTC IsAdditiveNoiseResult (DMTypeOf MainKind, DMTypeOf Main
 
            -- set in- and output types as given in the mgauss rule
            -- input type gets a LessEqual so we can put Integer or Real (but not Data)
-           addConstraintFromName name (Solvable(IsLessEqual(τin, (NoFun (DMContainer k L2 iclp n (NoFun (Numeric (Num DMReal τv))))))))
-           unifyFromName name τgauss (NoFun (DMContainer k LInf U n (NoFun (Numeric (Num DMReal NonConst)))))
+           addConstraintFromName name (Solvable(IsLessEqual(τin, (NoFun (DMContainer k L2 iclp n (NoFun (Numeric (Num (IRNum DMReal) τv))))))))
+           unifyFromName name τgauss (NoFun (DMContainer k LInf U n (NoFun (Numeric (Num (IRNum DMReal) NonConst)))))
 
            dischargeConstraint @MonadDMTC name
         _ -> do -- regular gauss or unification errpr later
            τ <- newVar -- input type can be anything (as long as it's numeric)
 
            -- set in- and output types as given in the gauss rule
-           addConstraintFromName name (Solvable(IsLessEqual(τin, (NoFun (Numeric (Num DMReal τ))))))
-           unifyFromName name τgauss (NoFun (Numeric (Num DMReal NonConst)))
+           addConstraintFromName name (Solvable(IsLessEqual(τin, (NoFun (Numeric (Num (IRNum DMReal) τ))))))
+           unifyFromName name τgauss (NoFun (Numeric (Num (IRNum DMReal) NonConst)))
 
            dischargeConstraint @MonadDMTC name
 
@@ -456,33 +456,4 @@ instance Solve MonadDMTC IsVecLike VecKind where
         Vector -> dischargeConstraint name
         Gradient -> dischargeConstraint name
         Matrix r -> unifyFromName name r oneId >> dischargeConstraint name
-
-
---------------------------------------------------
--- check if a type is equal to another, set a sensitivity accordingly
-
-
-newtype SetIfTypesEqual a = SetIfTypesEqual a deriving Show
-
-instance FixedVars TVarOf (SetIfTypesEqual (Sensitivity, DMMain, DMMain, Sensitivity, Sensitivity)) where
-  fixedVars (SetIfTypesEqual _) = []
-
-instance TCConstraint SetIfTypesEqual where
-  constr = SetIfTypesEqual
-  runConstr (SetIfTypesEqual c) = c
-
-instance Solve MonadDMTC SetIfTypesEqual (Sensitivity, DMMain, DMMain, Sensitivity, Sensitivity) where
-    solve_ Dict _ name (SetIfTypesEqual (target, t1, t2, strue, sfalse)) = let
-       f1 :: [SomeK TVarOf] = freeVars t1
-       f2 :: [SomeK TVarOf] = freeVars t2
-     in
-       case (and [null f1, null f2]) of -- no free variables in any of the types
-            True -> case t1 == t2 of
-                         True -> do
-                           unifyFromName name target strue
-                           dischargeConstraint name
-                         False -> do
-                           unifyFromName name target sfalse
-                           dischargeConstraint name
-            False -> pure ()
 
