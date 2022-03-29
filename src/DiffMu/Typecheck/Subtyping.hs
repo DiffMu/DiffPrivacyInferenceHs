@@ -381,7 +381,7 @@ convertSubtypingToSupremum name _                   = pure ()
 --    return False if nothing could be done
 solveSubtyping :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => Symbol -> (DMTypeOf k, DMTypeOf k) -> t ()
 solveSubtyping name (_, DMAny) = dischargeConstraint name
-solveSubtyping name path = withLogLocation "Subtyping" $ do
+solveSubtyping name path@(a,b) = withLogLocation "Subtyping" $ do
 
   -- Here we define which errors should be caught while doing our hypothetical computation.
   let relevance (UnificationError _ _)      = IsGraphRelevant
@@ -411,9 +411,12 @@ solveSubtyping name path = withLogLocation "Subtyping" $ do
       npath <- normalizeExact path
       log $ "(With normalizations applied the constraint is now " <> show npath <> " ; it should be the same as the input.)"
       convertSubtypingToSupremum name path -- in this case we try to change this one into a sup
-    Fail e         -> throwUnlocatedError (UnsatisfiableConstraint (show (fst path) <> " ⊑ " <> show (snd path) <> "\n\n"
-                         <> "Got the following errors while searching the subtyping graph:\n"
-                         <> show e))
+    Fail e         -> do
+
+      let msg2 = case getUnificationFailingHint @t (path) of
+                   Just hint -> DMPersistentMessage (hint :\\: msg)
+                   Nothing -> DMPersistentMessage msg
+      throwError (WithContext (UnsatisfiableConstraint (show (fst path) <> " ⊑ " <> show (snd path))) (msg2))
 
 instance Typeable k => FixedVars TVarOf (IsLessEqual (DMTypeOf k, DMTypeOf k)) where
   fixedVars _ = mempty
