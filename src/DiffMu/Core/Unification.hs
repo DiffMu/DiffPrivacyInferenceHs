@@ -274,7 +274,8 @@ getUnificationFailingHint ((a,b))=
                      in case (hasIR a || hasIR b) && (DMData ∈ [a,b]) of
                        True -> Just $ DMPersistentMessage $ "You might want to use one of the following conversion functions:\n" <>
                                                             "`disc :: [Real :@ ∞] -> Data`\n" <>
-                                                            "`norm_convert :: [MetricMatrix(Data,*) :@ 2] -> MetricMatrix(Real,l)` if your matrix rows" <>
+                                                            "`undisc :: [Data :@ ∞] -> Real`\n" <>
+                                                            "`undisc_container :: [MetricMatrix(Data,*) :@ 2] -> MetricMatrix(Real,l)` if your matrix rows" <>
                                                             " all have row `l`-norm `<=1` (use `clip` for this)\n"
                        False -> Nothing
         Nothing -> Nothing
