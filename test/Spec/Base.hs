@@ -176,7 +176,7 @@ parseEval_b_customCheck dolog parse desc term (testBy :: TestBy) customTCCheck =
     let term'' :: TC DMMain
         term'' = case res of
                    Left err -> error $ "Error while parsing DMTerm from string: " <> show err
-                   Right res''  ->
+                   Right (res'',_)  ->
                      do
                             (res) <- parseDMTermFromJExpr res'' >>= (liftNewLightTC . preprocessAll)
                             -- res <- preprocessDMTerm res'

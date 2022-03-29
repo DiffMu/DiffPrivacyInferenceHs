@@ -51,6 +51,7 @@ import System.IO (FilePath, readFile)
 
 
 newtype RawSource = RawSource (HashMap (Maybe FilePath) (Array Int Text))
+  deriving (Show)
 
 rawSourceFromString :: String -> [FilePath] -> IO RawSource
 rawSourceFromString input other_files = do

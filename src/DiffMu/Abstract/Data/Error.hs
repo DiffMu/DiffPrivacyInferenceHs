@@ -150,6 +150,7 @@ printSourceLines fp (begin,end) = do
                <> edge <> "\n"
     Nothing -> return $    "  |\n"
                         <> "  | <<source not available>>\n"
+                        <> "  | (for file: " <> T.pack (show fp) <> ")\n"
                         <> "  |\n"
 
 
