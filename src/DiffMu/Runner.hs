@@ -41,7 +41,7 @@ typecheckFromString_DMTerm_Detailed term rawsource = do
  case (res) of
    Left err -> putStrLn $ "Error while parsing DMTerm from string: " <> show err
    Right (term,files) -> do
-     rs <- (rawSourceFromString rawsource [])
+     rs <- (rawSourceFromString rawsource files)
      putStrLn $ ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
      putStrLn $ show rs
      putStrLn $ ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
@@ -53,7 +53,7 @@ typecheckFromString_DMTerm_Simple term rawsource = do
  case res of
    Left err -> putStrLn $ "Error while parsing DMTerm from string: " <> show err
    Right (term,files) -> do
-     rs <- (rawSourceFromString rawsource [])
+     rs <- (rawSourceFromString rawsource files)
      putStrLn $ ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
      putStrLn $ show rs
      putStrLn $ ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
