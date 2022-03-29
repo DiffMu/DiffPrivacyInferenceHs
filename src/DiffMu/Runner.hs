@@ -34,19 +34,30 @@ import qualified Data.Text.IO as TIO
 run :: IO ()
 run = putStrLn "Hello?"
 
+
 typecheckFromString_DMTerm_Detailed :: String -> String -> IO ()
 typecheckFromString_DMTerm_Detailed term rawsource = do
- let res = parseJTreeFromString term >>= parseJExprFromJTree
- case res of
+ let (res) = parseJTreeFromString term >>= parseJExprFromJTree
+ case (res) of
    Left err -> putStrLn $ "Error while parsing DMTerm from string: " <> show err
-   Right term -> typecheckFromJExpr_Detailed term (rawSourceFromString rawsource)
+   Right (term,files) -> do
+     rs <- (rawSourceFromString rawsource files)
+     putStrLn $ ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
+     putStrLn $ show rs
+     putStrLn $ ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
+     typecheckFromJExpr_Detailed term rs
 
 typecheckFromString_DMTerm_Simple :: String -> String -> IO ()
 typecheckFromString_DMTerm_Simple term rawsource = do
  let res = parseJTreeFromString term >>= parseJExprFromJTree
  case res of
    Left err -> putStrLn $ "Error while parsing DMTerm from string: " <> show err
-   Right term -> typecheckFromJExpr_Simple term (rawSourceFromString rawsource)
+   Right (term,files) -> do
+     rs <- (rawSourceFromString rawsource files)
+     putStrLn $ ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
+     putStrLn $ show rs
+     putStrLn $ ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
+     typecheckFromJExpr_Simple term rs
 
 data DoShowLog = DoShowLog DMLogSeverity [DMLogLocation] | DontShowLog
 

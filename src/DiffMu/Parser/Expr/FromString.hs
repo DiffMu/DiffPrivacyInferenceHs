@@ -367,10 +367,11 @@ pModuleToJExpr (JModule [_,_,m]) = pTreeToJExpr m
 pModuleToJExpr t = jParseError ("All typechecked code must be within a module!")
 
 
-parseJExprFromJTree :: (JTree, LocMap, [String]) -> Either DMException JExpr
-parseJExprFromJTree (tree, locs, _) =
+
+parseJExprFromJTree :: (JTree, LocMap, [String]) -> Either DMException (JExpr, [String])
+parseJExprFromJTree (tree, locs, filenames) =
   let x = runStateT (pModuleToJExpr tree) ("unknown", 0, 0, locs)
       y = case runExcept x of
         Left err -> Left err
-        Right (term, _) -> Right term
+        Right (term, _) -> Right (term, filenames)
   in y

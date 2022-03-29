@@ -6,6 +6,7 @@ module DiffMu.Abstract.Data.Error where
 import DiffMu.Prelude
 -- import DiffMu.Abstract.Class.Log
 import DiffMu.Abstract.Data.ErrorReporting
+import DiffMu.Abstract.Data.HashMap
 
 import {-# SOURCE #-} DiffMu.Core.Definitions
 
@@ -14,6 +15,8 @@ import Data.String (IsString)
 import qualified Data.Text as T
 import qualified Prelude as P
 import Data.Graph (edges)
+import System.IO (FilePath)
+import qualified Data.HashMap.Strict as H
 
 --------------------------------------------------------------------------
 -- Printing
@@ -53,7 +56,7 @@ indent s = unlinesS (fmap ("  " <>) (linesS s))
 
 data SourceLoc = SourceLoc
   {
-    getLocFile  :: Text
+    getLocFile  :: Maybe FilePath
   , getLocBegin :: Int
   , getLocEnd   :: Int
   }
@@ -89,15 +92,21 @@ instance Monad t => Normalize t SourceLocExt where
   normalize e = pure
 
 instance ShowPretty SourceLoc where
-  showPretty (SourceLoc file begin end) | begin == end  = T.unpack file <> ": line " <> show begin
-  showPretty (SourceLoc file begin end) = T.unpack file <> ": between lines " <> show begin <> " and " <> show end
+  showPretty (SourceLoc file begin end) =
+    let file' = case file of
+                  Just f -> f
+                  Nothing -> "none"
+    in case begin == end of
+        True -> file' <> ": line " <> show begin
+        False -> file' <> ": between lines " <> show begin <> " and " <> show end
+
 
 instance Show SourceLocExt where
   show = showPretty
 
 instance ShowLocated SourceLoc where
   showLocated loc@(SourceLoc file (begin) (end)) = do
-    sourcelines <- printSourceLines (begin, end)
+    sourcelines <- printSourceLines file (begin, end)
     return $ T.pack (showPretty loc) <> "\n"
              <> sourcelines
 
@@ -128,27 +137,34 @@ instance ShowLocated SourceLocExt where
 -- conditions:
 --  - `begin <= end`
 --
-printSourceLines :: MonadReader RawSource t => (Int,Int) -> t Text
-printSourceLines (begin,end) = do
+printSourceLines :: MonadReader RawSource t => Maybe FilePath -> (Int,Int) -> t Text
+printSourceLines fp (begin,end) = do
   let numbersize = length (show end)
-  printed_lines <- mapM (printSourceLine numbersize) [begin .. (end - 1)]
-  let edge = T.pack $ take (numbersize P.+ 2) (repeat ' ') <> "|"
-  return $ edge <> "\n"
-           <> T.concat (fmap (<> "\n") printed_lines)
-           <> edge <> "\n"
+  RawSource source <- ask
+  case H.lookup fp source of
+    Just source -> do
+      let printed_lines = fmap (printSourceLine source numbersize) [begin .. (end - 1)]
+      let edge = T.pack $ take (numbersize P.+ 2) (repeat ' ') <> "|"
+      return $ edge <> "\n"
+               <> T.concat (fmap (<> "\n") printed_lines)
+               <> edge <> "\n"
+    Nothing -> return $    "  |\n"
+                        <> "  | <<source not available>>\n"
+                        <> "  | (for file: " <> T.pack (show fp) <> ")\n"
+                        <> "  |\n"
 
 
 --
 -- conditions:
 --  - `length(show(linenumber)) <= required_numbersize`
 --
-printSourceLine :: MonadReader RawSource t => Int -> Int -> t Text
-printSourceLine required_numbersize linenumber = do
+printSourceLine :: Array Int Text -> Int -> Int -> Text
+printSourceLine source required_numbersize linenumber =
   let printed_linenumber = show linenumber
-  let padded_linenumber = take (required_numbersize - length printed_linenumber) (repeat ' ') <> printed_linenumber
-  RawSource source <- ask
-  let required_line = source ! linenumber
-  return $ " " <> T.pack padded_linenumber <> " |     " <> required_line
+      padded_linenumber = take (required_numbersize - length printed_linenumber) (repeat ' ') <> printed_linenumber
+  -- RawSource source <- ask
+      required_line = source ! linenumber
+  in " " <> T.pack padded_linenumber <> " |     " <> required_line
 
 
 -------------------------------------------------------------------------

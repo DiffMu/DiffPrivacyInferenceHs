@@ -6,6 +6,7 @@ module DiffMu.Abstract.Data.MonComCtx where
 import DiffMu.Prelude
 import DiffMu.Abstract.Data.MonadicPolynomial
 import DiffMu.Abstract.Class.Term
+import DiffMu.Abstract.Data.HashMap
 
 import Data.HashMap.Strict as H
 
@@ -47,10 +48,6 @@ instance (ShowLocated v, ShowLocated x, DictKey v) => ShowLocated (Ctx v x) wher
 instance Default (Ctx v x)
 
 
-class DictKey k => DictLikeM t k v d | d -> k v where
-  setValueM :: k -> v -> d -> t d
-  getValueM :: k -> d -> t (Maybe v)
-  deleteValueM :: k -> d -> t d
 
 instance (MonadInternalError t,
           DictLike k v1 d1, DictLike k v2 d2,

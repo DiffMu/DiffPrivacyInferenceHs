@@ -6,6 +6,7 @@ import DiffMu.Prelude
 import DiffMu.Abstract.Class.Term
 import DiffMu.Abstract.Class.Constraint
 import DiffMu.Abstract.Class.IsT
+import DiffMu.Abstract.Data.HashMap
 
 import qualified Prelude as P
 import Data.HashMap.Strict as H
@@ -61,16 +62,6 @@ instance (HasMonCom t m v, MonoidM t v) => ModuleM t (ActV v) (MonCom m v) where
 -----------------------------------------------------------
 -- usage as dictionary
 
-class DictKey k => DictLike k v d | d -> k v where
-  setValue :: k -> v -> d -> d
-  getValue :: k -> d -> Maybe v
-  deleteValue :: k -> d -> d
-  emptyDict :: d
-  isEmptyDict :: d -> Bool
-  getAllKeys :: d -> [k]
-  getAllElems :: d -> [v]
-  getAllKeyElemPairs :: d -> [(k,v)]
-  fromKeyElemPairs :: [(k,v)] -> d
 
 changeValue :: DictLike k v d => k -> (v -> v) -> d -> d
 changeValue k f d = case getValue k d of
