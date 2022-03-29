@@ -282,10 +282,10 @@ pJBlackBox name args =
     _ -> parseError $ "Invalid function name expression " <> show name <> ", must be a symbol."
 
 
-pClip :: JExpr -> ParseTC (DMTypeOf ClipKind)
-pClip (JESymbol (Symbol "L1"))   = pure (Clip L1)
-pClip (JESymbol (Symbol "L2"))   = pure (Clip L2)
-pClip (JESymbol (Symbol "LInf")) = pure (Clip LInf)
+pClip :: JExpr -> ParseTC (DMTypeOf NormKind)
+pClip (JESymbol (Symbol "L1"))   = pure L1
+pClip (JESymbol (Symbol "L2"))   = pure L2
+pClip (JESymbol (Symbol "LInf")) = pure LInf
 pClip term = parseError $ "The term " <> show term <> "is not a valid clip value."
 
 
@@ -300,8 +300,8 @@ pJBBCall name args rt size = do
 
 -- supported builtins and their parsers
 builtins = H.fromList
-  [ ("norm_convert!", pUnary MutConvertM)
-  , ("norm_convert", pUnary ConvertM)
+  [ ("undisc_container!", pUnary MutUndiscM)
+  , ("undisc_container", pUnary UndiscM)
   , ("size", pUnary Size)
   , ("length", pUnary Length)
   , ("zero_gradient", pUnary ZeroGrad)
@@ -311,6 +311,7 @@ builtins = H.fromList
   , ("row_to_vec", pUnary MakeVec)
   , ("vec_to_row", pUnary MakeRow)
   , ("disc", pUnary Disc)
+  , ("undisc", pUnary Undisc)
   , ("ceil", pUnary (\a -> Op (IsUnary DMOpCeil) [a]))
 
   , ("subtract_gradient!", pBinary MutSubGrad)
@@ -323,6 +324,8 @@ builtins = H.fromList
   , ("reduce_cols", pBinary PReduceCols)
   , ("clip!", pBuiltinClip MutClipM)
   , ("clip", pBuiltinClip ClipM)
+  , ("norm_convert!", pBuiltinClip MutConvertM)
+  , ("norm_convert", pBuiltinClip ConvertM)
   , ("count", pBinary Count)
   , ("/", pBinary (\a b -> Op (IsBinary DMOpDiv) [a,b]))
   , ("-", pBinary (\a b -> Op (IsBinary DMOpSub) [a,b]))

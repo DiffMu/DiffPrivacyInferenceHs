@@ -457,3 +457,28 @@ instance Solve MonadDMTC IsVecLike VecKind where
         Gradient -> dischargeConstraint name
         Matrix r -> unifyFromName name r oneId >> dischargeConstraint name
 
+--------------------------------------------------
+-- container norm conversion
+--
+
+newtype ConversionResult a = ConversionResult a deriving Show
+
+instance FixedVars TVarOf (ConversionResult (DMTypeOf NormKind, DMTypeOf NormKind, Sensitivity, Sensitivity)) where
+  fixedVars (ConversionResult _) = []
+
+instance TCConstraint ConversionResult where
+  constr = ConversionResult
+  runConstr (ConversionResult c) = c
+
+instance Solve MonadDMTC ConversionResult (DMTypeOf NormKind, DMTypeOf NormKind, Sensitivity, Sensitivity) where
+    solve_ Dict _ name (ConversionResult (nrm_in, nrm_out, n, s)) =
+     case (nrm_in, nrm_out) of
+        (L1,_)      -> unify ("Setting container norm conversion penalty to 1.") s oneId >> dischargeConstraint name
+        (L2,L2)     -> unify ("Setting container norm conversion penalty to 1.") s oneId >> dischargeConstraint name
+        (LInf,LInf) -> unify ("Setting container norm conversion penalty to 1.") s oneId >> dischargeConstraint name
+        (L2,L1)     -> unify ("Setting container norm conversion penalty to sqrt(n_rows).") s (sqrt n) >> dischargeConstraint name
+        (L2,LInf)   -> unify ("Setting container norm conversion penalty to sqrt(n_rows).") s (sqrt n) >> dischargeConstraint name
+        (LInf,L1)   -> unify ("Setting container norm conversion penalty to sqrt(n_rows).") s (sqrt n) >> dischargeConstraint name
+        (LInf,L2)   -> unify ("Setting container norm conversion penalty to sqrt(n_rows).") s (sqrt n) >> dischargeConstraint name
+        _           -> pure ()
+

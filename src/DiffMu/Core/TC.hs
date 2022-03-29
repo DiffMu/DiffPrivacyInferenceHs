@@ -60,6 +60,9 @@ inftyP = (constCoeff Infty, constCoeff Infty)
 instance (Substitute v x a, Substitute v x b, Substitute v x c, Substitute v x d, Substitute v x e) => Substitute v x (a, b, c, d, e) where
   substitute σs (a, b, c, d, e) = (,,,,) <$> substitute σs a <*> substitute σs b <*> substitute σs c <*> substitute σs d <*> substitute σs e
 
+instance (Substitute v x a, Substitute v x b, Substitute v x c, Substitute v x d) => Substitute v x (a, b, c, d) where
+  substitute σs (a, b, c, d) = (,,,) <$> substitute σs a <*> substitute σs b <*> substitute σs c <*> substitute σs d
+
 instance (Substitute v x a, Substitute v x b, Substitute v x c) => Substitute v x (a, b, c) where
   substitute σs (a, b, c) = (,,) <$> substitute σs a <*> substitute σs b <*> substitute σs c
 

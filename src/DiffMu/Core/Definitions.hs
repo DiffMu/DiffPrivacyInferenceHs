@@ -717,7 +717,7 @@ instance TCConstraint IsTypeOpResult where
 -- DMTerm
 --
 
-type Clip = DMTypeOf ClipKind
+type NormTerm = DMTypeOf NormKind
 
 data Asgmt a = (:-) TeVar a
   deriving (Generic, Show, Eq, Ord)
@@ -750,6 +750,7 @@ data PreDMTerm (t :: * -> *) =
   | DMFalse
   | Var TeVar
   | Disc (LocPreDMTerm t)
+  | Undisc (LocPreDMTerm t)
 --  | Rnd JuliaType
   | Arg TeVar JuliaType Relevance
   | Op DMTypeOp_Some [(LocPreDMTerm t)]
@@ -783,8 +784,10 @@ data PreDMTerm (t :: * -> *) =
   | MFold (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t)
   | Count (LocPreDMTerm t) (LocPreDMTerm t)
   | MMap (LocPreDMTerm t) (LocPreDMTerm t)
-  | MutConvertM (LocPreDMTerm t)
-  | ConvertM (LocPreDMTerm t)
+  | MutConvertM NormTerm (LocPreDMTerm t)
+  | ConvertM NormTerm (LocPreDMTerm t)
+  | MutUndiscM (LocPreDMTerm t)
+  | UndiscM (LocPreDMTerm t)
   | MCreate (LocPreDMTerm t) (LocPreDMTerm t) (TeVar, TeVar) (LocPreDMTerm t)
   | Transpose (LocPreDMTerm t)
   | Size (LocPreDMTerm t) -- matrix dimensions, returns a tuple of two numbers
@@ -792,9 +795,9 @@ data PreDMTerm (t :: * -> *) =
   | Index (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t) -- matrix index
   | VIndex (LocPreDMTerm t) (LocPreDMTerm t) -- vector index
   | Row (LocPreDMTerm t) (LocPreDMTerm t) -- matrix row
-  | ClipM Clip (LocPreDMTerm t)
+  | ClipM NormTerm (LocPreDMTerm t)
   | ClipN (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t)
-  | MutClipM Clip (LocPreDMTerm t)
+  | MutClipM NormTerm (LocPreDMTerm t)
   -- Loop (DMTerm : "Number of iterations") ([TeVar] : "Captured variables") (TeVar : "name of iteration var", TeVar : "name of capture variable") (DMTerm : "body")
   | Loop (LocPreDMTerm t) [TeVar] (TeVar, TeVar) (LocPreDMTerm t)
 -- Special NN builtins
@@ -820,7 +823,7 @@ pattern TBind a b c = TLetBase BindLet a b c
 pattern SmpLet a b c = TLetBase SampleLet a b c
 
 {-# COMPLETE Extra, Ret, DMTrue, DMFalse, Sng, Var, Arg, Op, Phi, Lam, LamStar, BBLet, BBApply, Disc,
- Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, Gauss, Laplace, Exponential, MutGauss, MutLaplace, AboveThresh, Count, MMap, MapRows, MapCols, MapCols2, MapRows2, PReduceCols, PFoldRows, MutPFoldRows, MFold, MutConvertM, ConvertM, MCreate, Transpose,
+ Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, Gauss, Laplace, Exponential, MutGauss, MutLaplace, AboveThresh, Count, MMap, MapRows, MapCols, MapCols2, MapRows2, PReduceCols, PFoldRows, MutPFoldRows, MFold, MutConvertM, ConvertM, MCreate, Transpose, UndiscM, MutUndiscM, Undisc,
  Size, Length, Index, VIndex, Row, ClipN, ClipM, MutClipM, Loop, SubGrad, MutSubGrad, ScaleGrad, TProject, ZeroGrad, SumGrads, SmpLet,
  Sample, InternalExpectConst, InternalMutate #-}
 
@@ -994,8 +997,11 @@ recDMTermM_Loc f h (rest)            = mapM (recDMTermM_Loc_Impl f h) rest -- h 
     recDMTermM_Loc_Impl f h (MutPFoldRows a b c d)   = MutPFoldRows <$> (f a) <*> (f b) <*> (f c) <*> (f d)
     recDMTermM_Loc_Impl f h (PReduceCols a b)  = PReduceCols <$> (f a) <*> (f b)
     recDMTermM_Loc_Impl f h (MFold a b c)      = MFold <$> (f a) <*> (f b) <*> (f c)
-    recDMTermM_Loc_Impl f h (MutConvertM a)       = MutConvertM <$> (f a)
-    recDMTermM_Loc_Impl f h (ConvertM a)       = ConvertM <$> (f a)
+    recDMTermM_Loc_Impl f h (MutConvertM a b)  = MutConvertM a <$> (f b)
+    recDMTermM_Loc_Impl f h (ConvertM a b)     = ConvertM a <$> (f b)
+    recDMTermM_Loc_Impl f h (MutUndiscM a)     = MutUndiscM <$> (f a)
+    recDMTermM_Loc_Impl f h (UndiscM a)        = UndiscM <$> (f a)
+    recDMTermM_Loc_Impl f h (Undisc a)         = Undisc <$> (f a)
     recDMTermM_Loc_Impl f h (MCreate a b x c ) = MCreate <$> (f a) <*> (f b) <*> pure x <*> (f c)
     recDMTermM_Loc_Impl f h (Transpose a)      = Transpose <$> (f a)
     recDMTermM_Loc_Impl f h (Size a)           = Size <$> (f a)
@@ -1129,8 +1135,11 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (MutPFoldRows a b c d)   = "MutPFoldRows (" <> (showPretty a) <> " to " <> (showPretty b) <> ", " <> (showPretty c) <> ", " <> (showPretty d)  <> ")"
   showPretty (PReduceCols a b)  = "PReduceCols (" <> (showPretty a) <> " to " <> (showPretty b)  <> ")"
   showPretty (MFold a b c)      = "MFold (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ")"
-  showPretty (MutConvertM a)       = "MutConvertM (" <> (showPretty a) <> ")"
-  showPretty (ConvertM a)       = "ConvertM (" <> (showPretty a) <> ")"
+  showPretty (MutUndiscM a)     = "MutUndiscM (" <> (showPretty a) <> ")"
+  showPretty (UndiscM a)        = "UndiscM (" <> (showPretty a) <> ")"
+  showPretty (Undisc a)         = "Undisc (" <> (showPretty a) <> ")"
+  showPretty (MutConvertM a b)  = "MutConvertM (" <> (showPretty a) <> ", " <> showPretty b <> ")"
+  showPretty (ConvertM a b)     = "ConvertM (" <> (showPretty a) <> ", " <> showPretty b <> ")"
   showPretty (MCreate a b x c ) = "MCreate (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> show x <> ", " <> (showPretty c) <> ")"
   showPretty (Transpose a)      = "Transpose (" <> (showPretty a) <> ")"
   showPretty (Size a)           = "Size (" <> (showPretty a) <> ")"

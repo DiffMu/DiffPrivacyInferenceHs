@@ -869,7 +869,32 @@ checkSen' scope (Located l (ClipM c m)) = do
   unify (l :\\: "Argument of `clip` must be an (LInf, Data)-Matrix.") τb (NoFun (DMContainer k LInf clp n (NoFun (Numeric (Num DMData NonConst)))))
 
   -- change clip parameter to input
-  return (NoFun (DMContainer k LInf c n (NoFun (Numeric (Num DMData NonConst)))))
+  return (NoFun (DMContainer k LInf (Clip c) n (NoFun (Numeric (Num DMData NonConst)))))
+
+
+
+checkSen' scope (Located l (MutConvertM nrm m)) = checkSens scope (Located l (ConvertM nrm m))
+checkSen' scope (Located l (ConvertM nrm m)) = do
+    
+  s <- newVar -- scalar for conversion sensitivity, depends on the norms between which we convert
+  τb <- checkSens scope m <* mscale s -- check the matrix
+
+  -- variables for input norm and clip parameters, dimension and element type
+  nrm_in <- newVar
+  clp <- newVar
+  n <- newVar
+  t <- newVar
+
+  -- variable for container kind
+  k <- newVar
+
+  -- set correct matrix type
+  unify (l :\\: "Argument of `norm_convert` must be a Matrix.") τb (NoFun (DMContainer k nrm_in clp n t))
+
+  addConstraint (Solvable (ConversionResult (nrm_in, nrm, n, s))) (l :\\: "Set container norm conversion penalty.")
+
+  -- change clip parameter to input
+  return (NoFun (DMContainer k nrm clp n t))
 
 
 checkSen' scope (Located l (ClipN value upper lower)) = do
@@ -907,10 +932,10 @@ checkSen' scope (Located l (Count f m)) = let
   
 
 --------------------
--- NOTE this is different from what is in the paper, as we scale the result context by 2 not by 1
+-- NOTE this is different from what is in the paper (convert rule), as we scale the result context by 2 not by 1
 -- a proof that this is correct is in the matrixnorm pdf, and the authors told me it's correct too
-checkSen' scope (Located l (MutConvertM m)) = checkSens scope (Located l (ConvertM m))
-checkSen' scope (Located l (ConvertM m)) = do
+checkSen' scope (Located l (MutUndiscM m)) = checkSens scope (Located l (UndiscM m))
+checkSen' scope (Located l (UndiscM m)) = do
   τb <- checkSens scope m -- check the matrix
 
   -- variables for norm and clip parameters and dimension
@@ -1216,6 +1241,13 @@ checkSen' scope term@(Located l (MakeVec m)) = do
   unify (l :\\: "`vec_from_row` expects one-row matrix") mtype (NoFun (DMMat nrm clp oneId cols τ))
 
   return (NoFun (DMVec nrm clp cols τ))
+
+
+checkSen' scope term@(Located l (Undisc t)) = do
+  tt <- checkSen' scope t <* mtruncateS inftyS
+  v <- newVar
+  unify (l :\\: "Input for `undisc` must be numeric (use `undisc_contianer` for container types)") (NoFun (Numeric v)) tt
+  return (NoFun (Numeric (Num (IRNum DMReal) NonConst)))
 
 
 checkSen' scope term@(Located l (MakeRow m)) = do

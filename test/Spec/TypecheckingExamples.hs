@@ -16,6 +16,7 @@ testTypecheckingExamples pp = do
   testBlackBox pp
   testSLoop pp
   testSample pp
+  testConvert pp
   testMMap pp
   testRet pp
   testCount pp
@@ -213,7 +214,7 @@ testSample pp = describe "Sample" $ do
               \  D, L = sample(b, data, data) \n\
               \  gs = unbox(foo(D[1,:]), Vector{<:Data}, length(D[1,:])) \n\
               \  clip!(L2,gs) \n\
-              \  norm_convert!(gs) \n\
+              \  undisc_container!(gs) \n\
               \  gaussian_mechanism!(2, 0.2, 0.3, gs)  \n\
               \  clone(x * gs) \n\
               \end"
@@ -221,6 +222,17 @@ testSample pp = describe "Sample" $ do
         cs = ""
     parseEvalString_l_customCheck pp "" ex (ty, cs) (pure $ Right ())
 
+
+testConvert pp = describe "Convert" $ do
+    let ex = "function foo(x::MetricMatrix(Data,L2)) \n\
+      \    x = norm_convert(L1,x) \n\
+      \    x \n\
+      \ end"
+        ty = "Fun([([NoFun(Matrix<n: L2, c: τ_1>[s_2 × s_1](NoFun(Num(Data[--])))) @ sqrt(s_1)] -> NoFun(Matrix<n: L1, c: τ_1>[s_2 × s_1](NoFun(Num(Data[--]))))) @ Just [MetricMatrix(Data,L2)]])"
+        cs = ""
+    parseEvalString_l_customCheck pp "" ex (ty, cs) (pure $ Right ())
+
+       
 testExponential pp = describe "Exponential mechanism" $ do
     let ex = "function foo(x,v)::Priv() \n\
               \  function bar(y) \n\
@@ -371,7 +383,7 @@ testDPGD pp = describe "DPGD" $ do
           \           d = data[i,:] \n\
           \           l = labels[i,:] \n\
           \           gs = unbox(unbounded_gradient(model, d, l), length(model)) \n\
-          \           gsc = norm_convert(clip(L2,gs)) \n\
+          \           gsc = undisc_container(clip(L2,gs)) \n\
           \           gsg = gaussian_mechanism(2/dim, eps, del, scale_gradient(1/dim,gsc)) \n\
           \           model = subtract_gradient(model, scale_gradient(eta * dim, gsg)) \n\
           \    end \n\

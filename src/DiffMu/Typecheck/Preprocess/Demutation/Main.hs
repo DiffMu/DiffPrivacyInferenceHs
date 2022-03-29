@@ -780,6 +780,12 @@ elaborateMut scname (Located l (MutClipM c t)) = do
     [newT] -> demutTLetStatement l PureLet mutVars (Located l (MutClipM c newT))
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
+elaborateMut scname (Located l (MutConvertM c t)) = do
+  (argTerms, mutVars) <- elaborateMutList "norm_convert" scname [(MutatedArg , t)]
+  case argTerms of
+    [newT] -> demutTLetStatement l PureLet mutVars (Located l (MutConvertM c newT))
+    _ -> internalError ("Wrong number of terms after elaborateMutList")
+
 elaborateMut scname (Located l (MutGauss t1 t2 t3 t4)) = do
   (argTerms, mutVars) <- elaborateMutList "gauss" scname [(NotMutatedArg Pure , t1), (NotMutatedArg Pure , t2), (NotMutatedArg Pure , t3), (MutatedArg , t4)]
   case argTerms of
@@ -792,10 +798,10 @@ elaborateMut scname (Located l (MutLaplace t1 t2 t3)) = do
     [newT1, newT2, newT3] -> demutTLetStatement l PureLet mutVars (Located l (Laplace newT1 newT2 newT3))
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
-elaborateMut scname (Located l (MutConvertM t1)) = do
+elaborateMut scname (Located l (MutUndiscM t1)) = do
   (argTerms, mutVars) <- elaborateMutList "convert" scname [(MutatedArg , t1)]
   case argTerms of
-    [newT1] -> demutTLetStatement l PureLet mutVars (Located l (MutConvertM newT1))
+    [newT1] -> demutTLetStatement l PureLet mutVars (Located l (MutUndiscM newT1))
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 
@@ -814,6 +820,7 @@ elaborateMut scname (Located l (InternalMutate t1)) = do
 elaborateMut scname (Located l (MCreate t1 t2 t3 t4))     = elaborateNonMut3 scname l (\tt1 tt2 tt4 -> MCreate tt1 tt2 t3 tt4) t1 t2 t4
 elaborateMut scname (Located l (Transpose t1))            = elaborateNonMut1 scname l Transpose t1
 elaborateMut scname (Located l (Disc t1))                 = elaborateNonMut1 scname l Disc t1
+elaborateMut scname (Located l (Undisc t1))               = elaborateNonMut1 scname l Undisc t1
 elaborateMut scname (Located l (Size t1))                 = elaborateNonMut1 scname l Size t1
 elaborateMut scname (Located l (Length t1))               = elaborateNonMut1 scname l Length t1
 elaborateMut scname (Located l (ZeroGrad t1))             = elaborateNonMut1 scname l ZeroGrad t1
@@ -823,7 +830,8 @@ elaborateMut scname (Located l (Sample t1 t2 t3))         = elaborateNonMut3 scn
 elaborateMut scname (Located l (InternalExpectConst t1))  = elaborateNonMut1 scname l InternalExpectConst t1
 elaborateMut scname (Located l (Clone t1))                = elaborateNonMut1 scname l Clone t1
 elaborateMut scname (Located l (ClipM c t1))              = elaborateNonMut1 scname l (ClipM c) t1
-elaborateMut scname (Located l (ConvertM  t1))            = elaborateNonMut1 scname l ConvertM t1
+elaborateMut scname (Located l (ConvertM c t1))           = elaborateNonMut1 scname l (ConvertM c) t1
+elaborateMut scname (Located l (UndiscM  t1))             = elaborateNonMut1 scname l UndiscM t1
 elaborateMut scname (Located l (Gauss t1 t2 t3 t4))       = elaborateNonMut4 scname l Gauss t1 t2 t3 t4
 elaborateMut scname (Located l (Laplace t1 t2 t3))        = elaborateNonMut3 scname l Laplace t1 t2 t3
 elaborateMut scname (Located l (AboveThresh t1 t2 t3 t4)) = elaborateNonMut4 scname l AboveThresh t1 t2 t3 t4

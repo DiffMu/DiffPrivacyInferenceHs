@@ -19,7 +19,7 @@ testScoping_AssignmentMoveSemantics pp = do
 testAMS01 pp = do
   let exa = " function f(a,b)      \n\
            \   x = a              \n\
-           \   norm_convert!(a)   \n\
+           \   undisc_container!(a)   \n\
            \ end                  "
 
 
