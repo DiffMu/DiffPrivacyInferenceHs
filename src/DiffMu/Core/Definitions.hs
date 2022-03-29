@@ -356,6 +356,8 @@ instance ShowPretty (DMTypeOf k) where
   showPretty (x :∧: y) = "(" <> showPretty x <> "∧" <> showPretty y <> ")"
   showPretty (BlackBox n) = "BlackBox[" <> showPretty n <> "]"
 
+instance ShowLocated (DMTypeOf k) where
+  showLocated = pure . T.pack . showPretty
 
 -- instance Eq (DMTypeOf NormKind) where
 --   _ == _ = False
@@ -579,6 +581,8 @@ instance Show JuliaType where
   show (JTGrads) = "DMGrads"
   show (JTBot) = "Union{}"
 
+instance ShowLocated JuliaType where
+  showLocated = pure . T.pack . show
 
 --------------------------------------------------------------------------
 -- Type Operations
@@ -625,6 +629,9 @@ data DMTypeOp =
    | Binary DMTypeOps_Binary (DMType :@ SVar , DMType :@ SVar) (DMType)
   deriving (Show)
 
+instance ShowLocated DMTypeOp_Some where
+  showLocated (IsUnary a) = pure $ T.pack $ show a
+  showLocated (IsBinary a) = pure $ T.pack $ show a
 
 --------------------------------------------------------------------------
 -- Constraints
@@ -1200,7 +1207,8 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (BBKind t) w
 instance ShowPretty (EmptyExtension a) where
   showPretty a = undefined
 
-
+instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowLocated (PreDMTerm t) where
+  showLocated = pure . T.pack . showPretty
 
 
 --------------------------------------------------------------------------

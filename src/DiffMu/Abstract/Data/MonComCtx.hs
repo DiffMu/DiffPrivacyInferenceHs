@@ -38,6 +38,12 @@ instance (Show v, Show x, DictKey v) => Show (Ctx v x) where
 instance (ShowPretty v, ShowPretty x, DictKey v) => ShowPretty (Ctx v x) where
   showPretty (Ctx γ) = showWith ",\n" (\x τ -> showPretty x <> " : " <> showPretty τ) γ ""
 
+instance (ShowLocated v, ShowLocated x, DictKey v) => ShowLocated (Ctx v x) where
+  showLocated (Ctx γ) = do
+    source <- ask
+    return $ showWith ",\n" (\x τ -> runReader (showLocated x) source <> " : " <> runReader (showLocated τ) source) γ ""
+
+
 instance Default (Ctx v x)
 
 

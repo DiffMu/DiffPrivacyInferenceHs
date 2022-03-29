@@ -49,6 +49,8 @@ newtype WrapMessageLight a = WrapMessageLight a
   deriving (Show)
 instance ShowPretty a => ShowPretty (WrapMessageLight a) where
   showPretty (WrapMessageLight a) = showPretty a
+instance ShowLocated a => ShowLocated (WrapMessageLight a) where
+  showLocated (WrapMessageLight a) = showLocated a
 instance Monad m => Normalize m (WrapMessageLight a) where
   normalize e x = pure x
 

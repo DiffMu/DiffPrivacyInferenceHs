@@ -9,6 +9,7 @@ import DiffMu.Abstract.Class.IsT
 
 import qualified Prelude as P
 import Data.HashMap.Strict as H
+import qualified Data.Text as T
 
 -- foldM
 
@@ -92,7 +93,7 @@ setValueMaybe (Just k) v scope = setValue k v scope
 setValueMaybe Nothing v scope = scope
 
 class ShowDict k v d | d -> k v where
-  showWith :: String -> (k -> v -> String) -> d -> String -> String
+  showWith :: StringLike s => s -> (k -> v -> s) -> d -> s -> s
 
 instance (DictKey k) => DictLike k v (MonCom v k) where
   setValue v m (MonCom h) = MonCom (H.insert v m h)
@@ -110,7 +111,7 @@ instance ShowDict k v (MonCom v k) where
     let d' = H.toList d
     in case d' of
       [] -> emptycase
-      _  -> intercalate comma ((\(k,v) -> merge k v) <$> d')
+      _  -> intercalateS comma ((\(k,v) -> merge k v) <$> d')
 
 
 
@@ -182,6 +183,10 @@ newtype SingleKinded a (k :: j) = SingleKinded a
 
 instance Show a => Show (SingleKinded a k) where
   show (SingleKinded a) = show a
+
+
+instance ShowLocated a => ShowLocated (SingleKinded a k) where
+  showLocated (SingleKinded a) = showLocated a
 
 -- instance (Typeable j, Typeable v, Typeable (k :: j), FreeVars v a) => FreeVars v (SingleKinded a k) where
 --   freeVars (SingleKinded a) = freeVars a
@@ -296,7 +301,12 @@ instance (Show r , Show v, Eq r, SemiringM Identity r) => Show (LinCom r (MonCom
           -- factor r [] = _ -- case r == oneId of
           -- factor r = 
 
+instance (Show r , Show v, Eq r, SemiringM Identity r) => ShowLocated (LinCom r (MonCom Int v)) where
+  showLocated = pure . T.pack . show
+
 -- instance (Show r , KShow v) => Show (CPolyM r Int (v k) j) where
+
+
 
 
 instance (Typeable r, Typeable j, IsKind (k :: j), Typeable v, KHashable v, KShow v, Show r, KEq v, Eq r, CheckNeutral Identity r, SemiringM Identity r, forall k2. Substitute v (CPolyM r Int (v k)) (v k2)) => Term v (CPolyM r Int (v k)) where

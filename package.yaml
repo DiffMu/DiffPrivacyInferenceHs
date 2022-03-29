@@ -39,6 +39,7 @@ library:
     - hashable
     - unordered-containers
     - containers
+    - array
     - singletons
     - newtype
     - constraints

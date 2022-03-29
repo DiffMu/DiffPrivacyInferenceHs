@@ -441,6 +441,10 @@ instance ShowPretty a => ShowPretty (Watched a) where
   -- show (Watched NotNormal a) = "*" <> show a
   showPretty (Watched (NormalForMode m) a) = showPretty a
 
+instance ShowLocated a => ShowLocated (Watched a) where
+  -- show (Watched NotNormal a) = "*" <> show a
+  showLocated (Watched (NormalForMode m) a) = showLocated a
+
 instance (MonadWatch t, Normalize t a) => Normalize t (Watched a) where
   normalize nt (Watched c a) =
     do resetChanged
@@ -454,6 +458,13 @@ data ConstraintWithMessage m = ConstraintWithMessage (Watched (Solvable GoodCons
 instance ShowPretty m => ShowPretty (ConstraintWithMessage m) where
   showPretty (ConstraintWithMessage c m) = showPretty c <> "\n"
                                           <> indent (showPretty m)
+
+
+instance ShowLocated m => ShowLocated (ConstraintWithMessage m) where
+  showLocated (ConstraintWithMessage c m) = do
+    c' <- showLocated c
+    m' <- (showLocated m)
+    return $ c' <> "\n" <> indent m'
 
 instance (MonadDMTC t, Normalize t m) => Normalize t (ConstraintWithMessage m) where
   normalize e (ConstraintWithMessage x m) = ConstraintWithMessage <$> (normalize e x) <*> normalize e m
@@ -504,6 +515,14 @@ instance (ShowPretty v, ShowPretty a, DictKey v) => ShowPretty (CtxStack v a) wh
       showPretty (CtxStack top other) = "   - top:\n" <> showPretty top <> "\n"
                               <> "   - others:\n" <> showPretty other
 
+
+instance (ShowLocated v, ShowLocated a, DictKey v) => ShowLocated (CtxStack v a) where
+      showLocated (CtxStack top other) = do
+        top' <- showLocated top
+        other' <- showLocated other
+        return $ "   - top:\n" <> top' <> "\n"
+                              <> "   - others:\n" <> other'
+
 -- type ConstraintCtx = AnnNameCtx (Ctx Symbol (Solvable' TC))
 
 instance (MonadWatch t, Normalize t ks) => Normalize t (AnnNameCtx ks) where
@@ -518,6 +537,10 @@ instance Show ks => Show (AnnNameCtx ks) where
 
 instance ShowPretty ks => ShowPretty (AnnNameCtx ks) where
   showPretty (AnnNameCtx _ kinds) = showPretty kinds
+
+
+instance ShowLocated ks => ShowLocated (AnnNameCtx ks) where
+  showLocated (AnnNameCtx _ kinds) = showLocated kinds
 
 instance Default ks => Default (AnnNameCtx ks)
 
@@ -1078,12 +1101,15 @@ newtype WrapMessageId a = WrapMessageId a
 
 instance ShowPretty a => ShowPretty (WrapMessageId a) where showPretty (WrapMessageId a) = showPretty a
 
+instance (ShowLocated a) => ShowLocated (WrapMessageId a) where showLocated (WrapMessageId a) = showLocated a
+
 instance (Monad m, Normalize TC a) => Normalize (TCT m) (WrapMessageId a) where
   normalize e (WrapMessageId x) = WrapMessageId <$> liftTC (normalize e x)
 
 newtype WrapMessageRevId a = WrapMessageRevId a
   deriving (Show)
 instance ShowPretty a => ShowPretty (WrapMessageRevId a) where showPretty (WrapMessageRevId a) = showPretty a
+instance ShowLocated a => ShowLocated (WrapMessageRevId a) where showLocated (WrapMessageRevId a) = showLocated a
 
 instance (Monad m) => Normalize (m) (WrapMessageRevId a) where
   normalize e x = pure x

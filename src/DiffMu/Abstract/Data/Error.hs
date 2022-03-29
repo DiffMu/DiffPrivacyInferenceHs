@@ -1,4 +1,6 @@
 
+{-# LANGUAGE UndecidableInstances #-}
+
 module DiffMu.Abstract.Data.Error where
 
 import DiffMu.Prelude
@@ -8,32 +10,41 @@ import DiffMu.Abstract.Data.ErrorReporting
 import {-# SOURCE #-} DiffMu.Core.Definitions
 
 import Debug.Trace
+import Data.String (IsString)
+import qualified Data.Text as T
+import qualified Prelude as P
+import Data.Graph (edges)
 
 --------------------------------------------------------------------------
 -- Printing
 
-newlineIndentIfLong :: String -> String
-newlineIndentIfLong xs = case '\n' `elem` xs of
-  False -> xs
-  True -> "\n" <> indent xs
 
-parenIfMultiple :: String -> String
-parenIfMultiple xs = case ' ' `elem` xs of
-  False -> xs
-  True -> "(" <> xs <> ")"
+newlineIndentIfLong :: StringLike t => t -> t
+newlineIndentIfLong xs = if length (linesS xs) <= 1
+  then xs
+  else "\n" <> indent xs
 
-parenIndent :: String -> String
-parenIndent s = "\n(\n" <> unlines (fmap ("  " <>) (lines s)) <> ")"
+parenIfMultiple :: StringLike t => t -> t
+parenIfMultiple xs = if length (wordsS xs) <= 1
+  then xs
+  else "(" <> xs <> ")"
 
-braceIndent :: String -> String
-braceIndent s = "\n{\n" <> unlines (fmap ("  " <>) (lines s)) <> "}"
+-- parenIfMultiple xs = case ' ' `elem` xs of
+--   False -> xs
+--   True -> "(" <> xs <> ")"
+
+parenIndent :: StringLike s => s -> s
+parenIndent s = "\n(\n" <> unlinesS (fmap ("  " <>) (linesS s)) <> ")"
+
+braceIndent :: StringLike s => s -> s
+braceIndent s = "\n{\n" <> unlinesS (fmap ("  " <>) (linesS s)) <> "}"
 
 
 -- justIndent :: String -> String
 -- justIndent s = unlines (fmap ("  " <>) (lines s))
 
-indent :: String -> String
-indent s = unlines (fmap ("  " <>) (lines s))
+indent :: StringLike s => s -> s
+indent s = unlinesS (fmap ("  " <>) (linesS s))
 
 
 
@@ -42,7 +53,7 @@ indent s = unlines (fmap ("  " <>) (lines s))
 
 data SourceLoc = SourceLoc
   {
-    getLocFile  :: String
+    getLocFile  :: Text
   , getLocBegin :: Int
   , getLocEnd   :: Int
   }
@@ -64,6 +75,10 @@ instance Normalize t a => Normalize t (Located a) where
 instance Show a => Show (Located a) where
   show (Located loc a) = show a
 
+
+instance ShowLocated a => ShowLocated (Located a) where
+  showLocated (Located loc a) = showLocated a
+
 downgradeToRelated :: Text -> SourceLocExt -> SourceLocExt
 downgradeToRelated = RelatedLoc
 
@@ -74,38 +89,91 @@ instance Monad t => Normalize t SourceLocExt where
   normalize e = pure
 
 instance ShowPretty SourceLoc where
-  showPretty (SourceLoc file begin end) | begin == end  = file <> ": line " <> show begin
-  showPretty (SourceLoc file begin end) = file <> ": between lines " <> show begin <> " and " <> show end
+  showPretty (SourceLoc file begin end) | begin == end  = T.unpack file <> ": line " <> show begin
+  showPretty (SourceLoc file begin end) = T.unpack file <> ": between lines " <> show begin <> " and " <> show end
 
 instance Show SourceLocExt where
   show = showPretty
 
+instance ShowLocated SourceLoc where
+  showLocated loc@(SourceLoc file (begin) (end)) = do
+    sourcelines <- printSourceLines (begin, end)
+    return $ T.pack (showPretty loc) <> "\n"
+             <> sourcelines
+
 instance ShowPretty SourceLocExt where
   showPretty = \case
-    ExactLoc sl -> "In " <> showPretty sl
+    ExactLoc sl -> showPretty sl
     RelatedLoc s sle -> showPretty s <> ": " <> showPretty sle
     UnknownLoc -> "Unknown location"
     NotImplementedLoc s -> "This location is currently ineffable. (" <> showPretty s <> ")"
 
+
+instance ShowLocated SourceLocExt where
+  showLocated = \case
+    ExactLoc sl -> showLocated sl
+    RelatedLoc s sle -> do s' <- showLocated s
+                           sle' <- showLocated sle
+                           return $ s' <> ": " <> sle'
+    UnknownLoc -> pure "Unknown location"
+    NotImplementedLoc s -> do
+      s' <- showLocated s
+      return $ "This location is currently ineffable. (" <> s' <> ")"
+
+
 -------------------------------------------------------------------------
-type MessageLike t a = (Normalize t a, ShowPretty a, Show a)
+-- Printing source
+
+--
+-- conditions:
+--  - `begin <= end`
+--
+printSourceLines :: MonadReader RawSource t => (Int,Int) -> t Text
+printSourceLines (begin,end) = do
+  let numbersize = length (show end)
+  printed_lines <- mapM (printSourceLine numbersize) [begin .. (end - 1)]
+  let edge = T.pack $ take (numbersize P.+ 2) (repeat ' ') <> "|"
+  return $ edge <> "\n"
+           <> T.intercalate "\n" printed_lines <> "\n"
+           <> edge <> "\n"
+
+
+--
+-- conditions:
+--  - `length(show(linenumber)) <= required_numbersize`
+--
+printSourceLine :: MonadReader RawSource t => Int -> Int -> t Text
+printSourceLine required_numbersize linenumber = do
+  let printed_linenumber = show linenumber
+  let padded_linenumber = take (required_numbersize - length printed_linenumber) (repeat ' ') <> printed_linenumber
+  RawSource source <- ask
+  let required_line = source ! linenumber
+  return $ " " <> T.pack padded_linenumber <> " |     " <> required_line
+
+
+-------------------------------------------------------------------------
+type MessageLike t a = (Normalize t a, Show a, ShowLocated a)
 
 data DMPersistentMessage t where
   DMPersistentMessage :: MessageLike t a => a -> DMPersistentMessage t
 
-instance ShowPretty (DMPersistentMessage t) where
-  showPretty (DMPersistentMessage msg) = showPretty msg
+
+-- instance ShowPretty (DMPersistentMessage t) where
+--   showPretty (DMPersistentMessage msg) = showPretty msg
 
 instance Show (DMPersistentMessage t) where
-  show = showPretty
+  show (DMPersistentMessage msg) = show msg
+
+instance ShowLocated (DMPersistentMessage t) where
+  showLocated (DMPersistentMessage msg) = showLocated msg
 
 instance Monad t => Normalize t (DMPersistentMessage t) where
   normalize e (DMPersistentMessage msg) = DMPersistentMessage <$> normalize e msg
 
-instance Monad t => SemigroupM t (DMPersistentMessage t) where
+instance MonadReader RawSource t => SemigroupM t (DMPersistentMessage t) where
   (DMPersistentMessage a) ⋆ (DMPersistentMessage b) = return (DMPersistentMessage $ a :-----: b)
 
-instance Monad t => MonoidM t (DMPersistentMessage t) where
+instance MonadReader RawSource t => MonoidM t (DMPersistentMessage t) where
   neutral = pure (DMPersistentMessage ())
 
 instance Monad t => CheckNeutral t (DMPersistentMessage t) where
@@ -115,13 +183,19 @@ data WithContext e t = WithContext e (DMPersistentMessage t)
   -- deriving (Functor,Foldable,Traversable)
 
 
-instance ShowPretty e => ShowPretty (WithContext e t) where
-  showPretty (WithContext e ctx) = showPretty e <> "\n"
-                                   <> indent (showPretty ctx)
-                                  
-instance ShowPretty e => Show (WithContext e t) where
-  show (WithContext e ctx) = showPretty e <> "\n"
-                            <> indent (showPretty ctx)
+instance ShowLocated e => ShowLocated (WithContext e t) where
+  showLocated (WithContext e ctx) = do
+    e' <- showLocated e
+    ctx' <- showLocated ctx
+    return $ e' <> "\n" <> indent ctx'
+
+
+instance Show e => Show (WithContext e t) where
+  show (WithContext e ctx) = show e
+
+-- instance ShowPretty e => Show (WithContext e t) where
+--   show (WithContext e ctx) = showPretty e <> "\n"
+--                             <> indent (showPretty ctx)
 
 withContext e x = WithContext e (DMPersistentMessage x)
 
@@ -189,6 +263,9 @@ instance Show DMException where
 instance ShowPretty (DMException) where
   showPretty = show
 
+instance ShowLocated (DMException) where
+  showLocated = return . T.pack . showPretty
+
 instance Eq DMException where
   -- UnsupportedTermError    a        == UnsupportedTermError    b       = True
   UnificationError        a a2     == UnificationError        b b2    = True
@@ -224,7 +301,13 @@ isCriticalError e = case e of
 data WrapMessageNatural s t e a = WrapMessageNatural (forall x. t x -> s (Maybe x)) a
 
 instance Show a => Show (WrapMessageNatural s t e a) where show (WrapMessageNatural f a) = show a
-instance ShowPretty a => ShowPretty (WrapMessageNatural s t e a) where showPretty (WrapMessageNatural f a) = showPretty a
+-- instance ShowPretty a => ShowPretty (WrapMessageNatural s t e a) where showPretty (WrapMessageNatural f a) = showPretty a
+instance (Monad s, ShowLocated a) => ShowLocated (WrapMessageNatural s t e a) where showLocated (WrapMessageNatural f a) = showLocated a
+-- where showLocated (WrapMessageNatural f a) = do
+--                                                                                                           x <- f $ showLocated a
+--                                                                                                           case x of
+--                                                                                                             Just a -> return a
+--                                                                                                             Nothing -> return "[Error when generating Error]"
 
 instance (Monad s, Normalize t a) => Normalize s (WrapMessageNatural s t e a) where
   normalize level (WrapMessageNatural f x) = WrapMessageNatural f <$> do
@@ -237,7 +320,7 @@ instance (Monad s, Normalize t a) => Normalize s (WrapMessageNatural s t e a) wh
                                                                            -- Nothing -> pure x
 
 instance IsNaturalError (WithContext e) where
-  functionalLift α (WithContext x (DMPersistentMessage msg)) = WithContext x (DMPersistentMessage (WrapMessageNatural α msg))
+  functionalLift α (WithContext x (DMPersistentMessage msg)) = WithContext x (DMPersistentMessage (WrapMessageNatural @_ @_ @e α msg))
 
 class IsNaturalError e where
   -- functionalLiftMaybe :: (Monad t, Monad s) => (forall a. t a -> s (Maybe a)) -> e t -> e s
@@ -247,7 +330,7 @@ class IsNaturalError e where
 class (IsNaturalError e, MonadError (e t) t) => MonadDMError e t where
   isCritical :: e t -> t Bool
   persistentError :: LocatedDMException t -> t ()
-  catchAndPersist :: (Normalize t x, ShowPretty x, Show x) => t a -> (DMPersistentMessage t -> t (a, x)) -> t a
+  catchAndPersist :: MessageLike t x => t a -> (DMPersistentMessage t -> t (a, x)) -> t a
   enterNonPersisting :: t ()
   exitNonPersisting :: t ()
 
@@ -269,12 +352,15 @@ infixl 5 :-----:
 data (:-----:) a b = (:-----:) a b
   deriving (Show)
 
-instance (ShowPretty a, ShowPretty b) => ShowPretty (a :-----: b) where
-  showPretty (a :-----: b) = showPretty a
+instance (ShowLocated a, ShowLocated b) => ShowLocated (a :-----: b) where
+  showLocated (a :-----: b) = do
+    a' <- showLocated a
+    b' <- showLocated b
+    return $       a'
                    <> "\n"
                    <> "---------------------------------------------------------"
                    <> "\n"
-                   <> showPretty b
+                   <> b'
 
 instance (Normalize t a, Normalize t b) => Normalize t (a :-----: b) where
   normalize e (a :-----: b) = (:-----:) <$> normalize e a <*> normalize e b
@@ -285,10 +371,13 @@ infixl 5 :\\:
 data (:\\:) a b = (:\\:) a b
   deriving (Show)
 
-instance (ShowPretty a, ShowPretty b) => ShowPretty (a :\\: b) where
-  showPretty (a :\\: b) = showPretty a
+instance (ShowLocated a, ShowLocated b) => ShowLocated (a :\\: b) where
+  showLocated (a :\\: b) = do
+    a' <- showLocated a
+    b' <- showLocated b
+    return $       a'
                    <> "\n"
-                   <> showPretty b
+                   <> b'
 
 instance (Normalize t a, Normalize t b) => Normalize t (a :\\: b) where
   normalize e (a :\\: b) = (:\\:) <$> normalize e a <*> normalize e b
@@ -299,8 +388,11 @@ infixl 5 :\\->:
 data (:\\->:) a b = (:\\->:) a b
   deriving (Show)
 
-instance (ShowPretty a, ShowPretty b) => ShowPretty (a :\\->: b) where
-  showPretty (a :\\->: b) = showPretty a <> " " <> newlineIndentIfLong (showPretty b)
+instance (ShowLocated a, ShowLocated b) => ShowLocated (a :\\->: b) where
+  showLocated (a :\\->: b) = do
+    a' <- showLocated a
+    b' <- showLocated b
+    return $ a' <> " " <> newlineIndentIfLong b'
 
 instance (Normalize t a, Normalize t b) => Normalize t (a :\\->: b) where
   normalize e (a :\\->: b) = (:\\->:) <$> normalize e a <*> normalize e b
@@ -313,8 +405,11 @@ infixl 6 :<>:
 data (:<>:) a b = (:<>:) a b
   deriving (Show)
 
-instance (ShowPretty a, ShowPretty b) => ShowPretty (a :<>: b) where
-  showPretty (a :<>: b) = showPretty a <> " " <> showPretty b
+instance (ShowLocated a, ShowLocated b) => ShowLocated (a :<>: b) where
+  showLocated (a :<>: b) = do
+    a' <- showLocated a 
+    b' <- showLocated b 
+    return $ a' <> " " <> b'
 
 instance (Normalize t a, Normalize t b) => Normalize t (a :<>: b) where
   normalize e (a :<>: b) = (:<>:) <$> normalize e a <*> normalize e b

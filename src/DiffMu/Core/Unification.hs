@@ -26,6 +26,7 @@ newtype WrapMessageINC e a = WrapMessageINC a
 
 instance Show a => Show (WrapMessageINC e a) where show (WrapMessageINC a) = show a
 instance ShowPretty a => ShowPretty (WrapMessageINC e a) where showPretty (WrapMessageINC a) = showPretty a
+instance ShowLocated a => ShowLocated (WrapMessageINC e a) where showLocated (WrapMessageINC a) = showLocated a
 
 removeINCResT :: (MonadInternalError t) => INCResT e t a -> t (Maybe a)
 removeINCResT n = do
@@ -57,6 +58,7 @@ newtype WrapMessageINCRev e a = WrapMessageINCRev a
 
 instance Show a => Show (WrapMessageINCRev e a) where show (WrapMessageINCRev a) = show a
 instance ShowPretty a => ShowPretty (WrapMessageINCRev e a) where showPretty (WrapMessageINCRev a) = showPretty a
+instance ShowLocated a => ShowLocated (WrapMessageINCRev e a) where showLocated (WrapMessageINCRev a) = showLocated a
 
 instance (Show (e (INCResT e m)), MonadInternalError m, MonadLog m, Normalize m a) => Normalize (INCResT e m) (WrapMessageINCRev e a) where
   normalize e (WrapMessageINCRev x) =
@@ -345,7 +347,7 @@ instance Typeable k => FixedVars TVarOf (IsEqual (DMTypeOf k, DMTypeOf k)) where
 -- Using the unification instance, we implement solving of the `IsEqual` constraint for DMTypes.
 instance (Typeable k) => Solve MonadDMTC IsEqual (DMTypeOf k, DMTypeOf k) where
   solve_ Dict _ name (IsEqual (a,b)) = do
-    res <- runExceptT $ runINCResT $ unifyᵢ_Msg @(StoppingReason (WithContext DMException)) (Just name) a b
+    res <- runExceptT $ runINCResT $ unifyᵢ_Msg @(StoppingReason (WithContext DMException)) (name) a b
     case res of
       Left (Wait')   -> return ()
       Left (Fail' (WithContext err (DMPersistentMessage msg))) -> throwError (WithContext err (DMPersistentMessage (WrapMessageINC @(WithContext DMException) msg)))
@@ -367,7 +369,7 @@ instance Solve MonadDMTC IsLessEqual (Sensitivity, Sensitivity) where
       solveLessEqualSensitivity a b = case getVal a of
          Just av -> case getVal b of
                          Just bv -> case av == Infty of
-                                         True -> (b ==! constCoeff Infty) (Just name) >> dischargeConstraint name
+                                         True -> (b ==! constCoeff Infty) (name) >> dischargeConstraint name
                                          False -> case (av <= bv) of
                                                        True -> dischargeConstraint name
                                                        False -> failConstraint name

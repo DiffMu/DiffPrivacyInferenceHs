@@ -8,7 +8,7 @@ import DiffMu.Abstract.Data.Error
 -- import DiffMu.Abstract
 import GHC.Stack
 
-
+import qualified Data.Text as T
 import qualified Control.Monad.Except as QUAL
 
 data DMLogLocation =
@@ -183,8 +183,15 @@ getLogMessages (DMMessages messages _) sevR locsR =
 getErrors :: DMMessages t -> [LocatedDMException t]
 getErrors (DMMessages _ errs) = errs
 
-getErrorMessage :: [LocatedDMException t] -> String
-getErrorMessage (errs) = intercalate ("\n\n") (fmap (\e -> red "Error:\n" <> showPretty e) errs)
+getErrorMessage :: RawSource -> [LocatedDMException t] -> Text
+getErrorMessage rawsource (errs) = 
+  let action = do errlist <- (\e -> do e' <- showLocated e
+                                       return $ red "Error:\n" <> e')
+                              `mapM`
+                              errs
+
+                  return $ T.intercalate ("\n\n") (errlist)
+  in runReader action rawsource
 
 
 

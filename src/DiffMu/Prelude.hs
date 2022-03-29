@@ -4,7 +4,9 @@ module DiffMu.Prelude
   (
     -- module Prelude
     module All
+  , StringLike (..)
   , RawSource (..)
+  , rawSourceFromString
   , Symbol (..)
   , SymbolOf (..)
   , DictKey (..)
@@ -22,6 +24,7 @@ module DiffMu.Prelude
   , ScopeVar (..)
   , MemVar (..)
   , ShowPretty (..)
+  , ShowLocated (..)
   , throwOriginalError
   , blue, green, yellow, red, magenta
   , (&&), (||)
@@ -37,13 +40,21 @@ import qualified DiffMu.Imports as QUAL (throwError)
 import DiffMu.Prelude.MonadicAlgebra as All
 import DiffMu.Prelude.Data as All
 import Data.List.Unicode as All
+import Data.String as S
+import Data.Array as All hiding (index, indices)
 
 import Prelude ((&&),(||))
 import qualified Prelude (String)
-import Data.Text as T
+import qualified Data.Text as T
 
 
-newtype RawSource = RawSource String
+newtype RawSource = RawSource (Array Int Text)
+
+rawSourceFromString :: String -> RawSource
+rawSourceFromString input =
+  let ls = T.pack <$> linesS input
+  in RawSource $ listArray (1,length ls) (ls)
+
 
 newtype Symbol = Symbol Text
   deriving (Eq,Ord,Hashable,Semigroup,Monoid)
@@ -53,6 +64,56 @@ instance Monad t => Normalize t Symbol where
 
 instance Monad t => Normalize t Text where
   normalize nt a = pure a
+
+-------------------------------------------------------------------------
+-- StringLike
+
+class (IsString t, Semigroup t) => StringLike t where
+  wordsS :: t -> [t]
+  linesS :: t -> [t]
+  unlinesS :: [t] -> t
+  intercalateS :: t -> [t] -> t
+
+instance StringLike Text where
+  wordsS = T.words
+  linesS = T.lines
+  unlinesS = T.unlines
+  intercalateS = T.intercalate
+
+instance StringLike String where
+  wordsS = S.words
+  linesS = S.lines
+  unlinesS = S.unlines
+  intercalateS = intercalate
+
+-------------------------------------------------------------------------
+-- ShowLocated
+
+class ShowLocated a where
+  showLocated :: MonadReader RawSource t => a -> t Text
+
+instance ShowLocated () where
+  showLocated _ = return ""
+
+instance ShowLocated Text where
+  showLocated a = return a
+
+instance ShowLocated Symbol where
+  showLocated (Symbol a) = return a
+
+instance ShowLocated TeVar where
+  showLocated = pure . T.pack . showPretty
+
+instance ShowLocated ProcVar where
+  showLocated = pure . T.pack . showPretty
+
+instance ShowLocated a => ShowLocated [a] where
+  showLocated as = do
+    as' <- (mapM showLocated as)
+    return $ "[" <> T.intercalate ", " as' <> "]"
+
+-------------------------------------------------------------------------
+-- ShowPretty
 
 class ShowPretty a where
   showPretty :: a -> String

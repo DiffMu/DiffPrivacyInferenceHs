@@ -45,7 +45,7 @@ import Test.Hspec.Core.Runner as All
 
 tc :: TC a -> IO (Either (DMException) a)
 tc r = do
-  x <- executeTC (DontShowLog) r (RawSource "<no source>")
+  x <- executeTC (DontShowLog) r (RawSource (listArray (0,0) ["<no source>"]))
 
   let x' = case x of
         ((WithContext e _ : _), res) -> Left e
@@ -56,7 +56,7 @@ tc r = do
 
 tcl :: TC a -> IO (Either (DMException) a)
 tcl r = do
-  x <- executeTC (DoShowLog Force []) r (RawSource "<no source>")
+  x <- executeTC (DoShowLog Force []) r (RawSource (listArray (0,0) ["<no source>"]))
 
   let x' = case x of
         ((WithContext e _ : _), res) -> Left e

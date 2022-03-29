@@ -72,7 +72,7 @@ exitAssignment = insideAssignment .= False
 getCurrentLoc :: (MonadState ParseFull m) => m SourceLocExt
 getCurrentLoc = do
   (file,line,nextline) <- use location
-  return $ ExactLoc (SourceLoc file line nextline)
+  return $ ExactLoc (SourceLoc (T.pack file) line nextline)
 
 
 pSingle_Loc :: JExpr -> ParseTC LocProcDMTerm

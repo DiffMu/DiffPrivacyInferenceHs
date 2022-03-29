@@ -13,6 +13,7 @@ import DiffMu.Abstract.Data.ErrorReporting
 import DiffMu.Core.Logging
 -- import DiffMu.Abstract.Class.MonadTerm
 import Debug.Trace
+import qualified Data.Text as T
 
 default (Text)
 
@@ -69,6 +70,10 @@ instance Show (Solvable eC eC2 isT) where
 instance ShowPretty (Solvable eC eC2 isT) where
   showPretty = show
 
+instance ShowLocated (Solvable eC eC2 isT) where
+  showLocated = pure . T.pack . show
+  -- showLocated (Solvable (c :: c a)) =  -- (Solvable @isT <$> insideConstr (normalize @(t) nt) c)
+
 data CloseConstraintSetResult = ConstraintSet_WasEmpty | ConstraintSet_WasNotEmpty
 
 class (Monad t) => MonadConstraint isT t | t -> isT where
@@ -76,7 +81,7 @@ class (Monad t) => MonadConstraint isT t | t -> isT where
   type ContentConstraintOnSolvable t :: * -> Constraint
   type ConstraintOnSolvable t :: * -> Constraint
   type ConstraintBackup t
-  addConstraint :: (Normalize t a, ShowPretty a, Show a) => Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT -> a -> t Symbol
+  addConstraint :: (MessageLike t a) => Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT -> a -> t Symbol
   getUnsolvedConstraintMarkNormal :: [SolvingMode] -> t (Maybe (Symbol , Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT, SolvingMode, DMPersistentMessage t))
   dischargeConstraint :: Symbol -> t ()
   failConstraint :: Symbol -> t ()
