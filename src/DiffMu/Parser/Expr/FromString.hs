@@ -204,6 +204,13 @@ data JExpr =
    deriving Show
 
 
+badTypeMessage t = "Got " <> show t <> " where a julia type or one of the builtin types/type functions was expected.\nThe builtin types are:\n"
+                          <> "- Data\n- PrivacyFunction\n- DMGrads\n- DMModel\n"
+                          <> "Builtin type functions are:\n"
+                          <> "- Priv\n- BlackBox\n- Static\n- MetricGradient\n- MetricVector\n- MetricMatrix\n"
+                          <> "Supported julia types are:\n"
+                          <> "- Integer\n- Real\n- Matrix\n- Vector\n- Function\n- Bool\n- Any\n"
+                          
 pJuliaType :: JTree -> JEParseState JuliaType
 pJuliaType (JSym name) = case name of
     "Any"             -> pure JTAny
@@ -217,12 +224,12 @@ pJuliaType (JSym name) = case name of
     "Matrix"          -> pure (JTMatrix JTAny)
     "DMModel"         -> pure JTModel
     "DMGrads"         -> pure JTGrads
-    _                 -> jParseError ("Unsupported julia type " <> show name)
+    _                 -> jParseError (badTypeMessage name)
 pJuliaType (JCurly (name : args)) = pJuliaCurly (name:args)
 pJuliaType (JCall [JSym "MetricMatrix", t, n]) = JTMetricMatrix <$> pJuliaType t <*> pNorm n
 pJuliaType (JCall [JSym "MetricVector", t, n]) = JTMetricVector <$> pJuliaType t <*> pNorm n
 pJuliaType (JCall [JSym "MetricGradient", t, n]) = JTMetricGradient <$> pJuliaType t <*> pNorm n
-pJuliaType t = jParseError ("Expected a julia type, got " <> show t)
+pJuliaType t = jParseError (badTypeMessage t)
 
 pNorm (JSym "L1") = pure L1
 pNorm (JSym "L2") = pure L2
@@ -357,9 +364,7 @@ pTreeToJExpr tree = case tree of
 pModuleToJExpr :: JTree -> JEParseState JExpr
 pModuleToJExpr (JBlock [_,m]) = pModuleToJExpr m
 pModuleToJExpr (JModule [_,_,m]) = pTreeToJExpr m
-pModuleToJExpr t = jParseError ("All typechecked code must be within a module! Instead got " <> show t)
-
-
+pModuleToJExpr t = jParseError ("All typechecked code must be within a module!")
 
 
 parseJExprFromJTree :: (JTree, LocMap, [String]) -> Either DMException JExpr
