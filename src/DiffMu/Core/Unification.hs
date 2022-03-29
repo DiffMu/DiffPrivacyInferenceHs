@@ -266,11 +266,10 @@ getUnificationFailingHint ((a,b))=
       -- case3 = testEquality (typeRep @k) (typeRep @NumKind)
       case4 = testEquality (typeRep @k) (typeRep @BaseNumKind)
       -- case5 = testEquality (typeRep @k) (typeRep @ClipKind)
-      -- case6 = testEquality (typeRep @k) (typeRep @NormKind)
+      case6 = testEquality (typeRep @k) (typeRep @NormKind)
       -- case7 = testEquality (typeRep @k) (typeRep @ConstnessKind)
   -- in case (case0,case1,case2,case3,case4,case5,case6,case7) of
   in case case4 of
-
         Just Refl -> let hasIR (IRNum a) = True
                          hasIR _ = False
                      in case (hasIR a || hasIR b) && (DMData ∈ [a,b]) of
@@ -280,7 +279,9 @@ getUnificationFailingHint ((a,b))=
                                                             "`undisc_container :: [MetricMatrix(Data,*) :@ 2] -> MetricMatrix(Real,l)` if your matrix rows" <>
                                                             " all have row `l`-norm `<=1` (use `clip` for this)\n"
                        False -> Nothing
-        Nothing -> Nothing
+        Nothing -> case case6 of
+                    Just Refl -> Just $ DMPersistentMessage $ "You might want to use the `norm_convert` function.\n"
+                    Nothing -> Nothing
 
 
 instance Monad t => Normalize t JuliaType where

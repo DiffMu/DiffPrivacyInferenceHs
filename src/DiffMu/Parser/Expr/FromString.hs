@@ -144,7 +144,7 @@ parseJTreeFromString input =
     (Right a, locas) -> do
         -- make a map from each line number to the line number of the next expression.
         let addElem (a:b:as) = (a,b) : (addElem (b:as))
-            addElem [a] = [(a,a)]
+            addElem [a] = [(a,a+1)]
             addElem [] = []
             locmap = H.fromList (addElem (reverse locas))
         Right (a, locmap)
