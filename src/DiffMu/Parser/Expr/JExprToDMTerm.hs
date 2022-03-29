@@ -398,4 +398,4 @@ pJCall term args = Apply <$> pSingle_Loc term <*> mapM pSingle_Loc args
 
 
 parseDMTermFromJExpr :: JExpr -> TC LocProcDMTerm
-parseDMTermFromJExpr expr = traceShow expr $ liftNewLightTC (pSingle_Loc expr)
+parseDMTermFromJExpr expr = liftNewLightTC (pSingle_Loc expr)
