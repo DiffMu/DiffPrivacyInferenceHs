@@ -134,7 +134,7 @@ printSourceLines (begin,end) = do
   printed_lines <- mapM (printSourceLine numbersize) [begin .. (end - 1)]
   let edge = T.pack $ take (numbersize P.+ 2) (repeat ' ') <> "|"
   return $ edge <> "\n"
-           <> T.intercalate "\n" printed_lines <> "\n"
+           <> T.concat (fmap (<> "\n") printed_lines)
            <> edge <> "\n"
 
 
