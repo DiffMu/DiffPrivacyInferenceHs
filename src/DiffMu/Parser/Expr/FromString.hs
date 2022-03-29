@@ -51,12 +51,12 @@ data JTree =
    | JUnsupported String
    deriving Show
 
-type TreeParseState = (DiffMu.Prelude.State [Int])
+type TreeParseState = (DiffMu.Prelude.State [(String,Int)])
 type Parser = ParsecT Void String TreeParseState
 
 -- map a line number to the line number of the next expression, to enable
 -- multi-line error messages.
-type LocMap = H.HashMap Int Int
+type LocMap = H.HashMap (String,Int) Int
 
 
 pTLineNumber :: Parser JTree
@@ -68,7 +68,7 @@ pTLineNumber = let pLocation = do
               in do
                    (filename, n) <- (char ':') >> (between (string "(#= ") (string " =#)") pLocation)
                    locas <- get -- collect line numbers in state
-                   put (n : locas)
+                   put ((filename,n) : locas)
                    return (JLineNumber filename n)
 
 with :: String -> Parser a -> Parser a
@@ -137,18 +137,21 @@ pTree =     try pTLineNumber
         <|> JUnsupported <$> pAny
 
 
-parseJTreeFromString :: String -> Either DMException (JTree, LocMap)
+parseJTreeFromString :: String -> Either DMException (JTree, LocMap, [String])
 parseJTreeFromString input =
   let res = runState (runParserT pTree "jl-hs-communication" input) []
   in case res of
     (Left e, _)  -> Left (InternalError $ "Communication Error: Could not parse JExpr from string\n\n----------------------\n" <> input <> "\n---------------------------\n" <> errorBundlePretty e)
     (Right a, locas) -> do
         -- make a map from each line number to the line number of the next expression.
-        let addElem (a:b:as) = (a,b) : (addElem (b:as))
-            addElem [a] = [(a,a P.+ 1)]
+        let addElem ((f1,l1):(f2,l2):as) = case f1 == f2 of
+                                                True  -> ((f1,l1),l2) : (addElem ((f2,l2):as))
+                                                False -> ((f1,l1),l1 P.+ 1) : (addElem ((f2,l2):as)) --  last node of included file
+            addElem [(f,a)] = [((f,a), a P.+ 1)] -- last node
             addElem [] = []
             locmap = H.fromList (addElem (reverse locas))
-        Right (a, locmap)
+            filenames = nub (P.map fst locas)
+        Right (a, locmap, filenames)
 
 
 --------------------------------------------------------------------------------------------
@@ -295,7 +298,7 @@ pTreeToJExpr :: JTree -> JEParseState JExpr
 pTreeToJExpr tree = case tree of
      JLineNumber f l -> do -- put line number in the state for exquisit error messages
                                  (_,_,_,locs) <- get
-                                 nl <- case H.lookup l locs of
+                                 nl <- case H.lookup (f, l) locs of
                                             Just nl -> return nl
                                             Nothing -> error $ "this should not happen"
                                  put (f, l, nl, locs)
@@ -359,8 +362,8 @@ pModuleToJExpr t = jParseError ("All typechecked code must be within a module! I
 
 
 
-parseJExprFromJTree :: (JTree, LocMap) -> Either DMException JExpr
-parseJExprFromJTree (tree, locs) =
+parseJExprFromJTree :: (JTree, LocMap, [String]) -> Either DMException JExpr
+parseJExprFromJTree (tree, locs, _) =
   let x = runStateT (pModuleToJExpr tree) ("unknown", 0, 0, locs)
       y = case runExcept x of
         Left err -> Left err
