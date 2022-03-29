@@ -46,14 +46,22 @@ import Data.Array as All hiding (index, indices)
 import Prelude ((&&),(||))
 import qualified Prelude (String)
 import qualified Data.Text as T
+import Data.HashMap.Strict as H
+import System.IO (FilePath, readFile)
 
 
-newtype RawSource = RawSource (Array Int Text)
+newtype RawSource = RawSource (HashMap (Maybe FilePath) (Array Int Text))
 
-rawSourceFromString :: String -> RawSource
-rawSourceFromString input =
-  let ls = T.pack <$> linesS input
-  in RawSource $ listArray (1,length ls) (ls)
+rawSourceFromString :: String -> [FilePath] -> IO RawSource
+rawSourceFromString input other_files = do
+  let make_line_array file = let ls = (T.pack <$> linesS file)
+                             in  listArray (1,length ls) (ls) 
+  other_file_contents <- mapM readFile other_files
+  return $ RawSource $ H.fromList $
+    ((Nothing, make_line_array input)
+    :
+    ((Just <$> other_files) `zip` (make_line_array <$> other_file_contents))
+    )
 
 
 newtype Symbol = Symbol Text

@@ -39,14 +39,18 @@ typecheckFromString_DMTerm_Detailed term rawsource = do
  let res = parseJTreeFromString term >>= parseJExprFromJTree
  case res of
    Left err -> putStrLn $ "Error while parsing DMTerm from string: " <> show err
-   Right term -> typecheckFromJExpr_Detailed term (rawSourceFromString rawsource)
+   Right term -> do
+     rs <- (rawSourceFromString rawsource [])
+     typecheckFromJExpr_Detailed term rs
 
 typecheckFromString_DMTerm_Simple :: String -> String -> IO ()
 typecheckFromString_DMTerm_Simple term rawsource = do
  let res = parseJTreeFromString term >>= parseJExprFromJTree
  case res of
    Left err -> putStrLn $ "Error while parsing DMTerm from string: " <> show err
-   Right term -> typecheckFromJExpr_Simple term (rawSourceFromString rawsource)
+   Right term -> do
+     rs <- (rawSourceFromString rawsource [])
+     typecheckFromJExpr_Simple term rs
 
 data DoShowLog = DoShowLog DMLogSeverity [DMLogLocation] | DontShowLog
 

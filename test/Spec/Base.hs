@@ -42,10 +42,11 @@ import Debug.Trace as All
 import Test.Hspec as All
 import Test.Hspec.Core.Runner as All
 
+import qualified Data.HashMap.Strict as H
 
 tc :: TC a -> IO (Either (DMException) a)
 tc r = do
-  x <- executeTC (DontShowLog) r (RawSource (listArray (0,0) ["<no source>"]))
+  x <- executeTC (DontShowLog) r (RawSource H.empty)
 
   let x' = case x of
         ((WithContext e _ : _), res) -> Left e
@@ -56,7 +57,7 @@ tc r = do
 
 tcl :: TC a -> IO (Either (DMException) a)
 tcl r = do
-  x <- executeTC (DoShowLog Force []) r (RawSource (listArray (0,0) ["<no source>"]))
+  x <- executeTC (DoShowLog Force []) r (RawSource H.empty)
 
   let x' = case x of
         ((WithContext e _ : _), res) -> Left e
