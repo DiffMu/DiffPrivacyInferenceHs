@@ -23,7 +23,7 @@ import Debug.Trace(trace, traceM)
 -- it also parses numbers properly.
 
 data JTree =
-     JLineNumber String Int
+     JLineNumber (Maybe String) Int
    | JHole
    | JTrue
    | JFalse
@@ -51,12 +51,12 @@ data JTree =
    | JUnsupported String
    deriving Show
 
-type TreeParseState = (DiffMu.Prelude.State [(String,Int)])
+type TreeParseState = (DiffMu.Prelude.State [(Maybe String,Int)])
 type Parser = ParsecT Void String TreeParseState
 
 -- map a line number to the line number of the next expression, to enable
 -- multi-line error messages.
-type LocMap = H.HashMap (String,Int) Int
+type LocMap = H.HashMap (Maybe String,Int) Int
 
 
 pTLineNumber :: Parser JTree
@@ -64,7 +64,9 @@ pTLineNumber = let pLocation = do
                                 filename <- some (noneOf @[] " :")
                                 char ':'
                                 n <- decimal
-                                return (filename, n)
+                                case filename of
+                                     "none" -> return (Nothing, n)
+                                     _ -> return (Just filename, n)
               in do
                    (filename, n) <- (char ':') >> (between (string "(#= ") (string " =#)") pLocation)
                    locas <- get -- collect line numbers in state
@@ -150,7 +152,7 @@ parseJTreeFromString input =
             addElem [(f,a)] = [((f,a), a P.+ 1)] -- last node
             addElem [] = []
             locmap = H.fromList (addElem (reverse locas))
-            filenames = nub (P.map fst locas)
+            filenames = [s | Just s <- (nub (P.map fst locas))]
         Right (a, locmap, filenames)
 
 
@@ -165,7 +167,7 @@ parseJTreeFromString input =
 
 
 -- parse state is (filename, line number, next line number, map from line number to next line number)
-type JEParseState = (StateT (String,Int,Int,LocMap) (Except DMException))
+type JEParseState = (StateT (Maybe String,Int,Int,LocMap) (Except DMException))
 
 jParseError :: String -> JEParseState a
 jParseError message = do
@@ -180,7 +182,7 @@ data JExpr =
    | JETrue
    | JEFalse
    | JEColon
-   | JELineNumber String Int Int
+   | JELineNumber (Maybe String) Int Int
    | JEUnsupported String
    | JECall JExpr [JExpr]
    | JEBlock [JExpr]
@@ -370,7 +372,7 @@ pModuleToJExpr t = jParseError ("All typechecked code must be within a module!")
 
 parseJExprFromJTree :: (JTree, LocMap, [String]) -> Either DMException (JExpr, [String])
 parseJExprFromJTree (tree, locs, filenames) =
-  let x = runStateT (pModuleToJExpr tree) ("unknown", 0, 0, locs)
+  let x = runStateT (pModuleToJExpr tree) (Nothing, 0, 0, locs)
       y = case runExcept x of
         Left err -> Left err
         Right (term, _) -> Right (term, filenames)

@@ -19,14 +19,14 @@ import qualified Data.HashMap.Strict as H
 
 data ParseFull = ParseFull
   {
-    _location :: (String, Int, Int), -- filename and line number and line number of next term
+    _location :: (Maybe String, Int, Int), -- filename and line number and line number of next term
     _outerFuncNames :: [Symbol], -- to error upon non-toplevel back box definitions and simple recursion
     _insideAssignment :: Bool, -- to error upon assignemnts within assignments (like x = y = 100).
     _holeNames :: NameCtx -- generate new names for holes
   }
 
 instance Default ParseFull where
-    def = ParseFull ("unknown",0,0) [] False def
+    def = ParseFull (Nothing,0,0) [] False def
 
 type ParseTC = LightTC Location_Parse ParseFull
 
@@ -72,7 +72,7 @@ exitAssignment = insideAssignment .= False
 getCurrentLoc :: (MonadState ParseFull m) => m SourceLocExt
 getCurrentLoc = do
   (file,line,nextline) <- use location
-  return $ ExactLoc (SourceLoc (Just file) line nextline)
+  return $ ExactLoc (SourceLoc file line nextline)
 
 
 pSingle_Loc :: JExpr -> ParseTC LocProcDMTerm

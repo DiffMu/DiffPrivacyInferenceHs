@@ -242,7 +242,7 @@ data DMException where
   FLetReorderError        :: String -> DMException
   UnificationShouldWaitError :: DMTypeOf k -> DMTypeOf k -> DMException
   TermColorError          :: AnnotationKind -> String -> DMException
-  ParseError              :: String -> String -> Int -> Int-> DMException -- error message, filename, line number, line number of next expression
+  ParseError              :: String -> Maybe String -> Int -> Int-> DMException -- error message, filename, line number, line number of next expression
   DemutationMovedVariableAccessError :: Show a => a -> DMException
   DemutationNonAliasedMutatingArgumentError :: String -> DMException
   DemutationSplitMutatingArgumentError :: String -> DMException
@@ -264,9 +264,12 @@ instance Show DMException where
   show (DemutationError e) = "While demutating, the following error was encountered:\n " <> e
   show (BlackBoxError e) = "While preprocessing black boxes, the following error was encountered:\n " <> e
   show (FLetReorderError e) = "While processing function signatures, the following error was encountered:\n " <> e
-  show (ParseError e file line nextline) = case line == nextline of
+  show (ParseError e (Just file) line nextline) = case line == nextline of
                                                 True -> "Unsupported julia expression in file " <> file <> ", line " <> show line <> ":\n " <> e
                                                 False -> "Unsupported julia expression in file " <> file <> ", between line " <> show line <> " and " <> show nextline <> ":\n " <> e
+  show (ParseError e Nothing line nextline) = case line == nextline of
+                                                True -> "Unsupported julia expression in \"none\", line " <> show line <> ":\n " <> e
+                                                False -> "Unsupported julia expression in \"none\", between line " <> show line <> " and " <> show nextline <> ":\n " <> e
   show (TermColorError color t) = "Expected " <> show t <> " to be a " <> show color <> " expression but it is not."
   show (DemutationDefinitionOrderError a) = "The variable '" <> show a <> "' has not been defined before being used.\n"
                                             <> "Note that every variable has to be assigned some value prior to its usage.\n"
