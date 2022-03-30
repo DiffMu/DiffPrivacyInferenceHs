@@ -96,7 +96,7 @@ instance ShowPretty SourceLoc where
     let file' = case file of
                   Just f -> f
                   Nothing -> "none"
-    in case begin == end of
+    in case (begin P.+ 1 >= end) of
         True -> file' <> ": line " <> show begin
         False -> file' <> ": between lines " <> show begin <> " and " <> show end
 

@@ -48,6 +48,7 @@ import qualified Prelude (String)
 import qualified Data.Text as T
 import Data.HashMap.Strict as H
 import System.IO (FilePath, readFile)
+import GHC.IO (catchAny)
 
 
 newtype RawSource = RawSource (HashMap (Maybe FilePath) (Array Int Text))
@@ -57,11 +58,16 @@ rawSourceFromString :: String -> [FilePath] -> IO RawSource
 rawSourceFromString input other_files = do
   let make_line_array file = let ls = (T.pack <$> linesS file)
                              in  listArray (1,length ls) (ls) 
-  other_file_contents <- mapM readFile other_files
+  let tryReadFile f = (Just <$> readFile f) `catchAny` (\e -> return Nothing)
+
+  let onlyJust xs = [(Just a, make_line_array b) | (a, Just b) <- xs]
+
+  other_file_contents <- mapM tryReadFile other_files
+  let good_other_file_contents = onlyJust ((other_files) `zip` (other_file_contents))
   return $ RawSource $ H.fromList $
     ((Nothing, make_line_array input)
     :
-    ((Just <$> other_files) `zip` (make_line_array <$> other_file_contents))
+    (good_other_file_contents)
     )
 
 
