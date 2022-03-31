@@ -470,13 +470,17 @@ elaborateMut scname term@(Located l (Extra (ProcBBApply f args bbkind))) = do
 
 
 
-elaborateMut scname (Located l (Extra (ProcPreLoop iters iterVar body))) = do -- demutationError $ "Not implemented: loop." -- do
+elaborateMut scname (Located l (Extra (ProcPreLoop (i1,i2,i3) iterVar body))) = do -- demutationError $ "Not implemented: loop." -- do
   debug $ "[elaborateMut/Loop] BEGIN ---------------------"
 
 
   -- first, elaborate the iters
-  (newIters) <- elaboratePureValue scname iters
-  newIters' <- moveTypeAsTerm_Loc newIters
+  (newi1) <- elaboratePureValue scname i1
+  newi1' <- moveTypeAsTerm_Loc newi1
+  (newi2) <- elaboratePureValue scname i2
+  newi2' <- moveTypeAsTerm_Loc newi2
+  (newi3) <- elaboratePureValue scname i3
+  newi3' <- moveTypeAsTerm_Loc newi3
   --
   -- add the iterator to the scope,
   -- and backup old type
@@ -586,7 +590,7 @@ elaborateMut scname (Located l (Extra (ProcPreLoop iters iterVar body))) = do --
   let capture_assignment   = ld s1 l $ Extra (DemutTLetBase PureLet capturesBefore (ld s1 l (Var captureVar)))
   let capture_return       = ld s2 l $ Tup [ld s2 l (Var v) | v <- capturesAfter]
   let demutated_body_terms = [capture_return] <> bodyTerms <> [capture_assignment]
-  let demutated_loop = Extra (DemutLoop (newIters') capturesBefore capturesAfter ((UserTeVar iterVar, captureVar))
+  let demutated_loop = Extra (DemutLoop (newi1',newi2',newi3') capturesBefore capturesAfter ((UserTeVar iterVar, captureVar))
                              (Located l $ Extra (DemutBlock demutated_body_terms)))
 
   --

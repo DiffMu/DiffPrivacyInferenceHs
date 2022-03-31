@@ -806,7 +806,7 @@ data PreDMTerm (t :: * -> *) =
   | ClipN (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t)
   | MutClipM NormTerm (LocPreDMTerm t)
   -- Loop (DMTerm : "Number of iterations") ([TeVar] : "Captured variables") (TeVar : "name of iteration var", TeVar : "name of capture variable") (DMTerm : "body")
-  | Loop (LocPreDMTerm t) [TeVar] (TeVar, TeVar) (LocPreDMTerm t)
+  | Loop ((LocPreDMTerm t), (LocPreDMTerm t), (LocPreDMTerm t)) [TeVar] (TeVar, TeVar) (LocPreDMTerm t)
 -- Special NN builtins
   | MutSubGrad (LocPreDMTerm t) (LocPreDMTerm t)
   | SubGrad (LocPreDMTerm t) (LocPreDMTerm t)
@@ -874,7 +874,7 @@ data ProceduralExtension a =
   | ProcBBLet ProcVar [JuliaType] -- name, arguments
   | ProcBBApply a [a] (BBKind ProceduralExtension)
   | ProcPhi a a (Maybe a)
-  | ProcPreLoop a (ProcVar) a
+  | ProcPreLoop (a,a,a) (ProcVar) a
   | ProcReturn
   | ProcVarTerm (ProcVar)
   | ProcLam     [ProcAsgmt JuliaType] JuliaType a
@@ -892,7 +892,7 @@ data DemutatedExtension a =
   | DemutFLet TeVar a
   | DemutBBLet TeVar [JuliaType] -- name, arguments
   | DemutPhi a a a
-  | DemutLoop a [TeVar] [TeVar] (TeVar, TeVar) a -- number of iters, captures before, captures after, iter-var, capture-var
+  | DemutLoop (a,a,a) [TeVar] [TeVar] (TeVar, TeVar) a -- number of iters, captures before, captures after, iter-var, capture-var
   | DemutBlock [a]
   deriving (Show, Eq, Functor, Foldable, Traversable)
 
@@ -1019,7 +1019,7 @@ recDMTermM_Loc f h (rest)            = mapM (recDMTermM_Loc_Impl f h) rest -- h 
     recDMTermM_Loc_Impl f h (ClipN a b c)      = ClipN <$> (f a) <*> (f b) <*> (f c)
     recDMTermM_Loc_Impl f h (ClipM c a)        = ClipM c <$> (f a)
     recDMTermM_Loc_Impl f h (MutClipM c a)     = MutClipM c <$> (f a)
-    recDMTermM_Loc_Impl f h (Loop a b x d )    = Loop <$> (f a) <*> pure b <*> pure x <*> (f d)
+    recDMTermM_Loc_Impl f h (Loop (a1,a2,a3) b x d )  = Loop <$> ((,,) <$> (f a1) <*> (f a2) <*> (f a3)) <*> pure b <*> pure x <*> (f d)
     recDMTermM_Loc_Impl f h (SubGrad a b)      = SubGrad <$> (f a) <*> (f b)
     recDMTermM_Loc_Impl f h (MutSubGrad a b)      = MutSubGrad <$> (f a) <*> (f b)
     recDMTermM_Loc_Impl f h (ScaleGrad a b)    = ScaleGrad <$> (f a) <*> (f b)
@@ -1089,6 +1089,9 @@ instance ShowPretty (JuliaType) where
 
 instance (ShowPretty a, ShowPretty b) => ShowPretty (a,b) where
   showPretty (a,b) = "("<> showPretty a <> ", " <> showPretty b <> ")"
+
+instance (ShowPretty a, ShowPretty b, ShowPretty c) => ShowPretty (a,b,c) where
+  showPretty (a,b,c) = "("<> showPretty a <> ", " <> showPretty b <> ", " <> showPretty c <> ")"
 
 instance ShowPretty Relevance where
   showPretty = show

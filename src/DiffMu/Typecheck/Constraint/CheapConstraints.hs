@@ -126,26 +126,34 @@ instance TCConstraint IsLoopResult where
   constr = IsLoopResult
   runConstr (IsLoopResult c) = c
 
-instance FixedVars TVarOf (IsLoopResult ((Sensitivity, Sensitivity, Sensitivity), Annotation SensitivityK, DMMain)) where
+instance FixedVars TVarOf (IsLoopResult ((Sensitivity, Sensitivity, Sensitivity), Annotation SensitivityK, (DMMain, DMMain, DMMain))) where
   fixedVars (IsLoopResult (_, _, res)) = freeVars res
 
 
-instance Solve MonadDMTC IsLoopResult ((Sensitivity, Sensitivity, Sensitivity), Annotation SensitivityK, DMMain) where
-  solve_ Dict _ name (IsLoopResult ((s1, s2, s3), sa, τ_iter)) = do
+instance Solve MonadDMTC IsLoopResult ((Sensitivity, Sensitivity, Sensitivity), Annotation SensitivityK, (DMMain, DMMain, DMMain)) where
+  solve_ Dict _ name (IsLoopResult ((s1, s2, s3), sa, (i1,i2,i3))) = do
      let SensitivityAnnotation s = sa
-     case τ_iter of
-        NoFun (Numeric (Num _ (Const η))) -> do
-           unifyFromName name s1 zeroId
-           unifyFromName name s2 (exp s η)
-           unifyFromName name s3 η
-           dischargeConstraint name
-        NoFun (Numeric (Num _ NonConst)) -> do
-           unifyFromName name s oneId
-           unifyFromName name s1 oneId
-           unifyFromName name s2 oneId
-           unifyFromName name s3 inftyS
-           dischargeConstraint name
-        _ -> return ()
+     let isConst :: DMMain -> Maybe (Either Sensitivity ())
+         isConst t = case t of
+                          (NoFun (Numeric (Num _ (Const n)))) -> Just (Left n)
+                          (NoFun (Numeric (Num _ NonConst))) -> Just (Right ())
+                          _ -> Nothing
+     case (isConst i1,isConst i2,isConst i3) of
+          (Just (Left start), Just (Left step), Just (Left end)) -> do -- all operands are const, so number of iterations is const too
+             let η = ceil (divide (minus end (minus start oneId)) step) -- compute number of iterations
+             addConstraintFromName name (Solvable (IsLessEqual (start, end)))
+             unifyFromName name s1 zeroId -- iteration variable context scales with 0
+             unifyFromName name s2 (exp s η)
+             unifyFromName name s3 η
+             dischargeConstraint name
+          (Just _, Just _, Just _) -> do -- some operands are non-const
+             unifyFromName name s oneId
+             unifyFromName name s1 inftyS -- iteration variable context scales with inf (dffers from paper but is true)
+             unifyFromName name s2 oneId
+             unifyFromName name s3 inftyS
+             dischargeConstraint name
+          _ -> pure ()
+
 
 --------------------------------------------------
 -- is it gauss or mgauss?

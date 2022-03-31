@@ -197,10 +197,12 @@ transformLets reqc (Located l_term (term)) = do
        ttail <- handleAnyTerm_Loc tail
        return (Located l_term (FLet name tf ttail))
 
-   Loop n cs (x1, x2) body -> do
-       tn <- handleSensTerm_Loc n
+   Loop (i1,i2,i3) cs (x1, x2) body -> do
+       ti1 <- handleSensTerm_Loc i1
+       ti2 <- handleSensTerm_Loc i2
+       ti3 <- handleSensTerm_Loc i3
        tbody  <- handleAnyTerm_Loc body
-       return (Located l_term (Loop tn cs (x1, x2) tbody))
+       return (Located l_term (Loop (ti1,ti2,ti3) cs (x1, x2) tbody))
 
    Apply f xs -> do
        txs <- mapM handleSensTerm_Loc xs

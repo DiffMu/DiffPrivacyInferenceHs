@@ -85,5 +85,5 @@ substituteNames names (Located l term) = let
    SLetBase k x body tail -> Located l <$> (SLetBase k (subIf x) <$> subSame body <*> subSame tail)
    TLetBase k ns body tail       -> Located l <$> (TLetBase k (map subIf ns) <$> subSame body <*> subSame tail)
    MCreate t1 t2 (x1, x2) t3     -> Located l <$> (MCreate <$> subSame t1 <*> subSame t2 <*> return (subIf x1, subIf x2) <*> subSame t3)
-   Loop t1 cs (x1, x2) body      -> Located l <$> (Loop <$> subSame t1 <*> return (map subIf cs) <*> return (subIf x1, subIf x2) <*> subSame body)
+   Loop (i1,i2,i3) cs (x1, x2) body      -> Located l <$> (Loop <$> ((,,) <$> subSame i1 <*> subSame i2 <*> subSame i3) <*> return (map subIf cs) <*> return (subIf x1, subIf x2) <*> subSame body)
    _ -> recDMTermMSameExtension_Loc (substituteNames names) (Located l term)

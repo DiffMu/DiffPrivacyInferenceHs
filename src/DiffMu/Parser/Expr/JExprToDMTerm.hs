@@ -181,25 +181,17 @@ pJLamStar args ret body = do
 
 
 
-pJLoop ivar iter body =
-  let pIter start step end = do
-       dstart <- pSingle_Loc start
-       dstep <- pSingle_Loc step
-       dend <- pSingle_Loc end
-       myloc <- getCurrentLoc
-       let div  = Located myloc . Op (IsBinary DMOpDiv)
-       let sub  = Located myloc . Op (IsBinary DMOpSub)
-       let ceil = Located myloc . Op (IsUnary DMOpCeil)
-       return (ceil [div [sub [dend, sub [dstart, (Located myloc (Sng 1 JTInt))]], dstep]]) -- compute number of steps
-  in case iter of
+pJLoop ivar iter body = case iter of
        JEIter start step end -> do
                                  dbody <- pSingle_Loc body
-                                 nit <- pIter start step end
+                                 dstart <- pSingle_Loc start
+                                 dstep <- pSingle_Loc step
+                                 dend <- pSingle_Loc end
                                  i <- case ivar of
                                               JEHole -> holeVar
                                               JESymbol s -> newProcVar s
                                               i -> parseError ("Invalid iteration variable " <> (show i) <> ".")
-                                 return (Extra (ProcPreLoop nit i dbody))
+                                 return (Extra (ProcPreLoop (dstart, dstep, dend) i dbody))
        it -> parseError ("Invalid iterator " <> show it <> ", must be a range.")
 
 

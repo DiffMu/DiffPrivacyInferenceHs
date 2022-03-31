@@ -200,7 +200,7 @@ testSLoop pp = describe "Sensitivity loop" $ do
         intc_nc c = NoFun(Numeric (Num (IRNum DMInt) c))
         int = NoFun(Numeric (Num (IRNum DMInt) NonConst))
         ty_s  = do c <- newVar ; pure $ Fun([([intc_nc c :@ (constCoeff (Fin 1024))] :->: int) :@ Just [JTInt]])
-        ty_v  = do c <- newVar ; pure $ Fun([([intc_nc c :@ (constCoeff (Fin 1)), int :@ (constCoeff (Fin 2))] :->: int) :@ Just [JTInt, JTInt]])
+        ty_v  = do c <- newVar ; pure $ Fun([([intc_nc c :@ (constCoeff (Fin 1)), int :@ inftyS] :->: int) :@ Just [JTInt, JTInt]])
         ty_v2 = do c <- newVar ; pure $ Fun([([intc_nc c :@ (constCoeff (Fin 1)), int :@ (inftyS)] :->: int) :@ Just [JTInt, JTInt]])
     parseEvalUnify pp "static" sloop (ty_s)
     parseEvalUnify pp "overwriting" mloop (ty_s)
@@ -218,7 +218,7 @@ testSample pp = describe "Sample" $ do
               \  gaussian_mechanism!(2, 0.2, 0.3, gs)  \n\
               \  clone(x * gs) \n\
               \end"
-        ty = "Fun([([NoFun(Matrix<n: LInf, c: τ_39>[s_14 × s_24](NoFun(Num(Data[--])))) @ (0.4⋅s_22⋅(1 / s_14),0.3⋅s_22⋅(1 / s_14)),NoFun(Num(Int[s_22 ©])) @ (∑∅,∑∅),NoFun(Num(Int[--])) @ (∞,∞)] ->* NoFun(Vector<n: LInf, c: U>[s_24](NoFun(Num(Real[--]))))) @ Just [Any,Any,Integer]])"
+        ty = "Fun([([NoFun(Matrix<n: LInf, c: τ_39>[s_14 × s_24](NoFun(Num(Data[--])))) @ (0.4⋅s_22⋅(1 / s_14),0.3⋅s_22⋅(1 / s_14)),NoFun(Num(IR Int[s_22 ©])) @ (∑∅,∑∅),NoFun(Num(IR Int[--])) @ (∞,∞)] ->* NoFun(Vector<n: LInf, c: U>[s_24](NoFun(Num(IR Real[--]))))) @ Just [Any,Any,Integer]])"
         cs = ""
     parseEvalString_l_customCheck pp "" ex (ty, cs) (pure $ Right ())
 
@@ -248,7 +248,7 @@ testAboveThresh pp = describe "Above threshold" $ do
     let ex = "function test(qs, d) :: Priv() \n\
               \  above_threshold(qs, 1, d, 100) \n\
               \ end"
-        ty = "Fun([([NoFun(Vector<n: τ_0, c: τ_1>[s_1](Fun([([τ_3 @ 1] -> NoFun(Num(Real[--]))) @ Nothing]))) @ (∞,∞),τ_3 @ (1,∑∅)] ->* NoFun(Num(Int[--]))) @ Just [Any,Any]])"
+        ty = "Fun([([NoFun(Vector<n: τ_0, c: τ_1>[s_1](Fun([([τ_3 @ 1] -> NoFun(Num(IR Real[--]))) @ Nothing]))) @ (∞,∞),τ_3 @ (1,∑∅)] ->* NoFun(Num(IR Int[--]))) @ Just [Any,Any]])"
         cs = ""
     parseEvalString_customCheck pp "" ex (ty, cs) (pure $ Right ())
 
@@ -390,7 +390,7 @@ testDPGD pp = describe "DPGD" $ do
           \    model \n\
           \ end"
 
-      ty = "Fun([([NoFun(Matrix<n: τ_16, c: τ_17>[s_16 × s_28](Num(Data))) @ (2.0⋅sqrt(2.0⋅(0.0 - ln(s_43))⋅ceil(s_16))⋅s_19,s_20⋅ceil(s_16) + s_43),NoFun(Matrix<n: τ_81, c: τ_82>[s_33 × s_34](Num(Data))) @ (2.0⋅sqrt(2.0⋅(0.0 - ln(s_43))⋅ceil(s_16))⋅s_19,s_20⋅ceil(s_16) + s_43),NoFun(Num(τ_101[s_19])) @ (0,0),NoFun(Num(τ_103[s_20])) @ (0,0),NoFun(Num(τ_129[s_47])) @ (∞,∞)] ->* NoFun(Params[s_44](Num(Real[--])))) @ Just [Any,Any,Any,Any,Any]])"
+      ty = "Fun([([NoFun(Matrix<n: τ_16, c: τ_17>[s_16 × s_28](Num(Data))) @ (2.0⋅sqrt(2.0⋅(0.0 - ln(s_43))⋅ceil(s_16))⋅s_19,s_20⋅ceil(s_16) + s_43),NoFun(Matrix<n: τ_81, c: τ_82>[s_33 × s_34](Num(Data))) @ (2.0⋅sqrt(2.0⋅(0.0 - ln(s_43))⋅ceil(s_16))⋅s_19,s_20⋅ceil(s_16) + s_43),NoFun(Num(τ_101[s_19])) @ (0,0),NoFun(Num(τ_103[s_20])) @ (0,0),NoFun(Num(τ_129[s_47])) @ (∞,∞)] ->* NoFun(Params[s_44](Num(IR Real[--])))) @ Just [Any,Any,Any,Any,Any]])"
 
       cs = "constr_16 : [final,worst,global,exact,special] IsLess (s_20,1),\
           \\nconstr_38 : [final,worst,global,exact,special] IsLess (0,s_43),\

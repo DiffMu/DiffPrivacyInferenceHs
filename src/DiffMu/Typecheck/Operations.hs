@@ -131,8 +131,7 @@ solveBinary name op (τ1, τ2) = f op τ1 τ2
 
 
 
-    -- TODO figure out how to handle negative numbers.
-    f DMOpSub (Numeric (Num t1 (Const s1))) (Numeric (Num t2 (Const s2))) = ret zeroId zeroId ((Numeric <$> (Num <$> (numSup t1 t2) <*> pure (Const (minus s1 s2)))))
+    f DMOpSub (Numeric (Num t1 (Const s1))) (Numeric (Num t2 (Const s2))) = ret zeroId zeroId (Numeric <$> (Num <$> (numSup t1 t2) <*> pure NonConst))
     f DMOpSub (Numeric (Num t1 (Const s1))) (Numeric (Num t2 NonConst)) = ret zeroId oneId (Numeric <$> (Num <$> numSup t1 t2 <*> pure NonConst))
     f DMOpSub (Numeric (Num t1 NonConst)) (Numeric (Num t2 (Const s2))) = ret oneId zeroId (Numeric <$> (Num <$> numSup t1 t2 <*> pure NonConst))
     f DMOpSub (Numeric (Num t1 NonConst)) (Numeric (Num t2 NonConst)) = ret oneId oneId (Numeric <$> (Num <$> numSup t1 t2 <*> pure NonConst))
