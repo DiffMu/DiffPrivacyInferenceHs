@@ -118,10 +118,10 @@ checkSen' scope (Located l (DMTrue)) = return (NoFun DMBool)
 checkSen' scope (Located l (DMFalse)) = return (NoFun DMBool)
 
 -- TODO: Here we assume that η really has type τ, and do not check it. Should maybe do that.
-checkSen' scope (Located l (Sng η τ)) = do
-  res <- Numeric <$> (Num <$> (createDMTypeBaseNum τ) <*> pure (Const (constCoeff (Fin η))))
-  return (NoFun res)
-
+checkSen' scope (Located l (Sng η τ)) = case η < 0 of
+    True -> NoFun <$> Numeric <$> (Num <$> (createDMTypeBaseNum τ) <*> pure NonConst) -- we don't allow negative const
+    False -> NoFun <$> Numeric <$> (Num <$> (createDMTypeBaseNum τ) <*> pure (Const (constCoeff (Fin η)))) -- we don't allow negative const
+    
 -- typechecking an op
 checkSen' scope (Located l (Op op args)) = do
   -- create a new typeop constraint for op

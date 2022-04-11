@@ -138,16 +138,16 @@ instance Solve MonadDMTC IsLoopResult ((Sensitivity, Sensitivity, Sensitivity), 
                           (NoFun (Numeric (Num _ (Const n)))) -> Just (Left n)
                           (NoFun (Numeric (Num _ NonConst))) -> Just (Right ())
                           _ -> Nothing
+     msg <- inheritanceMessageFromName name
      case (isConst i1,isConst i2,isConst i3) of
           (Just (Left start), Just (Left step), Just (Left end)) -> do -- all operands are const, so number of iterations is const too
-             let η = ceil (divide (minus end (minus start oneId)) step) -- compute number of iterations
-             addConstraintFromName name (Solvable (IsLessEqual (start, end)))
+             let η = ceil (divide ((minus end start) ⋆! oneId) step) -- compute number of iterations
+             addConstraint (Solvable (IsLessEqual (start, end))) (msg :\\: "Start value of iterator must be <= end value of iterator.")
              unifyFromName name s1 zeroId -- iteration variable context scales with 0
              unifyFromName name s2 (exp s η)
              unifyFromName name s3 η
              dischargeConstraint name
           (Just _, Just _, Just _) -> do -- some operands are non-const
-             msg <- inheritanceMessageFromName name
              unify (msg :\\: "The loop has variable number of iterations, so the sensitivity of all captured variables in the loop body must be 1.") s oneId
              unifyFromName name s1 inftyS -- iteration variable context scales with inf (dffers from paper but is true)
              unifyFromName name s2 oneId
