@@ -224,7 +224,7 @@ data DMTypeOf (k :: DMKind) where
 
 
 instance Hashable (DMTypeOf k) where
-  hashWithSalt s (DMBool) = s +! 11
+  hashWithSalt s (DMBool) = s +! 12
   hashWithSalt s (DMInt) = s +! 1
   hashWithSalt s (DMReal) = s +! 2
   hashWithSalt s (DMData) = s +! 3
@@ -237,6 +237,7 @@ instance Hashable (DMTypeOf k) where
   hashWithSalt s (Gradient) = s +! 10
   hashWithSalt s (NonConst) = s +! 11
   hashWithSalt s (Const t) = s `hashWithSalt` t
+  hashWithSalt s (IRNum t) = s `hashWithSalt` t
   hashWithSalt s (Num t n) = s `hashWithSalt` n `hashWithSalt` t
   hashWithSalt s (Numeric t) = s `hashWithSalt` t
   hashWithSalt s (TVar t) = s `hashWithSalt` t
@@ -252,6 +253,7 @@ instance Hashable (DMTypeOf k) where
   hashWithSalt s (NoFun t) = s `hashWithSalt` t
   hashWithSalt s (n :∧: t) = s `hashWithSalt` n `hashWithSalt` t
   hashWithSalt s (BlackBox n) = s `hashWithSalt` n
+
 
 instance (Hashable a, Hashable b) => Hashable (a :@ b) where
   hashWithSalt s (a:@ b) = s `hashWithSalt` a `hashWithSalt` b

@@ -2,6 +2,7 @@
 module Spec.Subtyping where
 
 import Spec.Base
+import DiffMu.Typecheck.Constraint.IsJuliaEqual
 
 (⊑!) :: forall k t. (SingI k, Typeable k, MonadDMTC t) => DMTypeOf k -> DMTypeOf k -> t ()
 (⊑!) a b = addConstraintNoMessage (Solvable (IsLessEqual (a,b))) >> pure ()
@@ -64,7 +65,7 @@ testSubtyping_MaxMinCases = do
     it "does NOT resolve 'Int ≤ a'." $ do
       let test0 = do
             a <- newVar
-            (IRNum DMInt) ⊑! a
+            (DMInt) ⊑! a
             return a
       let isTVar (TVar x) = pure (Right ())
           isTVar a        = pure (Left a)
@@ -73,7 +74,7 @@ testSubtyping_MaxMinCases = do
     it "does NOT resolve 'a ≤ Real'." $ do
       let test0 = do
             a <- newVar
-            a ⊑! (IRNum DMReal)
+            a ⊑! (DMReal)
             return a
       let isTVar (TVar x) = pure (Right ())
           isTVar a        = pure (Left a)
@@ -96,8 +97,10 @@ testSubtyping_MaxMinCases = do
             a ⊑! ty
             return a
       let correct :: (DMType) -> TC _
-          correct ((DMTup [Numeric (Num (IRNum DMInt) (Const s)), Numeric (Num (TVar _) (TVar _))])) = pure $ Right s
-          correct r                                                     = pure $ Left r
+          correct ((DMTup [Numeric (Num (IRNum DMInt) (Const s)), Numeric (Num (IRNum (TVar _)) (TVar _))])) = pure $ Right s
+          correct r                                                     = do
+            ctrs <- getAllConstraints
+            pure $ Left $ "value: " <> showPretty r <> "\n" <> "ctrs: \n" <> showPretty ctrs 
       (tc $ sn_EW test0 >>= correct) `shouldReturn` (Right (Right (constCoeff (Fin 2))))
 
     it "partially resolves 'a[--] ≤ b' inside NoFun" $ do
@@ -294,6 +297,12 @@ testSubtyping_ContractEdge = do
             (y :: DMMain) <- newVar
             addConstraintNoMessage (Solvable (IsJuliaEqual (y, b)))
 
+            -- 2022-04-11
+            -- we actually have to make x fixed as well, because else we get a unification from (a <= x)
+            -- and after that also of (a <= b)
+            addConstraintNoMessage (Solvable (IsJuliaEqual (y, x)))
+
+
             return (a,b)
       (tc $ (sn test1 >>= (\(a,b) -> return (a == b)))) `shouldReturn` (Right False)
 
@@ -393,7 +402,7 @@ testSubtyping_ContractEdge = do
 
             return (d,a,b,c)
       let checkres (d,a,b,c) = (a == c, b == c, a == d, b == d, isGood a)
-            where isGood (NoFun (Numeric (Num (TVar x) NonConst))) = True
+            where isGood (NoFun (Numeric (Num (IRNum (TVar x)) NonConst))) = True
                   isGood _ = False
       (tc $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right (True,True,True,True,True))
 
@@ -415,16 +424,17 @@ testSubtyping_ContractEdge = do
             (d ≤! b) ()
 
 
-            -- the additional constraint
-            x <- newVar
-            (x ≤! a) ()
+            -- the additional constraints on `a` and `b`
+            x :: DMMain <- newVar
+            addConstraintNoMessage (Solvable (IsNonConst (a, x))) 
+            addConstraintNoMessage (Solvable (IsNonConst (b, x))) 
 
             return (d,a,b,c)
       let checkres (d,a,b,c) | let f = [a,b,c,d]
                                    ix = [0,1,2,3]
                                in and [(f !! i /= f !! j) | i <- ix, j <- ix, i /= j] = Right ()
           checkres x = Left x
-      (tc $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right (Right ()))
+      (tcl $ (sn test1 >>= (return . checkres))) `shouldReturn` (Right (Right ()))
 
     it "does NOT contract diamond if any vertices appear in other constraints" $ do
       let int = NoFun (Numeric (Num (IRNum DMInt) NonConst))

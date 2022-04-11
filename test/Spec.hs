@@ -54,6 +54,8 @@ runAllTests parse = defaultspec $ do
   testDemutation_Passthrough parse
   testTypecheckingExamples parse
   testIssues parse
+
+  -- not activated:
   -- testParsing parse
 
 

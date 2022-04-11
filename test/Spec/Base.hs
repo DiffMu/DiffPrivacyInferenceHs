@@ -57,7 +57,7 @@ tc r = do
 
 tcl :: TC a -> IO (Either (DMException) a)
 tcl r = do
-  x <- executeTC (DoShowLog Force []) r (RawSource H.empty)
+  x <- executeTC (DoShowLog Force [Location_Constraint, Location_Subtyping, Location_MonadicGraph]) r (RawSource H.empty)
 
   let x' = case x of
         ((WithContext e _ : _), res) -> Left e
