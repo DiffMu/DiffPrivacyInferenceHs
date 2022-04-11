@@ -154,10 +154,10 @@ typecheckFromJExpr_Detailed term rawsource = do
         -- Location_Check,
         Location_Constraint,
         Location_PrePro_Demutation,
-        Location_PreProcess
+        Location_PreProcess,
         -- Location_Subst
         -- Location_INC,
-        -- Location_MonadicGraph,
+        Location_MonadicGraph
          --Location_All
         ]
   let printer (ty, full) =

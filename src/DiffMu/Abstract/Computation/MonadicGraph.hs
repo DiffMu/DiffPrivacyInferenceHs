@@ -287,7 +287,7 @@ findSupremumM relevance (GraphM graph) ((a,b) :=: x,isShortestSup) msg =
             Finished ((a₀,a₁),isShortestPath) -> do
               debug "Since finding path successfull, solving leftover constraints."
               debug "============ BEFORE solving all new constraints >>>>>>>>>>>>>>>>"
-              solveAllConstraints ExactNormalization [SolveExact]
+              solveAllConstraints ExactNormalization [SolveExact,SolveRecreateSupremum]
               debug "============ AFTER solving all new constraints >>>>>>>>>>>>>>>>"
               logPrintConstraints
               closedRes <- mergeTopConstraintSet
@@ -330,7 +330,7 @@ findSupremumM relevance (GraphM graph) ((a,b) :=: x,isShortestSup) msg =
             Finished ((a₀,a₁),isShortestPath) -> do
               debug "Since finding path successfull, solving leftover constraints."
               debug "============ BEFORE solving all new constraints >>>>>>>>>>>>>>>>"
-              solveAllConstraints ExactNormalization [SolveExact]
+              solveAllConstraints ExactNormalization [SolveExact,SolveRecreateSupremum]
               debug "============ AFTER solving all new constraints >>>>>>>>>>>>>>>>"
               logPrintConstraints
               closedRes <- mergeTopConstraintSet
@@ -365,9 +365,25 @@ findSupremumM relevance (GraphM graph) ((a,b) :=: x,isShortestSup) msg =
     -- we have to rewind!
     state0 <- get
 
+    -- 2022-04-11
+    -- because of issue #136 (simulating the connection of layers for proper supremum inheritance)
+    -- we need to do `convertSubtypingToSupremum` after finding paths a -> x and b -> x
+    -- for that to be always possible we need to make sure that we know which constraints
+    -- are coming from higher levels, and which are just other constraints that happen to lie around.
+    -- Because of this we open a new constraint set here.
+    openNewConstraintSet
+
     -- first, we check if there are even paths a -> x and b -> x
     pathLeft  <- findPathM relevance (GraphM graph) (a,x) msg
     pathRight <- findPathM relevance (GraphM graph) (b,x) msg
+
+    -- 2022-04-11 (part 2)
+    -- We do the conversion, and close the constraint set.
+    -- We do not care about whether there were constraints left over
+    -- (because they are most likely going to be)
+    -- Since in case of failure we revert back to `state0` anyways.
+    solveAllConstraints ExactNormalization  [SolveRecreateSupremum]
+    mergeTopConstraintSet
 
     case (pathLeft,pathRight) of
       -- if one of the paths fails, then the supremum cannot exist,
