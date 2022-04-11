@@ -547,6 +547,7 @@ completeDiamondUpstream graph (a0,a1) =
 -- and may even only work if `a == center` or `b == center`.
 checkContractionAllowed :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => [(DMTypeOf k)] -> (DMTypeOf k, DMTypeOf k) -> DMTypeOf k -> t ContractionAllowed
 checkContractionAllowed contrTypes (TVar a, TVar b) (center) = do
+  debug $ "[CheckContractionAllowd]: Called for (" <> show a <> " ==> " <> show b <> "), center: " <> show center <> ", contrTypes: " <> show contrTypes
   let acceptOnlyVar (TVar a) = Just a
       acceptOnlyVar _        = Nothing
 
@@ -558,7 +559,7 @@ checkContractionAllowed contrTypes (TVar a, TVar b) (center) = do
   -- The actual case distinction
   case contrVars' of
     Nothing -> do
-      debug "Contraction not allowed because the candidate list contains types which are not TVars."
+      debug "  ^^^^ Contraction not allowed because the candidate list contains types which are not TVars."
       return ContractionDisallowed
     (Just contrVars') -> do
       let contrVars = (SomeK <$> contrVars')
@@ -573,7 +574,9 @@ checkContractionAllowed contrTypes (TVar a, TVar b) (center) = do
       let m = length ctrs_all_ab
           n = length ctrs_relevant P.+ length ctrs_relevant_max P.+ length ctrs_relevant_min
       case m == n of
-        False -> return ContractionDisallowed
+        False -> do
+          debug "  ^^^^ Contraction not allowed because constraints which are not subtyping/inf/sup constraints exist for the contrVars (=contrTypes\\{center})"
+          return ContractionDisallowed
         True -> do
           -- Get all subtyping pairs
           let subFromSub (_,(a,b)) = [(a,b)]
@@ -583,6 +586,8 @@ checkContractionAllowed contrTypes (TVar a, TVar b) (center) = do
           let subs = (ctrs_relevant >>= subFromSub)
                     <> (ctrs_relevant_max >>= subFromMax)
                     <> (ctrs_relevant_min >>= subFromMin)
+
+          debug $ "  ^^^^ subtyping pairs are: " <> show subs
 
           --
           -- NOTE: In the following, we only deal with edges here which are relevant,
@@ -607,10 +612,14 @@ checkContractionAllowed contrTypes (TVar a, TVar b) (center) = do
                   , and [x == TVar b, freeVars y `intersect` contrVars == []]
                   ]
 
-          let allRelevantAreGood = and (isGood <$> subs)
-          case allRelevantAreGood of
-            False -> return ContractionDisallowed
-            True -> return ContractionAllowed
+          let edgesWithGoodness = [(a,b,isGood (a,b)) | (a,b) <- subs]
+          case find (\(a,b,good) -> not good) edgesWithGoodness of
+            Just (a,b,_) -> do
+              debug $ "  ^^^^ Contraction not allowed because the edge " <> show (a,b) <> " is not good."
+              return ContractionDisallowed
+            Nothing -> do
+              debug $ "  ^^^^ Contraction allowed because all edges are good."
+              return ContractionAllowed
 
 checkContractionAllowed _ _ _ = return ContractionDisallowed
 
@@ -629,7 +638,7 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsLessEqual (DMTypeOf k, DMTyp
     -- if we are in solve final, we try to contract the edge
         debug $ "Computing LessEqual: " <> show (a,b)
         alloweda <- checkContractionAllowed [a,b] (a,b) a
-        allowedb <- checkContractionAllowed [a,b] (a,b) a
+        allowedb <- checkContractionAllowed [a,b] (a,b) b
         case (alloweda , allowedb) of
           (ContractionAllowed, _) -> unify "diamond contraction" a b >> return ()
           (_, ContractionAllowed) -> unify "diamond contraction" a b >> return ()
