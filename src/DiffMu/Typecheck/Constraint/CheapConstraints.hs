@@ -147,7 +147,8 @@ instance Solve MonadDMTC IsLoopResult ((Sensitivity, Sensitivity, Sensitivity), 
              unifyFromName name s3 η
              dischargeConstraint name
           (Just _, Just _, Just _) -> do -- some operands are non-const
-             unifyFromName name s oneId
+             msg <- inheritanceMessageFromName name
+             unify (msg :\\: "The loop has variable number of iterations, so the sensitivity of all captured variables in the loop body must be 1.") s oneId
              unifyFromName name s1 inftyS -- iteration variable context scales with inf (dffers from paper but is true)
              unifyFromName name s2 oneId
              unifyFromName name s3 inftyS
