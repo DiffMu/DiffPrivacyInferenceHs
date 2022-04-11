@@ -135,7 +135,7 @@ testSupremum = do
             a <- newVar
             b <- newVar
             c <- supremum a b
-            unify () c (IRNum DMReal)
+            unify () c (DMReal)
             return (a,b)
       let check (TVar a, TVar b) | a /= b = pure (Right ())
           check x                         = pure (Left x)
