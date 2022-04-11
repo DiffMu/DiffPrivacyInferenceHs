@@ -616,6 +616,9 @@ instance Monad t => Normalize t (TeVar) where
   normalize nt v = pure v
 
 
+instance Monad t => Normalize t JuliaType where
+  normalize nt = pure
+
 
 type TypeCtx extra = Ctx TeVar (WithRelev extra)
 type TypeCtxSP = Either (TypeCtx SensitivityK) (TypeCtx PrivacyK)
@@ -641,6 +644,34 @@ instance Show SolvingEvent where
 data Watcher = Watcher Changed
   deriving (Generic)
 
+newtype UserVars = UserVars [(Sensitivity, String, JuliaType, SourceLocExt)]
+
+instance Default UserVars where
+    def = UserVars []
+
+instance MonadDMTC t => Normalize t UserVars where
+    normalize nt (UserVars vs) = UserVars <$> normalize nt vs
+
+instance ShowPretty UserVars where
+ showPretty (UserVars vs) = let
+        isNumber :: SymTerm MainSensKind -> Bool
+        isNumber a@(SingleKinded (LinCom (MonCom as))) = case H.toList as of
+           [(MonCom aterm, av)] -> case H.toList aterm of
+                                       [] -> True
+                                       _ -> False
+           [] -> True
+           _ -> False
+
+        showIfVar (name, cond, typ, loc) = case isNumber name of
+           True -> ""
+           False -> " - Variable " <> showPretty name <> " can be chosen with type " <> showPretty typ <> " to be " <> cond <> ". Appeared in the privacy loop in " <> showPretty loc <> "\n"
+    in case vs of
+         [] -> ""
+         vs -> let s = (foldl (<>) "" (map showIfVar vs)) in
+                   case s of
+                        "" -> ""
+                        s -> "where\n" <> s
+
 data MetaCtx m = MetaCtx
   {
     _sensVars :: KindedNameCtx SVarOf,
@@ -649,6 +680,7 @@ data MetaCtx m = MetaCtx
     _sensSubs :: Subs SVarOf SensitivityOf,
     _typeSubs :: Subs TVarOf DMTypeOf,
     _constraints :: ConstraintCtx m,
+    _userVars :: UserVars,
     -- cached state
     _fixedTVars :: Ctx (SingSomeK TVarOf) [Symbol]
   }
@@ -744,13 +776,14 @@ instance Monad m => MonadLog (TCT m) where
 
 
 instance Show m => Show (MetaCtx m) where
-  show (MetaCtx s t n sσ tσ cs fixedT) =
+  show (MetaCtx s t n sσ tσ cs (UserVars uvs) fixedT) =
        "- sens vars: " <> show s <> "\n"
     <> "- type vars: " <> show t <> "\n"
     <> "- name vars: " <> show n <> "\n"
     <> "- sens subs:   " <> show sσ <> "\n"
     <> "- type subs:   " <> show tσ <> "\n"
     <> "- fixed TVars: " <> show fixedT <> "\n"
+    <> "- user-chosen vars: " <> show uvs <> "\n"
     <> "- constraints:\n" <> show cs <> "\n"
 
 instance Show Watcher where
@@ -834,6 +867,10 @@ instance Monad m => MonadTerm SensitivityOf (TCT m) where
   getConstraintsBlockingVariable _ _ = return mempty
 
 
+memorizeUserVar :: (MonadDMTC m) => Sensitivity -> String -> JuliaType -> SourceLocExt -> m ()
+memorizeUserVar var bounds ty loc = do
+    UserVars ls <- use (meta.userVars)
+    meta.userVars .= UserVars ((var, bounds, ty, loc) : ls)
 
 getFixedVarsOfSolvable :: Solvable GoodConstraint GoodConstraintContent MonadDMTC -> [SingSomeK TVarOf]
 getFixedVarsOfSolvable (Solvable c) =
@@ -1084,6 +1121,7 @@ normalizeContext :: (MonadDMTC t) => NormalizationType -> t ()
 normalizeContext nt = do
   types %=~ normalize nt
   meta.constraints %=~ normalize nt
+  meta.userVars %=~ normalize nt
 
 
 

@@ -143,6 +143,7 @@ typecheckFromJExpr_Simple term rawsource = do
   let printer (ty, full) =
         "\n---------------------------------------------------------------------------\n"
         <> "Type:\n" <> runReader (showLocated ty) rawsource
+        <> "\n" <> T.pack (showPretty (_userVars (_meta full)))
         <> "\n---------------------------------------------------------------------------\n"
         <> "Constraints:\n" <> runReader (showLocated (_constraints (_meta full))) rawsource
   typecheckFromJExprWithPrinter printer (DontShowLog) term rawsource

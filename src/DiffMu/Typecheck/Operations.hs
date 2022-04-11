@@ -130,7 +130,7 @@ solveBinary name op (τ1, τ2) = f op τ1 τ2
     f DMOpAdd (TVar a) t                            = matchType a t
 
 
-
+    -- always return non-const so we can't get negative const
     f DMOpSub (Numeric (Num t1 (Const s1))) (Numeric (Num t2 (Const s2))) = ret zeroId zeroId (Numeric <$> (Num <$> (numSup t1 t2) <*> pure NonConst))
     f DMOpSub (Numeric (Num t1 (Const s1))) (Numeric (Num t2 NonConst)) = ret zeroId oneId (Numeric <$> (Num <$> numSup t1 t2 <*> pure NonConst))
     f DMOpSub (Numeric (Num t1 NonConst)) (Numeric (Num t2 (Const s2))) = ret oneId zeroId (Numeric <$> (Num <$> numSup t1 t2 <*> pure NonConst))

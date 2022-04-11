@@ -284,9 +284,6 @@ getUnificationFailingHint ((a,b))=
                     Nothing -> Nothing
 
 
-instance Monad t => Normalize t JuliaType where
-  normalize nt = pure
-
 
 instance MonadDMError (WithContext DMException) t => Unify (WithContext DMException) t () where
   unify_ _ _ _ = return ()

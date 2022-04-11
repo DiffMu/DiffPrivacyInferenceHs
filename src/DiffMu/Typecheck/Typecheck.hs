@@ -1505,9 +1505,10 @@ checkPri' scope term@(Located l (Gauss rp εp δp f)) =
         (l :\\: "Gauss delta parameter must be <= 1")
       addConstraint (Solvable (IsLess (zeroId :: Sensitivity, v_ε)))
         (l :\\: "Gauss epsilon parameter must be > 0")
+
       addConstraint (Solvable (IsLess (zeroId :: Sensitivity, v_δ)))
         (l :\\: "Gauss delta parameter must be > 0")
-
+        
       -- restrict interesting variables in f's context to v_r
       let mf = setBody df (v_ε, v_δ) v_r
 
@@ -1701,6 +1702,8 @@ checkPri' scope (Located l (Loop (start,step,end) cs' (xi, xc) body)) =
             (l :\\: "This variable can be chosen freely <= 1")
           addConstraint (Solvable (IsLess (zeroId :: Sensitivity, δn))) -- otherwise we get an infinite ε...
             (l :\\: "This variable can be chosen freely > 0")
+
+          memorizeUserVar δn "within (0,1]" JTReal l
 
           -- compute the new privacy for the xs according to the advanced composition theorem
           let two = oneId ⋆! oneId
