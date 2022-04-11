@@ -490,6 +490,15 @@ data CtxStack v a = CtxStack
   }
 deriving instance Functor (CtxStack v)
 
+getValueCtxStack :: DictKey v => v -> CtxStack v a -> Maybe a
+getValueCtxStack v (CtxStack top others) = f v (top:others)
+  where
+    f :: DictKey v => v -> [Ctx v a] -> Maybe a 
+    f v [] = Nothing
+    f v (x:xs) = case getValue v x of
+                  Just a -> Just a
+                  Nothing -> f v xs
+
 type ConstraintCtx m = AnnNameCtx (CtxStack Symbol (ConstraintWithMessage m))
 instance DictKey v => DictLike v x (CtxStack v x) where
   setValue k v (CtxStack d other) = CtxStack (setValue k v d) other
@@ -1025,15 +1034,19 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
 
   getConstraintMessage name = do
     (AnnNameCtx _ ctrs) <- use (meta.constraints) 
-    case getValue name ctrs of
+    case getValueCtxStack name ctrs of
       Just (ConstraintWithMessage _ descr) -> return descr
-      Nothing -> internalError $ "Expected a constraint with the name " <> show name <> " to exist."
+      Nothing -> internalError $ "Expected a constraint with the name " <> show name <> " to exist (getting message).\n"
+                                <> "Ctrs is:\n" 
+                                <> show ctrs
 
   getConstraint name = do
     (AnnNameCtx _ ctrs) <- use (meta.constraints) 
-    case getValue name ctrs of
+    case getValueCtxStack name ctrs of
       Just (ConstraintWithMessage (Watched _ a) descr) -> return (a, descr)
-      Nothing -> internalError $ "Expected a constraint with the name " <> show name <> " to exist."
+      Nothing -> internalError $ "Expected a constraint with the name " <> show name <> " to exist (getting constraint content).\n"
+                                <> "Ctrs is:\n" 
+                                <> show ctrs
     
 
 

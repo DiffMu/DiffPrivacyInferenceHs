@@ -330,13 +330,14 @@ convertSubtypingToSupremum name (lower, TVar upper) = do
   -- case testEquality (typeRep @k) (typeRep @ConstnessKind) of
   --   Just Refl -> pure ()
   --   _ -> do
+      logForce $ "[SubToSup]: Trying conversion for " <> show (lower, TVar upper)
 
       -- all (subtyping) constraints that contain upper
       allCsWithUpper <- filterWithSomeVars [(SomeK upper)] <$> getAllConstraints
       allSubWithUpper <- filterWithSomeVars [(SomeK upper)] <$> fmap (second runConstr) <$> getConstraintsByType (Proxy @(IsLessEqual (DMTypeOf k, DMTypeOf k)))
 
       case ((length allSubWithUpper) == (length allCsWithUpper)) of
-        False -> return () -- upper is involved in other constraints that are not LessEqual constraints, so this simplification is not allowed
+        False -> (logForce "[SubToSup]: => other constraints are in the way!") >> return () -- upper is involved in other constraints that are not LessEqual constraints, so this simplification is not allowed
         True -> do
             allSubtypings <- getConstraintsByType (Proxy @(IsLessEqual (DMTypeOf k, DMTypeOf k)))
             -- TODO: We are actually not allowed to do this always, but only if there is nothing which could be broken...
@@ -410,7 +411,7 @@ solveSubtyping name path@(a,b) = withLogLocation "Subtyping" $ do
       log $ "Subtyping computation of " <> show path <> " returned `Wait`. Keeping constraint as is."
       npath <- normalizeExact path
       log $ "(With normalizations applied the constraint is now " <> show npath <> " ; it should be the same as the input.)"
-      convertSubtypingToSupremum name path -- in this case we try to change this one into a sup
+      -- convertSubtypingToSupremum name path -- in this case we try to change this one into a sup
     Fail e         -> do
 
       let msg2 = case getUnificationFailingHint @t (path) of
@@ -617,6 +618,7 @@ checkContractionAllowed _ _ _ = return ContractionDisallowed
 -- We can solve `IsLessEqual` constraints for DMTypes.
 -- NOTE: IsLessEqual is interpreted as a subtyping relation.
 instance (SingI k, Typeable k) => Solve MonadDMTC IsLessEqual (DMTypeOf k, DMTypeOf k) where
+  solve_ Dict SolveRecreateSupremum name (IsLessEqual (a,b)) = convertSubtypingToSupremum name (a,b)
   solve_ Dict SolveSpecial name (IsLessEqual (a,b)) = return ()
   solve_ Dict SolveExact name (IsLessEqual (a,b)) = solveSubtyping name (a,b)
   solve_ Dict SolveGlobal name (IsLessEqual path) = collapseSubtypingCycles path
@@ -749,6 +751,7 @@ unifyAll msg (x:y:vars) = do
 
 -- TODO: Check whether this does the correct thing.
 instance (SingI k, Typeable k) => Solve MonadDMTC IsSupremum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) where
+  solve_ Dict SolveRecreateSupremum name (IsSupremum ((a,b) :=: y)) = pure ()
   solve_ Dict SolveExact name (IsSupremum ((a,b) :=: y)) = solveSupremum (GraphM (subtypingGraph name)) name ((a,b) :=: y)
   solve_ Dict SolveSpecial name (IsSupremum ((a,b) :=: y)) = solveSupremumSpecial (GraphM (subtypingGraph name)) name ((a,b) :=: y)
 
@@ -787,6 +790,7 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsSupremum ((DMTypeOf k, DMTyp
 
 -- TODO: Check whether this does the correct thing.
 instance (SingI k, Typeable k) => Solve MonadDMTC IsInfimum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) where
+  solve_ Dict SolveRecreateSupremum name (IsInfimum ((a,b) :=: y)) = pure ()
   solve_ Dict SolveExact name (IsInfimum ((a,b) :=: x)) = solveInfimum (GraphM (subtypingGraph name)) name ((a,b) :=: x)
   solve_ Dict SolveSpecial name (IsInfimum ((a,b) :=: x)) = solveInfimumSpecial (GraphM (subtypingGraph name)) name ((a,b) :=: x)
   solve_ Dict SolveGlobal name (IsInfimum ((a,b) :=: x)) = do

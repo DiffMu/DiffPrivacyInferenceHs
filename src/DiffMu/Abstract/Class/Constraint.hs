@@ -17,11 +17,12 @@ import qualified Data.Text as T
 
 default (Text)
 
-data SolvingMode = SolveExact | SolveAssumeWorst | SolveGlobal | SolveFinal | SolveSpecial
+data SolvingMode = SolveExact | SolveRecreateSupremum | SolveAssumeWorst | SolveGlobal | SolveFinal | SolveSpecial
   deriving (Eq)
 
 instance Show SolvingMode where
   show SolveExact = "exact"
+  show SolveRecreateSupremum = "recreate_supremum" -- NOTE: this is only to be used in monadic graph search
   show SolveAssumeWorst = "worst"
   show SolveGlobal = "global"
   show SolveFinal = "final"
