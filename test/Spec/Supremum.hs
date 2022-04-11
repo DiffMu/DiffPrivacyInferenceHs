@@ -35,10 +35,14 @@ testSupremum = do
           it ("computes inf{" <> show a <> ", " <> show b <> "} = " <> show c) $ do
             (tc $ sn_EW $ infimum a b) `shouldReturn` (c)
 
+    let testinfl (a :: DMTypeOf k) b c = do
+          it ("computes inf{" <> show a <> ", " <> show b <> "} = " <> show c) $ do
+            (tcl $ sn_EW $ infimum a b) `shouldReturn` (c)
+
     let twoId = oneId ⋆! oneId
 
     testinf ((IRNum DMInt)) ((IRNum DMInt)) (Right $ (IRNum DMInt))
-    testinf ((IRNum DMReal)) ((IRNum DMReal)) (Right $ (IRNum DMReal))
+    testinfl ((IRNum DMReal)) ((IRNum DMReal)) (Right $ (IRNum DMReal))
     testinf ((IRNum DMInt)) ((IRNum DMReal)) (Right $ (IRNum DMInt))
 
     testinf (Num (IRNum DMInt) (Const twoId)) (Num (IRNum DMInt) (Const twoId)) (Right $ Num (IRNum DMInt) (Const twoId)) -- (Right $ Const (twoId)))

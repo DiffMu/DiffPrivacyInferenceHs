@@ -297,6 +297,12 @@ testSubtyping_ContractEdge = do
             (y :: DMMain) <- newVar
             addConstraintNoMessage (Solvable (IsJuliaEqual (y, b)))
 
+            -- 2022-04-11
+            -- we actually have to make x fixed as well, because else we get a unification from (a <= x)
+            -- and after that also of (a <= b)
+            addConstraintNoMessage (Solvable (IsJuliaEqual (y, x)))
+
+
             return (a,b)
       (tc $ (sn test1 >>= (\(a,b) -> return (a == b)))) `shouldReturn` (Right False)
 
