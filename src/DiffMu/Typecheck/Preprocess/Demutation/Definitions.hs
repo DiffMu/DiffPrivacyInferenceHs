@@ -226,7 +226,8 @@ computeVarAccessType var (a,xvat) (b,yvat) = do
            [(ReadMulti),(WriteSingle)]               -> throwUnlocatedError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' "
                                                                                    <> "' is being mutated and read in two different scopes.\n"
                                                                                    <> "This is not allowed."
-           [(ReadMulti),(WriteSingleFunction)]       -> pure ((WriteSingleFunction)) -- because of flet reordering it is allowed to mutate functions
+           [(ReadMulti),(WriteSingleFunction)]       -> throwUnlocatedError $ DemutationVariableAccessTypeError $ "The variable '" <> show var <> "' cannot be redefined as a function after already being read somewhere. "
+            --  pure ((WriteSingleFunction)) -- because of flet reordering it is allowed to mutate functions
            [(WriteSingle), (WriteSingle)] | a `iOrE` b  -> pure ((WriteSingle))
            -- [(WriteSingle) l, (WriteSingle) k] | a == b -> throwUnlocatedError $ DemutationError $ "The function argument '" <> show var <> "' has been mutated.\n"
            --                                                                             <> "But then a statement follows which assigns a variable with the same name."
