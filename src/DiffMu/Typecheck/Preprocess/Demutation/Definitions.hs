@@ -184,10 +184,14 @@ instance Monoid IsMutated where
 -- Variable Access Type
 --------------------------------------------------------------------------------------
 
+-- NOTE: The order of constructors is relevant!
+--       (in `computeVarAccessType`)
 data VarAccessType = ReadSingle | ReadMulti | WriteSingleBase IsFLetDefined
   deriving (Show,Eq,Ord)
 
-data IsFLetDefined = FLetDefined | NotFLetDefined
+-- NOTE: The order of constructors is relevant!
+--       (in `computeVarAccessType`)
+data IsFLetDefined = NotFLetDefined | FLetDefined
   deriving (Show,Eq,Ord)
 
 pattern WriteSingle = WriteSingleBase NotFLetDefined
