@@ -25,7 +25,7 @@ import Prelude as P
 
 
 -- defining the constraint
-newtype IsJuliaEqual a = IsJuliaEqual a deriving Show
+newtype IsJuliaEqual a = IsJuliaEqual a deriving (Show, Eq)
 
 instance TCConstraint IsJuliaEqual where
   constr = IsJuliaEqual
@@ -84,7 +84,7 @@ instance FixedVars TVarOf (IsJuliaEqual (DMMain, DMMain)) where
 -- set the a type to non-const, in case it's numeric or a tuple.
 --
 
-newtype IsNonConst a = IsNonConst a deriving Show
+newtype IsNonConst a = IsNonConst a deriving (Show, Eq)
 
 instance TCConstraint IsNonConst where
   constr = IsNonConst
@@ -115,7 +115,7 @@ instance Typeable k => Solve MonadDMTC IsNonConst (DMTypeOf k, DMTypeOf k) where
 -- things behave like subtyping.
 --
 
-newtype UnifyWithConstSubtype a = UnifyWithConstSubtype a deriving Show
+newtype UnifyWithConstSubtype a = UnifyWithConstSubtype a deriving (Show, Eq)
 
 instance TCConstraint UnifyWithConstSubtype where
   constr = UnifyWithConstSubtype

@@ -14,6 +14,7 @@ import DiffMu.Core.Logging
 import {-# SOURCE #-} DiffMu.Typecheck.Subtyping
 import {-# SOURCE #-} DiffMu.Core.Unification
 
+import Data.List (partition)
 import qualified Data.HashMap.Strict as H
 import qualified Prelude as P
 
@@ -1028,6 +1029,26 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
     let cs' = H.toList cs
     return [(name,c) | (name, (ConstraintWithMessage (Watched _ c) _)) <- cs']
 
+  nubConstraints = do
+    cs <- getAllKeyElemPairs <$> use (meta.constraints.anncontent.topctx)
+
+    let getNamesToDischarge ((name,c):cs) = do
+          let (duplicateConstrs,otherConstrs) = partition (\(n,c') -> c' == c) cs
+          let namesToDischarge = fst <$> duplicateConstrs
+          case length namesToDischarge > 0 of
+            True -> debug $ "Discharging duplicate constraints for " <> show name <> ":\n"
+                      <> "  The following constraints have the same content and are going to be discharged:\n"
+                      <> "  " <> show namesToDischarge
+            False -> return ()
+          otherNamesToDischarge <- getNamesToDischarge otherConstrs
+          return (namesToDischarge <> otherNamesToDischarge)
+        getNamesToDischarge [] = return []
+
+    names <- getNamesToDischarge (fmap (second (\(ConstraintWithMessage (Watched _ c) _) -> c)) cs)
+    mapM dischargeConstraint names
+    return ()
+
+
   clearSolvingEvents = do
     events <- tcstate.solvingEvents %%= (\ev -> (ev,[]))
     return (show <$> (reverse events))
@@ -1082,20 +1103,20 @@ instance Monad t => Normalize t AnnotationKind where
   normalize nt a = pure a
 
 
-supremum :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsSupremum ((a k, a k) :=: a k), SingI k, Typeable k, ContentConstraintOnSolvable t ((a k, a k) :=: a k), ConstraintOnSolvable t (IsSupremum ((a k, a k) :=: a k))) => (a k) -> (a k) -> t (a k)
+supremum :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsSupremum ((a k, a k) :=: a k), SingI k, Typeable k, ContentConstraintOnSolvable t ((a k, a k) :=: a k), ConstraintOnSolvable t (IsSupremum ((a k, a k) :=: a k)), Eq (a k)) => (a k) -> (a k) -> t (a k)
 supremum x y = do
   (z :: a k) <- newVar
   addConstraintNoMessage (Solvable (IsSupremum ((x, y) :=: z)))
   return z
 
 
-supremumFromName :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsSupremum ((a k, a k) :=: a k), SingI k, Typeable k, ContentConstraintOnSolvable t ((a k, a k) :=: a k), ConstraintOnSolvable t (IsSupremum ((a k, a k) :=: a k))) => Symbol -> (a k) -> (a k) -> t (a k)
+supremumFromName :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsSupremum ((a k, a k) :=: a k), SingI k, Typeable k, ContentConstraintOnSolvable t ((a k, a k) :=: a k), ConstraintOnSolvable t (IsSupremum ((a k, a k) :=: a k)), Eq (a k)) => Symbol -> (a k) -> (a k) -> t (a k)
 supremumFromName name x y = do
   (z :: a k) <- newVar
   addConstraintFromName name (Solvable (IsSupremum ((x, y) :=: z)))
   return z
 
-infimum :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsInfimum ((a k, a k) :=: a k), SingI k, Typeable k, ContentConstraintOnSolvable t ((a k, a k) :=: a k), ConstraintOnSolvable t (IsInfimum ((a k, a k) :=: a k))) => (a k) -> (a k) -> t (a k)
+infimum :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsInfimum ((a k, a k) :=: a k), SingI k, Typeable k, ContentConstraintOnSolvable t ((a k, a k) :=: a k), ConstraintOnSolvable t (IsInfimum ((a k, a k) :=: a k)), Eq (a k)) => (a k) -> (a k) -> t (a k)
 infimum x y = do
   (z :: a k) <- newVar
   addConstraintNoMessage (Solvable (IsInfimum ((x, y) :=: z)))

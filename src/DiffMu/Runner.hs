@@ -167,6 +167,6 @@ typecheckFromJExpr_Detailed term rawsource = do
         <> "\n---------------------------------------------------------------------------\n"
         <> "Monad state:\n" <> T.pack (show full)
 
-  typecheckFromJExprWithPrinter printer (DoShowLog Warning logging_locations) term rawsource
+  typecheckFromJExprWithPrinter printer (DoShowLog Debug logging_locations) term rawsource
 
 

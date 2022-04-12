@@ -37,7 +37,7 @@ import qualified Data.HashMap.Strict as H
 -- the arguments the callee is applied to to a type variable that will be determined upon resultion of the
 -- constraint.
 
-newtype IsFunctionArgument a = IsFunctionArgument a deriving Show
+newtype IsFunctionArgument a = IsFunctionArgument a deriving (Show, Eq)
 
 instance TCConstraint IsFunctionArgument where
   constr = IsFunctionArgument

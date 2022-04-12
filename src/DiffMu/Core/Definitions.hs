@@ -62,7 +62,7 @@ type SVar   = SVarOf MainSensKind
 -- 1. DMKinds
 
 data AnnotationKind = SensitivityK | PrivacyK
-  deriving Show
+  deriving (Show, Eq)
 
 -- type family Annotation (a :: AnnotationKind) = (result :: *) | result -> a where
 -- data family Annotation (a :: AnnotationKind) :: *
@@ -629,7 +629,7 @@ instance Show DMTypeOps_Binary where
 data DMTypeOp =
      Unary DMTypeOps_Unary   (DMType :@ SVar) (DMType)
    | Binary DMTypeOps_Binary (DMType :@ SVar , DMType :@ SVar) (DMType)
-  deriving (Show)
+  deriving (Show, Eq)
 
 instance ShowLocated DMTypeOp_Some where
   showLocated (IsUnary a) = pure $ T.pack $ show a
@@ -660,7 +660,7 @@ instance ShowLocated DMTypeOp_Some where
 --
 -- For example, we have:
 newtype IsTypeOpResult a = IsTypeOpResult a
-  deriving (Show)
+  deriving (Show, Eq)
 --
 -- The idea is that `a` represents the data which is the actual content which needs
 -- to be solved by this constraint, and the type of the wrapper around it tells us
