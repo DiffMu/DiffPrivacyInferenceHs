@@ -231,7 +231,7 @@ elaborateMut scname (Located l (Extra (ProcBBLet procx args))) = do
   scope'  <- setImmutType scname procx PureBlackBox
 
   -- allocate a memory location
-  memx <- allocateMem scname (Just procx)
+  memx <- allocateMem scname (Just procx) (NotFunctionArgument)
 
   -- write it into the memctx
   setMem procx [(SingleMem memx)]
@@ -359,7 +359,7 @@ elaborateMut scname (Located l (Extra (ProcFLet name term))) = do
                 _ -> internalError $ "got a move from the FLet body, this should not happen"
 
   -- create memory location for function name
-  mem <- allocateMem scname (Just name)
+  mem <- allocateMem scname (Just name) (NotFunctionArgument)
   setMem name [(SingleMem mem)]
 
   -- write the immut type into the scope
@@ -488,7 +488,7 @@ elaborateMut scname (Located l (Extra (ProcPreLoop (i1,i2,i3) iterVar body))) = 
   --
   -- backup iter memory location, and create a new one
   oldIterMem <- getValue iterVar <$> use memCtx
-  setMem iterVar =<< pure <$> SingleMem <$> allocateMem scname (Just iterVar)
+  setMem iterVar =<< pure <$> SingleMem <$> allocateMem scname (Just iterVar) (NotFunctionArgument)
   --
   -- backup the vactx
   vanames <- getAllKeys <$> use vaCtx
@@ -543,6 +543,33 @@ elaborateMut scname (Located l (Extra (ProcPreLoop (i1,i2,i3) iterVar body))) = 
                           <> "\n"
                           <> "Loop body:\n"
                           <> showPretty body
+  --
+  -- Check that if function arguments are mutated, then their containing pvars
+  -- need to still point to them after the loop body. For details, see #232.
+  meminfo <- use memVarInfo
+  let containsMutatedFunctionArgument pmemstate =
+        let pmemvars = getAllMemVarsOfMemState pmemstate
+            changedArgMemVars = [mv | mv <- pmemvars
+                                    , getValue mv mutsBefore /= getValue mv mutsAfter
+                                    , getValue mv meminfo == Just FunctionArgument
+                                    ]
+        in changedArgMemVars
+  let ensureNotChangedIfMutatedFunctionArgument (pv,pmemstate_before) = do
+        let mutatedArgMemVars = containsMutatedFunctionArgument pmemstate_before
+        case length mutatedArgMemVars > 0 of
+          False -> pure ()
+          True  -> do let pmemstate_after = case getValue pv memsAfter of 
+                                           Just a -> a
+                                           Nothing -> undefined -- this should not happen since pv is in `memsBefore`
+                      case pmemstate_before == pmemstate_after of
+                        True  -> pure ()
+                        False -> demutationError $ "The variable " <> show pv <> " contains a reference to the following mutated function arguments: " <> show mutatedArgMemVars <> "\n"
+                                                   <> "If function arguments are mutated in a loop, then the variable which contains them is not allowed to be reassigned.\n"
+                                                   <> "But this happened here, memory of the variable before the body: " <> show pmemstate_before <> ", after: " <> show pmemstate_after
+                                                   <> "\n"
+                                                   <> "Loop body:\n"
+                                                   <> showPretty body
+  mapM_ ensureNotChangedIfMutatedFunctionArgument (getAllKeyElemPairs memsBefore)
   --
   -- The captures are the list of variables whoose mem changed.
   -- For this we do almost the same as for `newMems`, except that we
@@ -1010,7 +1037,7 @@ elaborateLambda scname args body = do
   --
   -- Allocate new memory for the arguments.
   let arghint (x ::- _) = Just x
-  argmvs <- mapM (allocateMem scname) (arghint <$> args)
+  argmvs <- mapM (\hint -> allocateMem scname hint FunctionArgument) (arghint <$> args)
 
   -- assign memory to variables
   mapM (\(x ::- _,a) -> setMem x [SingleMem a]) (zip args argmvs)

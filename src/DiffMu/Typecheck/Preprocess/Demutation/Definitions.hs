@@ -13,6 +13,7 @@ import DiffMu.Typecheck.Preprocess.Common
 import DiffMu.Typecheck.Preprocess.TopLevel
 
 import qualified Data.HashMap.Strict as H
+import qualified Data.HashSet as HS
 
 import qualified Data.Text as T
 import Data.Foldable
@@ -255,9 +256,14 @@ computeVarAccessType var (a,xvat) (b,yvat) = do
 
 
 --------------------------------------------------------------------------------------
--- Memory types and local aliasing
+-- Memory info
 --------------------------------------------------------------------------------------
 
+data IsFunctionArgument = FunctionArgument | NotFunctionArgument
+  deriving (Eq,Show)
+
+type MemVarInfo = IsFunctionArgument
+type MemVarInfoCtx = Ctx MemVar MemVarInfo
 
 
 --------------------------------------------------------------------------------------
@@ -273,6 +279,7 @@ data MFull = MFull
   , _termVarsOfMut :: NameCtx
   , _scopeNames :: NameCtx
   , _memNames :: NameCtx
+  , _memVarInfo :: MemVarInfoCtx
   , _topLevelInfo :: TopLevelInformation
   }
 
@@ -294,16 +301,22 @@ appendNewScopeVar hint (Scope old) = do
   v <- newScopeVar hint
   return (Scope (v : old))
 
-newMemVar :: (MonadState MFull m) => Either ProcVar Text -> m (MemVar)
-newMemVar (Left hint) = scopeNames %%= (first (MemVarForProcVar hint) . (newName ""))
-newMemVar (Right hint) = scopeNames %%= (first StandaloneMemVar . (newName hint))
+newMemVar :: (MonadState MFull m) => Either ProcVar Text -> MemVarInfo -> m (MemVar)
+newMemVar (Left hint) mvi = do
+  mv <- scopeNames %%= (first (MemVarForProcVar hint) . (newName ""))
+  memVarInfo %= (setValue mv mvi)
+  return mv
+newMemVar (Right hint) mvi = do
+  mv <- scopeNames %%= (first StandaloneMemVar . (newName hint))
+  memVarInfo %= (setValue mv mvi)
+  return mv
 
-allocateMem :: Scope -> Maybe ProcVar -> MTC (MemVar)
-allocateMem scopename procvar = do
+allocateMem :: Scope -> Maybe ProcVar -> MemVarInfo -> MTC (MemVar)
+allocateMem scopename procvar mvi = do
   let hint = case procvar of
               Just a -> Left a
               Nothing -> Right "anon"
-  mv <- newMemVar hint
+  mv <- newMemVar hint mvi
   mutCtx %= (setValue mv (scopename, TeVarMutTrace Nothing NotSplit []))
   return mv
 
@@ -579,7 +592,7 @@ moveGetMem_Loc scname pv (Located _ mt) = moveGetMem scname pv mt
 
 moveGetMem :: Scope -> Maybe ProcVar -> MoveType -> MTC [MemType]
 moveGetMem scname pv (NoMove te) = do
-  mem <- allocateMem scname pv
+  mem <- allocateMem scname pv (NotFunctionArgument)
   return [(SingleMem mem)]
 moveGetMem scname pv (SingleMove a) = do
   memstate <- expectNotMoved a
@@ -595,7 +608,7 @@ moveGetMem scname pv (TupleMove as) = do
 moveGetMem scname pv (RefMove te) = do
   -- if we had a reference,
   -- allocate new memory for it
-  memvar <- allocateMem scname pv
+  memvar <- allocateMem scname pv (NotFunctionArgument)
   pure $ [RefMem memvar]
 
 
@@ -625,10 +638,16 @@ setMemTupleInManyMems scname xs mems = mapM_ (setMemTuple scname xs) mems
 
 setMemTuple :: Scope -> [ProcVar] -> MemType -> MTC ()
 setMemTuple scname xs (SingleMem a) = do
+  -- we get the memory info of the input var
+  mvictx <- use memVarInfo
+  ifa <- case getValue a mvictx of
+        Nothing -> internalError $ "Expected the memvariable " <> show a <> " to have an info entry."
+        Just ifa -> return ifa
+
   -- We are deconstructing a tuple value,
   -- need to create memory locations for all parts
   let f (x) = do
-        mx <- allocateMem scname (Just x)
+        mx <- allocateMem scname (Just x) ifa
         setMem x [SingleMem mx]
         return mx
   memvars <- mapM f xs

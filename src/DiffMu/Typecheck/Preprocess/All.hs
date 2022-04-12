@@ -31,7 +31,7 @@ preprocessAll term = do
   info $ "term prior to preprocessing:\n" <> showPretty term
 
   -- -- mutation processing
-  term'' <- liftLightTC (MFull def def def def def def tlinfo) (\_ -> ()) (demutate term)
+  term'' <- liftLightTC (MFull def def def def def def def tlinfo) (\_ -> ()) (demutate term)
   -- term'' <- liftLightTC () (\_ -> ()) (nondemutate term')
 
   info $ "-----------------------------------"
