@@ -281,7 +281,7 @@ instance (Typeable j, Typeable r, Typeable v, IsKind (k :: j), KEq v, Eq r, KHas
 -- type CPolyM r e v = SingleKinded (LinCom r (MonCom e v))
 
 instance (Show r , Show v, Eq r, SemiringM Identity r) => Show (LinCom r (MonCom Int v)) where
-  show (poly) = showWith " + " (\vars r -> factor r vars <> showWith "⋅" f vars "") poly "∑∅"
+  show (poly) = showWith " + " (\vars r -> factor r vars <> showWith "⋅" f vars "") poly "0"
     where f v 1 = show v
           f v e = show v <> "^" <> show e
           factor r (MonCom vars) = case (H.null vars, (r == oneId)) of
