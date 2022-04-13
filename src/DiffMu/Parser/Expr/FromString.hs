@@ -206,10 +206,13 @@ data JExpr =
    deriving Show
 
 
-badTypeMessage t = "Got " <> show t <> " where a julia type or one of the builtin types/type functions was expected.\nThe builtin types are:\n"
+badTypeMessage t = "Got " <> show t <> " where a julia type or one of the builtin types/type functions was expected.\n\nThe builtin types are:\n"
                           <> "- Data\n- PrivacyFunction\n- DMGrads\n- DMModel\n"
+                          <> "\n"
                           <> "Builtin type functions are:\n"
-                          <> "- Priv\n- BlackBox\n- Static\n- MetricGradient\n- MetricVector\n- MetricMatrix\n"
+                          <> "- Priv()\n- BlackBox()\n- Static()\n- MetricGradient()\n- MetricVector()\n- MetricMatrix()\n"
+                          <> "(For adding type annotations, apply above type functions to that type, e.g. `Priv(Integer)`.)\n"
+                          <> "\n"
                           <> "Supported julia types are:\n"
                           <> "- Integer\n- Real\n- Matrix\n- Vector\n- Function\n- Bool\n- Any\n"
                           
