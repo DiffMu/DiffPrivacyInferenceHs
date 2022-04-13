@@ -701,8 +701,8 @@ data TCState m = TCState
     _watcher :: Watcher,
     _logger :: DMLogger,
     _solvingEvents :: [SolvingEvent],
-    _persistingCounter :: Int,
-    _currentConstraintMessage :: Maybe m
+    _persistingCounter :: Int
+    -- _currentConstraintMessage :: Maybe m
   }
   deriving (Generic, Functor)
 
@@ -800,8 +800,8 @@ instance Show Watcher where
   show (Watcher changed) = show changed
 
 instance Show (TCState m) where
-  show (TCState w l _ _ _) = "- watcher: " <> show w <> "\n"
-                         <> "- messages: " <> show l <> "\n"
+  show (TCState w l _ _) = "- watcher: " <> show w <> "\n"
+                        <> "- messages: " <> show l <> "\n"
 
 instance Show m => Show (Full m) where
   show (Full tcs m γ) = "\nState:\n" <> show tcs <> "\nMeta:\n" <> show m <> "\nTypes:\n" <> show γ <> "\n"
@@ -917,14 +917,9 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
   type ContentConstraintOnSolvable (TCT m) = GoodConstraintContent
   type ConstraintOnSolvable (TCT m) = GoodConstraint
   addConstraint (Solvable c) constr_desc = do
-      -- Add location to message
-      curloc <- use (tcstate.currentConstraintMessage)
-      let constr_desc' = case curloc of
-            Nothing -> DMPersistentMessage $ constr_desc
-            Just sle -> DMPersistentMessage $ sle :\\: (constr_desc)
 
       -- add the constraint to the constraint list
-      name <- meta.constraints %%= (newAnnName "constr" (ConstraintWithMessage (Watched (NormalForMode []) (Solvable c)) constr_desc'))
+      name <- meta.constraints %%= (newAnnName "constr" (ConstraintWithMessage (Watched (NormalForMode []) (Solvable c)) (DMPersistentMessage constr_desc)))
 
       -- compute the fixed vars of this constraint
       -- and add them to the cached list
