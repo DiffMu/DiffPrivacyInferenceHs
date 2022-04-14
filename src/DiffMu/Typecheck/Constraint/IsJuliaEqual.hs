@@ -41,7 +41,7 @@ makeNonConst_JuliaVersion (Numeric a) = Numeric (makeNonConst_JuliaVersion a)
 -- everything else is not changed
 makeNonConst_JuliaVersion x = x
 
-solveJuliaEqual :: (IsT MonadDMTC t) => Symbol -> DMMain -> DMMain -> t ()
+solveJuliaEqual :: (IsT MonadDMTC t) => IxSymbol -> DMMain -> DMMain -> t ()
 solveJuliaEqual name (NoFun a) (NoFun b) = do
   -- we compute the free variables in the type which are of NumKind
   -- these are the once which block this constraint, since they have

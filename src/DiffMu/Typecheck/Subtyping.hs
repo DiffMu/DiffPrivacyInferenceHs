@@ -42,7 +42,7 @@ getTupSize (TVar a) = Wait
 getTupSize _ = Fail (UserError ())
 
 -- The subtyping graph for our type system.
-subtypingGraph :: forall e t k. (SingI k, Typeable k, MonadDMTC t) => Symbol -> EdgeType -> [Edge t (DMTypeOf k)]
+subtypingGraph :: forall e t k. (SingI k, Typeable k, MonadDMTC t) => IxSymbol -> EdgeType -> [Edge t (DMTypeOf k)]
 subtypingGraph name =
   let 
       -- An abbreviation for adding a subtyping constraint.
@@ -322,20 +322,20 @@ subtypingGraph name =
 
 
 
-convertSubtypingToSupremum :: forall k t. (SingI k, Typeable k, IsT MonadDMTC t) => Symbol -> (DMTypeOf k, DMTypeOf k) -> t ()
+convertSubtypingToSupremum :: forall k t. (SingI k, Typeable k, IsT MonadDMTC t) => IxSymbol -> (DMTypeOf k, DMTypeOf k) -> t ()
 convertSubtypingToSupremum = convertSubtypingToSupInf (\(a,b,c) msg -> addConstraint (Solvable (IsSupremum ((a,b) :=: c))) msg) (\(a,b) -> (a,b))
 
-convertSubtypingToInfimum :: forall k t. (SingI k, Typeable k, IsT MonadDMTC t) => Symbol -> (DMTypeOf k, DMTypeOf k) -> t ()
+convertSubtypingToInfimum :: forall k t. (SingI k, Typeable k, IsT MonadDMTC t) => IxSymbol -> (DMTypeOf k, DMTypeOf k) -> t ()
 convertSubtypingToInfimum = convertSubtypingToSupInf (\(a,b,c) msg -> addConstraint (Solvable (IsInfimum ((a,b) :=: c))) msg) (\(a,b) -> (b,a))
 
 type MaybeInversionFunc k = (DMTypeOf k, DMTypeOf k) -> (DMTypeOf k, DMTypeOf k)
-type SupInfCreationFunc t k = forall msg. MessageLike t msg => (DMTypeOf k, DMTypeOf k, DMTypeOf k) -> msg -> t Symbol
+type SupInfCreationFunc t k = forall msg. MessageLike t msg => (DMTypeOf k, DMTypeOf k, DMTypeOf k) -> msg -> t IxSymbol
 
 -- If we have a bunch of subtyping constraints {β ≤ α, γ ≤ α, δ ≤ α} then it
 -- are allowed to turn this into a supremum constraint, i.e. "sup{β,γ,δ} = α"
 -- in the case that α does not appear in any other constraints except as lower bound of
 -- subtyping constraints. 
-convertSubtypingToSupInf :: forall k t. (SingI k, Typeable k, IsT MonadDMTC t) => SupInfCreationFunc t k -> MaybeInversionFunc k -> Symbol -> (DMTypeOf k, DMTypeOf k) -> t ()
+convertSubtypingToSupInf :: forall k t. (SingI k, Typeable k, IsT MonadDMTC t) => SupInfCreationFunc t k -> MaybeInversionFunc k -> IxSymbol -> (DMTypeOf k, DMTypeOf k) -> t ()
 convertSubtypingToSupInf createConstr invert name (l,u) = do
   case invert (l,u) of
     (lower, TVar upper) -> do
@@ -395,7 +395,7 @@ convertSubtypingToSupInf createConstr invert name (l,u) = do
 -- this simply uses the `findPathM` function from Abstract.Computation.MonadicGraph
 -- We return True if we could do something about the constraint
 --    return False if nothing could be done
-solveSubtyping :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => Symbol -> (DMTypeOf k, DMTypeOf k) -> t ()
+solveSubtyping :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => IxSymbol -> (DMTypeOf k, DMTypeOf k) -> t ()
 solveSubtyping name (_, DMAny) = dischargeConstraint name
 solveSubtyping name path@(a,b) = withLogLocation "Subtyping" $ do
 
@@ -665,12 +665,12 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsLessEqual (DMTypeOf k, DMTyp
 
 --------------------------------------------
 -- wrapper for computing supremum
-solveSupremum :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> Symbol -> ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) -> t ()
+solveSupremum :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> IxSymbol -> ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) -> t ()
 solveSupremum graph name ((a,b) :=: x) = callMonadicGraphSupremum graph name ((a,b) :=: x)
 
 --------------------------------------------
 -- wrapper for computing infimum
-solveInfimum :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> Symbol -> ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) -> t ()
+solveInfimum :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> IxSymbol -> ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) -> t ()
 solveInfimum graph name ((a,b) :=: x) = callMonadicGraphSupremum (oppositeGraph graph) name ((a,b) :=: x)
 
 
@@ -678,7 +678,7 @@ solveInfimum graph name ((a,b) :=: x) = callMonadicGraphSupremum (oppositeGraph 
 -- solvers for special cases
 -------------------
 -- supremum
-solveSupremumSpecial :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> Symbol -> ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) -> t ()
+solveSupremumSpecial :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> IxSymbol -> ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) -> t ()
 -- if one input is equal to the output we can skip the supremum computation,
 -- then we only have to create a subtyping constraint
 solveSupremumSpecial graph name ((a,b) :=: x) | a == x = do
@@ -705,7 +705,7 @@ solveSupremumSpecial graph name ((a,b) :=: x) | otherwise = return ()
 
 -------------------
 -- infimum
-solveInfimumSpecial :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> Symbol -> ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) -> t ()
+solveInfimumSpecial :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> IxSymbol -> ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) -> t ()
 solveInfimumSpecial graph name ((a,b) :=: x) | a == x = do
   msg <- inheritanceMessageFromName name
   (x ≤! b) msg
@@ -733,7 +733,7 @@ solveInfimumSpecial graph name ((a,b) :=: x) | otherwise = return ()
 --------------------------------------------
 -- The actual solving is done here.
 -- we call the `findSupremumM` function from Abstract.Computation.MonadicGraph
-callMonadicGraphSupremum :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> Symbol -> ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) -> t ()
+callMonadicGraphSupremum :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => GraphM t (DMTypeOf k) -> IxSymbol -> ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k) -> t ()
 callMonadicGraphSupremum graph name ((a,b) :=: x) = do
 
   -- Here we define which errors should be caught while doing our hypothetical computation.

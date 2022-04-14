@@ -44,7 +44,7 @@ instance TCConstraint IsFunctionArgument where
   runConstr (IsFunctionArgument c) = c
 
 -- first is expected argument type, second is given argument type
-solveIsFunctionArgument :: IsT MonadDMTC t => Symbol -> (DMTypeOf MainKind, DMTypeOf MainKind) -> t ()
+solveIsFunctionArgument :: IsT MonadDMTC t => IxSymbol -> (DMTypeOf MainKind, DMTypeOf MainKind) -> t ()
 
 -- if the expected argument and given argument are both functions / collections of functions, we add an
 -- IsChoice constraint 
@@ -101,7 +101,7 @@ instance Solve MonadDMTC IsChoice (ChoiceHash, [DMTypeOf FunKind]) where
 
 -- see if the constraint can be resolved. might update the IsCHoice constraint, do nothing, or discharge.
 -- might produce new IsFunctionArgument constraints for the arguments.
-solveIsChoice :: forall t. IsT MonadDMTC t => Symbol -> (ChoiceHash, [DMTypeOf FunKind]) -> t ()
+solveIsChoice :: forall t. IsT MonadDMTC t => IxSymbol -> (ChoiceHash, [DMTypeOf FunKind]) -> t ()
 solveIsChoice name (provided, required) = do
    -- remove all choices from the "required" list that have a unique match in the "provided" hashmap.
    -- when a choice is resolved, the corresponding counter in the hashmap is incremented by one.
@@ -176,7 +176,7 @@ solveIsChoice name (provided, required) = do
    return ()
 
 
-resolveChoiceHash :: forall t. IsT MonadDMTC t => Symbol -> ([JuliaType], (DMTypeOf FunKind, [DMTypeOf FunKind])) -> t ()
+resolveChoiceHash :: forall t. IsT MonadDMTC t => IxSymbol -> ([JuliaType], (DMTypeOf FunKind, [DMTypeOf FunKind])) -> t ()
 resolveChoiceHash name (sign, (method, [])) = pure () -- no matches were found for this method.
 resolveChoiceHash name (sign, (method, matches)) = do
    let resolveAnn :: (DMTypeOf FunKind) -> t (DMMain, [DMMain])

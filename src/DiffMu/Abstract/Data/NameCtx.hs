@@ -14,7 +14,7 @@ import qualified Data.HashMap.Strict as H
 ---------------------------------------------------------------------
 -- A simple (non-kinded) context for names
 data NameCtx = NameCtx
-  { names :: [Symbol]
+  { names :: [IxSymbol]
   , currentCtr :: Int
   }
   deriving (Generic)
@@ -22,9 +22,9 @@ instance Default NameCtx
 instance Show NameCtx where
   show (NameCtx names _) = "[" <> intercalate ", " (show <$> names) <> "]"
 
-newName :: Text -> NameCtx -> (Symbol, NameCtx)
+newName :: Text -> NameCtx -> (IxSymbol, NameCtx)
 newName (hint) (NameCtx names ctr) =
-  let name = Symbol (hint <> "_" <> T.pack (show ctr))
+  let name = IxSymbol (Symbol hint, ctr)
   in (name , NameCtx (name : names) (ctr +! 1))
 
 
@@ -62,7 +62,7 @@ instance KShow v => Show (KindedNameCtx v) where
 
 newKindedName :: (Show (Demote (KindOf k)), SingKind (KindOf k), SingI k, FromSymbol v, Typeable k, Typeable v) => Text -> KindedNameCtx v -> (v k, KindedNameCtx v)
 newKindedName (hint) (KindedNameCtx names ctr) =
-  let name = (fromSymbol (Symbol (hint <> "_" <> T.pack (show ctr))))
+  let name = (fromSymbol (Symbol hint) ctr) -- (hint <> "_" <> T.pack (show ctr))))
   in (name , KindedNameCtx (SingSomeK (name) : names) (ctr +! 1))
 
 -- makeSing :: forall j (v :: j -> *). (forall k. (Show (Demote (KindOf k)))) => SomeK v -> SingSomeK v
