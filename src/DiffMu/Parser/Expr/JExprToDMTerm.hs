@@ -335,7 +335,7 @@ builtins = H.fromList
   , ("gaussian_mechanism!", pQuaternary MutGauss)
   , ("gaussian_mechanism", pQuaternary Gauss)
   , ("above_threshold", pQuaternary AboveThresh)
-  , ("exponential_mechanism", pQuaternary Exponential)
+--  , ("exponential_mechanism", pQuaternary Exponential)
   , ("parallel_private_fold_rows", pQuaternary PFoldRows)
   , ("parallel_private_fold_rows!", pQuaternary MutPFoldRows)
   
