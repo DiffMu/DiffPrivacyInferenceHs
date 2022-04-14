@@ -8,6 +8,7 @@ module DiffMu.Prelude
   , RawSource (..)
   , rawSourceFromString
   , Symbol (..)
+  , IxSymbol (..)
   , SymbolOf (..)
   , DictKey (..)
   , KHashable (..)
@@ -43,7 +44,7 @@ import Data.List.Unicode as All
 import Data.String as S
 import Data.Array as All hiding (index, indices)
 
-import Prelude ((&&),(||))
+import Prelude ((&&),(||),div,rem,(/),(!!))
 import qualified Prelude (String)
 import qualified Data.Text as T
 import Data.HashMap.Strict as H
@@ -73,6 +74,12 @@ rawSourceFromString input other_files = do
 
 newtype Symbol = Symbol Text
   deriving (Eq,Ord,Hashable,Semigroup,Monoid)
+
+newtype IxSymbol = IxSymbol (Symbol,Int)
+  deriving (Eq,Ord,Hashable)
+
+instance Monad t => Normalize t IxSymbol where
+  normalize nt a = pure a
 
 instance Monad t => Normalize t Symbol where
   normalize nt a = pure a
@@ -116,6 +123,9 @@ instance ShowLocated Text where
 instance ShowLocated Symbol where
   showLocated (Symbol a) = return a
 
+instance ShowLocated IxSymbol where
+  showLocated a = T.pack <$> (return $ show a)
+
 instance ShowLocated TeVar where
   showLocated = pure . T.pack . showPretty
 
@@ -140,12 +150,12 @@ instance ShowPretty Text where
   showPretty s = T.unpack s
 
 class FromSymbol (v :: j -> *) where
-  fromSymbol :: Symbol -> v k
+  fromSymbol :: Symbol -> Int -> v k
 
 -- data SymbolOf (k :: j) where
   -- SymbolOf :: Symbol -> SymbolOf k
 
-newtype SymbolOf (k :: j) = SymbolOf Symbol
+newtype SymbolOf (k :: j) = SymbolOf IxSymbol
   deriving (Eq, Hashable)
 
 -- data SymbolOf (k :: j) where
@@ -153,7 +163,7 @@ newtype SymbolOf (k :: j) = SymbolOf Symbol
 --   -- deriving Eq via Symbol -- (Eq,Ord,Hashable)
 
 instance FromSymbol SymbolOf where
-  fromSymbol v = SymbolOf v
+  fromSymbol v n = SymbolOf (IxSymbol (v, n))
 
 -- instance Eq (SymbolOf (k :: j)) where
 --   (SymbolOf x) == (SymbolOf y) = x == y
@@ -166,8 +176,31 @@ class (Eq v, Hashable v) => DictKey v
 
 -- symbols
 
+-- WARNING: Not total
+showSubscriptDigit :: Int -> Char
+showSubscriptDigit a | a <= 9 = ['₀' .. '₉'] !! a
+showSubscriptDigit _ = undefined
+
+showSubscriptInt :: Int -> String
+showSubscriptInt a | a <= 9 = showSubscriptDigit a : []
+showSubscriptInt a          =
+  let last = (a `rem` 10)
+      beforeLast = (a - last) `div` 10
+  in showSubscriptInt beforeLast <> (showSubscriptDigit last : [])
+
+showWithSubscript :: Show a => (a,Int) -> String
+showWithSubscript (a,n) = show a <> showSubscriptInt n
+
+instance Show IxSymbol where
+  show (IxSymbol x) = showWithSubscript x
+
+instance DictKey IxSymbol
+
+instance ShowPretty IxSymbol where
+  showPretty = show
+
 instance Show (SymbolOf k) where
-  show (SymbolOf s :: SymbolOf k) = show s --  <> " : " <> show (demote @k)
+  show (SymbolOf x :: SymbolOf k) = show x --  <> " : " <> show (demote @k)
 
 instance Show Symbol where
   show (Symbol t) = T.unpack t
@@ -175,27 +208,29 @@ instance Show Symbol where
 instance ShowPretty Symbol where
   showPretty = show
 
+
 instance DictKey Symbol
 
 
 -- proc variables
 
-data ProcVar = UserProcVar Symbol | GenProcVar Symbol
+data ProcVar = UserProcVar (Symbol) | GenProcVar (IxSymbol)
   deriving (Eq,Generic, Ord)
 
 instance Hashable ProcVar
 instance Show ProcVar where
   show (UserProcVar x) = show x
   show (GenProcVar x) =  show x
+
 instance ShowPretty ProcVar where
-  showPretty (UserProcVar x) = showPretty x
-  showPretty (GenProcVar x) =  showPretty x
+  showPretty (UserProcVar x) = show x
+  showPretty (GenProcVar x) =  show x
 
 instance DictKey ProcVar
 
 -- term variables
 
-data TeVar = UserTeVar ProcVar | GenTeVar Symbol (Maybe TeVar)
+data TeVar = UserTeVar ProcVar | GenTeVar IxSymbol (Maybe TeVar)
   deriving (Eq,Generic, Ord)
 
 instance Hashable TeVar
@@ -206,7 +241,7 @@ instance ShowPretty TeVar where
   showPretty (UserTeVar x) = showPretty x
   showPretty (GenTeVar x pv) = case pv of
     Just pv -> showPretty pv
-    Nothing -> showPretty x
+    Nothing -> show x
 
 instance DictKey TeVar
 
@@ -214,7 +249,7 @@ instance DictKey TeVar
 
 -- scope variables
 
-data ScopeVar = ScopeVar Symbol
+data ScopeVar = ScopeVar IxSymbol
   deriving (Eq,Generic, Ord)
 
 instance Hashable ScopeVar
@@ -224,7 +259,7 @@ instance DictKey ScopeVar
 
 -- memory variables
 
-data MemVar = MemVarForProcVar ProcVar Symbol | StandaloneMemVar Symbol
+data MemVar = MemVarForProcVar ProcVar IxSymbol | StandaloneMemVar IxSymbol
   deriving (Eq,Generic, Ord)
 
 instance Hashable MemVar

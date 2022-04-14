@@ -26,7 +26,6 @@ import Data.IORef
 import System.IO.Unsafe
 import DiffMu.Abstract.Data.Error
 import DiffMu.Abstract.Data.ErrorReporting
-import DiffMu.Core.TC (currentConstraintMessage)
 
 default (Text)
 
@@ -72,9 +71,7 @@ checkPriv scope t = do
   types .= Right def -- cast to privacy context.
 
   -- The checking itself
-  tcstate.currentConstraintMessage .= Just (DMPersistentMessage $ getLocation t)
   res <- catchNoncriticalError t (withLogLocation "Check" $ checkPri' scope t)
-  tcstate.currentConstraintMessage .= Nothing
 
   -- The computation to do after checking
   γ <- use types
@@ -97,9 +94,7 @@ checkSens scope t = do
 
 
   -- get the delayed value of the sensititivty checking
-  tcstate.currentConstraintMessage .= Just (DMPersistentMessage $ getLocation t)
   res <- catchNoncriticalError t (withLogLocation "Check" $ checkSen' scope t)
-  tcstate.currentConstraintMessage .= Nothing
 
   -- The computation to do after checking
   γ <- use types

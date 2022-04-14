@@ -22,7 +22,7 @@ class MonadDMError e t => Unify e t a where
 unify :: (Unify e t a, Normalize (t) a, MessageLike t msg) => msg -> a -> a -> t a
 unify name a b = (chainM2 (unify_ name) (normalizeExact a) (normalizeExact b))
 
-unifyFromName :: (isT m, MonadConstraint isT m, Unify e m b, Normalize m b) => Symbol -> b -> b -> m b
+unifyFromName :: (isT m, MonadConstraint isT m, Unify e m b, Normalize m b) => IxSymbol -> b -> b -> m b
 unifyFromName name a b = do
   msg <- inheritanceMessageFromName name
   unify msg a b

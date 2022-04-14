@@ -32,7 +32,7 @@ default (Text)
 -- set the a type to a variable const, in case it's numeric or a tuple.
 --
 
-newtype MakeConst a = MakeConst a deriving Show
+newtype MakeConst a = MakeConst a deriving (Show, Eq)
 
 instance TCConstraint MakeConst where
   constr = MakeConst
@@ -62,7 +62,7 @@ instance Solve MonadDMTC MakeConst (DMMain) where
 -- replacing all Numeric TVars by non-const
 
 
-newtype MakeNonConst a = MakeNonConst a deriving Show
+newtype MakeNonConst a = MakeNonConst a deriving (Show, Eq)
 
 instance TCConstraint MakeNonConst where
   constr = MakeNonConst
@@ -120,7 +120,7 @@ makeConst_JuliaVersion x = return x
 -------------------------------------------------------------------
 -- is it Loop or static Loop (i.e. is no of iterations const or not)
 
-newtype IsLoopResult a = IsLoopResult a deriving Show
+newtype IsLoopResult a = IsLoopResult a deriving (Show, Eq)
 
 instance TCConstraint IsLoopResult where
   constr = IsLoopResult
@@ -159,7 +159,7 @@ instance Solve MonadDMTC IsLoopResult ((Sensitivity, Sensitivity, Sensitivity), 
 --------------------------------------------------
 -- is it gauss or mgauss?
 --
-newtype IsAdditiveNoiseResult a = IsAdditiveNoiseResult a deriving Show
+newtype IsAdditiveNoiseResult a = IsAdditiveNoiseResult a deriving (Show, Eq)
 
 instance TCConstraint IsAdditiveNoiseResult where
   constr = IsAdditiveNoiseResult
@@ -235,7 +235,7 @@ instance Solve MonadDMTC IsReorderedTuple (([Int], DMTypeOf MainKind) :=: DMType
 --------------------------------------------------
 -- projecting of tuples
 
-newtype IsTProject a = IsTProject a deriving Show
+newtype IsTProject a = IsTProject a deriving (Show, Eq)
 
 instance FixedVars TVarOf (IsTProject ((Int, DMTypeOf MainKind) :=: DMTypeOf MainKind)) where
   fixedVars (IsTProject (_ :=: ρ)) = freeVars ρ
@@ -265,7 +265,7 @@ instance Solve MonadDMTC IsTProject ((Int, DMTypeOf MainKind) :=: DMTypeOf MainK
 --------------------------------------------------
 -- black boxes
 
-newtype IsBlackBox a = IsBlackBox a deriving Show
+newtype IsBlackBox a = IsBlackBox a deriving (Show, Eq)
 
 instance FixedVars TVarOf (IsBlackBox ((DMTypeOf MainKind, [DMTypeOf MainKind]))) where
   fixedVars (IsBlackBox (b, args)) = []
@@ -291,7 +291,7 @@ instance Solve MonadDMTC IsBlackBox (DMMain, [DMMain]) where
 
 
 
-newtype IsBlackBoxReturn a = IsBlackBoxReturn a deriving Show
+newtype IsBlackBoxReturn a = IsBlackBoxReturn a deriving (Show, Eq)
 
 instance FixedVars TVarOf (IsBlackBoxReturn (DMTypeOf MainKind, Sensitivity)) where
   fixedVars (IsBlackBoxReturn (b, args)) = []
@@ -428,7 +428,7 @@ instance Solve MonadDMTC IsClone (DMMain, DMMain) where
 --------------------------------------------------
 -- matrix or vector
 
-newtype IsVecOrMat a = IsVecOrMat a deriving Show
+newtype IsVecOrMat a = IsVecOrMat a deriving (Show, Eq)
 
 instance FixedVars TVarOf (IsVecOrMat (VecKind, Sensitivity)) where
   fixedVars (IsVecOrMat _) = []
@@ -449,7 +449,7 @@ instance Solve MonadDMTC IsVecOrMat (VecKind, Sensitivity) where
 -- gradient or vector or 1d-matrix
 --
 
-newtype IsVecLike a = IsVecLike a deriving Show
+newtype IsVecLike a = IsVecLike a deriving (Show, Eq)
 
 instance FixedVars TVarOf (IsVecLike VecKind) where
   fixedVars (IsVecLike _) = []
@@ -470,7 +470,7 @@ instance Solve MonadDMTC IsVecLike VecKind where
 -- container norm conversion
 --
 
-newtype ConversionResult a = ConversionResult a deriving Show
+newtype ConversionResult a = ConversionResult a deriving (Show, Eq)
 
 instance FixedVars TVarOf (ConversionResult (DMTypeOf NormKind, DMTypeOf NormKind, Sensitivity, Sensitivity)) where
   fixedVars (ConversionResult _) = []

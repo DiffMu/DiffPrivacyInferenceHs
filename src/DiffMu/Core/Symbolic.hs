@@ -190,6 +190,20 @@ instance Show (SymVar k) where
   -- show (Id te) = "id(" <> show te <> ")"
   show (Ln te) = "ln(" <> show te <> ")"
   show (Exp (b, e)) = show b <> "^(" <> show e <> ")"
+  show (Ceil te) = "⌈" <> show te <> "⌉"
+  show (Sqrt te) = "√(" <> show te <> ")"
+  show (Max te) = "max(" <> show te <> ")"
+  show (Minus (t1, t2)) = "(" <> show t1 <> " - " <> show t2 <> ")"
+  show (Div t2) = "(1 / " <> show t2 <> ")"
+  show (TruncateSym a b) = "⌉" <> show a <> "⌈" <> "{" <> show b <> "}"
+  show (TruncateDoubleSym a b) = "⌉" <> show a <> "⌈" <> "{" <> show b <> "}"
+
+{-
+instance Show (SymVar k) where
+  show (HonestVar v) = show v
+  -- show (Id te) = "id(" <> show te <> ")"
+  show (Ln te) = "ln(" <> show te <> ")"
+  show (Exp (b, e)) = show b <> "^(" <> show e <> ")"
   show (Ceil te) = "ceil(" <> show te <> ")"
   show (Sqrt te) = "sqrt(" <> show te <> ")"
   show (Max te) = "max(" <> show te <> ")"
@@ -197,6 +211,7 @@ instance Show (SymVar k) where
   show (Div t2) = "(1 / " <> show t2 <> ")"
   show (TruncateSym a b) = "⌉" <> show a <> "⌈" <> "{" <> show b <> "}"
   show (TruncateDoubleSym a b) = "⌉" <> show a <> "⌈" <> "{" <> show b <> "}"
+  -}
 
 instance Hashable (SymVar k)
 

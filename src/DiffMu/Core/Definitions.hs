@@ -62,7 +62,7 @@ type SVar   = SVarOf MainSensKind
 -- 1. DMKinds
 
 data AnnotationKind = SensitivityK | PrivacyK
-  deriving Show
+  deriving (Show, Eq)
 
 -- type family Annotation (a :: AnnotationKind) = (result :: *) | result -> a where
 -- data family Annotation (a :: AnnotationKind) :: *
@@ -629,7 +629,7 @@ instance Show DMTypeOps_Binary where
 data DMTypeOp =
      Unary DMTypeOps_Unary   (DMType :@ SVar) (DMType)
    | Binary DMTypeOps_Binary (DMType :@ SVar , DMType :@ SVar) (DMType)
-  deriving (Show)
+  deriving (Show, Eq)
 
 instance ShowLocated DMTypeOp_Some where
   showLocated (IsUnary a) = pure $ T.pack $ show a
@@ -660,7 +660,7 @@ instance ShowLocated DMTypeOp_Some where
 --
 -- For example, we have:
 newtype IsTypeOpResult a = IsTypeOpResult a
-  deriving (Show)
+  deriving (Show, Eq)
 --
 -- The idea is that `a` represents the data which is the actual content which needs
 -- to be solved by this constraint, and the type of the wrapper around it tells us
@@ -1102,6 +1102,8 @@ instance ShowPretty a => ShowPretty (Located a) where
   showPretty (Located l a) = showPretty a
 
 
+showVar = showPretty
+
 instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t) where
   showPretty (Extra e)          = showPretty e
   showPretty (Ret (r))          = "Ret (" <>  showPretty r <> ")"
@@ -1109,7 +1111,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (DMFalse)          = "DMFalse"
   showPretty (DMTrue)           = "DMTrue"
   showPretty (Sng g jt)         = show g
-  showPretty (Var v)    = showPretty v
+  showPretty (Var v)            = showVar v
 --  showPretty (Rnd jt)           = "Rnd"
   showPretty (Arg v jt r)       = showPretty v
   showPretty (Op op [t1])       = showPretty op <> " " <> parenIfMultiple (showPretty t1)
@@ -1123,12 +1125,12 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (BBLet n jts b)    = "BBLet " <> showPretty n <> " = (" <> show jts <> " -> ?)\n" <> showPretty b
   showPretty (BBApply t as cs k)  = "BBApply (" <> showPretty t <> ")[" <> showPretty cs <> "](" <> showPretty as <> ") -> " <> showPretty k
   showPretty (Apply a bs)       = (showPretty a) <> (showPretty bs)
-  showPretty (FLet v a b)       = "FLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty a) <> "\n" <> (showPretty b)
+  showPretty (FLet v a b)       = "FLet " <> showVar v <> " = " <> newlineIndentIfLong (showPretty a) <> "\n" <> (showPretty b)
   showPretty (Choice chs)       = "Choice <..>"
-  showPretty (SLet v a b)       = "SLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty a) <> "\n" <> (showPretty b)
+  showPretty (SLet v a b)       = "SLet " <> showVar v <> " = " <> newlineIndentIfLong (showPretty a) <> "\n" <> (showPretty b)
   showPretty (Tup as)           = "Tup " <> (showPretty as)
-  showPretty (TLet v a b)       = "TLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty a) <> "\n" <> (showPretty b)
-  showPretty (TBind v a b)      = "TBind " <> showPretty v <> " <- " <> newlineIndentIfLong (showPretty a) <> "\n" <> (showPretty b)
+  showPretty (TLet v a b)       = "TLet " <> showVar v <> " = " <> newlineIndentIfLong (showPretty a) <> "\n" <> (showPretty b)
+  showPretty (TBind v a b)      = "TBind " <> showVar v <> " <- " <> newlineIndentIfLong (showPretty a) <> "\n" <> (showPretty b)
   showPretty (Gauss a b c d)    = "Gauss (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ", " <> (showPretty d) <> ")"
   showPretty (AboveThresh a b c d) = "AboveThresh (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ", " <> (showPretty d) <> ")"
   showPretty (MutLaplace a b c) = "MutLaplace (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ")"

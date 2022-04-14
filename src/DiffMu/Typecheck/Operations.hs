@@ -59,7 +59,7 @@ solveUnary op τ = traceM ("solving ceil " <> show τ) >> f op τ
 
 
 -- We can solve a binary typeop constraint.
-solveBinary :: forall t. IsT MonadDMTC t => Symbol -> DMTypeOps_Binary -> (DMType, DMType) -> t (Maybe (Sensitivity , Sensitivity, DMType))
+solveBinary :: forall t. IsT MonadDMTC t => IxSymbol -> DMTypeOps_Binary -> (DMType, DMType) -> t (Maybe (Sensitivity , Sensitivity, DMType))
 solveBinary name op (τ1, τ2) = f op τ1 τ2
   where
     ret :: Sensitivity -> Sensitivity -> t (DMType) -> t (Maybe (Sensitivity, Sensitivity, DMType))
@@ -198,7 +198,7 @@ solveBinary name op (τ1, τ2) = f op τ1 τ2
 
 ----------------------------------------
 -- Solving unary constraints (exactly)
-solveop :: (IsT MonadDMTC t) => Symbol -> IsTypeOpResult DMTypeOp -> t ()
+solveop :: (IsT MonadDMTC t) => IxSymbol -> IsTypeOpResult DMTypeOp -> t ()
 solveop name (IsTypeOpResult (Unary op (τa :@ s) τr)) = do
   solveres <- solveUnary op τa
   case solveres of

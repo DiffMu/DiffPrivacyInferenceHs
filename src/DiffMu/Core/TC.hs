@@ -14,6 +14,7 @@ import DiffMu.Core.Logging
 import {-# SOURCE #-} DiffMu.Typecheck.Subtyping
 import {-# SOURCE #-} DiffMu.Core.Unification
 
+import Data.List (partition)
 import qualified Data.HashMap.Strict as H
 import qualified Prelude as P
 
@@ -203,6 +204,9 @@ instance DMExtra a => FreeVars TVarOf (WithRelev a) where
   freeVars (WithRelev _ a) = freeVars a
 
 instance FreeVars TVarOf Symbol where
+   freeVars a = []
+
+instance FreeVars TVarOf IxSymbol where
    freeVars a = []
 
 instance FreeVars TVarOf TeVar where
@@ -499,7 +503,7 @@ getValueCtxStack v (CtxStack top others) = f v (top:others)
                   Just a -> Just a
                   Nothing -> f v xs
 
-type ConstraintCtx m = AnnNameCtx (CtxStack Symbol (ConstraintWithMessage m))
+type ConstraintCtx m = AnnNameCtx (CtxStack IxSymbol (ConstraintWithMessage m))
 instance DictKey v => DictLike v x (CtxStack v x) where
   setValue k v (CtxStack d other) = CtxStack (setValue k v d) other
   getValue k (CtxStack d _) = getValue k d
@@ -553,7 +557,7 @@ instance ShowLocated ks => ShowLocated (AnnNameCtx ks) where
 
 instance Default ks => Default (AnnNameCtx ks)
 
-newAnnName :: DictLike Symbol k ks => Text -> k -> AnnNameCtx ks -> (Symbol, AnnNameCtx ks)
+newAnnName :: DictLike IxSymbol k ks => Text -> k -> AnnNameCtx ks -> (IxSymbol, AnnNameCtx ks)
 newAnnName hint k (AnnNameCtx names kinds) =
   let (name, names') = newName hint names
       kinds' = setValue name k kinds
@@ -634,12 +638,12 @@ type TypeCtxSP = Either (TypeCtx SensitivityK) (TypeCtx PrivacyK)
 
 
 data SolvingEvent =
-  Event_ConstraintDischarged Symbol
-  | Event_ConstraintUpdated Symbol String
-  | Event_ConstraintCreated Symbol String
+  Event_ConstraintDischarged IxSymbol
+  | Event_ConstraintUpdated IxSymbol String
+  | Event_ConstraintCreated IxSymbol String
   | Event_SubstitutionAdded String
   | Event_ConstraintSetCreated
-  | Event_ConstraintSetMerged [Symbol]
+  | Event_ConstraintSetMerged [IxSymbol]
 
 instance Show SolvingEvent where
   show (Event_ConstraintCreated name constr) = "CREATE " <> show name <> " : " <> constr
@@ -691,7 +695,7 @@ data MetaCtx m = MetaCtx
     _constraints :: ConstraintCtx m,
     _userVars :: UserVars,
     -- cached state
-    _fixedTVars :: Ctx (SingSomeK TVarOf) [Symbol]
+    _fixedTVars :: Ctx (SingSomeK TVarOf) [IxSymbol]
   }
   deriving (Generic, Functor)
 
@@ -700,8 +704,8 @@ data TCState m = TCState
     _watcher :: Watcher,
     _logger :: DMLogger,
     _solvingEvents :: [SolvingEvent],
-    _persistingCounter :: Int,
-    _currentConstraintMessage :: Maybe m
+    _persistingCounter :: Int
+    -- _currentConstraintMessage :: Maybe m
   }
   deriving (Generic, Functor)
 
@@ -799,8 +803,8 @@ instance Show Watcher where
   show (Watcher changed) = show changed
 
 instance Show (TCState m) where
-  show (TCState w l _ _ _) = "- watcher: " <> show w <> "\n"
-                         <> "- messages: " <> show l <> "\n"
+  show (TCState w l _ _) = "- watcher: " <> show w <> "\n"
+                        <> "- messages: " <> show l <> "\n"
 
 instance Show m => Show (Full m) where
   show (Full tcs m γ) = "\nState:\n" <> show tcs <> "\nMeta:\n" <> show m <> "\nTypes:\n" <> show γ <> "\n"
@@ -912,18 +916,13 @@ recomputeFixedVars = do
 
 
 instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
-  type ConstraintBackup (TCT m) = (Ctx Symbol (Watched (Solvable GoodConstraint GoodConstraintContent MonadDMTC)))
+  type ConstraintBackup (TCT m) = (Ctx IxSymbol (Watched (Solvable GoodConstraint GoodConstraintContent MonadDMTC)))
   type ContentConstraintOnSolvable (TCT m) = GoodConstraintContent
   type ConstraintOnSolvable (TCT m) = GoodConstraint
   addConstraint (Solvable c) constr_desc = do
-      -- Add location to message
-      curloc <- use (tcstate.currentConstraintMessage)
-      let constr_desc' = case curloc of
-            Nothing -> DMPersistentMessage $ constr_desc
-            Just sle -> DMPersistentMessage $ sle :\\: (constr_desc)
 
       -- add the constraint to the constraint list
-      name <- meta.constraints %%= (newAnnName "constr" (ConstraintWithMessage (Watched (NormalForMode []) (Solvable c)) constr_desc'))
+      name :: IxSymbol <- meta.constraints %%= (newAnnName "constr" (ConstraintWithMessage (Watched (NormalForMode []) (Solvable c)) (DMPersistentMessage constr_desc)))
 
       -- compute the fixed vars of this constraint
       -- and add them to the cached list
@@ -1028,6 +1027,26 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
     let cs' = H.toList cs
     return [(name,c) | (name, (ConstraintWithMessage (Watched _ c) _)) <- cs']
 
+  nubConstraints = do
+    cs <- getAllKeyElemPairs <$> use (meta.constraints.anncontent.topctx)
+
+    let getNamesToDischarge ((name,c):cs) = do
+          let (duplicateConstrs,otherConstrs) = partition (\(n,c') -> c' == c) cs
+          let namesToDischarge = fst <$> duplicateConstrs
+          case length namesToDischarge > 0 of
+            True -> debug $ "Discharging duplicate constraints for " <> show name <> ":\n"
+                      <> "  The following constraints have the same content and are going to be discharged:\n"
+                      <> "  " <> show namesToDischarge
+            False -> return ()
+          otherNamesToDischarge <- getNamesToDischarge otherConstrs
+          return (namesToDischarge <> otherNamesToDischarge)
+        getNamesToDischarge [] = return []
+
+    names <- getNamesToDischarge (fmap (second (\(ConstraintWithMessage (Watched _ c) _) -> c)) cs)
+    mapM dischargeConstraint names
+    return ()
+
+
   clearSolvingEvents = do
     events <- tcstate.solvingEvents %%= (\ev -> (ev,[]))
     return (show <$> (reverse events))
@@ -1082,20 +1101,20 @@ instance Monad t => Normalize t AnnotationKind where
   normalize nt a = pure a
 
 
-supremum :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsSupremum ((a k, a k) :=: a k), SingI k, Typeable k, ContentConstraintOnSolvable t ((a k, a k) :=: a k), ConstraintOnSolvable t (IsSupremum ((a k, a k) :=: a k))) => (a k) -> (a k) -> t (a k)
+supremum :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsSupremum ((a k, a k) :=: a k), SingI k, Typeable k, ContentConstraintOnSolvable t ((a k, a k) :=: a k), ConstraintOnSolvable t (IsSupremum ((a k, a k) :=: a k)), Eq (a k)) => (a k) -> (a k) -> t (a k)
 supremum x y = do
   (z :: a k) <- newVar
   addConstraintNoMessage (Solvable (IsSupremum ((x, y) :=: z)))
   return z
 
 
-supremumFromName :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsSupremum ((a k, a k) :=: a k), SingI k, Typeable k, ContentConstraintOnSolvable t ((a k, a k) :=: a k), ConstraintOnSolvable t (IsSupremum ((a k, a k) :=: a k))) => Symbol -> (a k) -> (a k) -> t (a k)
+supremumFromName :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsSupremum ((a k, a k) :=: a k), SingI k, Typeable k, ContentConstraintOnSolvable t ((a k, a k) :=: a k), ConstraintOnSolvable t (IsSupremum ((a k, a k) :=: a k)), Eq (a k)) => IxSymbol -> (a k) -> (a k) -> t (a k)
 supremumFromName name x y = do
   (z :: a k) <- newVar
   addConstraintFromName name (Solvable (IsSupremum ((x, y) :=: z)))
   return z
 
-infimum :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsInfimum ((a k, a k) :=: a k), SingI k, Typeable k, ContentConstraintOnSolvable t ((a k, a k) :=: a k), ConstraintOnSolvable t (IsInfimum ((a k, a k) :=: a k))) => (a k) -> (a k) -> t (a k)
+infimum :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsInfimum ((a k, a k) :=: a k), SingI k, Typeable k, ContentConstraintOnSolvable t ((a k, a k) :=: a k), ConstraintOnSolvable t (IsInfimum ((a k, a k) :=: a k)), Eq (a k)) => (a k) -> (a k) -> t (a k)
 infimum x y = do
   (z :: a k) <- newVar
   addConstraintNoMessage (Solvable (IsInfimum ((x, y) :=: z)))

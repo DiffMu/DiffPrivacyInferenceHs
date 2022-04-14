@@ -217,7 +217,7 @@ class (Monad t, Term (VarFam a) a) => MonadTerm (a :: j -> *) t where
   newVar :: (IsKind k) => t (a k)
   addSub :: (IsKind k) => Sub (VarFam a) a k -> t ()
   getSubs :: t (Subs (VarFam a) a)
-  getConstraintsBlockingVariable :: (IsKind k) => Proxy a -> VarFam a k -> t ([Symbol])
+  getConstraintsBlockingVariable :: (IsKind k) => Proxy a -> VarFam a k -> t ([IxSymbol])
 
 class (Monad t, Term (VarFam a) a, MonadTerm a t) => MonadTermDuplication a t where
   duplicateAllConstraints :: [SomeK (Sub (VarFam a) (ListK a))] -> t ()

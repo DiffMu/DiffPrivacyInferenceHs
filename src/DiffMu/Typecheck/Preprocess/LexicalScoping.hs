@@ -37,8 +37,8 @@ newTeVar t = newTeVarOfLS t
 newTeVarOfLS :: (MonadState LSFull m) => TeVar -> m (TeVar)
 newTeVarOfLS hintVar = termVarsOfLS %%= (first (\x -> GenTeVar x (Just hintVar)) . (newName (hint hintVar)))
   where
-    hint (GenTeVar (Symbol x) _)   = x <> "_genls"
-    hint (UserTeVar (x))         = T.pack (show x) <> "_uls"
+    hint (GenTeVar (IxSymbol (Symbol x,_)) _)   = x <> "_genls"
+    hint (UserTeVar (x))                 = T.pack (show x) <> "_uls"
 
 -- transform the dmterm to one where function argument names are unique
 -- by generating new names for them and substituting all occurances in the body

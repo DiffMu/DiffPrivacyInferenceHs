@@ -42,9 +42,9 @@ typecheckFromString_DMTerm_Detailed term rawsource = do
    Left err -> putStrLn $ "Error while parsing DMTerm from string: " <> show err
    Right (term,files) -> do
      rs <- (rawSourceFromString rawsource files)
-     putStrLn $ ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
-     putStrLn $ show rs
-     putStrLn $ ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
+    --  putStrLn $ ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
+    --  putStrLn $ show rs
+    --  putStrLn $ ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
      typecheckFromJExpr_Detailed term rs
 
 typecheckFromString_DMTerm_Simple :: String -> String -> IO ()
@@ -54,9 +54,9 @@ typecheckFromString_DMTerm_Simple term rawsource = do
    Left err -> putStrLn $ "Error while parsing DMTerm from string: " <> show err
    Right (term,files) -> do
      rs <- (rawSourceFromString rawsource files)
-     putStrLn $ ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
-     putStrLn $ show rs
-     putStrLn $ ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
+    --  putStrLn $ ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
+    --  putStrLn $ show rs
+    --  putStrLn $ ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
      typecheckFromJExpr_Simple term rs
 
 data DoShowLog = DoShowLog DMLogSeverity [DMLogLocation] | DontShowLog
@@ -167,6 +167,6 @@ typecheckFromJExpr_Detailed term rawsource = do
         <> "\n---------------------------------------------------------------------------\n"
         <> "Monad state:\n" <> T.pack (show full)
 
-  typecheckFromJExprWithPrinter printer (DoShowLog Warning logging_locations) term rawsource
+  typecheckFromJExprWithPrinter printer (DoShowLog Debug logging_locations) term rawsource
 
 
