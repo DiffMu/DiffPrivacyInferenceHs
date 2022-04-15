@@ -18,8 +18,8 @@ import DiffMu.Typecheck.Preprocess.All
 -- import DiffMu.Typecheck.Preprocess.Demutation
 -- import DiffMu.Typecheck.Preprocess.FLetReorder
 --import DiffMu.Parser.DMTerm.FromString
-import DiffMu.Parser.Expr.FromString
-import DiffMu.Parser.Expr.JExprToDMTerm
+import DiffMu.Parser.FromString
+import DiffMu.Parser.JExprToDMTerm
 
 import DiffMu.Typecheck.JuliaType
 

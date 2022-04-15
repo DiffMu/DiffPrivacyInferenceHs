@@ -26,9 +26,9 @@ import DiffMu.Typecheck.Preprocess.Demutation
 import DiffMu.Typecheck.Preprocess.Common
 import DiffMu.Typecheck.Preprocess.All
 import DiffMu.Runner as All
-import DiffMu.Parser.Expr.FromString as All
-import DiffMu.Parser.Expr.FromString
-import DiffMu.Parser.Expr.JExprToDMTerm
+import DiffMu.Parser.FromString as All
+import DiffMu.Parser.FromString
+import DiffMu.Parser.JExprToDMTerm
 
 import DiffMu.Typecheck.JuliaType as All
 

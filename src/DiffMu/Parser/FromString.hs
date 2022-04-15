@@ -1,5 +1,5 @@
 
-module DiffMu.Parser.Expr.FromString where
+module DiffMu.Parser.FromString where
 
 import DiffMu.Prelude
 import DiffMu.Core
@@ -68,7 +68,7 @@ pTLineNumber = let pLocation = do
                                      "none" -> return (Nothing, n)
                                      _ -> return (Just filename, n)
               in do
-                   (filename, n) <- (char ':') >> (between (string "(#= ") (string " =#)") pLocation)
+                   (filename, n) <- wskip ((char ':') >> (between (string "(#= ") (string " =#)") pLocation))
                    locas <- get -- collect line numbers in state
                    put ((filename,n) : locas)
                    return (JLineNumber filename n)
@@ -95,11 +95,7 @@ pSymbolString =    (try (char ':' *> pIdentifier)
 -- any string that is well-paranthesised
 pAny :: Parser String
 pAny = let noParen = (some (noneOf @[] "()"))
-       in (join <$> some (noParen <|> between (wskipc '(') (wskipc ')') pAny))
-
-pAnymo :: Parser String
-pAnymo = let noParen = (some (noneOf @[] "()"))
-       in (join <$> some (noParen <|> between (wskipc '(') (wskipc ')') pAny))
+       in (join <$> some (noParen <|> between (oneOf @[] "(") (oneOf @[] ")") pAny))
 
 pWithCtor :: String -> ([JTree] -> JTree) -> Parser JTree
 pWithCtor name ctor = name `with` (ctor <$> (pTree `sepBy` sep))
@@ -145,6 +141,7 @@ parseJTreeFromString input =
   in case res of
     (Left e, _)  -> Left (InternalError $ "Communication Error: Could not parse JExpr from string\n\n----------------------\n" <> input <> "\n---------------------------\n" <> errorBundlePretty e)
     (Right a, locas) -> do
+        traceM input
         -- make a map from each line number to the line number of the next expression.
         let addElem ((f1,l1):(f2,l2):as) = case f1 == f2 of
                                                 True  -> ((f1,l1),l2) : (addElem ((f2,l2):as))

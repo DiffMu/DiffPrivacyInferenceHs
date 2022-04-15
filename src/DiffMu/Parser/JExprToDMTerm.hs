@@ -1,14 +1,14 @@
 
 {-# LANGUAGE TemplateHaskell #-}
 
-module DiffMu.Parser.Expr.JExprToDMTerm where
+module DiffMu.Parser.JExprToDMTerm where
     
 import DiffMu.Prelude
 import DiffMu.Abstract
 import DiffMu.Core
 import DiffMu.Core.Logging
 import DiffMu.Core.TC
-import DiffMu.Parser.Expr.FromString
+import DiffMu.Parser.FromString
 import DiffMu.Typecheck.Preprocess.Common
 import qualified Data.Text as T
 import qualified Prelude as P
@@ -45,13 +45,8 @@ parseError :: String -> ParseTC a
 parseError message = do
                        (file, line, next) <- use location
                        loc <- getCurrentLoc
-
                        throwError (withContext (ParseError message file line next) loc)
                         
-                        -- [("While parsing this line", loc)])
-
-                      --  throwOriginalError (ParseError message file line)
-
 
 -- set parse state to be inside a function
 enterFunction :: (MonadState ParseFull m) => Symbol -> m ()
@@ -94,7 +89,11 @@ pSingle e = case e of
                  JERef name refs -> pJRef name refs
                  JECall name args -> pJCall name args
                  
-                 JEBlock stmts -> Extra <$> (Block <$> pList stmts)
+                 JEBlock stmts -> do
+                     l <- pList stmts
+                     case l of
+                          [] -> parseError "Found an empty block."
+                          _ -> Extra <$> (Block <$> pure l)
                  JELam args ret body -> pJLam args ret body
                  JELamStar args ret body -> pJLamStar args ret  body
                  JEIfElse cond tr fs -> Extra <$> (ProcPhi <$> (pSingle_Loc cond) <*> (pSingle_Loc tr) <*> (mapM pSingle_Loc fs))
@@ -118,9 +117,6 @@ pSingle e = case e of
 
 
 
--- pList_Loc :: [JExpr] -> ParseTC [LocProcDMTerm]
--- pList_Loc = undefined
-
 pList :: [JExpr] -> ParseTC [LocProcDMTerm]
 pList [] = pure []
 pList (JEBlock stmts : tail) = pList (stmts ++ tail) -- handle nested blocks
@@ -130,7 +126,6 @@ pList (s : tail) = do
     ps <- case s of
                JELineNumber file line nextline -> location .= (file, line, nextline) >> return Nothing
                _ -> Just <$> (pSingle_Loc s)
-               
     ptail <- pList tail
     case ps of
         Nothing -> return ptail

@@ -29,8 +29,8 @@ import Data.IORef
 import DiffMu.Runner
 import DiffMu.Core.Definitions
 import DiffMu.Typecheck.JuliaType
-import DiffMu.Parser.Expr.FromString
-import DiffMu.Parser.Expr.JExprToDMTerm
+import DiffMu.Parser.FromString
+import DiffMu.Parser.JExprToDMTerm
 
 import Spec
 
