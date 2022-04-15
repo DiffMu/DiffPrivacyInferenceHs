@@ -525,16 +525,14 @@ instance (Show v, Show a, DictKey v) => Show (CtxStack v a) where
 
 
 instance (ShowPretty v, ShowPretty a, DictKey v) => ShowPretty (CtxStack v a) where
-      showPretty (CtxStack top other) = "   - top:\n" <> showPretty top <> "\n"
-                              <> "   - others:\n" <> showPretty other
+      showPretty (CtxStack top other) = showPretty top <> showPretty other
 
 
 instance (ShowLocated v, ShowLocated a, DictKey v) => ShowLocated (CtxStack v a) where
       showLocated (CtxStack top other) = do
         top' <- showLocated top
         other' <- showLocated other
-        return $ "   - top:\n" <> top' <> "\n"
-                              <> "   - others:\n" <> other'
+        return $ top' <> other'
 
 -- type ConstraintCtx = AnnNameCtx (Ctx Symbol (Solvable' TC))
 

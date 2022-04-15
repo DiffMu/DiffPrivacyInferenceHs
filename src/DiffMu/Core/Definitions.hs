@@ -273,7 +273,7 @@ instance Show (Annotation a) where
 instance Show (DMTypeOf k) where
   show DMAny = "DMAny"
   show DMBool = "Bool"
-  show DMInt = "Int"
+  show DMInt = "Integer"
   show DMReal = "Real"
   show DMData = "Data"
   show (IRNum a) = "IR " <> show a
@@ -326,9 +326,9 @@ instance (ShowPretty a, ShowPretty b) => ShowPretty (a :@ b) where
 
 
 instance ShowPretty (DMTypeOf k) where
-  showPretty DMAny = "DMAny"
+  showPretty DMAny = "Any"
   showPretty DMBool = "Bool"
-  showPretty DMInt = "Int"
+  showPretty DMInt = "Integer"
   showPretty DMReal = "Real"
   showPretty DMData = "Data"
   showPretty (IRNum a) = showPretty a
@@ -339,7 +339,7 @@ instance ShowPretty (DMTypeOf k) where
   showPretty (TVar t) = showPretty t
   showPretty (a :->: b) = showFunPretty "->" a b
   showPretty (a :->*: b) = showFunPretty "->*" a b
-  showPretty (DMTup ts) = showPretty ts
+  showPretty (DMTup ts) = "Tuple" <> showPretty ts <> ""
   showPretty L1 = "L1"
   showPretty L2 = "L2"
   showPretty LInf = "LInf"
@@ -348,15 +348,15 @@ instance ShowPretty (DMTypeOf k) where
   showPretty Gradient = "Gradient"
   showPretty (Matrix n) = showPretty n <> "-row Matrix"
   showPretty (Clip n) = showPretty n
-  showPretty (DMVec nrm clp n τ) = "Vector<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty n <> "](" <> showPretty τ <> ")"
-  showPretty (DMMat nrm clp n m τ) = "Matrix<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty n <> " × " <> showPretty m <> "](" <> showPretty τ <> ")"
+  showPretty (DMVec nrm clp n τ) = "Vector<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty n <> "]{" <> showPretty τ <> "}"
+  showPretty (DMMat nrm clp n m τ) = "Matrix<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty n <> " × " <> showPretty m <> "]{" <> showPretty τ <> "}"
   showPretty (DMModel m) = "DMModel[" <> showPretty m <> "]"
-  showPretty (DMGrads nrm clp m τ) = "DMGrads<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty m <> "](" <> showPretty τ <> ")"
-  showPretty (DMContainer k nrm clp m τ) = "DMContainer{" <> show k <> "}<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty m <> "](" <> showPretty τ <> ")"
+  showPretty (DMGrads nrm clp m τ) = "DMGrads<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty m <> "]{" <> showPretty τ <> "}"
+  showPretty (DMContainer k nrm clp m τ) = "DMContainer<kind: " <> show k <> ", n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty m <> "]{" <> showPretty τ <> "}"
   showPretty (NoFun x) = showPretty x
   showPretty (Fun xs) = showPrettyEnumVertical (fmap fstAnn xs)
   showPretty (x :∧: y) = "(" <> showPretty x <> "∧" <> showPretty y <> ")"
-  showPretty (BlackBox n) = "BlackBox[" <> showPretty n <> "]"
+  showPretty (BlackBox n) = "BlackBox<sign: " <> showPretty n <> ">"
 
 instance ShowLocated (DMTypeOf k) where
   showLocated = pure . T.pack . showPretty

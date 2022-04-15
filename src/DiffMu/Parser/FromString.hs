@@ -141,7 +141,6 @@ parseJTreeFromString input =
   in case res of
     (Left e, _)  -> Left (InternalError $ "Communication Error: Could not parse JExpr from string\n\n----------------------\n" <> input <> "\n---------------------------\n" <> errorBundlePretty e)
     (Right a, locas) -> do
-        traceM input
         -- make a map from each line number to the line number of the next expression.
         let addElem ((f1,l1):(f2,l2):as) = case f1 == f2 of
                                                 True  -> ((f1,l1),l2) : (addElem ((f2,l2):as))
