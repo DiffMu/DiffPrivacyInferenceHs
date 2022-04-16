@@ -11,4 +11,3 @@ instance (Show a, Show b) => Show (a :=: b) where
 
 
 
-

@@ -1099,20 +1099,20 @@ instance Monad t => Normalize t AnnotationKind where
   normalize nt a = pure a
 
 
-supremum :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsSupremum ((a k, a k) :=: a k), SingI k, Typeable k, ContentConstraintOnSolvable t ((a k, a k) :=: a k), ConstraintOnSolvable t (IsSupremum ((a k, a k) :=: a k)), Eq (a k)) => (a k) -> (a k) -> t (a k)
+supremum :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsSupremum ((a k, a k) :=: a k), SingI k, Typeable k, ContentConstraintOnSolvable t ((a k, a k) :=: a k), ShowPretty (a k),  ConstraintOnSolvable t (IsSupremum ((a k, a k) :=: a k)), Eq (a k)) => (a k) -> (a k) -> t (a k)
 supremum x y = do
   (z :: a k) <- newVar
   addConstraintNoMessage (Solvable (IsSupremum ((x, y) :=: z)))
   return z
 
 
-supremumFromName :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsSupremum ((a k, a k) :=: a k), SingI k, Typeable k, ContentConstraintOnSolvable t ((a k, a k) :=: a k), ConstraintOnSolvable t (IsSupremum ((a k, a k) :=: a k)), Eq (a k)) => IxSymbol -> (a k) -> (a k) -> t (a k)
+supremumFromName :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsSupremum ((a k, a k) :=: a k), SingI k, Typeable k, ContentConstraintOnSolvable t ((a k, a k) :=: a k), ShowPretty (a k), ConstraintOnSolvable t (IsSupremum ((a k, a k) :=: a k)), Eq (a k)) => IxSymbol -> (a k) -> (a k) -> t (a k)
 supremumFromName name x y = do
   (z :: a k) <- newVar
   addConstraintFromName name (Solvable (IsSupremum ((x, y) :=: z)))
   return z
 
-infimum :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsInfimum ((a k, a k) :=: a k), SingI k, Typeable k, ContentConstraintOnSolvable t ((a k, a k) :=: a k), ConstraintOnSolvable t (IsInfimum ((a k, a k) :=: a k)), Eq (a k)) => (a k) -> (a k) -> t (a k)
+infimum :: (IsT isT t, HasNormalize isT ((a k, a k) :=: a k), MonadConstraint isT (t), MonadTerm a (t), Solve isT IsInfimum ((a k, a k) :=: a k), SingI k, Typeable k, ContentConstraintOnSolvable t ((a k, a k) :=: a k), ShowPretty (a k),  ConstraintOnSolvable t (IsInfimum ((a k, a k) :=: a k)), Eq (a k)) => (a k) -> (a k) -> t (a k)
 infimum x y = do
   (z :: a k) <- newVar
   addConstraintNoMessage (Solvable (IsInfimum ((x, y) :=: z)))

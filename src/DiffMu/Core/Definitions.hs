@@ -64,6 +64,10 @@ type SVar   = SVarOf MainSensKind
 data AnnotationKind = SensitivityK | PrivacyK
   deriving (Show, Eq)
 
+instance ShowPretty AnnotationKind where
+    showPretty SensitivityK = "SensitivityKind"
+    showPretty PrivacyK = "PrivacyKind"
+
 -- type family Annotation (a :: AnnotationKind) = (result :: *) | result -> a where
 -- data family Annotation (a :: AnnotationKind) :: *
 -- data instance Annotation SensitivityK = SymTerm MainSensKind
@@ -72,6 +76,10 @@ data AnnotationKind = SensitivityK | PrivacyK
 data Annotation (a :: AnnotationKind) where
   SensitivityAnnotation :: SymTerm MainSensKind -> Annotation SensitivityK
   PrivacyAnnotation :: (SymTerm MainSensKind, SymTerm MainSensKind) -> Annotation PrivacyK
+
+instance ShowPretty (Annotation a) where
+    showPretty (SensitivityAnnotation a) = " @ " <> showPretty a
+    showPretty (PrivacyAnnotation a) = " @ " <> showPretty a
 
 instance Eq (Annotation a) where
   (SensitivityAnnotation a) == SensitivityAnnotation b = a == b
@@ -631,6 +639,10 @@ data DMTypeOp =
    | Binary DMTypeOps_Binary (DMType :@ SVar , DMType :@ SVar) (DMType)
   deriving (Show, Eq)
 
+instance ShowPretty DMTypeOp where
+    showPretty (Unary op t s) = "Unary operation " <> show op <> " on " <> showPretty t <> " with result type " <> showPretty s
+    showPretty (Binary op t s) = "Binary operation " <> show op <> " on " <> showPretty t <> " with result type " <> showPretty s
+
 instance ShowLocated DMTypeOp_Some where
   showLocated (IsUnary a) = pure $ T.pack $ show a
   showLocated (IsBinary a) = pure $ T.pack $ show a
@@ -660,7 +672,7 @@ instance ShowLocated DMTypeOp_Some where
 --
 -- For example, we have:
 newtype IsTypeOpResult a = IsTypeOpResult a
-  deriving (Show, Eq)
+  deriving (Show, ShowPretty, Eq)
 --
 -- The idea is that `a` represents the data which is the actual content which needs
 -- to be solved by this constraint, and the type of the wrapper around it tells us
@@ -1069,10 +1081,13 @@ freeVarsOfProcDMTerm t = fst $ recDMTermMSameExtension_Loc f (Located UnknownLoc
 instance ShowPretty a => ShowPretty [a] where
   showPretty as = "[" <> intercalate ", " (fmap showPretty as) <> "]"
 
+instance (Show a, Show b) => ShowPretty (HashMap a b) where
+    showPretty = show
+--  showPretty as = "[" <> intercalate ", " (fmap showPretty (Data.HashMap.Strict.assocs as)) <> "]"
+
 instance ShowPretty a => ShowPretty (Maybe a) where
       showPretty (Just v) = "Just " <> (showPretty v)
       showPretty Nothing = "Nothing"
-
 
 
 instance ShowPretty a => ShowPretty (Asgmt a) where
@@ -1089,11 +1104,17 @@ instance ShowPretty (DMTypeOp_Some) where
 instance ShowPretty (JuliaType) where
   showPretty = show
 
-instance (ShowPretty a, ShowPretty b) => ShowPretty (a,b) where
-  showPretty (a,b) = "("<> showPretty a <> ", " <> showPretty b <> ")"
+instance ShowPretty (Int) where
+  showPretty = show
+
+--instance (ShowPretty a, ShowPretty b) => ShowPretty (a,b) where
+--  showPretty (a,b) = "("<> showPretty a <> ", " <> showPretty b <> ")"
 
 instance (ShowPretty a, ShowPretty b, ShowPretty c) => ShowPretty (a,b,c) where
   showPretty (a,b,c) = "("<> showPretty a <> ", " <> showPretty b <> ", " <> showPretty c <> ")"
+
+instance (ShowPretty a, ShowPretty b, ShowPretty c, ShowPretty d) => ShowPretty (a,b,c,d) where
+  showPretty (a,b,c,d) = "("<> showPretty a <> ", " <> showPretty b <> ", " <> showPretty c <> ", " <> showPretty d <> ")"
 
 instance ShowPretty Relevance where
   showPretty = show

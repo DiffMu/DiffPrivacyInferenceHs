@@ -27,6 +27,9 @@ instance Show SolvingMode where
   show SolveGlobal = "global"
   show SolveFinal = "final"
   show SolveSpecial = "special"
+  
+instance ShowPretty SolvingMode where
+    showPretty = show
 
 instance Monad m => Normalize m SolvingMode where
   normalize _ = pure
@@ -53,7 +56,7 @@ class MonadNormalize t where
   normalizeState :: NormalizationType -> t ()
 
 data Solvable  (extraConstr :: * -> Constraint) (extraContentConstr :: * -> Constraint) isT where
-  Solvable :: (Solve isT c a, (HasNormalize isT a), Show (c a), Eq (c a), Typeable c, Typeable a, extraContentConstr a, extraConstr (c a)) => c a -> Solvable extraConstr extraContentConstr isT
+  Solvable :: (Solve isT c a, (HasNormalize isT a), Show (c a), ShowPretty (c a), Eq (c a), Typeable c, Typeable a, extraContentConstr a, extraConstr (c a)) => c a -> Solvable extraConstr extraContentConstr isT
 
 -- solve' :: (Solve isT c a, IsT isT t, Normalize (t) a) => c a -> t ()
 solve :: (Monad (t), IsT isT t) => SolvingMode -> IxSymbol -> (Solvable eC eC2 isT) -> t ()
@@ -75,12 +78,15 @@ instance Eq (Solvable eC eC2 isT) where
       Just Refl -> ca == db
       Nothing   -> False
 
+instance (ShowPretty a, ShowPretty b) => ShowPretty (a :=: b) where
+  showPretty (a :=: b) = showPretty a <> " :=: " <> showPretty b
+
 
 instance ShowPretty (Solvable eC eC2 isT) where
-  showPretty = show
+  showPretty (Solvable c) = showPretty c
 
 instance ShowLocated (Solvable eC eC2 isT) where
-  showLocated = pure . T.pack . show
+  showLocated = pure . T.pack . showPretty
   -- showLocated (Solvable (c :: c a)) =  -- (Solvable @isT <$> insideConstr (normalize @(t) nt) c)
 
 data CloseConstraintSetResult = ConstraintSet_WasEmpty | ConstraintSet_WasNotEmpty
@@ -129,17 +135,21 @@ addConstraintFromNameMaybe (Nothing)   = addConstraintNoMessage
 
 
 
-(==!) :: (MessageLike t msg, MonadConstraint isT t, Solve isT IsEqual (a,a), (HasNormalize isT a), Show (a), Eq a, Typeable a, IsT isT t, ContentConstraintOnSolvable t (a,a), ConstraintOnSolvable t (IsEqual (a,a))) => a -> a -> msg -> t ()
+(==!) :: (MessageLike t msg, MonadConstraint isT t, Solve isT IsEqual (a,a), (HasNormalize isT a), Show (a), ShowPretty (a), Eq a, Typeable a, IsT isT t, ContentConstraintOnSolvable t (a,a), ConstraintOnSolvable t (IsEqual (a,a))) => a -> a -> msg -> t ()
 (==!) a b msg = addConstraint (Solvable (IsEqual (a,b))) msg >> pure ()
 
 -- An abbreviation for adding a less equal constraint.
-(≤!) :: (MessageLike t msg, MonadConstraint isT t, Solve isT IsLessEqual (a,a), (HasNormalize isT a), Show (a), Eq a, Typeable a, IsT isT t, ContentConstraintOnSolvable t (a,a), ConstraintOnSolvable t (IsLessEqual (a,a))) => a -> a -> msg -> t ()
+(≤!) :: (MessageLike t msg, MonadConstraint isT t, Solve isT IsLessEqual (a,a), (HasNormalize isT a), Show (a), ShowPretty (a), Eq a, Typeable a, IsT isT t, ContentConstraintOnSolvable t (a,a), ConstraintOnSolvable t (IsLessEqual (a,a))) => a -> a -> msg -> t ()
 (≤!) a b msg = addConstraint (Solvable (IsLessEqual (a,b))) msg >> pure ()
 
 
+
+instance (ShowPretty a, ShowPretty b) => ShowPretty (a,b) where
+  showPretty (a,b) = "("<> showPretty a <> ", " <> showPretty b <> ")"
+
 -- Basic constraints
 newtype IsEqual a = IsEqual a
-  deriving (Show, Eq)
+  deriving (Show, ShowPretty, Eq)
 
 instance TCConstraint IsEqual where
   constr = IsEqual
@@ -148,7 +158,7 @@ instance TCConstraint IsEqual where
 
 ---- Less Equal (subtyping)
 newtype IsLessEqual a = IsLessEqual a
-  deriving (Show, Eq)
+  deriving (Show, ShowPretty, Eq)
 
 instance TCConstraint IsLessEqual where
   constr = IsLessEqual
@@ -156,35 +166,35 @@ instance TCConstraint IsLessEqual where
 
 ---- Less (for sensitivities)
 newtype IsLess a = IsLess a
-  deriving (Show, Eq)
+  deriving (Show, ShowPretty, Eq)
 
 instance TCConstraint IsLess where
   constr = IsLess
   runConstr (IsLess c) = c
 
 ---- Sups
-newtype IsSupremum a = IsSupremum a deriving (Show, Eq)
+newtype IsSupremum a = IsSupremum a deriving (Show, ShowPretty, Eq)
 
 instance TCConstraint IsSupremum where
   constr = IsSupremum
   runConstr (IsSupremum c) = c
 
 ---- Infimum
-newtype IsInfimum a = IsInfimum a deriving (Show, Eq)
+newtype IsInfimum a = IsInfimum a deriving (Show, ShowPretty, Eq)
 
 instance TCConstraint IsInfimum where
   constr = IsInfimum
   runConstr (IsInfimum c) = c
 
 ---- Choices
-newtype IsChoice a = IsChoice a deriving (Show, Eq)
+newtype IsChoice a = IsChoice a deriving (Show, ShowPretty, Eq)
 
 instance TCConstraint IsChoice where
   constr = IsChoice
   runConstr (IsChoice c) = c
 
 ---- Functions/Privacy Functions
-newtype IsFunction a = IsFunction a deriving (Show, Eq)
+newtype IsFunction a = IsFunction a deriving (Show, ShowPretty, Eq)
 
 instance TCConstraint IsFunction where
   constr = IsFunction
