@@ -108,11 +108,11 @@ pSingle e = case e of
                  JEHole -> parseError "Holes (_) are only allowed in assignments."
                  JEUnsupported s -> parseError ("Unsupported expression " <> show s)
                  JEIter _ _ _ -> parseError ("Iterators can only be used in for-loop statements directly.")
-                 JEColon -> parseError "Colon (:) can only be used to access matrix rows like in M[1,:]."
-                 JETypeAnnotation _ _ -> parseError "Type annotations are only supported on function arguments."
-                 JENotRelevant _ _ -> parseError "Type annotations are only supported on function arguments."
+                 JEColon -> parseError "Colon (:) can only be used to access matrix rows like in M[1,:], or to define iterator ranges like in a:b."
+                 JETypeAnnotation _ _ -> parseError "Type annotations are only supported on function arguments or as function return types."
+                 JENotRelevant _ _ -> parseError "Type annotations are only supported on function arguments or as function return types."
                  JELineNumber _ _ _ -> throwUnlocatedError (InternalError "What now?") -- TODO
-                 JEImport -> parseError "import statement is not allowed here."
+                 JEImport -> parseError "`import` statement is not allowed here."
                  JEUse -> parseError "`using` statement is not allowed here."
 
 
@@ -137,7 +137,7 @@ pJRef name refs = case refs of
                                        t1 <- pSingle_Loc i1
                                        referee <- pSingle_Loc name
                                        return (Row referee t1)
-                       [JEColon,_] -> parseError "Acessing columns of matrices as Vectors is not permitted."
+                       [JEColon,_] -> parseError "Acessing columns of matrices using : is not permitted, you can only do that for rows."
                        [i1,i2] -> do
                                   t1 <- pSingle_Loc i1
                                   t2 <- pSingle_Loc i2
@@ -154,14 +154,14 @@ pArg arg = case arg of
                      JESymbol s -> (::- JTAny) <$> (newProcVar s)
                      JETypeAnnotation (JESymbol s) τ -> (::- τ) <$> (newProcVar s)
                      JENotRelevant _ _ -> parseError ("Relevance annotation on a sensitivity function is not permitted.")
-                     a -> parseError ("Invalid function argument " <> show a)
+                     a -> parseError ("Invalid function argument " <> show a <> ". Expected a symbol, optionally with type annotation, or a hole (_).")
 
 pArgRel arg = case arg of
                        JEHole -> (::- (JTAny, IsRelevant)) <$> holeVar
                        JESymbol s -> (::- (JTAny, IsRelevant)) <$> (newProcVar s)
                        JETypeAnnotation (JESymbol s) τ -> (::- (τ, IsRelevant)) <$> (newProcVar s)
                        JENotRelevant (JESymbol s) τ -> (::- (τ, NotRelevant)) <$> (newProcVar s)
-                       a -> parseError ("Invalid function argument " <> show a)
+                       a -> parseError ("Invalid function argument " <> show a <> ". Expected a symbol, optionally with type annotation, or a hole (_).")
 
 
 pJLam args ret body = do
@@ -185,9 +185,9 @@ pJLoop ivar iter body = case iter of
                                  i <- case ivar of
                                               JEHole -> holeVar
                                               JESymbol s -> newProcVar s
-                                              i -> parseError ("Invalid iteration variable " <> (show i) <> ".")
+                                              i -> parseError ("Invalid iteration variable " <> (show i) <> ". Expected a symbol.")
                                  return (Extra (ProcPreLoop (dstart, dstep, dend) i dbody))
-       it -> parseError ("Invalid iterator " <> show it <> ", must be a range.")
+       it -> parseError ("Invalid iterator " <> show it <> ", must be a range (i.e. of the form a:b or a:s:b).")
 
 
 pJLet assignee assignment = do
@@ -205,7 +205,7 @@ pJLet assignee assignment = do
                             return (Extra (ProcSLetBase  PureLet v dasgmt))
                         JETypeAnnotation _ _ -> parseError "Type annotations on variables are not supported."
                         JENotRelevant _ _    -> parseError "Type annotations on variables are not supported."
-                        _                    -> parseError ("Invalid assignee " <> (show assignee) <> ", must be a variable.")
+                        _                    -> parseError ("Invalid assignee " <> (show assignee) <> ", must be a symbol.")
 
 
 pJTLet :: [JExpr] -> JExpr -> ParseTC ProcDMTerm
@@ -216,7 +216,7 @@ pJTLet assignees assignment = let
                                      tm1 <- pSingle_Loc m1
                                      tm2 <- pSingle_Loc m2
                                      return (Located (NotImplementedLoc "Sample location") (Sample tn tm1 tm2))
-                    _ -> parseError ("Invalid number of arguments for sample, namely " <> (show (length args)) <> " instead of 2.")
+                    _ -> parseError ("Invalid number of arguments for `sample`, namely " <> (show (length args)) <> " instead of 2.")
                     
    -- make sure that all assignees are simply symbols
    ensureSymbol (JESymbol s) = newProcVar s
@@ -273,7 +273,7 @@ pClip :: JExpr -> ParseTC (DMTypeOf NormKind)
 pClip (JESymbol (Symbol "L1"))   = pure L1
 pClip (JESymbol (Symbol "L2"))   = pure L2
 pClip (JESymbol (Symbol "LInf")) = pure LInf
-pClip term = parseError $ "The term " <> show term <> "is not a valid clip value."
+pClip term = parseError $ "The term " <> show term <> "is not a valid clip value. Must be one of L1, L2 or LInf."
 
 
 pJBBCall :: JExpr -> [JExpr] -> JuliaType -> [JExpr] -> ParseTC (ProcDMTerm)

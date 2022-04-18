@@ -207,7 +207,8 @@ badTypeMessage t = "Got " <> show t <> " where a julia type or one of the builti
                           <> "\n"
                           <> "Builtin type functions are:\n"
                           <> "- Priv()\n- BlackBox()\n- Static()\n- MetricGradient()\n- MetricVector()\n- MetricMatrix()\n"
-                          <> "(For adding type annotations, apply above type functions to that type, e.g. `Priv(Integer)`.)\n"
+                          <> "(For adding type annotations, apply above type functions to that type, e.g. `Priv(Integer)`.\n"
+                          <> "See documentation of the respective function for usage examples).\n"
                           <> "\n"
                           <> "Supported julia types are:\n"
                           <> "- Integer\n- Real\n- Matrix\n- Vector\n- Function\n- Bool\n- Any\n"
@@ -238,21 +239,21 @@ pNorm (JSym "LInf") = pure LInf
 pNorm t = jParseError ("Expected a Norm (L1, L2 or LInf), got " <> show t)
 
 pJuliaSubtype (JSubtype [t]) = pJuliaType t
-pJuliaSubtype (JSubtype t) = jParseError ("Invalid subtype statement " <> show t)
-pJuliaSubtype t = jParseError ("Expected a subtype statement, but found " <> show t)
+pJuliaSubtype (JSubtype t) = jParseError ("Invalid subtype statement " <> show t <> ", expected `<:T` for some supported type `T`")
+pJuliaSubtype t = jParseError ("Expected a subtype statement (i.e. `<: T` for some type `T`), but found " <> show t)
 
-pJuliaCurly [] = jParseError ("Invalid empty type")
+pJuliaCurly [] = jParseError ("Parametrized types with empty parameter list are not supported.")
 pJuliaCurly (name : args) = case name of
     JSym "Tuple"  -> (JTTuple <$> (mapM pJuliaType args))
     JSym "Matrix" -> case args of
         []  -> pure (JTMatrix JTAny)
         [a] -> (JTMatrix <$> (pJuliaSubtype a))
-        _   -> jParseError ("Too many type parameters for matrix type in Matrix{" <> show name <> "}")
+        as  -> jParseError ("Too many type parameters for matrix type in Matrix{" <> show as <> "}")
     JSym "Vector" -> case args of
         []  -> pure(JTVector JTAny)
         [a] -> (JTVector <$> (pJuliaSubtype a))
-        _   -> jParseError ("Too many type parameters for vector type in Vector{" <> show name <> "}")
-    _             -> jParseError ("Unsupported parametrised julia type" <> show name)
+        as  -> jParseError ("Too many type parameters for vector type in Vector{" <> show as <> "}")
+    _             -> jParseError ("Unsupported parametrised julia type" <> show name <> ". Only Matrix, Vector and Tuple types are supported.")
 
 
 
@@ -267,7 +268,7 @@ pArgs args = let pArg arg = case arg of
                      JTypeAssign [s, JCall [JSym "Static", t]] -> JENotRelevant <$> pTreeToJExpr s <*> pJuliaType t
                      JTypeAssign [s, t] -> JETypeAnnotation <$> pTreeToJExpr s <*> pJuliaType t
                      JHole -> pure JEHole
-                     _ -> jParseError ("Invalid function argument " <> show arg)
+                     _ -> jParseError ("Invalid function argument " <> show arg <> ", expected a symbol, optionally with a type assignment, or a hole (_).")
              in mapM pArg args
 
 pFLet :: JTree -> JTree -> JEParseState JExpr
@@ -278,7 +279,7 @@ pFLet call body = case call of
         JCall [JSym "Priv"] -> JEFunction <$> pTreeToJExpr (JSym name) <*> (JELamStar <$> pArgs args <*> pure JTAny <*> pTreeToJExpr body)
         JCall [JSym "Priv", annt] -> JEFunction <$> pTreeToJExpr (JSym name) <*> (JELamStar <$> pArgs args <*> pJuliaType annt <*> pTreeToJExpr body)
         _ -> JEFunction <$> pTreeToJExpr (JSym name) <*> (JELam <$> pArgs args <*> pJuliaType ann <*> pTreeToJExpr body)
-    _ -> error ("invalid shape of function definition " <> show call)
+    _ -> jParseError ("Invalid shape of function definition: " <> show call)
 
 pAss :: JTree -> JTree -> JEParseState JExpr
 pAss asg asm = case asg of
@@ -287,15 +288,16 @@ pAss asg asm = case asg of
     JCall _ -> pFLet asg asm
     JTup ts -> (JETupAssignment <$> mapM pTreeToJExpr ts <*> pTreeToJExpr asm)
     JTypeAssign [(JCall _), (JCall [JSym "BlackBox"])] -> pFLet asg asm
-    JTypeAssign _ -> jParseError ("Type annotations on variable assignments not yet supported in assignment of " <> show asg)
-    _ -> jParseError ("Unsupported assignment " <> show asg)
+    JTypeAssign _ -> jParseError ("Type annotations on variable assignments not supported in assignment of " <> show asg)
+    _ -> jParseError ("Unsupported assignment " <> show asg <> ". Expected a symbol, optionally with a type annotation, or a tuple of symbols.")
 
 
 pIter :: [JTree] -> JEParseState JExpr
 pIter as = case as of
     [start, end] -> JEIter <$> pTreeToJExpr start <*> (pure $ JEInteger 1) <*> pTreeToJExpr end
     [start, step, end] -> JEIter <$> pTreeToJExpr start <*> pTreeToJExpr step <*> pTreeToJExpr end
-    _ -> jParseError ("Unsupported iteration statement " <> show (JCall (JColon : as)))
+    _ -> jParseError ("Unsupported iteration statement " <> show (JCall (JColon : as))
+                   <> ".\nOnly range iteration is supported, i.e. iterators must be of the form a:b or a:s:b.")
 
 
 pUnbox :: [JTree] -> JEParseState JExpr
@@ -354,10 +356,10 @@ pTreeToJExpr tree = case tree of
          v -> jParseError ("You tried to load a module except DiffPrivacyInference with `using`. Please use standalone imports instead.: " <> show v)
      JLoop as        -> case as of
          [(JAssign [ivar, JCall (JColon: iter)]), body] -> JELoop <$> pTreeToJExpr ivar <*> pIter iter <*> pTreeToJExpr body
-         [(JAssign [_, iter]), _] -> jParseError ("Iterator has to be a range! Not like " <> show iter)
-         _ -> jParseError ("unsupported loop statement " <> show tree)
-     JCurly _        -> jParseError ("Did not expect a julia type but got " <> show tree)
-     JSubtype _        -> jParseError ("Did not expect a julia type but got " <> show tree)
+         [(JAssign [_, iter]), _] -> jParseError ("Iterator has to be a range (i.e. of the form a:b or a:s:b)! Not like " <> show iter)
+         _ -> error ("unsupported loop statement " <> show tree)
+     JCurly _        -> jParseError ("Did not expect a julia type here but got " <> show tree)
+     JSubtype _        -> jParseError ("Did not expect a julia type here but got " <> show tree)
      JTypeAssign _   -> jParseError ("Type annotations are not supported here: " <> show tree)
      JModule _ -> jParseError ("You can have only one module that contains all the code you want to typecheck.")
 
