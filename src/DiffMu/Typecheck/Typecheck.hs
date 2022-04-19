@@ -406,7 +406,7 @@ checkSen' scope (Located l (Apply f args)) =
 
 checkSen' scope (Located l (MMap f m)) = do
     s <- newVar
-    mv <- newVar
+    mv <- svar <$> newSVarWithPriority UserNamePriority "m"
     mr <- newVar
     let mm = checkSens scope m <* mscale s
     let mf = checkSens scope f <* mscale mv <* mscale mr
@@ -430,9 +430,9 @@ checkSen' scope (Located l (MMap f m)) = do
 
 checkSen' scope (Located l (MapRows f m)) = do
     s <- newVar
-    ηm <- newVar
-    ηn₁ <- newVar
-    ηn₂ <- newVar
+    ηm <- svar <$> newSVarWithPriority UserNamePriority "m"
+    ηn₁ <- svar <$> newSVarWithPriority UserNamePriority "n"
+    ηn₂ <- svar <$> newSVarWithPriority UserNamePriority "n"
     let mm = checkSens scope m <* mscale s
     let mf = checkSens scope f <* mscale ηm
     (τf :: DMMain, τm) <- msumTup (mf, mm) -- sum args and f's context
@@ -454,8 +454,8 @@ checkSen' scope (Located l (MapRows f m)) = do
 checkSen' scope (Located l (MapCols f m)) = do
     ς <- newVar
     r <- newVar
-    ηm₁ <- newVar
-    ηm₂ <- newVar
+    ηm₁ <- svar <$> newSVarWithPriority UserNamePriority "m"
+    ηm₂ <- svar <$> newSVarWithPriority UserNamePriority "m"
     let mf = checkSens scope f <* mscale (r)
     let mm = checkSens scope m <* mscale (ς ⋅! r)
     (τf :: DMMain, τm) <- msumTup (mf, mm) -- sum args and f's context
@@ -483,9 +483,9 @@ checkSen' scope (Located l (MapCols2 f m₁ m₂)) = do
     ς₁ <- newVar
     ς₂ <- newVar
     r <- newVar
-    ηm₁ <- newVar
-    ηm₂ <- newVar
-    ηm₃ <- newVar
+    ηm₁ <- svar <$> newSVarWithPriority UserNamePriority "m"
+    ηm₂ <- svar <$> newSVarWithPriority UserNamePriority "m"
+    ηm₃ <- svar <$> newSVarWithPriority UserNamePriority "m"
     let mf = checkSens scope f <* mscale (ηm₁ ⋅! r)
     let mm₁ = checkSens scope m₁ <* mscale (ς₁ ⋅! r)
     let mm₂ = checkSens scope m₂ <* mscale (ς₂ ⋅! r)
@@ -514,10 +514,10 @@ checkSen' scope (Located l (MapCols2 f m₁ m₂)) = do
 checkSen' scope (Located l (MapRows2 f m₁ m₂)) = do
     ς₁ <- newVar
     ς₂ <- newVar
-    ηm <- newVar
-    ηn₁ <- newVar
-    ηn₂ <- newVar
-    ηn₃ <- newVar
+    ηm <- svar <$> newSVarWithPriority UserNamePriority "m"
+    ηn₁ <- svar <$> newSVarWithPriority UserNamePriority "n"
+    ηn₂ <- svar <$> newSVarWithPriority UserNamePriority "n"
+    ηn₃ <- svar <$> newSVarWithPriority UserNamePriority "n"
     let mf = checkSens scope f <* mscale (ηn₁)
     let mm₁ = checkSens scope m₁ <* mscale (ς₁)
     let mm₂ = checkSens scope m₂ <* mscale (ς₂)
@@ -546,8 +546,8 @@ checkSen' scope (Located l (MapRows2 f m₁ m₂)) = do
 checkSen' scope (Located l (MFold f acc₀ m)) = do
     s₁ <- newVar
     s₂ <- newVar
-    ηm <- newVar
-    ηn <- newVar
+    ηm <- svar <$> newSVarWithPriority UserNamePriority "m"
+    ηn <- svar <$> newSVarWithPriority UserNamePriority "n"
     let mm = checkSens scope m <* mscale s₁
     let macc₀ = checkSens scope acc₀ <* mscale (exp s₂ (ηm ⋅! ηn))
     let mf = checkSens scope f <* mscale (ηm ⋅! ηn)
@@ -805,8 +805,8 @@ checkSen' scope (Located l (MCreate n m (x1, x2) body)) =
       let mbody = checkSens scope body
 
       -- variables for matrix dimension
-      nv <- newVar
-      mv <- newVar
+      nv <- svar <$> newSVarWithPriority UserNamePriority "n"
+      mv <- svar <$> newSVarWithPriority UserNamePriority "m"
 
       (τbody, _, _) <- msum3Tup (checkBody mbody nv mv, setDim mn nv, setDim mm mv)
 
@@ -817,8 +817,8 @@ checkSen' scope (Located l (Size m)) = do
   mt <- checkSens scope m
 
   -- variables for matrix dimension
-  nv <- newVar
-  mv <- newVar
+  nv <- svar <$> newSVarWithPriority UserNamePriority "n"
+  mv <- svar <$> newSVarWithPriority UserNamePriority "m"
 
   -- and matrix entries
   τ <- newVar
@@ -835,7 +835,7 @@ checkSen' scope (Located l (Length m)) = do
   mt <- checkSens scope m
 
   -- variables for vector dimension and entries
-  nv <- newVar
+  nv <- svar <$> newSVarWithPriority UserNamePriority "n"
   τ <- newVar
 
   nrm <- newVar -- variable for norm
@@ -853,7 +853,7 @@ checkSen' scope (Located l (ClipM c m)) = do
 
   -- variables for norm and clip parameters and dimension
   clp <- newVar
-  n <- newVar
+  n <- svar <$> newSVarWithPriority UserNamePriority "n"
 
   -- variable for vector kind
   k <- newVar
@@ -879,7 +879,7 @@ checkSen' scope (Located l (ConvertM nrm m)) = do
   -- variables for input norm and clip parameters, dimension and element type
   nrm_in <- newVar
   clp <- newVar
-  n <- newVar
+  n <- svar <$> newSVarWithPriority UserNamePriority "n"
   t <- newVar
 
   -- variable for container kind
@@ -995,8 +995,8 @@ checkSen' scope  (Located l (Index m i j)) = do
       τ <- newVar
       nrm <- newVar
       clp <- newVar
-      n <- newVar
-      m <- newVar
+      n <- svar <$> newSVarWithPriority UserNamePriority "n"
+      m <- svar <$> newSVarWithPriority UserNamePriority "m"
 
       -- set matrix type
       unify (l :\\: "Index parameter must be matrix") τm (NoFun (DMMat nrm clp n m τ))
@@ -1024,7 +1024,7 @@ checkSen' scope (Located l (VIndex v i))  = do
       τ <- newVar
       nrm <- newVar
       clp <- newVar
-      n <- newVar
+      n <- svar <$> newSVarWithPriority UserNamePriority "n"
 
       -- set vector type
       unify (l :\\: "single-index parameter must be vector") τv (NoFun (DMVec nrm clp n τ))
@@ -1049,8 +1049,8 @@ checkSen' scope (Located l (Row m i)) = do
       τ <- newVar
       nrm <- newVar
       clp <- newVar
-      n <- newVar
-      m <- newVar
+      n <- svar <$> newSVarWithPriority UserNamePriority "n"
+      m <- svar <$> newSVarWithPriority UserNamePriority "m"
 
       -- set matrix type
       unify (l :\\: "Rows can only be taken of matrices") τm (NoFun (DMMat nrm clp n m τ))
@@ -1070,7 +1070,7 @@ checkSen' scope (Located l (SubGrad ps gs)) = do
       τgs <- newVar
       nrm <- newVar
       clp <- newVar
-      m <- newVar
+      m <- svar <$> newSVarWithPriority UserNamePriority "m"
 
       -- set argument types
       unify (l :\\: "The thing that the gradient is subtracted from must be a model") ps (NoFun (DMModel m))
@@ -1099,7 +1099,7 @@ checkSen' scope term@(Located l (ScaleGrad scalar grad)) = do
   -- (norm and clip parameters and dimension)
   nrm <- newVar
   clp <- newVar
-  m <- newVar
+  m <- svar <$> newSVarWithPriority UserNamePriority "m"
 
   -- infer the types of the scalar and the gradient
   -- we get
@@ -1140,7 +1140,7 @@ checkSen' scope (Located l (ZeroGrad m)) = do
    tm <- checkSens scope m
 
    -- variables for element type, dimension, result norm and clip parameters
-   n <- newVar
+   n <- svar <$> newSVarWithPriority UserNamePriority "n"
    nrm <- newVar
    clp <- newVar -- actually variable, as all entries are zero
 
@@ -1166,7 +1166,7 @@ checkSen' scope term@(Located l (SumGrads g1 g2)) = do
   nrm <- newVar
   clp1 <- newVar
   clp2 <- newVar
-  m <- newVar
+  m <- svar <$> newSVarWithPriority UserNamePriority "m"
 
   -- infer the types of the scalar and the gradient
   let dg1 = checkSens scope g1
@@ -1232,7 +1232,7 @@ checkSen' scope term@(Located l (MakeVec m)) = do
   τ <- newVar
   nrm <- newVar
   clp <- newVar
-  cols <- newVar
+  cols <- svar <$> newSVarWithPriority UserNamePriority "n"
 
   -- set 1-row matrix type
   unify (l :\\: "`vec_from_row` expects one-row matrix") mtype (NoFun (DMMat nrm clp oneId cols τ))
@@ -1254,7 +1254,7 @@ checkSen' scope term@(Located l (MakeRow m)) = do
   τ <- newVar
   nrm <- newVar
   clp <- newVar
-  cols <- newVar
+  cols <- svar <$> newSVarWithPriority UserNamePriority "m"
 
   -- set 1-row matrix type
   unify (l :\\: "`row_from_vec` expects vector") mtype (NoFun (DMVec nrm clp cols τ))
@@ -1846,10 +1846,10 @@ checkPri' scope term@(Located l (SmpLet xs (Located l2 (Sample n m1_in m2_in)) t
       
       -- variables for clip parameter, dimensions and number of samples (m2)
       clp <- newVar
-      m1 <- newVar
-      m2 <- newVar
-      n1 <- newVar
-      n2 <- newVar
+      m1 <- svar <$> newSVarWithPriority UserNamePriority "m"
+      m2 <- svar <$> newSVarWithPriority UserNamePriority "m"
+      n1 <- svar <$> newSVarWithPriority UserNamePriority "n"
+      n2 <- svar <$> newSVarWithPriority UserNamePriority "n"
     
       -- set number of samples to const m2 and truncate context with 0
       unify (l :\\: "Number of samples must be const (Static) integer") tn (NoFun (Numeric (Num (IRNum DMInt) (Const m2))))
@@ -1873,7 +1873,7 @@ checkPri' scope term@(Located l (SmpLet xs (Located l2 (Sample n m1_in m2_in)) t
 checkPri' scope (Located l (PReduceCols f m)) = do
     ε <- newVar
     δ <- newVar
-    ηm <- newVar
+    ηm <- svar <$> newSVarWithPriority UserNamePriority "m"
     r <- newVar
     let mm = checkSens scope m <* mtruncateP (r ⋅! ε, r ⋅! δ)
     let mf = checkSens scope f <* mtruncateP inftyP
@@ -1893,9 +1893,9 @@ checkPri' scope (Located l (MutPFoldRows f acc m₁ m₂)) = checkPri' scope (Lo
 checkPri' scope (Located l (PFoldRows f acc m₁ m₂)) = do
     ε <- newVar
     δ <- newVar
-    ηm <- newVar
-    ηn₁ <- newVar
-    ηn₂ <- newVar
+    ηm <- svar <$> newSVarWithPriority UserNamePriority "m"
+    ηn₁ <- svar <$> newSVarWithPriority UserNamePriority "n"
+    ηn₂ <- svar <$> newSVarWithPriority UserNamePriority "n"
     l₁ <- newVar
     l₂ <- newVar
     c₁ <- newVar

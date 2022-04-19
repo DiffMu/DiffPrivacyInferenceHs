@@ -8,6 +8,7 @@ module DiffMu.Prelude
   , RawSource (..)
   , rawSourceFromString
   , NamePriority (..)
+  , CompoundPriority (..)
   , Symbol (..)
   , IxSymbol (..)
   , SymbolOf (..)
@@ -99,13 +100,22 @@ instance Monad t => Normalize t Text where
 -------------------------------------------------------------------------
 -- Var Priority
 
+data CompoundPriority = CompoundPriority NamePriority Int
+  deriving (Show, Eq)
+
+instance Ord CompoundPriority where
+  CompoundPriority n1 i1 <= CompoundPriority n2 i2 | n1 == n2 = i1 >= i2
+  CompoundPriority n1 i1 <= CompoundPriority n2 i2 | n1 > n2  = False
+  CompoundPriority n1 i1 <= CompoundPriority n2 i2 | otherwise = True
+
+
 type IsKind k = (SingI k, Typeable k)
 
 class HasVarPriority v where
-  varPriority :: IsKind k => v k -> NamePriority
+  varPriority :: IsKind k => v k -> CompoundPriority
 
 instance HasVarPriority SymbolOf where
-  varPriority (SymbolOf (IxSymbol (_,_,np))) = np
+  varPriority (SymbolOf (IxSymbol (_,ix,np))) = CompoundPriority np ix
 
 -------------------------------------------------------------------------
 -- StringLike
