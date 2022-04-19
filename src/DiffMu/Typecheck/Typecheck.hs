@@ -232,7 +232,7 @@ checkSen' scope (Located l (LamStar xτs retτ body)) = do
                            (l :\\: "LamStar argument " :<>: x :<>: "can become NonConst.")
                          pure ()
                      NotRelevant -> do
-                                      addConstraint (Solvable (MakeConst τ))
+                                      addConstraint (Solvable (MakeConst (τ, T.pack (showPretty x))))
                                         (l :\\: "Static LamStar argument " :<>: x :<>: " can become Const.")
                                       return ()
                return ()

@@ -33,7 +33,7 @@ type ParseTC = LightTC Location_Parse ParseFull
 $(makeLenses ''ParseFull)
 
 holeVar :: ParseTC ProcVar
-holeVar = holeNames %%= (first GenProcVar . (newName "hole"))
+holeVar = holeNames %%= (first GenProcVar . (newName GeneratedNamePriority "hole"))
 
 
 newProcVar :: Symbol -> ParseTC (ProcVar)

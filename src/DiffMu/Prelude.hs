@@ -7,6 +7,7 @@ module DiffMu.Prelude
   , StringLike (..)
   , RawSource (..)
   , rawSourceFromString
+  , NamePriority (..)
   , Symbol (..)
   , IxSymbol (..)
   , SymbolOf (..)
@@ -14,6 +15,8 @@ module DiffMu.Prelude
   , KHashable (..)
   , KShow (..)
   , KEq (..)
+  , IsKind (..)
+  , HasVarPriority (..)
   , FromSymbol (..)
   , composeFun
   , composeFunM
@@ -71,11 +74,16 @@ rawSourceFromString input other_files = do
     (good_other_file_contents)
     )
 
+-- NOTE : Order is important
+data NamePriority = GeneratedNamePriority | UserNamePriority
+  deriving (Eq, Ord, Generic, Show)
+
+instance Hashable NamePriority
 
 newtype Symbol = Symbol Text
   deriving (Eq,Ord,Hashable,Semigroup,Monoid)
 
-newtype IxSymbol = IxSymbol (Symbol,Int)
+newtype IxSymbol = IxSymbol (Symbol,Int,NamePriority)
   deriving (Eq,Ord,Hashable)
 
 instance Monad t => Normalize t IxSymbol where
@@ -86,6 +94,18 @@ instance Monad t => Normalize t Symbol where
 
 instance Monad t => Normalize t Text where
   normalize nt a = pure a
+
+
+-------------------------------------------------------------------------
+-- Var Priority
+
+type IsKind k = (SingI k, Typeable k)
+
+class HasVarPriority v where
+  varPriority :: IsKind k => v k -> NamePriority
+
+instance HasVarPriority SymbolOf where
+  varPriority (SymbolOf (IxSymbol (_,_,np))) = np
 
 -------------------------------------------------------------------------
 -- StringLike
@@ -150,7 +170,7 @@ instance ShowPretty Text where
   showPretty s = T.unpack s
 
 class FromSymbol (v :: j -> *) where
-  fromSymbol :: Symbol -> Int -> v k
+  fromSymbol :: Symbol -> Int -> NamePriority -> v k
 
 -- data SymbolOf (k :: j) where
   -- SymbolOf :: Symbol -> SymbolOf k
@@ -163,7 +183,7 @@ newtype SymbolOf (k :: j) = SymbolOf IxSymbol
 --   -- deriving Eq via Symbol -- (Eq,Ord,Hashable)
 
 instance FromSymbol SymbolOf where
-  fromSymbol v n = SymbolOf (IxSymbol (v, n))
+  fromSymbol v n p = SymbolOf (IxSymbol (v, n, p))
 
 -- instance Eq (SymbolOf (k :: j)) where
 --   (SymbolOf x) == (SymbolOf y) = x == y
@@ -192,7 +212,7 @@ showWithSubscript :: Show a => (a,Int) -> String
 showWithSubscript (a,n) = show a <> showSubscriptInt n
 
 instance Show IxSymbol where
-  show (IxSymbol x) = showWithSubscript x
+  show (IxSymbol (x,n,p)) = showWithSubscript (x,n)
 
 instance DictKey IxSymbol
 

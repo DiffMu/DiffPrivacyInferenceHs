@@ -285,6 +285,18 @@ instance Substitute SVarOf SensitivityOf SolvingMode where
 instance Substitute TVarOf DMTypeOf SolvingMode where
   substitute _ x = pure x
 
+instance FreeVars TVarOf Text where
+  freeVars _ = []
+
+instance FreeVars SVarOf Text where
+  freeVars _ = []
+
+instance Substitute SVarOf SensitivityOf Text where
+  substitute _ x = pure x
+
+instance Substitute TVarOf DMTypeOf Text where
+  substitute _ x = pure x
+
 -- Given a list of "multi substitutions", i.e. substitutions of the form
 -- [a := ListK [a1, a2, a3], b := ListK [b1, b2, b3], ...] and type τ,
 -- it returns (Just [τ1, τ2, τ3]) where
@@ -555,9 +567,9 @@ instance ShowLocated ks => ShowLocated (AnnNameCtx ks) where
 
 instance Default ks => Default (AnnNameCtx ks)
 
-newAnnName :: DictLike IxSymbol k ks => Text -> k -> AnnNameCtx ks -> (IxSymbol, AnnNameCtx ks)
-newAnnName hint k (AnnNameCtx names kinds) =
-  let (name, names') = newName hint names
+newAnnName :: DictLike IxSymbol k ks => NamePriority -> Text -> k -> AnnNameCtx ks -> (IxSymbol, AnnNameCtx ks)
+newAnnName np hint k (AnnNameCtx names kinds) =
+  let (name, names') = newName np hint names
       kinds' = setValue name k kinds
   in (name, AnnNameCtx names' kinds')
 
@@ -920,7 +932,7 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
   addConstraint (Solvable c) constr_desc = do
 
       -- add the constraint to the constraint list
-      name :: IxSymbol <- meta.constraints %%= (newAnnName "constr" (ConstraintWithMessage (Watched (NormalForMode []) (Solvable c)) (DMPersistentMessage constr_desc)))
+      name :: IxSymbol <- meta.constraints %%= (newAnnName GeneratedNamePriority "constr" (ConstraintWithMessage (Watched (NormalForMode []) (Solvable c)) (DMPersistentMessage constr_desc)))
 
       -- compute the fixed vars of this constraint
       -- and add them to the cached list
@@ -1278,13 +1290,18 @@ instance Monad m => IsT MonadDMTC (TCT m) where
 
 
 
+newTVarWithPriority :: forall k e t. (MonadDMTC t, SingI k, Typeable k) => NamePriority -> Text -> t (TVarOf k)
+newTVarWithPriority np hint = meta.typeVars %%= ((newKindedName np hint))
 
 
 newTVar :: forall k e t. (MonadDMTC t, SingI k, Typeable k) => Text -> t (TVarOf k)
-newTVar hint = meta.typeVars %%= ((newKindedName hint))
+newTVar = newTVarWithPriority GeneratedNamePriority 
+
+newSVarWithPriority :: forall k e t. (SingI k, MonadDMTC t, Typeable k) => NamePriority -> Text -> t (SVarOf k)
+newSVarWithPriority np hint = meta.sensVars %%= (newKindedName np hint)
 
 newSVar :: forall k e t. (SingI k, MonadDMTC t, Typeable k) => Text -> t (SVarOf k)
-newSVar hint = meta.sensVars %%= (newKindedName hint)
+newSVar = newSVarWithPriority GeneratedNamePriority
 
 newPVar = do
    p1 ::Sensitivity <- newVar
@@ -1292,7 +1309,7 @@ newPVar = do
    return (p1, p2)
 
 newTeVar :: (MonadDMTC m) => Text -> m (TeVar)
-newTeVar hint = meta.termVars %%= (first (\x -> GenTeVar x Nothing) . (newName hint))
+newTeVar hint = meta.termVars %%= (first (\x -> GenTeVar x Nothing) . (newName GeneratedNamePriority hint))
 
 ------------------------------------------------------------------------
 -- unification of sensitivities

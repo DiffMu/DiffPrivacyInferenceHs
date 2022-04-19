@@ -35,9 +35,9 @@ newTeVar t = newTeVarOfLS t
 
 -- generate unique new variables
 newTeVarOfLS :: (MonadState LSFull m) => TeVar -> m (TeVar)
-newTeVarOfLS hintVar = termVarsOfLS %%= (first (\x -> GenTeVar x (Just hintVar)) . (newName (hint hintVar)))
+newTeVarOfLS hintVar = termVarsOfLS %%= (first (\x -> GenTeVar x (Just hintVar)) . (newName GeneratedNamePriority (hint hintVar)))
   where
-    hint (GenTeVar (IxSymbol (Symbol x,_)) _)   = x <> "_genls"
+    hint (GenTeVar (IxSymbol (Symbol x,_,_)) _)   = x <> "_genls"
     hint (UserTeVar (x))                 = T.pack (show x) <> "_uls"
 
 -- transform the dmterm to one where function argument names are unique

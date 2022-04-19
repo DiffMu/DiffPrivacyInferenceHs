@@ -38,22 +38,30 @@ instance TCConstraint MakeConst where
   constr = MakeConst
   runConstr (MakeConst c) = c
 
-instance FixedVars TVarOf (MakeConst (DMMain)) where
+instance FixedVars TVarOf (MakeConst (DMMain, Text)) where
   fixedVars (MakeConst _) = []
 
-instance Solve MonadDMTC MakeConst (DMMain) where
-  solve_ Dict _ name (MakeConst τ) = case τ of
+instance Solve MonadDMTC MakeConst (DMMain, Text) where
+  solve_ Dict _ name (MakeConst (τ,username)) = case τ of
       TVar _ -> pure ()
       NoFun (TVar _) -> pure ()
-      NoFun (DMTup ts) -> (mapM (\t -> (addConstraintFromName name) (Solvable (MakeConst (NoFun t)))) ts) >> dischargeConstraint name
+      NoFun (DMTup ts) -> (mapM (\t -> (addConstraintFromName name) (Solvable (MakeConst (NoFun t, username)))) ts) >> dischargeConstraint name
+      {-
       NoFun (Numeric (Num _ (TVar k))) -> do
-                     ck <- newVar
+                     ck <- svar <$> newSVarWithPriority UserNamePriority username
                      unifyFromName name (TVar k) (Const ck)
                      dischargeConstraint name
       NoFun (Numeric (TVar k)) -> do
                      cv <- newVar 
-                     ck <- newVar
+                     ck <- svar <$> newSVarWithPriority UserNamePriority username
                      unifyFromName name (TVar k) (Num cv (Const ck))
+                     dischargeConstraint name
+      -}
+      NoFun (Numeric k) -> do
+                     cv <- newVar 
+                     ck <- newSVarWithPriority UserNamePriority username
+                     debug $ "While making const: priority of " <> show ck <> " is: " <> show (varPriority ck)
+                     unifyFromName name (k) (Num cv (Const (svar ck)))
                      dischargeConstraint name
       _ -> dischargeConstraint name 
 

@@ -92,9 +92,9 @@ instance (FreeVars v a) => FreeVars v (Maybe a) where
 
 
 
-
-class (KHashable v, KShow v, KShow a, KEq v, forall k. (Substitute v a (a k))) => Term v a where
+class (KHashable v, KShow v, KShow a, KEq v, HasVarPriority v, forall k. (Substitute v a (a k))) => Term v a where
   var :: IsKind k => v k -> a k
+  -- varPriority :: IsKind k => Proxy a -> v k -> NamePriority
   isVar :: IsKind k => a k -> Maybe (v k)
 
 data SomeK (v :: j -> *) where
@@ -135,10 +135,13 @@ data Subs v a where
 instance Term v a => Default (Subs v a) where
   def = Subs empty
 
-type IsKind k = (SingI k, Typeable k)
 
 singletonSub :: (Term x a, IsKind k) => Sub x a k -> Subs x a
-singletonSub ((x :: x k) := a) = Subs (singleton (SomeK @_ @k x) (SomeK a))
+singletonSub ((x :: x k) := (a :: a k)) = case isVar @x a of
+  Just av | varPriority x >= varPriority av  -- if the priority of x is higher, we replace `av`
+           -> Subs (singleton (SomeK @_ @k av) (SomeK (var x)))
+  _ -> Subs (singleton (SomeK @_ @k x) (SomeK a))
+
 
 
 instance Show (Subs v a) where

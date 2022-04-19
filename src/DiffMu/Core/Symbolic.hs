@@ -91,6 +91,9 @@ maxS s = injectVarId (Max s)
 minus s t = injectVarId (Minus (s, t))
 divide s t = s ⋅! injectVarId (Div t)
 
+instance HasVarPriority SymVar where
+  varPriority (HonestVar x@(SymbolOf (IxSymbol v@(y,yi,ynp)))) = varPriority x
+  varPriority _ = GeneratedNamePriority
 
 -- tryComputeSym :: NormalizationType -> SymVar k -> SymVar k
 -- tryComputeSym nt x = case f x of
