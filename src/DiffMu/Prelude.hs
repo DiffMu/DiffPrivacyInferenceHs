@@ -209,6 +209,7 @@ showSubscriptInt a          =
   in showSubscriptInt beforeLast <> (showSubscriptDigit last : [])
 
 showWithSubscript :: Show a => (a,Int) -> String
+showWithSubscript (a,0) = show a
 showWithSubscript (a,n) = show a <> showSubscriptInt n
 
 instance Show IxSymbol where
