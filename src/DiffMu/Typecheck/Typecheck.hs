@@ -414,8 +414,8 @@ checkSen' scope (Located l (MMap f m)) = do
 
     τ_in <- newVar -- a type var for the function input / matrix element type
     τ_out <- newVar -- a type var for the function output type
-    nrm <- newVar -- variable for norm
-    clp <- newVar -- variable for clip
+    nrm <- TVar <$> newTVarWithPriority UserNamePriority "N" -- variable for norm
+    clp <- TVar <$> newTVarWithPriority UserNamePriority "C" -- variable for clip
     k <- newVar -- variable for container kind
     unify (l :\\: "MMap argument type") τm (NoFun (DMContainer k nrm clp mv τ_in))
 
@@ -439,10 +439,10 @@ checkSen' scope (Located l (MapRows f m)) = do
 
     τ_in <- newVar -- a type var for the function input / matrix element type
     τ_out <- newVar -- a type var for the function output type
-    nrm₁ <- newVar -- variable for norm
-    clp₁ <- newVar -- variable for clip
-    nrm₂ <- newVar -- variable for norm
-    clp₂ <- newVar -- variable for clip
+    nrm₁ <- TVar <$> newTVarWithPriority UserNamePriority "N" -- variable for norm
+    clp₁ <- TVar <$> newTVarWithPriority UserNamePriority "C" -- variable for clip
+    nrm₂ <- TVar <$> newTVarWithPriority UserNamePriority "N" -- variable for norm
+    clp₂ <- TVar <$> newTVarWithPriority UserNamePriority "C" -- variable for clip
     unify (l :\\: "MapRows argument type") τm (NoFun (DMMat nrm₁ clp₁ ηm ηn₁ τ_in))
 
     -- set the type of the function using IFA
@@ -462,10 +462,10 @@ checkSen' scope (Located l (MapCols f m)) = do
 
     τ_in <- newVar -- a type var for the function input / matrix element type
     τ_out <- newVar -- a type var for the function output type
-    nrm₁ <- newVar -- variable for norm
-    clp₁ <- newVar -- variable for clip
-    nrm₂ <- newVar -- variable for norm
-    clp₂ <- newVar -- variable for clip
+    nrm₁ <- TVar <$> newTVarWithPriority UserNamePriority "N" -- variable for norm
+    clp₁ <- TVar <$> newTVarWithPriority UserNamePriority "C" -- variable for clip
+    nrm₂ <- TVar <$> newTVarWithPriority UserNamePriority "N" -- variable for norm
+    clp₂ <- TVar <$> newTVarWithPriority UserNamePriority "C" -- variable for clip
     unify (l :\\: "MapCols argument type") τm (NoFun (DMMat nrm₁ clp₁ ηm₁ r τ_in))
 
     -- set the type of the function using IFA
@@ -494,12 +494,12 @@ checkSen' scope (Located l (MapCols2 f m₁ m₂)) = do
     τ_in₁ <- newVar -- a type var for the function input / matrix element type
     τ_in₂ <- newVar -- a type var for the function input / matrix element type
     τ_out <- newVar -- a type var for the function output type
-    nrm₁ <- newVar -- variable for norm
-    clp₁ <- newVar -- variable for clip
-    nrm₂ <- newVar -- variable for norm
-    clp₂ <- newVar -- variable for clip
-    nrm₃ <- newVar -- variable for norm
-    clp₃ <- newVar -- variable for clip
+    nrm₁ <- TVar <$> newTVarWithPriority UserNamePriority "N" -- variable for norm
+    clp₁ <- TVar <$> newTVarWithPriority UserNamePriority "C" -- variable for clip
+    nrm₂ <- TVar <$> newTVarWithPriority UserNamePriority "N" -- variable for norm
+    clp₂ <- TVar <$> newTVarWithPriority UserNamePriority "C" -- variable for clip
+    nrm₃ <- TVar <$> newTVarWithPriority UserNamePriority "N" -- variable for norm
+    clp₃ <- TVar <$> newTVarWithPriority UserNamePriority "C" -- variable for clip
     unify (l :\\: "Binary MapCols2 first argument type") τm₁ (NoFun (DMMat LInf clp₁ ηm₁ r τ_in₁))
     unify (l :\\: "Binary MapCols2 second argument type") τm₂ (NoFun (DMMat LInf clp₂ ηm₂ r τ_in₂))
 
@@ -526,12 +526,12 @@ checkSen' scope (Located l (MapRows2 f m₁ m₂)) = do
     τ_in₁ <- newVar -- a type var for the function input / matrix element type
     τ_in₂ <- newVar -- a type var for the function input / matrix element type
     τ_out <- newVar -- a type var for the function output type
-    nrm₁ <- newVar -- variable for norm
-    clp₁ <- newVar -- variable for clip
-    nrm₂ <- newVar -- variable for norm
-    clp₂ <- newVar -- variable for clip
-    nrm₃ <- newVar -- variable for norm
-    clp₃ <- newVar -- variable for clip
+    nrm₁ <- TVar <$> newTVarWithPriority UserNamePriority "N" -- variable for norm
+    clp₁ <- TVar <$> newTVarWithPriority UserNamePriority "C" -- variable for clip
+    nrm₂ <- TVar <$> newTVarWithPriority UserNamePriority "N" -- variable for norm
+    clp₂ <- TVar <$> newTVarWithPriority UserNamePriority "C" -- variable for clip
+    nrm₃ <- TVar <$> newTVarWithPriority UserNamePriority "N" -- variable for norm
+    clp₃ <- TVar <$> newTVarWithPriority UserNamePriority "C" -- variable for clip
     unify (l :\\: "Binary MapRows2 first argument type") τm₁ (NoFun (DMMat LInf clp₁ ηm ηn₁ τ_in₁))
     unify (l :\\: "Binary MapRows2 second argument type") τm₂ (NoFun (DMMat LInf clp₂ ηm ηn₂ τ_in₂))
 
@@ -556,7 +556,7 @@ checkSen' scope (Located l (MFold f acc₀ m)) = do
     τ_content <- newVar
     τbody_in <- newVar -- a type var for the function input / matrix element type
     τbody_out <- newVar -- a type var for the function output type
-    clp₁ <- newVar -- variable for clip
+    clp₁ <- TVar <$> newTVarWithPriority UserNamePriority "C" -- variable for clip
     unify (l :\\: "MFold argument type") τm (NoFun (DMMat L1 clp₁ ηm ηn τ_content))
 
     -- set the type of the function using IFA
@@ -810,7 +810,7 @@ checkSen' scope (Located l (MCreate n m (x1, x2) body)) =
 
       (τbody, _, _) <- msum3Tup (checkBody mbody nv mv, setDim mn nv, setDim mm mv)
 
-      nrm <- newVar -- variable for norm
+      nrm <- TVar <$> newTVarWithPriority UserNamePriority "N" -- variable for norm
       return (NoFun (DMMat nrm U nv mv τbody))
 
 checkSen' scope (Located l (Size m)) = do
@@ -823,8 +823,8 @@ checkSen' scope (Located l (Size m)) = do
   -- and matrix entries
   τ <- newVar
 
-  nrm <- newVar -- variable for norm
-  clp <- newVar -- variable for clip
+  nrm <- TVar <$> newTVarWithPriority UserNamePriority "N" -- variable for norm
+  clp <- TVar <$> newTVarWithPriority UserNamePriority "C" -- variable for clip
   unify (l :\\: "Argument of `size` must be a matrix") mt (NoFun (DMMat nrm clp nv mv τ))
 
   mscale zeroId
@@ -838,8 +838,8 @@ checkSen' scope (Located l (Length m)) = do
   nv <- svar <$> newSVarWithPriority UserNamePriority "n"
   τ <- newVar
 
-  nrm <- newVar -- variable for norm
-  clp <- newVar -- variable for clip
+  nrm <- TVar <$> newTVarWithPriority UserNamePriority "N" -- variable for norm
+  clp <- TVar <$> newTVarWithPriority UserNamePriority "C" -- variable for clip
   unify (l :\\: "Arguemtn of `length` must be a vector.") mt (NoFun (DMVec nrm clp nv τ))
 
   mscale zeroId
@@ -852,7 +852,7 @@ checkSen' scope (Located l (ClipM c m)) = do
   τb <- checkSens scope m -- check the matrix
 
   -- variables for norm and clip parameters and dimension
-  clp <- newVar
+  clp <- TVar <$> newTVarWithPriority UserNamePriority "C"
   n <- svar <$> newSVarWithPriority UserNamePriority "n"
 
   -- variable for vector kind
@@ -877,8 +877,8 @@ checkSen' scope (Located l (ConvertM nrm m)) = do
   τb <- checkSens scope m <* mscale s -- check the matrix
 
   -- variables for input norm and clip parameters, dimension and element type
-  nrm_in <- newVar
-  clp <- newVar
+  nrm_in <- TVar <$> newTVarWithPriority UserNamePriority "N"
+  clp <- TVar <$> newTVarWithPriority UserNamePriority "C"
   n <- svar <$> newSVarWithPriority UserNamePriority "n"
   t <- newVar
 
@@ -936,8 +936,8 @@ checkSen' scope (Located l (UndiscM m)) = do
   τb <- checkSens scope m -- check the matrix
 
   -- variables for norm and clip parameters and dimension
-  nrm <- newVar
-  clp <- newVar -- this is a norm, because we do not accept
+  nrm <- TVar <$> newTVarWithPriority UserNamePriority "N"
+  clp <- TVar <$> newTVarWithPriority UserNamePriority "C" -- this is a norm, because we do not accept
                 -- the unbounded clip value
   n <- newVar
   
@@ -967,7 +967,7 @@ checkSen' (Transpose m) scope = do
 
       -- variables for norm and clip parameters and dimension
       τ <- newVar
-      clp <- newVar
+      clp <- TVar <$> newTVarWithPriority UserNamePriority "C"
       n <- newVar
       m <- newVar
 
@@ -993,8 +993,8 @@ checkSen' scope  (Located l (Index m i j)) = do
 
       -- variables for element type, norm and clip parameters and dimension
       τ <- newVar
-      nrm <- newVar
-      clp <- newVar
+      nrm <- TVar <$> newTVarWithPriority UserNamePriority "N"
+      clp <- TVar <$> newTVarWithPriority UserNamePriority "C"
       n <- svar <$> newSVarWithPriority UserNamePriority "n"
       m <- svar <$> newSVarWithPriority UserNamePriority "m"
 
@@ -1022,8 +1022,8 @@ checkSen' scope (Located l (VIndex v i))  = do
 
       -- variables for element type, norm and clip parameters and dimension
       τ <- newVar
-      nrm <- newVar
-      clp <- newVar
+      nrm <- TVar <$> newTVarWithPriority UserNamePriority "N"
+      clp <- TVar <$> newTVarWithPriority UserNamePriority "C"
       n <- svar <$> newSVarWithPriority UserNamePriority "n"
 
       -- set vector type
@@ -1047,8 +1047,8 @@ checkSen' scope (Located l (Row m i)) = do
 
       -- variables for element type, norm and clip parameters and dimension
       τ <- newVar
-      nrm <- newVar
-      clp <- newVar
+      nrm <- TVar <$> newTVarWithPriority UserNamePriority "N"
+      clp <- TVar <$> newTVarWithPriority UserNamePriority "C"
       n <- svar <$> newSVarWithPriority UserNamePriority "n"
       m <- svar <$> newSVarWithPriority UserNamePriority "m"
 
@@ -1068,8 +1068,8 @@ checkSen' scope (Located l (SubGrad ps gs)) = do
 
       -- variables for element types, norm and clip parameters and dimension
       τgs <- newVar
-      nrm <- newVar
-      clp <- newVar
+      nrm <- TVar <$> newTVarWithPriority UserNamePriority "N"
+      clp <- TVar <$> newTVarWithPriority UserNamePriority "C"
       m <- svar <$> newSVarWithPriority UserNamePriority "m"
 
       -- set argument types
@@ -1097,8 +1097,8 @@ checkSen' scope term@(Located l (ScaleGrad scalar grad)) = do
 
   -- Create variables for the matrix type
   -- (norm and clip parameters and dimension)
-  nrm <- newVar
-  clp <- newVar
+  nrm <- TVar <$> newTVarWithPriority UserNamePriority "N"
+  clp <- TVar <$> newTVarWithPriority UserNamePriority "C"
   m <- svar <$> newSVarWithPriority UserNamePriority "m"
 
   -- infer the types of the scalar and the gradient
@@ -1141,8 +1141,8 @@ checkSen' scope (Located l (ZeroGrad m)) = do
 
    -- variables for element type, dimension, result norm and clip parameters
    n <- svar <$> newSVarWithPriority UserNamePriority "n"
-   nrm <- newVar
-   clp <- newVar -- actually variable, as all entries are zero
+   nrm <- TVar <$> newTVarWithPriority UserNamePriority "N"
+   clp <- TVar <$> newTVarWithPriority UserNamePriority "C" -- actually variable, as all entries are zero
 
    -- input must be a model
    unify (l :\\: "Input for `zero_gradient` must be a model") tm (NoFun (DMModel n))
@@ -1163,9 +1163,9 @@ checkSen' scope term@(Located l (SumGrads g1 g2)) = do
 
   -- Create variables for the gradient type
   -- (norm and clip parameters and dimension)
-  nrm <- newVar
-  clp1 <- newVar
-  clp2 <- newVar
+  nrm <- TVar <$> newTVarWithPriority UserNamePriority "N"
+  clp1 <- TVar <$> newTVarWithPriority UserNamePriority "C"
+  clp2 <- TVar <$> newTVarWithPriority UserNamePriority "C"
   m <- svar <$> newSVarWithPriority UserNamePriority "m"
 
   -- infer the types of the scalar and the gradient
@@ -1230,8 +1230,8 @@ checkSen' scope term@(Located l (MakeVec m)) = do
 
   -- variables for element type, norm and clip parameters and dimension
   τ <- newVar
-  nrm <- newVar
-  clp <- newVar
+  nrm <- TVar <$> newTVarWithPriority UserNamePriority "N"
+  clp <- TVar <$> newTVarWithPriority UserNamePriority "C"
   cols <- svar <$> newSVarWithPriority UserNamePriority "n"
 
   -- set 1-row matrix type
@@ -1252,8 +1252,8 @@ checkSen' scope term@(Located l (MakeRow m)) = do
 
   -- variables for element type, norm and clip parameters and dimension
   τ <- newVar
-  nrm <- newVar
-  clp <- newVar
+  nrm <- TVar <$> newTVarWithPriority UserNamePriority "N"
+  clp <- TVar <$> newTVarWithPriority UserNamePriority "C"
   cols <- svar <$> newSVarWithPriority UserNamePriority "m"
 
   -- set 1-row matrix type
@@ -1588,8 +1588,8 @@ checkPri' scope (Located l (AboveThresh qs e d t)) = do
       let mt  = checkSens scope t  <* mtruncateP inftyP
 
       n <- newVar -- number of queries
-      nrm <- newVar -- norm of query vector
-      clp <- newVar -- clip of query vector
+      nrm <- TVar <$> newTVarWithPriority UserNamePriority "N" -- norm of query vector
+      clp <- TVar <$> newTVarWithPriority UserNamePriority "C" -- clip of query vector
 
       (τqs, (τe, τd, τt)) <- msumTup (mqs, msum3Tup (me, md, mt))
 
@@ -1845,7 +1845,7 @@ checkPri' scope term@(Located l (SmpLet xs (Located l2 (Sample n m1_in m2_in)) t
       (((tn,pn), (tm1,pm1), (tm2,pm2)), (ttail, (t1, (e1,d1)), (t2, (e2,d2)))) <- msumTup (msum, mtail)
       
       -- variables for clip parameter, dimensions and number of samples (m2)
-      clp <- newVar
+      clp <- TVar <$> newTVarWithPriority UserNamePriority "C"
       m1 <- svar <$> newSVarWithPriority UserNamePriority "m"
       m2 <- svar <$> newSVarWithPriority UserNamePriority "m"
       n1 <- svar <$> newSVarWithPriority UserNamePriority "n"
@@ -1896,10 +1896,10 @@ checkPri' scope (Located l (PFoldRows f acc m₁ m₂)) = do
     ηm <- svar <$> newSVarWithPriority UserNamePriority "m"
     ηn₁ <- svar <$> newSVarWithPriority UserNamePriority "n"
     ηn₂ <- svar <$> newSVarWithPriority UserNamePriority "n"
-    l₁ <- newVar
-    l₂ <- newVar
-    c₁ <- newVar
-    c₂ <- newVar
+    l₁ <- TVar <$> newTVarWithPriority UserNamePriority "N"
+    l₂ <- TVar <$> newTVarWithPriority UserNamePriority "N"
+    c₁ <- TVar <$> newTVarWithPriority UserNamePriority "C"
+    c₂ <- TVar <$> newTVarWithPriority UserNamePriority "C"
     let mf = checkSens scope f <* mtruncateP inftyP
     let macc = checkSens scope acc <* mtruncateP inftyP
     let mm₁ = checkSens scope m₁ <* mtruncateP (ε, δ)
