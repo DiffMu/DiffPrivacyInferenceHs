@@ -649,6 +649,7 @@ type TypeCtxSP = Either (TypeCtx SensitivityK) (TypeCtx PrivacyK)
 
 data SolvingEvent =
   Event_ConstraintDischarged IxSymbol
+  | Event_ConstraintMarkedFailed IxSymbol
   | Event_ConstraintUpdated IxSymbol String
   | Event_ConstraintCreated IxSymbol String
   | Event_SubstitutionAdded String
@@ -659,9 +660,10 @@ instance Show SolvingEvent where
   show (Event_ConstraintCreated name constr) = "CREATE " <> show name <> " : " <> constr
   show (Event_ConstraintUpdated name constr) = "UPDATE " <> show name <> " : " <> constr
   show (Event_ConstraintDischarged name)     = "DISCHARGE " <> show name
+  show (Event_ConstraintMarkedFailed name)   = "MARK FAIL " <> show name
   show (Event_SubstitutionAdded sub)         = "SUB " <> sub
   show (Event_ConstraintSetCreated)          = "CREATE CONSTR_SET"
-  show (Event_ConstraintSetMerged constrs)    = "MERGE CONSTR_SET : {" <> intercalate ", " (show <$> constrs) <> "}"
+  show (Event_ConstraintSetMerged constrs)   = "MERGE CONSTR_SET : {" <> intercalate ", " (show <$> constrs) <> "}"
 
 
 data Watcher = Watcher Changed
@@ -703,6 +705,7 @@ data MetaCtx m = MetaCtx
     _sensSubs :: Subs SVarOf SensitivityOf,
     _typeSubs :: Subs TVarOf DMTypeOf,
     _constraints :: ConstraintCtx m,
+    _failedConstraints :: Ctx IxSymbol (ConstraintWithMessage m),
     _userVars :: UserVars,
     -- cached state
     _fixedTVars :: Ctx (SingSomeK TVarOf) [IxSymbol]
@@ -799,7 +802,7 @@ instance Monad m => MonadLog (TCT m) where
 
 
 instance Show m => Show (MetaCtx m) where
-  show (MetaCtx s t n sσ tσ cs (UserVars uvs) fixedT) =
+  show (MetaCtx s t n sσ tσ cs failedCs (UserVars uvs) fixedT) =
        "- sens vars: " <> show s <> "\n"
     <> "- type vars: " <> show t <> "\n"
     <> "- name vars: " <> show n <> "\n"
@@ -808,6 +811,7 @@ instance Show m => Show (MetaCtx m) where
     <> "- fixed TVars: " <> show fixedT <> "\n"
     <> "- user-chosen vars: " <> show uvs <> "\n"
     <> "- constraints:\n" <> show cs <> "\n"
+    <> "- failed constraints:\n" <> show failedCs <> "\n"
 
 instance Show Watcher where
   show (Watcher changed) = show changed
@@ -966,6 +970,17 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
 
     -- log this as event
     tcstate.solvingEvents %= (Event_ConstraintDischarged name :)
+
+  markFailedConstraint name = do
+    val <- getValue name <$> use (meta.constraints.anncontent.topctx)
+    case val of
+      Nothing -> internalError $ "Expected constraint " <> show name <> " to exist."
+      Just val -> do
+        meta.constraints.anncontent.topctx %= (deleteValue name)
+        meta.failedConstraints %= (setValue name val)
+
+        -- log this as event
+        tcstate.solvingEvents %= (Event_ConstraintMarkedFailed name :)
 
   failConstraint name = do
     (AnnNameCtx n cs) <- use (meta.constraints)

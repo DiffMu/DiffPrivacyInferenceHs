@@ -100,6 +100,7 @@ class (Monad t) => MonadConstraint isT t | t -> isT where
   getUnsolvedConstraintMarkNormal :: [SolvingMode] -> t (Maybe (IxSymbol , Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT, SolvingMode, DMPersistentMessage t))
   nubConstraints :: t ()
   dischargeConstraint :: IxSymbol -> t ()
+  markFailedConstraint :: IxSymbol -> t ()
   failConstraint :: IxSymbol -> t ()
   updateConstraint :: IxSymbol -> Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT -> t ()
   openNewConstraintSet :: t ()
@@ -236,7 +237,7 @@ solveAllConstraints nt modes = withLogLocation "Constr" $ do
       -- logPrintSubstitutions
 
       catchAndPersist (solve mode name constr) $ \msg -> do
-        dischargeConstraint name
+        markFailedConstraint name
         let msg' = "The constraint" :<>: name :<>: ":" :<>: constr :\\:
                   "could not be solved:"
                   :-----:

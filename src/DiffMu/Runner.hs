@@ -141,16 +141,24 @@ typecheckFromJExprWithPrinter printer logoptions term rawsource = do
 typecheckFromJExpr_Simple :: JExpr -> RawSource -> IO ()
 typecheckFromJExpr_Simple term rawsource = do
   let printer (ty, full) =
-        let cs = runReader (showLocated (_constraints (_meta full))) rawsource
-            cstring = case cs of
-                           "[]" -> ""
-                           _ -> "Constraints:\n" <> cs
+        let cs = _anncontent (_constraints (_meta full))
+            pcs = runReader (showLocated cs) rawsource
+            cstring = case isEmptyDict cs of
+                           True -> ""
+                           _ -> "Constraints:\n" <> pcs
+            fcs = (_failedConstraints (_meta full))
+            pfcs = runReader (showLocated fcs) rawsource
+            fcstring = case isEmptyDict fcs of
+                           True -> ""
+                           _ -> red "CHECKING FAILED" <> ": The following constraints are not satisfiable:\n"
+                                <> pfcs
         in do
            "\n---------------------------------------------------------------------------\n"
            <> "Type:\n" <> runReader (showLocated ty) rawsource
            <> "\n" <> T.pack (showPretty (_userVars (_meta full)))
            <> "\n---------------------------------------------------------------------------\n"
-           <> cstring
+           <> cstring <> "\n"
+           <> fcstring
   typecheckFromJExprWithPrinter printer (DontShowLog) term rawsource
 
 typecheckFromJExpr_Detailed :: JExpr -> RawSource -> IO ()
