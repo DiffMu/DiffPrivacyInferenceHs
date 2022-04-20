@@ -335,10 +335,9 @@ showFunPrettyShort marker args ret =  "(" <> intercalate ", " (fmap showArgPrett
 showArgPrettyLong :: (ShowPretty a, ShowPretty b) => (a :@ b) -> String
 showArgPrettyLong (a :@ b) =
   let ty = "- " <> indentAfterFirstWith "  " (showPretty a) 
-  in appendDifferentIfLastIsLong ty 3 20
+  in appendDifferentIfLastIsLong ty 2 20
        ("@" <> showPretty b <> "\n")
        ("\n"
-      --  <> "|\n"
        <> "    @ " <> showPretty b <> "\n")
 
 showFunPrettyLong :: (ShowPretty a, ShowPretty b) => String -> [(a :@ b)] -> a -> String
