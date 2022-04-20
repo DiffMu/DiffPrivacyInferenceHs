@@ -52,7 +52,7 @@ newtype IsTypeOpResult a = IsTypeOpResult a
 --
 -- Having the generic type parameter a allows us to treat all constraints equally,
 -- in cases where we are writing generic code for dealing with any kind of constraints.
--- In order for this to work, we have to proof that our "constraint type" is nothing
+-- In order for this to work, we have to prove that our "constraint type" is nothing
 -- but a wrapper around `a`. For this, we show that it is an instance of the `TCConstraint`
 -- type class, for example:
 instance TCConstraint IsTypeOpResult where
@@ -87,7 +87,7 @@ instance TCConstraint IsTypeOpResult where
 --          That is, for the class `MonadDMTC`.
 --
 -- 2. While typechecking (and/or solving constraints) we sometimes have to add new constraints.
---    The typeclass `MonadConstraint isT t` expresses that, the monad `t` allows us to
+--    The typeclass `MonadConstraint isT t` expresses that the monad `t` allows us to
 --    add, discharge or update constraints which are solvable by monads in the class `isT`.
 --    All monads in the `MonadDMTC` class are instances of `MonadConstraint MonadDMTC`.
 --
@@ -168,8 +168,9 @@ instance TCConstraint IsChoice where
   constr = IsChoice
   runConstr (IsChoice c) = c
 
-instance (ShowPretty a, ShowPretty b) => ShowPretty (IsChoice (a,b)) where
-    showPretty (IsChoice (a,b)) = "Function types " <> showPretty b <> " are required to exist among the following choices: " <> showPretty a
+instance (ShowPretty a, ShowPretty b) => ShowPretty (IsChoice (a,[b])) where
+    showPretty (IsChoice (a,b)) = "Function types " <> newlineIndentIfLong (prettyEnumVertical . fmap showPretty $ b)
+                                  <> " are required to exist among the following choices: " <> newlineIndentIfLong (showPretty a)
 
 newtype IsFunctionArgument a = IsFunctionArgument a deriving (Show, Eq)
 
@@ -178,7 +179,9 @@ instance TCConstraint IsFunctionArgument where
   runConstr (IsFunctionArgument c) = c
 
 instance (ShowPretty a) => ShowPretty (IsFunctionArgument (a,a)) where
-    showPretty (IsFunctionArgument (a,b)) = "Function type " <> showPretty b <> " was used in functin application where function type " <> showPretty a <> " was expected."
+    showPretty (IsFunctionArgument (a,b)) = "Function type " <> newlineIndentIfLong (showPretty b)
+                                            <> "was used in a function application where function type " <> newlineIndentIfLong (showPretty a)
+                                            <> "was expected."
 
 -------------------------------------------------------------------
 -- Julia Types (solver in Typecheck/Constraint/IsJuliaEqual.hs)

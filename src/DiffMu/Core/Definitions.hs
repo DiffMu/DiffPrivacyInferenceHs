@@ -355,7 +355,8 @@ showFunPretty marker args ret =
       False -> showFunPrettyLong marker args ret
 
 showPrettyEnumVertical :: (ShowPretty a) => [a] -> String
-showPrettyEnumVertical as = "{\n" <> intercalate "\n,\n" (fmap (indentWith "|   " . showPretty) as) <> "\n}"
+showPrettyEnumVertical = prettyEnumVertical . fmap showPretty
+  -- "{\n" <> intercalate "\n,\n" (fmap (indentWith "|   " . showPretty) as) <> "\n}"
 
 instance ShowPretty (Sensitivity) where
   showPretty s = show s

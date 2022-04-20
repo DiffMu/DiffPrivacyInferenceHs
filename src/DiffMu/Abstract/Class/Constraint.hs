@@ -116,19 +116,16 @@ class (Monad t) => MonadConstraint isT t | t -> isT where
 inheritanceMessageFromName name = do
     (c,msg) <- getConstraint name
     return
-      (("Inherited from the constraint:" :: Text) :\\:
-       ("  " :: Text) :<>: c :\\:
+      (("Inherited from the constraint: " :: Text) :\\->:
+       (c :\\:
        msg
+       )
       )
 
 addConstraintNoMessage solvable = addConstraint solvable ()
 addConstraintFromName name solvable = do
-    (c,msg) <- getConstraint name
-    addConstraint solvable
-      (("Inherited from the constraint:" :: Text) :\\:
-       ("  " :: Text) :<>: c :\\:
-       msg
-      )
+    msg <- inheritanceMessageFromName name
+    addConstraint solvable msg
 
 addConstraintFromNameMaybe (Just name) = addConstraintFromName name
 addConstraintFromNameMaybe (Nothing)   = addConstraintNoMessage

@@ -65,6 +65,9 @@ indentAfterFirstWith indentText s =
       [] -> ""
       (l:ls) -> intercalateS "\n" (l : fmap (indentText <>) ls)
 
+prettyEnumVertical :: StringLike s => [s] -> s
+prettyEnumVertical as = "{\n" <> intercalateS "\n,\n" (fmap (indentWith "|   ") as) <> "\n}"
+
 
 --------------------------------------------------------------------------
 -- Locations
