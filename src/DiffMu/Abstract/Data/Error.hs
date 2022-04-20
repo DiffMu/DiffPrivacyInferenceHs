@@ -30,7 +30,12 @@ newlineIndentIfLong xs = if length (linesS xs) <= 1
 parenIfMultiple :: StringLike t => t -> t
 parenIfMultiple xs = if length (wordsS xs) <= 1
   then xs
-  else "(" <> xs <> ")"
+  else let sxs = toStringS xs 
+           firstChar = sxs !! 0
+           lastChar = reverse sxs !! 0
+       in if (firstChar == '(' && lastChar == ')')
+          then xs
+          else "(" <> xs <> ")"
 
 -- parenIfMultiple xs = case ' ' `elem` xs of
 --   False -> xs
@@ -49,13 +54,16 @@ braceIndent s = "\n{\n" <> unlinesS (fmap ("  " <>) (linesS s)) <> "}"
 indent :: StringLike s => s -> s
 indent s = unlinesS (fmap ("  " <>) (linesS s))
 
-indentAfterFirst :: StringLike s => Int -> s -> s
-indentAfterFirst n s =
+indentWith :: StringLike s => s -> s -> s
+indentWith indentText s = intercalateS "\n" (fmap (indentText <>) (linesS s))
+
+
+indentAfterFirstWith :: StringLike s => s -> s -> s
+indentAfterFirstWith indentText s =
   let ls = linesS s
-      spaces = fromStringS $ take n (repeat ' ')
   in case ls of
       [] -> ""
-      (l:ls) -> unlinesS (l : fmap (spaces <>) ls)
+      (l:ls) -> intercalateS "\n" (l : fmap (indentText <>) ls)
 
 
 --------------------------------------------------------------------------

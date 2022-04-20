@@ -25,7 +25,6 @@ import Data.HashMap.Strict
 import           Foreign.C.String
 import           Foreign.C.Types
 import           Foreign.Ptr
-import DiffMu.Abstract.Data.Error (indentAfterFirst)
 
 ---------------------------------------------------------
 -- Definition of Meta variables
@@ -313,6 +312,19 @@ instance Show (DMTypeOf k) where
   show (BlackBox n) = "BlackBox [" <> show n <> "]"
 
 
+
+appendDifferentIfLastIsLong :: StringLike s => s -> Int -> Int -> s -> s -> s
+appendDifferentIfLastIsLong main verticalToSwitch lengthToSwitch shortExtra longExtra =
+  let lastLength = case reverse (linesS main) of
+                     [] -> 0
+                     (l:ls) -> lengthS l
+  in case length (linesS main) > verticalToSwitch of
+       True  -> main <> longExtra
+       False -> case lastLength <= lengthToSwitch of
+                  True  -> main <> shortExtra
+                  False -> main <> longExtra
+                     
+
 showArgPrettyShort :: (ShowPretty a, ShowPretty b) => (a :@ b) -> String
 showArgPrettyShort (a :@ b) = showPretty a <> "@" <> parenIfMultiple (showPretty b)
 
@@ -321,15 +333,21 @@ showFunPrettyShort marker args ret =  "(" <> intercalate ", " (fmap showArgPrett
                                       <> " " <> marker <> " " <> (showPretty ret)
 
 showArgPrettyLong :: (ShowPretty a, ShowPretty b) => (a :@ b) -> String
-showArgPrettyLong (a :@ b) = "-  " <> indentAfterFirst 3 (showPretty a) <> "\n"
-                           <> "    @ " <> showPretty b <> "\n"
+showArgPrettyLong (a :@ b) =
+  let ty = "| -  " <> indentAfterFirstWith "|    " (showPretty a) 
+  in appendDifferentIfLastIsLong ty 3 20
+       ("@" <> showPretty b <> "\n")
+       ("\n"
+      --  <> "|\n"
+       <> "|    @ " <> showPretty b <> "\n")
 
 showFunPrettyLong :: (ShowPretty a, ShowPretty b) => String -> [(a :@ b)] -> a -> String
 showFunPrettyLong marker args ret =
-  let text = intercalate "\n" (fmap showArgPrettyLong args)
+  let text = intercalate "|\n" (fmap showArgPrettyLong args)
+             <> "|\n"
              <> "--------------------------\n"
              <> " " <> marker <> " " <> (showPretty ret)
-  in indent text
+  in text
 
 showFunPretty :: (ShowPretty a, ShowPretty b) => String -> [(a :@ b)] -> a -> String
 showFunPretty marker args ret =
