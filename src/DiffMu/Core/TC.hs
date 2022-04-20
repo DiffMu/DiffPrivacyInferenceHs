@@ -1281,8 +1281,8 @@ newSVar :: forall k e t. (SingI k, MonadDMTC t, Typeable k) => Text -> t (SVarOf
 newSVar = newSVarWithPriority GeneratedNamePriority
 
 newPVar = do
-   p1 ::Sensitivity <- newVar
-   p2 :: Sensitivity <- newVar
+   p1 :: Sensitivity <- svar <$> newSVarWithPriority UserNamePriority "ε"
+   p2 :: Sensitivity <- svar <$> newSVarWithPriority UserNamePriority "δ"
    return (p1, p2)
 
 newTeVar :: (MonadDMTC m) => Text -> m (TeVar)

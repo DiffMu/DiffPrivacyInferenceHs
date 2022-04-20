@@ -103,7 +103,7 @@ instance ShowDict k v (MonCom v k) where
     let d' = H.toList d
     in case d' of
       [] -> emptycase
-      _  -> intercalateS comma ((\(k,v) -> merge k v) <$> d')
+      _  -> intercalateS comma (sort ((\(k,v) -> merge k v) <$> d'))
 
 
 

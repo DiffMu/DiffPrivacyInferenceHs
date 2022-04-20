@@ -120,7 +120,7 @@ instance HasVarPriority SymbolOf where
 -------------------------------------------------------------------------
 -- StringLike
 
-class (IsString t, Semigroup t) => StringLike t where
+class (IsString t, Semigroup t, Ord t) => StringLike t where
   wordsS :: t -> [t]
   linesS :: t -> [t]
   unlinesS :: [t] -> t
