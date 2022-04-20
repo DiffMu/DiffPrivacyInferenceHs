@@ -1467,8 +1467,8 @@ checkPri' scope term@(Located l (Gauss rp εp δp f)) =
       τf <- df
       -- interesting input variables must have sensitivity <= r
       restrictInteresting r
-        ("In the gauss call" :\\->: term :\\: 
-         "All variables which are *NOT* annotated as 'Static' and are used in the body" :\\->: f :\\:
+        (l :\\:
+         "Gauss: All variables which are *NOT* annotated as 'Static' and are used in the body" :\\->: f :\\:
          "Have to have sensitivity <= " :<>: r
         )
       -- interesting output variables are set to (ε, δ), the rest is truncated to ∞
@@ -1536,8 +1536,8 @@ checkPri' scope term@(Located l (Laplace rp εp f)) =
       τf <- df
       -- interesting input variables must have sensitivity <= r
       restrictInteresting r
-        ("In the laplace call" :\\->: term :\\: 
-         "All variables which are *NOT* annotated as 'Static' and are used in the body" :\\->: f :\\:
+        (l :\\: 
+         "Laplace: All variables which are *NOT* annotated as 'Static' and are used in the body" :\\->: f :\\:
          "Have to have sensitivity <= " :<>: r
         )
       -- interesting output variables are set to (ε, δ), the rest is truncated to ∞
@@ -1641,8 +1641,8 @@ checkPri' scope term@(Located l (Exponential rp εp xs f)) = do
       -- interesting input variables must have sensitivity <= r
       --
       restrictInteresting r
-        ("In the exponential call" :\\->: term :\\: 
-         "All variables which are *NOT* annotated as 'Static' and are used in the body" :\\->: f :\\:
+        (l :\\:
+         "Exponential: All variables which are *NOT* annotated as 'Static' and are used in the body" :\\->: f :\\:
          "Have to have sensitivity <= " :<>: r
         )
         
