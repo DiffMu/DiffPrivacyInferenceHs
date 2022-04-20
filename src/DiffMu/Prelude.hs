@@ -125,18 +125,27 @@ class (IsString t, Semigroup t) => StringLike t where
   linesS :: t -> [t]
   unlinesS :: [t] -> t
   intercalateS :: t -> [t] -> t
+  fromStringS :: String -> t
+  toStringS :: t -> String
+  lengthS :: t -> Int
 
 instance StringLike Text where
   wordsS = T.words
   linesS = T.lines
   unlinesS = T.unlines
   intercalateS = T.intercalate
+  fromStringS = T.pack
+  toStringS = T.unpack
+  lengthS = T.length
 
 instance StringLike String where
   wordsS = S.words
   linesS = S.lines
   unlinesS = S.unlines
   intercalateS = intercalate
+  fromStringS = \a -> a
+  toStringS = \a -> a
+  lengthS = length
 
 -------------------------------------------------------------------------
 -- ShowLocated

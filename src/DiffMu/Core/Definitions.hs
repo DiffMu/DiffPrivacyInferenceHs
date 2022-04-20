@@ -311,17 +311,51 @@ instance Show (DMTypeOf k) where
   show (x :∧: y) = "(" <> show x <> "∧" <> show y <> ")"
   show (BlackBox n) = "BlackBox [" <> show n <> "]"
 
-showArgPretty :: (ShowPretty a, ShowPretty b) => (a :@ b) -> String
-showArgPretty (a :@ b) = "-  " <> showPretty a <> "\n"
-                      <> "    @ " <> showPretty b <> "\n"
+
+
+appendDifferentIfLastIsLong :: StringLike s => s -> Int -> Int -> s -> s -> s
+appendDifferentIfLastIsLong main verticalToSwitch lengthToSwitch shortExtra longExtra =
+  let lastLength = case reverse (linesS main) of
+                     [] -> 0
+                     (l:ls) -> lengthS l
+  in case length (linesS main) > verticalToSwitch of
+       True  -> main <> longExtra
+       False -> case lastLength <= lengthToSwitch of
+                  True  -> main <> shortExtra
+                  False -> main <> longExtra
+                     
+
+showArgPrettyShort :: (ShowPretty a, ShowPretty b) => (a :@ b) -> String
+showArgPrettyShort (a :@ b) = showPretty a <> "@" <> parenIfMultiple (showPretty b)
+
+showFunPrettyShort :: (ShowPretty a, ShowPretty b) => String -> [(a :@ b)] -> a -> String
+showFunPrettyShort marker args ret =  "(" <> intercalate ", " (fmap showArgPrettyShort args) <> ")"
+                                      <> " " <> marker <> " " <> (showPretty ret)
+
+showArgPrettyLong :: (ShowPretty a, ShowPretty b) => (a :@ b) -> String
+showArgPrettyLong (a :@ b) =
+  let ty = "- " <> indentAfterFirstWith "  " (showPretty a) 
+  in appendDifferentIfLastIsLong ty 2 20
+       ("@" <> showPretty b <> "\n")
+       ("\n"
+       <> "    @ " <> showPretty b <> "\n")
+
+showFunPrettyLong :: (ShowPretty a, ShowPretty b) => String -> [(a :@ b)] -> a -> String
+showFunPrettyLong marker args ret =
+  let text = intercalate "\n" (fmap showArgPrettyLong args)
+             <> "--------------------------\n"
+             <> " " <> marker <> " " <> (showPretty ret)
+  in text
 
 showFunPretty :: (ShowPretty a, ShowPretty b) => String -> [(a :@ b)] -> a -> String
-showFunPretty marker args ret = intercalate "\n" (fmap showArgPretty args)
-                         <> "--------------------------\n"
-                         <> " " <> marker <> " " <> (showPretty ret)
+showFunPretty marker args ret =
+  let shortResult = showFunPrettyShort marker args ret
+  in case length shortResult < 40 of
+      True  -> shortResult
+      False -> showFunPrettyLong marker args ret
 
 showPrettyEnumVertical :: (ShowPretty a) => [a] -> String
-showPrettyEnumVertical as = "{\n" <> intercalate "\n,\n" (fmap (indent . showPretty) as) <> "\n}"
+showPrettyEnumVertical as = "{\n" <> intercalate "\n,\n" (fmap (indentWith "|   " . showPretty) as) <> "\n}"
 
 instance ShowPretty (Sensitivity) where
   showPretty s = show s
