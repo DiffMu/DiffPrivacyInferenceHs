@@ -49,6 +49,13 @@ braceIndent s = "\n{\n" <> unlinesS (fmap ("  " <>) (linesS s)) <> "}"
 indent :: StringLike s => s -> s
 indent s = unlinesS (fmap ("  " <>) (linesS s))
 
+indentAfterFirst :: StringLike s => Int -> s -> s
+indentAfterFirst n s =
+  let ls = linesS s
+      spaces = fromStringS $ take n (repeat ' ')
+  in case ls of
+      [] -> ""
+      (l:ls) -> unlinesS (l : fmap (spaces <>) ls)
 
 
 --------------------------------------------------------------------------
