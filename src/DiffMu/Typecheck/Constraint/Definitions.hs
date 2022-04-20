@@ -42,7 +42,7 @@ import Data.HashMap.Strict (HashMap)
 --
 -- For example, we have:
 newtype IsTypeOpResult a = IsTypeOpResult a
-  deriving (Show, ShowPretty, Eq)
+  deriving (Show, Eq)
 --
 -- The idea is that `a` represents the data which is the actual content which needs
 -- to be solved by this constraint, and the type of the wrapper around it tells us
@@ -101,58 +101,84 @@ instance TCConstraint IsTypeOpResult where
 -- NOTE: The basic constraints definitions for equality/less-equal are located
 --       in Abstract.Class.Constraint.
 --       Here, also the definition of `Solvable` and `MonadConstraint` is to be found.
---
+
+instance ShowPretty a => ShowPretty (IsTypeOpResult (a)) where
+    showPretty (IsTypeOpResult (a)) = showPretty a
+        
 --
 --
 
 -- Equal (solver in Core/Unification.hs):
 newtype IsEqual a = IsEqual a
-  deriving (Show, ShowPretty, Eq)
+  deriving (Show, Eq)
 
 instance TCConstraint IsEqual where
   constr = IsEqual
   runConstr (IsEqual c) = c
 
----- Less Equal (subtyping, solver in Typecheck/Subtyping.hs)
+instance ShowPretty a => ShowPretty (IsEqual (a,a)) where
+    showPretty (IsEqual (a,b)) = showPretty a <> " and " <> showPretty b <> " must be equal."
+        
+-------------------------------------------------------------------
+-- Subtyping (solver in Typecheck/Subtyping.hs)
+-------------------------------------------------------------------
+
+---- Less Equal (both subtyping and sensitivity, actually. sensitivity version lives in Unification.hs)
 newtype IsLessEqual a = IsLessEqual a
-  deriving (Show, ShowPretty, Eq)
+  deriving (Show, Eq)
 
 instance TCConstraint IsLessEqual where
   constr = IsLessEqual
   runConstr (IsLessEqual c) = c
 
+instance ShowPretty a => ShowPretty (IsLessEqual (a,a)) where
+    showPretty (IsLessEqual (a,b)) = showPretty a <> " must be less or equal to " <> showPretty b
+        
 
 ---- Sups
-newtype IsSupremum a = IsSupremum a deriving (Show, ShowPretty, Eq)
+newtype IsSupremum a = IsSupremum a deriving (Show, Eq)
 
 instance TCConstraint IsSupremum where
   constr = IsSupremum
   runConstr (IsSupremum c) = c
 
+instance ShowPretty a => ShowPretty (IsSupremum ((a,a) :=: a)) where
+    showPretty (IsSupremum ((a,b) :=: c)) = "Type " <> showPretty c <> " is the supremum of types " <> showPretty a <> " and " <> showPretty b
+        
+
 ---- Infimum
-newtype IsInfimum a = IsInfimum a deriving (Show, ShowPretty, Eq)
+newtype IsInfimum a = IsInfimum a deriving (Show, Eq)
 
 instance TCConstraint IsInfimum where
   constr = IsInfimum
   runConstr (IsInfimum c) = c
+  
+instance ShowPretty a => ShowPretty (IsInfimum ((a,a) :=: a)) where
+    showPretty (IsInfimum ((a,b) :=: c)) = "Type " <> showPretty c <> " is the infimum of types " <> showPretty a <> " and " <> showPretty b
+        
 
 -------------------------------------------------------------------
 -- Function calls and choice resolution (solver in Typecheck/Constraint/IsFunctionArgument.hs)
 -------------------------------------------------------------------
 
 ---- Choices
-newtype IsChoice a = IsChoice a deriving (Show, ShowPretty, Eq)
+newtype IsChoice a = IsChoice a deriving (Show, Eq)
 
 instance TCConstraint IsChoice where
   constr = IsChoice
   runConstr (IsChoice c) = c
 
+instance (ShowPretty a, ShowPretty b) => ShowPretty (IsChoice (a,b)) where
+    showPretty (IsChoice (a,b)) = "Function types " <> showPretty b <> " are required to exist among the following choices: " <> showPretty a
 
-newtype IsFunctionArgument a = IsFunctionArgument a deriving (Show, ShowPretty, Eq)
+newtype IsFunctionArgument a = IsFunctionArgument a deriving (Show, Eq)
 
 instance TCConstraint IsFunctionArgument where
   constr = IsFunctionArgument
   runConstr (IsFunctionArgument c) = c
+
+instance (ShowPretty a) => ShowPretty (IsFunctionArgument (a,a)) where
+    showPretty (IsFunctionArgument (a,b)) = "Function type " <> showPretty b <> " was used in functin application where function type " <> showPretty a <> " was expected."
 
 -------------------------------------------------------------------
 -- Julia Types (solver in Typecheck/Constraint/IsJuliaEqual.hs)
@@ -162,22 +188,28 @@ instance TCConstraint IsFunctionArgument where
 -- set the a type to non-const, in case it's numeric or a tuple.
 --
 
-newtype IsNonConst a = IsNonConst a deriving (Show, ShowPretty, Eq)
+newtype IsNonConst a = IsNonConst a deriving (Show, Eq)
 
 instance TCConstraint IsNonConst where
   constr = IsNonConst
   runConstr (IsNonConst c) = c
+
+instance ShowPretty a => ShowPretty (IsNonConst (a,a)) where
+    showPretty (IsNonConst (a,b)) = "Type " <> showPretty b <> " is the non-static version of " <> showPretty a
 
 -------------------------------------------------------------------
 -- Mostly unify two types, but when encountering const / non-const
 -- things behave like subtyping.
 --
 
-newtype UnifyWithConstSubtype a = UnifyWithConstSubtype a deriving (Show, ShowPretty, Eq)
+newtype UnifyWithConstSubtype a = UnifyWithConstSubtype a deriving (Show, Eq)
 
 instance TCConstraint UnifyWithConstSubtype where
   constr = UnifyWithConstSubtype
   runConstr (UnifyWithConstSubtype c) = c
+
+instance ShowPretty a => ShowPretty (UnifyWithConstSubtype (a,a)) where
+    showPretty (UnifyWithConstSubtype (a,b)) = "Types " <> showPretty a <> " and " <> showPretty b <> " are equal except for static-ness, where the fist is a subtype of the second."
 
 -----------------------------------------------------------------
 -- Fake julia types
@@ -187,22 +219,27 @@ instance TCConstraint UnifyWithConstSubtype where
 -- we have a constraint which checks this by unifying after making variables non-const
 -- if possible.
 
-newtype IsJuliaEqual a = IsJuliaEqual a deriving (Show, ShowPretty,  Eq)
+newtype IsJuliaEqual a = IsJuliaEqual a deriving (Show, Eq)
 
 instance TCConstraint IsJuliaEqual where
   constr = IsJuliaEqual
   runConstr (IsJuliaEqual c) = c
 
+instance ShowPretty a => ShowPretty (IsJuliaEqual (a,a)) where
+    showPretty (IsJuliaEqual (a,b)) = "Types " <> showPretty a <> " and " <> showPretty b <> " describe the same julia type."
 
 ----------------------------------------------------------------
 -- Things that should be functions
 
-newtype IsFunction a = IsFunction a deriving (Show, ShowPretty, Eq)
+newtype IsFunction a = IsFunction a deriving (Show, Eq)
 
 instance TCConstraint IsFunction where
   constr = IsFunction
   runConstr (IsFunction c) = c
 
+instance (ShowPretty a, ShowPretty b) => ShowPretty (IsFunction (a,b)) where
+    showPretty (IsFunction (a,b)) = "Type " <> showPretty b <> " is a " <> showPretty a <> "-function."
+    
 -------------------------------------------------------------------
 -- Cheap Constraints (solver in Typecheck/Constraint/CheapConstraints.hs)
 -------------------------------------------------------------------
@@ -214,117 +251,146 @@ instance TCConstraint IsFunction where
 --
 
 newtype IsLess a = IsLess a
-  deriving (Show, ShowPretty, Eq)
+  deriving (Show, Eq)
 
 instance TCConstraint IsLess where
   constr = IsLess
   runConstr (IsLess c) = c
 
 
+instance ShowPretty a => ShowPretty (IsLess (a,a)) where
+    showPretty (IsLess (a,b)) = "Sensitivity " <> showPretty a <> " is less than sensitivity " <> showPretty b <> "."
+        
 
 -------------------------------------------------------------------
 -- set the a type to a variable const, in case it's numeric or a tuple.
 --
 
-newtype MakeConst a = MakeConst a deriving (Show, ShowPretty, Eq)
+newtype MakeConst a = MakeConst a deriving (Show, Eq)
 
 instance TCConstraint MakeConst where
   constr = MakeConst
   runConstr (MakeConst c) = c
 
-
+instance ShowPretty a => ShowPretty (MakeConst (a,b)) where
+    showPretty (MakeConst (a,_)) = "If type " <> showPretty a <> " is numeric or a tuple, it can become static."
+        
 
 ----------------------------------------------------------
 -- replacing all Numeric TVars by non-const
 
 
-newtype MakeNonConst a = MakeNonConst a deriving (Show, ShowPretty, Eq)
+newtype MakeNonConst a = MakeNonConst a deriving (Show, Eq)
 
 instance TCConstraint MakeNonConst where
   constr = MakeNonConst
   runConstr (MakeNonConst c) = c
 
-
+instance ShowPretty a => ShowPretty (MakeNonConst (a,b)) where
+    showPretty (MakeNonConst (a,_)) = "All Numeric types in " <> showPretty a <> " will be set non-static."
+        
 
 -------------------------------------------------------------------
 -- is it Loop or static Loop (i.e. is no of iterations const or not)
 
-newtype IsLoopResult a = IsLoopResult a deriving (Show, ShowPretty, Eq)
+newtype IsLoopResult a = IsLoopResult a deriving (Show, Eq)
 
 instance TCConstraint IsLoopResult where
   constr = IsLoopResult
   runConstr (IsLoopResult c) = c
 
+instance (ShowPretty a, ShowPretty b, ShowPretty c) => ShowPretty (IsLoopResult (a,b,(c,c,c))) where
+    showPretty (IsLoopResult (a,b,(c1,c2,c3))) = "Sensitivities " <> showPretty a <> " are dependant on whether number of iterations in "
+                                        <> showPretty c1 <> ":" <> showPretty c2 <> ":" <> showPretty c3 <> " is static. Loop body has sensitivity " <> showPretty b
 
 --------------------------------------------------
 -- is it gauss or mgauss?
 --
 
-newtype IsAdditiveNoiseResult a = IsAdditiveNoiseResult a deriving (Show, ShowPretty, Eq)
+newtype IsAdditiveNoiseResult a = IsAdditiveNoiseResult a deriving (Show, Eq)
 
 instance TCConstraint IsAdditiveNoiseResult where
   constr = IsAdditiveNoiseResult
   runConstr (IsAdditiveNoiseResult c) = c
 
-
+instance (ShowPretty a, ShowPretty b) => ShowPretty (IsAdditiveNoiseResult (a,b)) where
+    showPretty (IsAdditiveNoiseResult (a,b)) = "Type " <> showPretty a <> " is the result of an additive noise mechanism executed on " <> showPretty b
 
 --------------------------------------------------
 -- projecting of tuples
 
-newtype IsTProject a = IsTProject a deriving (Show, ShowPretty, Eq)
+newtype IsTProject a = IsTProject a deriving (Show, Eq)
 
 instance TCConstraint IsTProject where
   constr = IsTProject
   runConstr (IsTProject c) = c
 
+instance (ShowPretty a) => ShowPretty (IsTProject ((Int , a) :=: a)) where
+    showPretty (IsTProject ((i , t) :=: e)) = "Type " <> showPretty t <> " is a tuple whose " <> show i <> "-th entry has type " <> showPretty e
 
 --------------------------------------------------
 -- black boxes
 
-newtype IsBlackBox a = IsBlackBox a deriving (Show, ShowPretty, Eq)
+newtype IsBlackBox a = IsBlackBox a deriving (Show, Eq)
 
 instance TCConstraint IsBlackBox where
   constr = IsBlackBox
   runConstr (IsBlackBox c) = c
 
+instance (ShowPretty a, ShowPretty b) => ShowPretty (IsBlackBox (a,b)) where
+    showPretty (IsBlackBox (a,b)) = "Black box function " <> showPretty a <> " is applied to arguments " <> showPretty b
 
 
-newtype IsBlackBoxReturn a = IsBlackBoxReturn a deriving (Show, ShowPretty, Eq)
+
+newtype IsBlackBoxReturn a = IsBlackBoxReturn a deriving (Show, Eq)
 
 instance TCConstraint IsBlackBoxReturn where
   constr = IsBlackBoxReturn
   runConstr (IsBlackBoxReturn c) = c
+
+instance (ShowPretty a, ShowPretty b) => ShowPretty (IsBlackBoxReturn (a,b)) where
+    showPretty (IsBlackBoxReturn (a,b)) = "Type " <> showPretty a <> " is an argument of a black box, its sensitivity " <> showPretty b <> "can be set accordingly."
 
 
 
 --------------------------------------------------
 -- matrix or vector
 
-newtype IsVecOrMat a = IsVecOrMat a deriving (Show, ShowPretty, Eq)
+newtype IsVecOrMat a = IsVecOrMat a deriving (Show, Eq)
 
 instance TCConstraint IsVecOrMat where
   constr = IsVecOrMat
   runConstr (IsVecOrMat c) = c
 
+instance ShowPretty a => ShowPretty (IsVecOrMat (a)) where
+    showPretty (IsVecOrMat (a)) = "Type " <> showPretty a <> " must be a vector or matrix."
 
 
 --------------------------------------------------
 -- gradient or vector or 1d-matrix
 --
 
-newtype IsVecLike a = IsVecLike a deriving (Show, ShowPretty, Eq)
+newtype IsVecLike a = IsVecLike a deriving (Show, Eq)
 
 instance TCConstraint IsVecLike where
   constr = IsVecLike
   runConstr (IsVecLike c) = c
 
+
+instance ShowPretty a => ShowPretty (IsVecLike (a)) where
+    showPretty (IsVecLike (a)) = "Type " <> showPretty a <> " must be a vector, gradient or one-row matrix."
+
 --------------------------------------------------
 -- container norm conversion
 --
 
-newtype ConversionResult a = ConversionResult a deriving (Show, ShowPretty, Eq)
+newtype ConversionResult a = ConversionResult a deriving (Show, Eq)
 
 instance TCConstraint ConversionResult where
   constr = ConversionResult
   runConstr (ConversionResult c) = c
 
+
+instance (ShowPretty a, ShowPretty b) => ShowPretty (ConversionResult (a,a,b,b)) where
+    showPretty (ConversionResult (a,b,c,d)) = "Converted norm " <> showPretty a <> " to norm " <> showPretty b <> " on an " <> showPretty c <> "-row container, "
+                                        <> " incurring conversion penalty is " <> showPretty d
