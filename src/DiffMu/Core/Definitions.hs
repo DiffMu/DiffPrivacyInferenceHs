@@ -334,17 +334,16 @@ showFunPrettyShort marker args ret =  "(" <> intercalate ", " (fmap showArgPrett
 
 showArgPrettyLong :: (ShowPretty a, ShowPretty b) => (a :@ b) -> String
 showArgPrettyLong (a :@ b) =
-  let ty = "| -  " <> indentAfterFirstWith "|    " (showPretty a) 
+  let ty = "- " <> indentAfterFirstWith "  " (showPretty a) 
   in appendDifferentIfLastIsLong ty 3 20
        ("@" <> showPretty b <> "\n")
        ("\n"
       --  <> "|\n"
-       <> "|    @ " <> showPretty b <> "\n")
+       <> "    @ " <> showPretty b <> "\n")
 
 showFunPrettyLong :: (ShowPretty a, ShowPretty b) => String -> [(a :@ b)] -> a -> String
 showFunPrettyLong marker args ret =
-  let text = intercalate "|\n" (fmap showArgPrettyLong args)
-             <> "|\n"
+  let text = intercalate "\n" (fmap showArgPrettyLong args)
              <> "--------------------------\n"
              <> " " <> marker <> " " <> (showPretty ret)
   in text
@@ -357,7 +356,7 @@ showFunPretty marker args ret =
       False -> showFunPrettyLong marker args ret
 
 showPrettyEnumVertical :: (ShowPretty a) => [a] -> String
-showPrettyEnumVertical as = "{\n" <> intercalate "\n,\n" (fmap (indent . showPretty) as) <> "}"
+showPrettyEnumVertical as = "{\n" <> intercalate "\n,\n" (fmap (indentWith "|   " . showPretty) as) <> "\n}"
 
 instance ShowPretty (Sensitivity) where
   showPretty s = show s
