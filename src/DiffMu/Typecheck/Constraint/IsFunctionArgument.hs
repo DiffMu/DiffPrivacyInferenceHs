@@ -11,8 +11,7 @@ import DiffMu.Core.Symbolic
 import DiffMu.Core.Unification
 import DiffMu.Typecheck.JuliaType
 import Algebra.PartialOrd
-import DiffMu.Typecheck.Constraint.CheapConstraints
-import DiffMu.Typecheck.Constraint.IsJuliaEqual
+import DiffMu.Typecheck.Constraint.Definitions
 
 import Debug.Trace
 
@@ -36,12 +35,6 @@ import qualified Data.HashMap.Strict as H
 -- function application, with the callee being the expected type and the given being a function type from
 -- the arguments the callee is applied to to a type variable that will be determined upon resultion of the
 -- constraint.
-
-newtype IsFunctionArgument a = IsFunctionArgument a deriving (Show, ShowPretty, Eq)
-
-instance TCConstraint IsFunctionArgument where
-  constr = IsFunctionArgument
-  runConstr (IsFunctionArgument c) = c
 
 -- first is expected argument type, second is given argument type
 solveIsFunctionArgument :: IsT MonadDMTC t => IxSymbol -> (DMTypeOf MainKind, DMTypeOf MainKind) -> t ()
@@ -94,6 +87,7 @@ solveIsFunctionArgument name (_, _) = return ()
 
 -- map Julia signature to method and the list of function calls that went to this method.
 type ChoiceHash = HashMap [JuliaType] (DMTypeOf FunKind, [DMTypeOf FunKind])
+
 
 -- hash has the existing methods, list has the required methods.
 instance Solve MonadDMTC IsChoice (ChoiceHash, [DMTypeOf FunKind]) where
@@ -295,30 +289,6 @@ noJuliaFunction :: DMTypeOf MainKind -> Bool
 noJuliaFunction τ = (juliatypes τ /= [JTFunction])
 
 
-
-
-------------------------------------------------------------------------------------------------------
---compute fixed vars of the constraints
-
--- get the typevar which appears on the right hand side of the topmost arrow.
-getFunctionReturnVar :: DMTypeOf k -> [SomeK TVarOf]
-getFunctionReturnVar (Fun fs) = mconcat (getFunctionReturnVar . fstAnn <$> fs)
-getFunctionReturnVar (as :->: (TVar a)) = [SomeK a]
-getFunctionReturnVar (as :->*: (TVar a)) = [SomeK a]
-getFunctionReturnVar _ = mempty
-
-getNoFunVars :: DMMain -> [SomeK TVarOf]
-getNoFunVars (NoFun a) = freeVars a
-getNoFunVars _ = mempty
-
-instance FixedVars TVarOf (IsFunctionArgument (DMTypeOf MainKind, DMTypeOf MainKind)) where
-  -- TODO: Is this calculation of fixed vars correct?
-  fixedVars (IsFunctionArgument (existingFuns, wantedFuns)) = getFunctionReturnVar wantedFuns <> getNoFunVars existingFuns <> getNoFunVars wantedFuns
-
 instance Solve MonadDMTC IsFunctionArgument (DMTypeOf MainKind, DMTypeOf MainKind) where
-  solve_ Dict _ name (IsFunctionArgument (a,b)) = solveIsFunctionArgument name (a,b)
+      solve_ Dict _ name (IsFunctionArgument (a,b)) = solveIsFunctionArgument name (a,b)
 
-
-instance FixedVars TVarOf (IsChoice (ChoiceHash, [DMTypeOf FunKind])) where
-  -- TODO: Is this calculation of fixed vars correct?
-  fixedVars (IsChoice (_, wantedFuns)) = mconcat (getFunctionReturnVar <$> wantedFuns)

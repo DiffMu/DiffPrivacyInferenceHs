@@ -17,9 +17,11 @@ import DiffMu.Core.Definitions as All
 import DiffMu.Core.Symbolic as All
 import DiffMu.Core.Context as All
 import DiffMu.Core.Scope as All
+import DiffMu.Core.Unification as All
 import DiffMu.Typecheck.Operations as All
 import DiffMu.Typecheck.Subtyping as All
 import DiffMu.Typecheck.Typecheck as All
+import DiffMu.Typecheck.Constraint.Definitions as All
 import DiffMu.Typecheck.Constraint.IsJuliaEqual as All
 import DiffMu.Typecheck.Preprocess.FLetReorder
 import DiffMu.Typecheck.Preprocess.Demutation

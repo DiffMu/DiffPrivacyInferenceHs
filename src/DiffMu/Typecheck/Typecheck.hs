@@ -7,11 +7,13 @@ import DiffMu.Core
 import DiffMu.Core.Logging
 import DiffMu.Core.Symbolic
 import DiffMu.Core.TC
+import DiffMu.Core.Unification
 import DiffMu.Typecheck.Operations
 import DiffMu.Core.Scope
 import DiffMu.Abstract.Data.ErrorReporting
 import DiffMu.Abstract.Data.Permutation
 import DiffMu.Typecheck.JuliaType
+import DiffMu.Typecheck.Constraint.Definitions
 import DiffMu.Typecheck.Constraint.IsFunctionArgument
 import DiffMu.Typecheck.Constraint.IsJuliaEqual
 import DiffMu.Typecheck.Constraint.CheapConstraints

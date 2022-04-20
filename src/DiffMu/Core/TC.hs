@@ -13,6 +13,7 @@ import DiffMu.Core.Symbolic
 import DiffMu.Core.Logging
 import {-# SOURCE #-} DiffMu.Typecheck.Subtyping
 import {-# SOURCE #-} DiffMu.Core.Unification
+import DiffMu.Typecheck.Constraint.Definitions
 
 import Data.List (partition)
 import qualified Data.HashMap.Strict as H
@@ -385,8 +386,8 @@ type SSubs = Subs SensitivityOf
 
 
 
-class (FixedVars TVarOf x) => GoodConstraint (x :: *) where
-instance (FixedVars TVarOf x) => GoodConstraint x where
+class GoodConstraint (x :: *) where
+instance GoodConstraint x where
 
 class (FreeVars TVarOf x, Substitute TVarOf DMTypeOf x) => GoodConstraintContent (x :: *) where
 instance (FreeVars TVarOf x, Substitute TVarOf DMTypeOf x) => GoodConstraintContent x where
@@ -883,35 +884,6 @@ memorizeUserVar var bounds ty loc = do
     UserVars ls <- use (meta.userVars)
     meta.userVars .= UserVars ((var, bounds, ty, loc) : ls)
 
-getFixedVarsOfSolvable :: Solvable GoodConstraint GoodConstraintContent MonadDMTC -> [SingSomeK TVarOf]
-getFixedVarsOfSolvable (Solvable c) =
-      -- compute the fixed vars of this constraint
-      -- and add them to the cached list
-      let newFixed = fixedVars @_ @TVarOf c
-      in [SingSomeK v | SomeK v <- newFixed]
-
--- Recompute fixed vars
--- NOTE: We only look at the topmost constraintctx in the ctxstack.
-recomputeFixedVars :: MonadDMTC t => t ()
-recomputeFixedVars = do
-  (Ctx (MonCom constrs)) <- use (meta.constraints.anncontent.topctx)
-  let constrs2 = H.toList constrs
-  let constrs3 = [(c, name) | (name , (ConstraintWithMessage (Watched _ c) _)) <- constrs2]
-
-  let createSingleCtx (c,name) =
-        let vars = getFixedVarsOfSolvable c
-            varsWithSameName = (\v -> (v,[name])) <$> vars
-            ctxWithSameName = fromKeyElemPairs varsWithSameName
-
-        in ctxWithSameName
-
-  let constrCtxs = fmap createSingleCtx constrs3
-  let constrCtx = mconcat constrCtxs
-
-  -- let constrVarPairs = constrs3 >>= (\(name, c) -> getFixedVarsOfSolvable)
-  meta.fixedTVars %= (\_ -> constrCtx)
-  return ()
-
 
 instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
   type ConstraintBackup (TCT m) = (Ctx IxSymbol (Watched (Solvable GoodConstraint GoodConstraintContent MonadDMTC)))
@@ -921,14 +893,6 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
 
       -- add the constraint to the constraint list
       name :: IxSymbol <- meta.constraints %%= (newAnnName "constr" (ConstraintWithMessage (Watched (NormalForMode []) (Solvable c)) (DMPersistentMessage constr_desc)))
-
-      -- compute the fixed vars of this constraint
-      -- and add them to the cached list
-      let newFixed = fixedVars @_ @TVarOf c
-      let varsWithSameName = (\(SomeK v) -> (SingSomeK v,[name])) <$> newFixed
-      let ctxWithSameName = fromKeyElemPairs varsWithSameName
-
-      meta.fixedTVars <>= ctxWithSameName
 
       -- log this as event
       tcstate.solvingEvents %= (Event_ConstraintCreated name (show c) :)
@@ -950,7 +914,6 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
 
   dischargeConstraint name = do
     meta.constraints.anncontent.topctx %= (deleteValue name)
-    recomputeFixedVars
 
     -- log this as event
     tcstate.solvingEvents %= (Event_ConstraintDischarged name :)
@@ -962,7 +925,6 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
 
   updateConstraint name c = do
     meta.constraints %= (\(AnnNameCtx n cs) -> AnnNameCtx n (changeValue name (\(ConstraintWithMessage _ descr) -> ConstraintWithMessage (Watched (NormalForMode []) c) descr) cs))
-    recomputeFixedVars
 
     -- log this as event
     tcstate.solvingEvents %= (Event_ConstraintUpdated name (show c) :)
@@ -1296,15 +1258,6 @@ newTeVar hint = meta.termVars %%= (first (\x -> GenTeVar x Nothing) . (newName h
 
 ------------------------------------------------------------------------
 -- unification of sensitivities
-
-instance FixedVars (TVarOf) (IsEqual (Sensitivity,Sensitivity)) where
-  fixedVars = mempty
-
-instance FixedVars (TVarOf) (IsLessEqual (Sensitivity,Sensitivity)) where
-  fixedVars = mempty
-
-instance FixedVars (TVarOf) (IsLess (Sensitivity,Sensitivity)) where
-  fixedVars = mempty
 
 -- Before we can unify dmtypes, we have to proof that we can unify
 -- sensitivities.

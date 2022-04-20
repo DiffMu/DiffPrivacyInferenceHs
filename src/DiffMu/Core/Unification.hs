@@ -7,6 +7,7 @@ import DiffMu.Prelude
 import DiffMu.Abstract
 import DiffMu.Abstract.Data.ErrorReporting
 import DiffMu.Core.Definitions
+import DiffMu.Typecheck.Constraint.Definitions
 import DiffMu.Core.TC
 import DiffMu.Core.Logging
 
@@ -20,6 +21,12 @@ default (Text)
 -------------------------------------------------------------------
 -- Unification of dmtypes
 --
+
+(==!) :: (MessageLike t msg, MonadConstraint isT t, Solve isT IsEqual (a,a), (HasNormalize isT a), Show (a), ShowPretty (a), Eq a, Typeable a, IsT isT t, ContentConstraintOnSolvable t (a,a), ConstraintOnSolvable t (IsEqual (a,a))) => a -> a -> msg -> t ()
+(==!) a b msg = addConstraint (Solvable (IsEqual (a,b))) msg >> pure ()
+
+(≤!) :: (MessageLike t msg, MonadConstraint isT t, Solve isT IsLessEqual (a,a), (HasNormalize isT a), Show (a), ShowPretty (a), Eq a, Typeable a, IsT isT t, ContentConstraintOnSolvable t (a,a), ConstraintOnSolvable t (IsLessEqual (a,a))) => a -> a -> msg -> t ()
+(≤!) a b msg = addConstraint (Solvable (IsLessEqual (a,b))) msg >> pure ()
 
 
 newtype WrapMessageINC e a = WrapMessageINC a
@@ -338,9 +345,6 @@ instance (HasUnificationError t e [a], MonadDMError e t, Show a, Unify e t a, Mo
 -- instance (Show a, Unify e t a, MonadLog t) => Unify e t [a] where
   unify_ name xs ys | length xs == length ys = mapM (uncurry (unify_ name)) (zip xs ys)
   unify_ name xs ys = throwError (unificationError' (Proxy @t) xs ys name)
-
-instance Typeable k => FixedVars TVarOf (IsEqual (DMTypeOf k, DMTypeOf k)) where
-  fixedVars _ = mempty
 
 -- Using the unification instance, we implement solving of the `IsEqual` constraint for DMTypes.
 instance (Typeable k) => Solve MonadDMTC IsEqual (DMTypeOf k, DMTypeOf k) where

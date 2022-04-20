@@ -55,11 +55,6 @@ class (Typeable v, Typeable a, forall k. Eq (v k)) => Substitute (v :: j -> *) (
   substitute :: (Monad t) => (forall k. (IsKind k) => v k -> t (a k)) -> (x -> t x)
 
 
--- Fixed (free) vars are those which are already fully determined by being the target of a constraint
-class (Typeable v, Typeable a, forall k. Eq (v k)) => FixedVars (v :: j -> *) (a :: *) where
-  fixedVars :: a -> [SomeK v]
-
-
 class (Typeable v, Typeable a, forall k. Eq (v k)) => FreeVars (v :: j -> *) (a :: *) where
   freeVars :: a -> [SomeK v]
 

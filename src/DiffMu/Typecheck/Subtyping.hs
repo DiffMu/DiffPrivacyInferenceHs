@@ -10,6 +10,7 @@ import DiffMu.Core.Logging
 import DiffMu.Core.TC
 import DiffMu.Core.Symbolic
 import DiffMu.Core.Unification
+import DiffMu.Typecheck.Constraint.Definitions
 
 
 import qualified Data.HashMap.Strict as H
@@ -433,13 +434,6 @@ solveSubtyping name path@(a,b) = withLogLocation "Subtyping" $ do
                    Just hint -> DMPersistentMessage (hint :\\: msg)
                    Nothing -> DMPersistentMessage msg
       throwError (WithContext (UnsatisfiableConstraint (show (fst path) <> " ⊑ " <> show (snd path))) (msg2))
-
-instance Typeable k => FixedVars TVarOf (IsLessEqual (DMTypeOf k, DMTypeOf k)) where
-  fixedVars _ = mempty
-instance Typeable k => FixedVars TVarOf (IsSupremum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k)) where
-  fixedVars (IsSupremum (_ :=: a)) = freeVars a
-instance Typeable k => FixedVars TVarOf (IsInfimum ((DMTypeOf k, DMTypeOf k) :=: DMTypeOf k)) where
-  fixedVars (IsInfimum (_ :=: a)) = freeVars a
 
 
 data ContractionAllowed = ContractionAllowed | ContractionDisallowed

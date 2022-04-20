@@ -5,6 +5,7 @@ module DiffMu.Abstract.Data.MonadicPolynomial where
 import DiffMu.Prelude
 import DiffMu.Abstract.Class.Term
 import DiffMu.Abstract.Class.Constraint
+import DiffMu.Typecheck.Constraint.Definitions
 import DiffMu.Abstract.Class.IsT
 import DiffMu.Abstract.Data.HashMap
 

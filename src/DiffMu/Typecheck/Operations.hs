@@ -10,6 +10,7 @@ import DiffMu.Core.TC
 import DiffMu.Core.Symbolic
 import DiffMu.Core.Unification
 import DiffMu.Typecheck.Subtyping
+import DiffMu.Typecheck.Constraint.Definitions
 import DiffMu.Typecheck.Constraint.CheapConstraints
 
 import Debug.Trace
@@ -248,10 +249,6 @@ solveop name (IsTypeOpResult (Binary op (τa1 :@ s1 , τa2 :@ s2) τr)) = do
           (Numeric (Num tr NonConst), Numeric (Num tr_val (Const _))) -> unifyFromName name tr tr_val >> return τr
           _ -> unifyFromName name τr val_τr
       dischargeConstraint @MonadDMTC name
-
-instance FixedVars TVarOf (IsTypeOpResult DMTypeOp) where
-  fixedVars (IsTypeOpResult (Unary _ _ res)) = freeVars res
-  fixedVars (IsTypeOpResult (Binary _ _ res)) = freeVars res
 
 -- An instance which says that the `IsTypeOpResult DMTypeOp` constraint is solvable
 -- in the `MonadDMTC` class of monads.

@@ -8,7 +8,9 @@ import DiffMu.Core.Definitions
 import DiffMu.Core.TC
 import DiffMu.Core
 import DiffMu.Core.Logging
+import DiffMu.Core.Unification
 import DiffMu.Typecheck.Subtyping
+import DiffMu.Typecheck.Constraint.Definitions
 
 -- local imports
 import Algebra.PartialOrd
@@ -130,6 +132,22 @@ createDMType JTAny = return DMAny
 createDMType (t)  = throwUnlocatedError (TypeMismatchError $ "expected " <> show t <> " to not be a function.")
 
 
+----------------------------------------------------------------
+-- Things that should be functions
+
+instance Solve MonadDMTC IsFunction (AnnotationKind, DMMain) where
+    solve_ Dict _ name (IsFunction (kind, typ)) = let
+        checkKind (f :@ _) = case (f, kind) of
+            (_:->:_, SensitivityK) -> True
+            (_:->*:_, PrivacyK) -> True
+            _ -> False
+        in case typ of
+            Fun ts -> case and (map checkKind ts) of
+                           True -> dischargeConstraint name
+                           False -> failConstraint name
+            NoFun _ -> failConstraint name
+            _ -> pure ()
+
 ---------------------------------------------------------
 -- julia-subtype constraints
 --
@@ -173,22 +191,3 @@ newtype JuliaSignature = JuliaSignature [JuliaType]
 instance PartialOrd JuliaSignature where
   leq (JuliaSignature a) (JuliaSignature b) = and (zipWith leq a b)
 
-
-----------------------------------------------------------------
--- Things that should be functions
-
-instance FixedVars TVarOf (IsFunction (AnnotationKind, DMTypeOf MainKind)) where
-  fixedVars (IsFunction (b)) = []
-
-instance Solve MonadDMTC IsFunction (AnnotationKind, DMMain) where
-    solve_ Dict _ name (IsFunction (kind, typ)) = let
-        checkKind (f :@ _) = case (f, kind) of
-            (_:->:_, SensitivityK) -> True
-            (_:->*:_, PrivacyK) -> True
-            _ -> False
-        in case typ of
-            Fun ts -> case and (map checkKind ts) of
-                           True -> dischargeConstraint name
-                           False -> failConstraint name
-            NoFun _ -> failConstraint name
-            _ -> pure ()

@@ -10,6 +10,7 @@ import DiffMu.Core.Definitions
 import DiffMu.Core.TC
 import DiffMu.Core.Unification
 import DiffMu.Core.Symbolic
+import DiffMu.Typecheck.Constraint.Definitions
 
 import qualified Data.HashMap.Strict as H
 

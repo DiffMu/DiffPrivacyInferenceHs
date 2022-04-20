@@ -134,71 +134,8 @@ addConstraintFromNameMaybe (Nothing)   = addConstraintNoMessage
 
 
 
-
-(==!) :: (MessageLike t msg, MonadConstraint isT t, Solve isT IsEqual (a,a), (HasNormalize isT a), Show (a), ShowPretty (a), Eq a, Typeable a, IsT isT t, ContentConstraintOnSolvable t (a,a), ConstraintOnSolvable t (IsEqual (a,a))) => a -> a -> msg -> t ()
-(==!) a b msg = addConstraint (Solvable (IsEqual (a,b))) msg >> pure ()
-
--- An abbreviation for adding a less equal constraint.
-(≤!) :: (MessageLike t msg, MonadConstraint isT t, Solve isT IsLessEqual (a,a), (HasNormalize isT a), Show (a), ShowPretty (a), Eq a, Typeable a, IsT isT t, ContentConstraintOnSolvable t (a,a), ConstraintOnSolvable t (IsLessEqual (a,a))) => a -> a -> msg -> t ()
-(≤!) a b msg = addConstraint (Solvable (IsLessEqual (a,b))) msg >> pure ()
-
-
-
 instance (ShowPretty a, ShowPretty b) => ShowPretty (a,b) where
   showPretty (a,b) = "("<> showPretty a <> ", " <> showPretty b <> ")"
-
--- Basic constraints
-newtype IsEqual a = IsEqual a
-  deriving (Show, ShowPretty, Eq)
-
-instance TCConstraint IsEqual where
-  constr = IsEqual
-  runConstr (IsEqual c) = c
-
-
----- Less Equal (subtyping)
-newtype IsLessEqual a = IsLessEqual a
-  deriving (Show, ShowPretty, Eq)
-
-instance TCConstraint IsLessEqual where
-  constr = IsLessEqual
-  runConstr (IsLessEqual c) = c
-
----- Less (for sensitivities)
-newtype IsLess a = IsLess a
-  deriving (Show, ShowPretty, Eq)
-
-instance TCConstraint IsLess where
-  constr = IsLess
-  runConstr (IsLess c) = c
-
----- Sups
-newtype IsSupremum a = IsSupremum a deriving (Show, ShowPretty, Eq)
-
-instance TCConstraint IsSupremum where
-  constr = IsSupremum
-  runConstr (IsSupremum c) = c
-
----- Infimum
-newtype IsInfimum a = IsInfimum a deriving (Show, ShowPretty, Eq)
-
-instance TCConstraint IsInfimum where
-  constr = IsInfimum
-  runConstr (IsInfimum c) = c
-
----- Choices
-newtype IsChoice a = IsChoice a deriving (Show, ShowPretty, Eq)
-
-instance TCConstraint IsChoice where
-  constr = IsChoice
-  runConstr (IsChoice c) = c
-
----- Functions/Privacy Functions
-newtype IsFunction a = IsFunction a deriving (Show, ShowPretty, Eq)
-
-instance TCConstraint IsFunction where
-  constr = IsFunction
-  runConstr (IsFunction c) = c
 
 
 ----------------------------------------------------------
