@@ -377,7 +377,6 @@ instance Solve MonadDMTC IsLessEqual (Sensitivity, Sensitivity) where
                                                        False -> failConstraint name
                          Nothing -> return ()
          Nothing -> return ()
-         
 
 -------------------------------------------------------------------
 -- Monadic monoid structure on dmtypes

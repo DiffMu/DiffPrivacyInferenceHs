@@ -291,10 +291,10 @@ $(makeLenses ''MFull)
 
 -- new variables
 newTeVarOfMut :: (MonadState MFull m) => Text -> Maybe ProcVar -> m (TeVar)
-newTeVarOfMut hint original = termVarsOfMut %%= (first (\x -> GenTeVar x (UserTeVar <$> original)) . (newName hint))
+newTeVarOfMut hint original = termVarsOfMut %%= (first (\x -> GenTeVar x (UserTeVar <$> original)) . (newName GeneratedNamePriority hint))
 
 newScopeVar :: (MonadState MFull m) => Text -> m (ScopeVar)
-newScopeVar hint = scopeNames %%= (first ScopeVar . (newName hint))
+newScopeVar hint = scopeNames %%= (first ScopeVar . (newName GeneratedNamePriority hint))
 
 appendNewScopeVar :: (MonadState MFull m) => Text -> Scope -> m Scope
 appendNewScopeVar hint (Scope old) = do
@@ -303,11 +303,11 @@ appendNewScopeVar hint (Scope old) = do
 
 newMemVar :: (MonadState MFull m) => Either ProcVar Text -> MemVarInfo -> m (MemVar)
 newMemVar (Left hint) mvi = do
-  mv <- scopeNames %%= (first (MemVarForProcVar hint) . (newName ""))
+  mv <- scopeNames %%= (first (MemVarForProcVar hint) . (newName GeneratedNamePriority ""))
   memVarInfo %= (setValue mv mvi)
   return mv
 newMemVar (Right hint) mvi = do
-  mv <- scopeNames %%= (first StandaloneMemVar . (newName hint))
+  mv <- scopeNames %%= (first StandaloneMemVar . (newName GeneratedNamePriority hint))
   memVarInfo %= (setValue mv mvi)
   return mv
 

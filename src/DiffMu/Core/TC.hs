@@ -286,6 +286,18 @@ instance Substitute SVarOf SensitivityOf SolvingMode where
 instance Substitute TVarOf DMTypeOf SolvingMode where
   substitute _ x = pure x
 
+instance FreeVars TVarOf Text where
+  freeVars _ = []
+
+instance FreeVars SVarOf Text where
+  freeVars _ = []
+
+instance Substitute SVarOf SensitivityOf Text where
+  substitute _ x = pure x
+
+instance Substitute TVarOf DMTypeOf Text where
+  substitute _ x = pure x
+
 -- Given a list of "multi substitutions", i.e. substitutions of the form
 -- [a := ListK [a1, a2, a3], b := ListK [b1, b2, b3], ...] and type τ,
 -- it returns (Just [τ1, τ2, τ3]) where
@@ -556,9 +568,9 @@ instance ShowLocated ks => ShowLocated (AnnNameCtx ks) where
 
 instance Default ks => Default (AnnNameCtx ks)
 
-newAnnName :: DictLike IxSymbol k ks => Text -> k -> AnnNameCtx ks -> (IxSymbol, AnnNameCtx ks)
-newAnnName hint k (AnnNameCtx names kinds) =
-  let (name, names') = newName hint names
+newAnnName :: DictLike IxSymbol k ks => NamePriority -> Text -> k -> AnnNameCtx ks -> (IxSymbol, AnnNameCtx ks)
+newAnnName np hint k (AnnNameCtx names kinds) =
+  let (name, names') = newName np hint names
       kinds' = setValue name k kinds
   in (name, AnnNameCtx names' kinds')
 
@@ -638,6 +650,7 @@ type TypeCtxSP = Either (TypeCtx SensitivityK) (TypeCtx PrivacyK)
 
 data SolvingEvent =
   Event_ConstraintDischarged IxSymbol
+  | Event_ConstraintMarkedFailed IxSymbol
   | Event_ConstraintUpdated IxSymbol String
   | Event_ConstraintCreated IxSymbol String
   | Event_SubstitutionAdded String
@@ -648,9 +661,10 @@ instance Show SolvingEvent where
   show (Event_ConstraintCreated name constr) = "CREATE " <> show name <> " : " <> constr
   show (Event_ConstraintUpdated name constr) = "UPDATE " <> show name <> " : " <> constr
   show (Event_ConstraintDischarged name)     = "DISCHARGE " <> show name
+  show (Event_ConstraintMarkedFailed name)   = "MARK FAIL " <> show name
   show (Event_SubstitutionAdded sub)         = "SUB " <> sub
   show (Event_ConstraintSetCreated)          = "CREATE CONSTR_SET"
-  show (Event_ConstraintSetMerged constrs)    = "MERGE CONSTR_SET : {" <> intercalate ", " (show <$> constrs) <> "}"
+  show (Event_ConstraintSetMerged constrs)   = "MERGE CONSTR_SET : {" <> intercalate ", " (show <$> constrs) <> "}"
 
 
 data Watcher = Watcher Changed
@@ -692,6 +706,7 @@ data MetaCtx m = MetaCtx
     _sensSubs :: Subs SVarOf SensitivityOf,
     _typeSubs :: Subs TVarOf DMTypeOf,
     _constraints :: ConstraintCtx m,
+    _failedConstraints :: Ctx IxSymbol (ConstraintWithMessage m),
     _userVars :: UserVars,
     -- cached state
     _fixedTVars :: Ctx (SingSomeK TVarOf) [IxSymbol]
@@ -788,7 +803,7 @@ instance Monad m => MonadLog (TCT m) where
 
 
 instance Show m => Show (MetaCtx m) where
-  show (MetaCtx s t n sσ tσ cs (UserVars uvs) fixedT) =
+  show (MetaCtx s t n sσ tσ cs failedCs (UserVars uvs) fixedT) =
        "- sens vars: " <> show s <> "\n"
     <> "- type vars: " <> show t <> "\n"
     <> "- name vars: " <> show n <> "\n"
@@ -797,6 +812,7 @@ instance Show m => Show (MetaCtx m) where
     <> "- fixed TVars: " <> show fixedT <> "\n"
     <> "- user-chosen vars: " <> show uvs <> "\n"
     <> "- constraints:\n" <> show cs <> "\n"
+    <> "- failed constraints:\n" <> show failedCs <> "\n"
 
 instance Show Watcher where
   show (Watcher changed) = show changed
@@ -892,7 +908,7 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
   addConstraint (Solvable c) constr_desc = do
 
       -- add the constraint to the constraint list
-      name :: IxSymbol <- meta.constraints %%= (newAnnName "constr" (ConstraintWithMessage (Watched (NormalForMode []) (Solvable c)) (DMPersistentMessage constr_desc)))
+      name :: IxSymbol <- meta.constraints %%= (newAnnName GeneratedNamePriority "constr" (ConstraintWithMessage (Watched (NormalForMode []) (Solvable c)) (DMPersistentMessage constr_desc)))
 
       -- log this as event
       tcstate.solvingEvents %= (Event_ConstraintCreated name (show c) :)
@@ -917,6 +933,17 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
 
     -- log this as event
     tcstate.solvingEvents %= (Event_ConstraintDischarged name :)
+
+  markFailedConstraint name = do
+    val <- getValue name <$> use (meta.constraints.anncontent.topctx)
+    case val of
+      Nothing -> internalError $ "Expected constraint " <> show name <> " to exist."
+      Just val -> do
+        meta.constraints.anncontent.topctx %= (deleteValue name)
+        meta.failedConstraints %= (setValue name val)
+
+        -- log this as event
+        tcstate.solvingEvents %= (Event_ConstraintMarkedFailed name :)
 
   failConstraint name = do
     (AnnNameCtx n cs) <- use (meta.constraints)
@@ -1240,13 +1267,18 @@ instance Monad m => IsT MonadDMTC (TCT m) where
 
 
 
+newTVarWithPriority :: forall k e t. (MonadDMTC t, SingI k, Typeable k) => NamePriority -> Text -> t (TVarOf k)
+newTVarWithPriority np hint = meta.typeVars %%= ((newKindedName np hint))
 
 
 newTVar :: forall k e t. (MonadDMTC t, SingI k, Typeable k) => Text -> t (TVarOf k)
-newTVar hint = meta.typeVars %%= ((newKindedName hint))
+newTVar = newTVarWithPriority GeneratedNamePriority 
+
+newSVarWithPriority :: forall k e t. (SingI k, MonadDMTC t, Typeable k) => NamePriority -> Text -> t (SVarOf k)
+newSVarWithPriority np hint = meta.sensVars %%= (newKindedName np hint)
 
 newSVar :: forall k e t. (SingI k, MonadDMTC t, Typeable k) => Text -> t (SVarOf k)
-newSVar hint = meta.sensVars %%= (newKindedName hint)
+newSVar = newSVarWithPriority GeneratedNamePriority
 
 newPVar = do
    p1 ::Sensitivity <- newVar
@@ -1254,7 +1286,7 @@ newPVar = do
    return (p1, p2)
 
 newTeVar :: (MonadDMTC m) => Text -> m (TeVar)
-newTeVar hint = meta.termVars %%= (first (\x -> GenTeVar x Nothing) . (newName hint))
+newTeVar hint = meta.termVars %%= (first (\x -> GenTeVar x Nothing) . (newName GeneratedNamePriority hint))
 
 ------------------------------------------------------------------------
 -- unification of sensitivities

@@ -301,10 +301,20 @@ instance (Show r , Show v, Eq r, SemiringM Identity r) => ShowLocated (LinCom r 
 
 
 
-instance (Typeable r, Typeable j, IsKind (k :: j), Typeable v, KHashable v, KShow v, Show r, KEq v, Eq r, CheckNeutral Identity r, SemiringM Identity r, forall k2. Substitute v (CPolyM r Int (v k)) (v k2)) => Term v (CPolyM r Int (v k)) where
+instance (HasVarPriority v, Typeable r, Typeable j, IsKind (k :: j), Typeable v, KHashable v, KShow v, Show r, KEq v, Eq r, CheckNeutral Identity r, SemiringM Identity r, forall k2. Substitute v (CPolyM r Int (v k)) (v k2)) => Term v (CPolyM r Int (v k)) where
   var (v :: v k2) = case testEquality (typeRep @k) (typeRep @k2) of
     Nothing -> zeroId -- NOTE: WARNING: This should actually be an error. But we currently do not have access to any failure monad here.
     Just Refl -> injectVarId v
+  isVar (SingleKinded (LinCom (MonCom a)) :: SingleKinded (LinCom r (MonCom Int (v k))) k1) = 
+    case testEquality (typeRep @k) (typeRep @k1) of
+      Nothing -> undefined -- NOTE: WARNING: This should actually be an error. But we currently do not have access to any failure monad here.
+      Just Refl ->
+        case H.toList a of
+          [(MonCom avars, ar)] ->
+            case H.toList avars of
+              [(v,1)] | ar == oneId -> Just v
+              _ -> Nothing
+          _ -> Nothing
 
 
     -- coerce x
