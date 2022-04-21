@@ -45,14 +45,25 @@ callWithCString f a b = unsafeLocalState $ do
   withCString a (\ca -> withCString b (\cb -> return $ call_StringStringBool f ca cb))
 
 
-typecheckFromCString_DMTerm_Detailed :: FunPtr SubtypingCallbackFun -> CString -> CString -> IO ()
-typecheckFromCString_DMTerm_Detailed fun str rawsource = do
+typecheckFromCString_DMTerm_Debug :: FunPtr SubtypingCallbackFun -> CString -> CString -> IO ()
+typecheckFromCString_DMTerm_Debug fun str rawsource = do
   putStrLn "hello!"
 
   writeIORef global_callback_issubtype (makeDMEnv (fun))
   str' <- peekCString str
   rawsource' <- peekCString rawsource
-  typecheckFromString_DMTerm_Detailed str' rawsource' `catchAny` \e -> do
+  typecheckFromString_DMTerm_Debug str' rawsource' `catchAny` \e -> do
+    putStrLn "======================================="
+    putStrLn $ "Call to haskell resulted in exception (" <> displayException e <> ")."
+
+foreign export ccall typecheckFromCString_DMTerm_Debug :: FunPtr SubtypingCallbackFun -> CString -> CString -> IO ()
+
+typecheckFromCString_DMTerm_Detailed :: FunPtr SubtypingCallbackFun -> CString -> CString -> IO ()
+typecheckFromCString_DMTerm_Detailed fun str rawsource = do
+  writeIORef global_callback_issubtype (makeDMEnv (fun))
+  str' <- peekCString str
+  rawsource' <- peekCString rawsource
+  typecheckFromString_DMTerm_Simple PrintConstraintHistory str' rawsource' `catchAny` \e -> do
     putStrLn "======================================="
     putStrLn $ "Call to haskell resulted in exception (" <> displayException e <> ")."
 
@@ -63,7 +74,7 @@ typecheckFromCString_DMTerm fun str rawsource = do
   writeIORef global_callback_issubtype (makeDMEnv (fun))
   str' <- peekCString str
   rawsource' <- peekCString rawsource
-  typecheckFromString_DMTerm_Simple str' rawsource' `catchAny` \e -> do
+  typecheckFromString_DMTerm_Simple DontPrintConstraintHistory str' rawsource' `catchAny` \e -> do
     putStrLn "======================================="
     putStrLn $ "Call to haskell resulted in exception (" <> displayException e <> ")."
 

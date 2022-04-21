@@ -33,6 +33,7 @@ module DiffMu.Prelude
   , throwOriginalError
   , blue, green, yellow, red, magenta
   , (&&), (||)
+  , showT
   )
   where
 
@@ -147,6 +148,10 @@ instance StringLike String where
   toStringS = \a -> a
   lengthS = length
 
+showT :: Show a => a -> Text
+showT = T.pack . show
+
+
 -------------------------------------------------------------------------
 -- ShowLocated
 
@@ -166,10 +171,10 @@ instance ShowLocated IxSymbol where
   showLocated a = T.pack <$> (return $ show a)
 
 instance ShowLocated TeVar where
-  showLocated = pure . T.pack . showPretty
+  showLocated = pure . showPretty
 
 instance ShowLocated ProcVar where
-  showLocated = pure . T.pack . showPretty
+  showLocated = pure . showPretty
 
 instance ShowLocated a => ShowLocated [a] where
   showLocated as = do
@@ -180,13 +185,16 @@ instance ShowLocated a => ShowLocated [a] where
 -- ShowPretty
 
 class ShowPretty a where
-  showPretty :: a -> String
+  showPretty :: a -> Text
 
 instance ShowPretty () where
   showPretty _ = ""
 
+instance ShowPretty Int where
+  showPretty = T.pack . show
+
 instance ShowPretty Text where
-  showPretty s = T.unpack s
+  showPretty s = s
 
 class FromSymbol (v :: j -> *) where
   fromSymbol :: Symbol -> Int -> NamePriority -> v k
@@ -237,7 +245,7 @@ instance Show IxSymbol where
 instance DictKey IxSymbol
 
 instance ShowPretty IxSymbol where
-  showPretty = show
+  showPretty = T.pack . show
 
 instance Show (SymbolOf k) where
   show (SymbolOf x :: SymbolOf k) = show x --  <> " : " <> show (demote @k)
@@ -246,7 +254,7 @@ instance Show Symbol where
   show (Symbol t) = T.unpack t
 
 instance ShowPretty Symbol where
-  showPretty = show
+  showPretty = T.pack . show
 
 
 instance DictKey Symbol
@@ -263,8 +271,8 @@ instance Show ProcVar where
   show (GenProcVar x) =  show x
 
 instance ShowPretty ProcVar where
-  showPretty (UserProcVar x) = show x
-  showPretty (GenProcVar x) =  show x
+  showPretty (UserProcVar x) = T.pack $ show x
+  showPretty (GenProcVar x) =  T.pack $ show x
 
 instance DictKey ProcVar
 
@@ -281,7 +289,7 @@ instance ShowPretty TeVar where
   showPretty (UserTeVar x) = showPretty x
   showPretty (GenTeVar x pv) = case pv of
     Just pv -> showPretty pv
-    Nothing -> show x
+    Nothing -> T.pack $ show x
 
 instance DictKey TeVar
 
@@ -306,6 +314,9 @@ instance Hashable MemVar
 instance Show MemVar where
   show (MemVarForProcVar p x) = show p <> "#" <> show x
   show (StandaloneMemVar x) = show x
+
+instance ShowPretty MemVar where
+  showPretty = showT
 
 instance DictKey MemVar
 
@@ -335,10 +346,10 @@ composeFunM (f:fs) a = do
   f rs
 
 class Monad t => MonadImpossible t where
-  impossible :: String -> t a
+  impossible :: Text -> t a
 
 class Monad t => MonadInternalError t where
-  internalError :: String -> t a
+  internalError :: Text -> t a
 
 class Monad t => MonadUnificationError t where
   unificationError :: Show a => a -> a -> t b

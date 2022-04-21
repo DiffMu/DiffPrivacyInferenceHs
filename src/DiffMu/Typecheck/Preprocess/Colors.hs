@@ -220,10 +220,10 @@ transformLets reqc (Located l_term (term)) = do
    Var _ -> retRequired reqc (Located l_term (term))
    Arg _ _ _ -> retRequired reqc (Located l_term (term))
 
-   TLetBase _ _ _ _ -> throwUnlocatedError (InternalError ("Parser spit out a non-pure TLet: " <> show term))
-   SLetBase _ _ _ _ -> throwUnlocatedError (InternalError ("Parser spit out a non-pure SLet: " <> show term))
-   FLet _ _ _ -> throwUnlocatedError (InternalError ("Parser spit out an FLet that has no lambda in its definition: " <> show term))
-   Ret _ -> throwUnlocatedError (InternalError ("Parser spit out a return term: " <> show term))
+   TLetBase _ _ _ _ -> throwUnlocatedError (InternalError ("Parser spit out a non-pure TLet: " <> showPretty term))
+   SLetBase _ _ _ _ -> throwUnlocatedError (InternalError ("Parser spit out a non-pure SLet: " <> showPretty term))
+   FLet _ _ _ -> throwUnlocatedError (InternalError ("Parser spit out an FLet that has no lambda in its definition: " <> showPretty term))
+   Ret _ -> throwUnlocatedError (InternalError ("Parser spit out a return term: " <> showPretty term))
 
    _ -> case reqc of
              Just PrivacyK -> do

@@ -112,20 +112,20 @@ instance Monad t => Normalize t SourceLocExt where
 instance ShowPretty SourceLoc where
   showPretty (SourceLoc file begin end) =
     let file' = case file of
-                  Just f -> f
+                  Just f -> T.pack f
                   Nothing -> "none"
     in case (begin P.+ 1 >= end) of
-        True -> file' <> ": line " <> show begin
-        False -> file' <> ": between lines " <> show begin <> " and " <> show end
+        True -> file' <> ": line " <> showPretty begin
+        False -> file' <> ": between lines " <> showPretty begin <> " and " <> showPretty end
 
 
 instance Show SourceLocExt where
-  show = showPretty
+  show = T.unpack . showPretty
 
 instance ShowLocated SourceLoc where
   showLocated loc@(SourceLoc file (begin) (end)) = do
     sourcelines <- printSourceLines file (begin, end)
-    return $ T.pack (showPretty loc) <> "\n"
+    return $ (showPretty loc) <> "\n"
              <> sourcelines
 
 instance ShowPretty SourceLocExt where
@@ -242,44 +242,44 @@ type LocatedDMException t = WithContext DMException t
 -- The different kinds of errors we can throw.
 
 data DMException where
-  UnsupportedError        :: String -> DMException
+  UnsupportedError        :: Text -> DMException
   UnificationError        :: Show a => a -> a -> DMException
   WrongNumberOfArgs       :: Show a => a -> a -> DMException
   WrongNumberOfArgsOp     :: Show a => a -> Int -> DMException
-  ImpossibleError         :: String -> DMException
-  InternalError           :: String -> DMException
+  ImpossibleError         :: Text -> DMException
+  InternalError           :: Text -> DMException
   VariableNotInScope      :: Show a => a -> DMException
   UnsatisfiableConstraint :: String -> DMException
-  TypeMismatchError       :: String -> DMException
+  TypeMismatchError       :: Text -> DMException
   NoChoiceFoundError      :: String -> DMException
   UnblockingError         :: String -> DMException
-  DemutationError         :: String -> DMException
+  DemutationError         :: Text -> DMException
   DemutationDefinitionOrderError :: Show a => a -> DMException
-  DemutationVariableAccessTypeError :: String -> DMException
+  DemutationVariableAccessTypeError :: Text -> DMException
   BlackBoxError           :: String -> DMException
   FLetReorderError        :: String -> DMException
   UnificationShouldWaitError :: DMTypeOf k -> DMTypeOf k -> DMException
-  TermColorError          :: AnnotationKind -> String -> DMException
+  TermColorError          :: AnnotationKind -> Text -> DMException
   ParseError              :: String -> Maybe String -> Int -> Int-> DMException -- error message, filename, line number, line number of next expression
   DemutationMovedVariableAccessError :: Show a => a -> DMException
-  DemutationNonAliasedMutatingArgumentError :: String -> DMException
-  DemutationSplitMutatingArgumentError :: String -> DMException
+  DemutationNonAliasedMutatingArgumentError :: Text -> DMException
+  DemutationSplitMutatingArgumentError :: Text -> DMException
 
 instance Show DMException where
-  show (UnsupportedError t) = "The term '" <> t <> "' is currently not supported."
+  show (UnsupportedError t) = "The term '" <> T.unpack t <> "' is currently not supported."
   -- show (UnsupportedTermError t) = "The term '" <> show t <> "' is currently not supported."
   show (UnificationError a b) = "Could not unify '" <> show a <> "' with '" <> show b <> "'."
   show (WrongNumberOfArgs a b) = "While unifying: the terms '" <> show a <> "' and '" <> show b <> "' have different numbers of arguments"
   show (WrongNumberOfArgsOp op n) = "The operation " <> show op <> " was given a wrong number (" <> show n <> ") of args."
-  show (ImpossibleError e) = "Something impossible happened: " <> e
-  show (InternalError e) = "Internal error: " <> e
+  show (ImpossibleError e) = "Something impossible happened: " <> T.unpack e
+  show (InternalError e) = "Internal error: " <> T.unpack e
   show (VariableNotInScope v) = "Variable not in scope: " <> show v
   show (UnsatisfiableConstraint c) = "The constraint " <> c <> " is not satisfiable."
-  show (TypeMismatchError e) = "Type mismatch: " <> e
+  show (TypeMismatchError e) = "Type mismatch: " <> T.unpack e
   show (NoChoiceFoundError e) = "No choice found: " <> e
   show (UnificationShouldWaitError a b) = "Trying to unify types " <> show a <> " and " <> show b <> " with unresolved infimum (∧)."
   show (UnblockingError e) = "While unblocking, the following error was encountered:\n " <> e
-  show (DemutationError e) = "While demutating, the following error was encountered:\n " <> e
+  show (DemutationError e) = "While demutating, the following error was encountered:\n " <> T.unpack e
   show (BlackBoxError e) = "While preprocessing black boxes, the following error was encountered:\n " <> e
   show (FLetReorderError e) = "While processing function signatures, the following error was encountered:\n " <> e
   show (ParseError e (Just file) line nextline) = case line == nextline of
@@ -292,16 +292,16 @@ instance Show DMException where
   show (DemutationDefinitionOrderError a) = "The variable '" <> show a <> "' has not been defined before being used.\n"
                                             <> "Note that every variable has to be assigned some value prior to its usage.\n"
                                             <> "Here, 'prior to usage' means literally earlier in the code."
-  show (DemutationVariableAccessTypeError e) = "An error regarding variable access types occured:\n" <> e
+  show (DemutationVariableAccessTypeError e) = "An error regarding variable access types occured:\n" <> T.unpack e
   show (DemutationMovedVariableAccessError a) = "Tried to access the variable " <> show a <> ". But this variable is not valid anymore, because it was assigned to something else."
-  show (DemutationNonAliasedMutatingArgumentError a) = "An error regarding non-aliasing of mutating arguments occured:\n" <> a
-  show (DemutationSplitMutatingArgumentError a) = "An error regarding mutating arguments occured:\n" <> a
+  show (DemutationNonAliasedMutatingArgumentError a) = "An error regarding non-aliasing of mutating arguments occured:\n" <> T.unpack a
+  show (DemutationSplitMutatingArgumentError a) = "An error regarding mutating arguments occured:\n" <> T.unpack a
 
 instance ShowPretty (DMException) where
-  showPretty = show
+  showPretty = T.pack . show
 
 instance ShowLocated (DMException) where
-  showLocated = return . T.pack . showPretty
+  showLocated = return . showPretty
 
 instance Eq DMException where
   -- UnsupportedTermError    a        == UnsupportedTermError    b       = True

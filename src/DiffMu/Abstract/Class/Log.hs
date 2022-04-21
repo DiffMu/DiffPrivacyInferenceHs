@@ -13,11 +13,11 @@ throwError e = do
   QUAL.throwError e
 
 class Monad m => MonadLog m where
-  log  :: String -> m ()
-  debug  :: String -> m ()
-  info  :: String -> m ()
-  warn :: String -> m ()
-  logForce  :: String -> m ()
+  log  :: Text -> m ()
+  debug  :: Text -> m ()
+  info  :: Text -> m ()
+  warn :: Text -> m ()
+  logForce  :: Text -> m ()
   withLogLocation :: String -> m a -> m a
 
 

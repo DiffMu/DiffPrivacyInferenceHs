@@ -69,7 +69,7 @@ checkPriv scope t = do
   case γ of -- TODO prettify.
       Left (Ctx (MonCom c)) | H.null c -> return ()
       Right (Ctx (MonCom c)) | H.null c -> return ()
-      ctx   -> impossible $ "Input context for checking must be empty. But I got:\n" <> show ctx
+      ctx   -> impossible $ "Input context for checking must be empty. But I got:\n" <> showT ctx
   types .= Right def -- cast to privacy context.
 
   -- The checking itself
@@ -91,7 +91,7 @@ checkSens scope t = do
   case γ of -- TODO prettify.
       Left (Ctx (MonCom c)) | H.null c -> return ()
       Right (Ctx (MonCom c)) | H.null c -> return ()
-      ctx   -> impossible $ "Input context for checking must be empty. But I got:\n" <> show ctx <> "\nThe term is:\n" <> show t
+      ctx   -> impossible $ "Input context for checking must be empty. But I got:\n" <> showT ctx <> "\nThe term is:\n" <> showPretty t
   types .= Left def -- cast to sensitivity context.
 
 
@@ -146,7 +146,7 @@ checkSen' scope (Located l (Op op args)) = do
 -- those get sensitivity 1, all other variables are var terms
 checkSen' scope (Located l (Arg x jτ i)) = do
   τs <- newVar
-  logForce $ "checking arg:" <> show (x :- jτ) <> ", dmtype is " <> show τs
+  logForce $ "checking arg:" <> showPretty (x :- jτ) <> ", dmtype is " <> showPretty τs
   -- the inferred type must be a subtype of the user annotation, if given.
   addJuliaSubtypeConstraint τs jτ (l :\\: "Function argument " :<>: x :<>: " user type annotation.")
 
@@ -160,9 +160,9 @@ checkSen' scope (Located l (Arg x jτ i)) = do
 checkSen' scope (Located l (Var x)) =  -- get the term that corresponds to this variable from the scope dict
    let mτ = getValue x scope
    in case mτ of
-     Nothing -> debug ("[Var-Sens] Scope is:\n" <> show (getAllKeys scope)) >> throwUnlocatedError (VariableNotInScope x)
+     Nothing -> debug ("[Var-Sens] Scope is:\n" <> showT (getAllKeys scope)) >> throwUnlocatedError (VariableNotInScope x)
      Just jτ -> do
-                     debug ("[Var-Sens] Scope is:\n" <> show (getAllKeys scope))
+                     debug ("[Var-Sens] Scope is:\n" <> showT (getAllKeys scope))
                      τ <- jτ -- extract the type of x
                      -- if the user has given an annotation
                      -- inferred type must be a subtype of the user annotation
@@ -189,7 +189,7 @@ checkSen' scope (Located l (Lam xτs retτ body)) = do
     -- get inferred types and sensitivities for the arguments
     xrτs <- getArgList @_ @SensitivityK xτs
     let xrτs' = [x :@ s | (x :@ SensitivityAnnotation s) <- xrτs]
-    logForce $ "Checking Lam, outer scope: " <> show (getAllKeys scope) <> " | inner: " <> show (getAllKeys scope')
+    logForce $ "Checking Lam, outer scope: " <> showT (getAllKeys scope) <> " | inner: " <> showT (getAllKeys scope')
 
     -- add constraints for making non-const if not resolvable
     let addC :: (DMMain :@ b, Asgmt a) -> TCT Identity ()
@@ -234,7 +234,7 @@ checkSen' scope (Located l (LamStar xτs retτ body)) = do
                            (l :\\: "LamStar argument " :<>: x :<>: "can become NonConst.")
                          pure ()
                      NotRelevant -> do
-                                      addConstraint (Solvable (MakeConst (τ, T.pack (showPretty x))))
+                                      addConstraint (Solvable (MakeConst (τ, (showPretty x))))
                                         (l :\\: "Static LamStar argument " :<>: x :<>: " can become Const.")
                                       return ()
                return ()
@@ -263,7 +263,7 @@ checkSen' scope (Located l (SLet x term body)) = do
    -- check body with that new scope
    result <- checkSens scope' body
 
-   debug $ "checking sensitivity SLet: " <> show x <> " = " <> show term <> " in " <> show body
+   debug $ "checking sensitivity SLet: " <> showT x <> " = " <> showPretty term <> " in " <> showPretty body
 
    return result
 
@@ -306,7 +306,7 @@ checkSen' scope (Located l (BBApply app args cs k)) =
     checkBBKind :: BBKind EmptyExtension -> TC (DMMain, Bool)
     checkBBKind a = let
 
-        err jt form = throwUnlocatedError $ TypeMismatchError $ "The type " <> show jt <> " is not allowed as return type of this black boxe call.\n"
+        err jt form = throwUnlocatedError $ TypeMismatchError $ "The type " <> showPretty jt <> " is not allowed as return type of this black boxe call.\n"
                                                                 <> form <> "See documentation of `unbox` for more information."
                                                             
         -- check the user-given return type dimension and make sure it's const
@@ -330,7 +330,7 @@ checkSen' scope (Located l (BBApply app args cs k)) =
 
            tt <- createDMType jt -- get return dmtype
            case tt of -- set dimension, return return type
-                DMMat _ _ _ _ _ -> err jt ("you gave 1 dim but matrix"<>show tt)
+                DMMat _ _ _ _ _ -> err jt ("you gave 1 dim but matrix"<>showT tt)
                 DMContainer k nrm clp d et -> do
                     unify (l :\\: "Setting black box return container dimension") d pdt_val
                     let niceType = (NoFun $ DMContainer k LInf clp d (NoFun $ Numeric $ Num DMData NonConst))
@@ -397,7 +397,7 @@ checkSen' scope (Located l (Apply f args)) =
     mf = checkSens scope f
 
   in do
-    logForce ("[Apply-Sens]Scope is:\n" <> show (getAllKeys scope))
+    logForce ("[Apply-Sens]Scope is:\n" <> showT (getAllKeys scope))
     (τ_sum :: DMMain, argτs) <- msumTup (mf , msumS margs) -- sum args and f's context
     τ_ret <- newVar -- a type var for the function return type
     addConstraint (Solvable (IsFunctionArgument (τ_sum, Fun [(argτs :->: τ_ret) :@ Nothing])))
@@ -585,7 +585,7 @@ checkSen' scope (Located l (FLet fname term body)) = do
 
   -- check body with that new scope. Choice terms will result in IsChoice constraints upon ivocation of fname
 
-  logForce ("[FLet-Sens] for '" <> show fname <> "', scope is: " <> show (getAllKeys scope))
+  logForce ("[FLet-Sens] for '" <> showT fname <> "', scope is: " <> showT (getAllKeys scope))
   result' <- checkSens scope' body
   removeVar @SensitivityK fname
   return result'
@@ -636,7 +636,7 @@ checkSen' scope (Located l (Tup ts)) = do
                         return v
   τnf <- mapM makeNoFun τsum
 
-  log $ "checking sens Tup: " <> show (Tup ts) <> ", type is " <> show (NoFun (DMTup τnf)) <> " when terms were " <> show τsum
+  log $ "checking sens Tup: " <> showPretty (Tup ts) <> ", type is " <> showPretty (NoFun (DMTup τnf)) <> " when terms were " <> showPretty τsum
   -- return the tuple.
   return (NoFun (DMTup τnf))
 
@@ -689,7 +689,7 @@ checkSen' original_scope (Located l (TLet xs term body)) = do
   -- finally we need make sure that our scaling factor `s` is the maximum of the tuple sensitivities
   (s ==! (maxS xs_sens)) (l :\\: "TLet sensitivity is maximum of entry sensitivities.")
 
-  log $ "checking sensitivities TLet: " <> show (xs) <> " = " <> show term <> " in " <> show body <> "\n ==> types are " <> show τbody <> " for term " <> show τterm
+  log $ "checking sensitivities TLet: " <> showPretty (xs) <> " = " <> showPretty term <> " in " <> showPretty body <> "\n ==> types are " <> showPretty τbody <> " for term " <> showPretty τterm
   -- and we return the type of the body
   return τbody
 
@@ -1245,7 +1245,7 @@ checkSen' scope term@(Located l (MakeVec m)) = do
 checkSen' scope term@(Located l (Undisc t)) = do
   tt <- checkSen' scope t <* mtruncateS inftyS
   v <- newVar
-  unify (l :\\: "Input for `undisc` must be numeric (use `undisc_contianer` for container types)") (NoFun (Numeric v)) tt
+  unify (l :\\: "Input for `undisc` must be numeric (use `undisc_container` for container types)") (NoFun (Numeric v)) tt
   return (NoFun (Numeric (Num (IRNum DMReal) NonConst)))
 
 
@@ -1274,7 +1274,7 @@ checkPri' :: DMScope -> LocDMTerm -> TC DMMain
 checkPri' scope (Located l (Ret t)) = do
    τ <- checkSens scope t
    mtruncateP inftyP
-   log $ "checking privacy " <> show (Ret t) <> ", type is " <> show τ
+   log $ "checking privacy " <> showPretty (Ret t) <> ", type is " <> showPretty τ
    return τ
 
 {-
@@ -1305,7 +1305,7 @@ checkPri' scope term@(Located l (Apply f args)) =
        -- we typecheck the function, but `apply` our current layer on the Later computation
        -- i.e. "typecheck" means here "extracting" the result of the later computation
        res <- (checkSens scope f)
-       logForce ("[Apply-Priv]Scope is:\n" <> show (getAllKeys scope))
+       logForce ("[Apply-Priv]Scope is:\n" <> showT (getAllKeys scope))
        mtruncateP inftyP -- truncate f's context to ∞
        return res
 
@@ -1328,7 +1328,7 @@ checkPri' scope (Located l (SLet x term body)) = do
   -- check body with that new scope
   result <- checkPriv scope' body
 
-  log $ "checking (transparent) privacy SLet: " <> show x <> " = " <> show term <> " in " <> show body
+  log $ "checking (transparent) privacy SLet: " <> showPretty x <> " = " <> showPretty term <> " in " <> showPretty body
 
   return result
 
@@ -1365,7 +1365,7 @@ checkPri' scope (Located l (SBind x term body)) = do
   τnofun <- newVar
   unify (l :\\: "Term after a bind cannot be a function") τbody (NoFun τnofun)
 
-  debug $ "checking privacy SLet: " <> show x <> " = " <> show term <> " in " <> show body<> "\n ==> inferred type is " <> show τx <> ", term type is " <> show τterm <> ", body types is " <> show τbody
+  debug $ "checking privacy SLet: " <> showPretty x <> " = " <> showPretty term <> " in " <> showPretty body<> "\n ==> inferred type is " <> showPretty τx <> ", term type is " <> showPretty τterm <> ", body types is " <> showPretty τbody
   -- return the type of this bind expression
   return τbody
 
@@ -1395,7 +1395,7 @@ checkPri' original_scope curterm@(Located l (TLet xs term body)) = do
   -- -- check body with that new scope
   result <- checkPriv scope_with_args body
 
-  log $ "checking (transparent) privacy SLet: " <> show xs <> " = " <> show term <> " in " <> show body
+  log $ "checking (transparent) privacy SLet: " <> showPretty xs <> " = " <> showPretty term <> " in " <> showPretty body
 
   return result
 checkPri' original_scope curterm@(Located l (TBind xs term body)) = do
@@ -1475,10 +1475,10 @@ checkPri' scope term@(Located l (Gauss rp εp δp f)) =
         )
       -- interesting output variables are set to (ε, δ), the rest is truncated to ∞
       ctxBeforeTrunc <- use types
-      debug $ "[Gauss] Before truncation, context is:\n" <> show ctxBeforeTrunc
+      debug $ "[Gauss] Before truncation, context is:\n" <> showT ctxBeforeTrunc
       mtruncateP inftyP
       ctxAfterTrunc <- use types
-      debug $ "[Gauss] After truncation, context is:\n" <> show ctxAfterTrunc
+      debug $ "[Gauss] After truncation, context is:\n" <> showT ctxAfterTrunc
       (ivars, itypes) <- getInteresting
       mapM (\(x, (τ :@ _)) -> setVarP x (WithRelev IsRelevant (τ :@ PrivacyAnnotation (ε, δ)))) (zip ivars itypes)
       -- return type is a privacy type.
@@ -1652,10 +1652,10 @@ checkPri' scope term@(Located l (Exponential rp εp xs f)) = do
       -- interesting output variables are set to (ε, 0), the rest is truncated to ∞
       --
       ctxBeforeTrunc <- use types
-      debug $ "[Exponential] Before truncation, context is:\n" <> show ctxBeforeTrunc
+      debug $ "[Exponential] Before truncation, context is:\n" <> showT ctxBeforeTrunc
       mtruncateP inftyP
       ctxAfterTrunc <- use types
-      debug $ "[Exponential] After truncation, context is:\n" <> show ctxAfterTrunc
+      debug $ "[Exponential] After truncation, context is:\n" <> showT ctxAfterTrunc
       (ivars, itypes) <- getInteresting
       mapM (\(x, (τ :@ _)) -> setVarP x (WithRelev IsRelevant (τ :@ PrivacyAnnotation (ε, zeroId)))) (zip ivars itypes)
 
@@ -1837,7 +1837,7 @@ checkPri' scope term@(Located l (SmpLet xs (Located l2 (Sample n m1_in m2_in)) t
                 -- truncate tail context to infinite privacy and return tail type and args types/privacies
                 case xs_types_privs' of
                      [(t1,p1), (t2,p2)] -> ((return (τ,(t1,p1),(t2,p2))) <* mtruncateP inftyP)
-                     _ -> impossible $ ("Both results of sample must be assigned a name. Instead I got " <> (show xs_types_privs'))
+                     _ -> impossible $ ("Both results of sample must be assigned a name. Instead I got " <> (showPretty xs_types_privs'))
   in do
       -- sum all involved contexts.
       -- tn, tm1, tm2: types of n_samples and the two matrices that are sampled

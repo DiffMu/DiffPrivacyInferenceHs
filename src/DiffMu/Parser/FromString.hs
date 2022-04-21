@@ -139,7 +139,7 @@ parseJTreeFromString :: String -> Either DMException (JTree, LocMap, [String])
 parseJTreeFromString input =
   let res = runState (runParserT pTree "jl-hs-communication" input) []
   in case res of
-    (Left e, _)  -> Left (InternalError $ "Communication Error: Could not parse JExpr from string\n\n----------------------\n" <> input <> "\n---------------------------\n" <> errorBundlePretty e)
+    (Left e, _)  -> Left (InternalError $ "Communication Error: Could not parse JExpr from string\n\n----------------------\n" <> T.pack input <> "\n---------------------------\n" <> T.pack (errorBundlePretty e))
     (Right a, locas) -> do
         -- make a map from each line number to the line number of the next expression.
         let addElem ((f1,l1):(f2,l2):as) = case f1 == f2 of

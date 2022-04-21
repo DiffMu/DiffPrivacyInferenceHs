@@ -343,7 +343,7 @@ convertSubtypingToSupInf createConstr invert name (l,u) = do
     -- case testEquality (typeRep @k) (typeRep @ConstnessKind) of
     --   Just Refl -> pure ()
     --   _ -> do
-        logForce $ "[SubToSupInf]: Trying conversion for " <> show (invert (lower, TVar upper))
+        logForce $ "[SubToSupInf]: Trying conversion for " <> showT (invert (lower, TVar upper))
 
         -- all (subtyping) constraints that contain upper
         allCsWithUpper <- filterWithSomeVars [(SomeK upper)] <$> getAllConstraints
@@ -375,7 +375,7 @@ convertSubtypingToSupInf createConstr invert name (l,u) = do
                                     messages
                                     )
                                   logForce "Something very suspicious is happening, at least make sure that this is really the correct approach."
-                                  logForce ("What happens is that we convert the subtyping constraint of " <> show (lower, TVar upper) <> " into the supremum " <> show ((lower, l) :=: TVar upper))
+                                  logForce ("What happens is that we convert the subtyping constraint of " <> showT (lower, TVar upper) <> " into the supremum " <> showT ((lower, l) :=: TVar upper))
                                   logForce "Whyever that is supposed to be correct..."
                                   return ()
                       (l1:l2:ls) -> do
@@ -418,15 +418,15 @@ solveSubtyping name path@(a,b) = withLogLocation "Subtyping" $ do
   -- We look at the result and if necessary throw errors.
   case res of
     Finished a     -> do
-      log $ "Subtyping computation of " <> show path <> " finished with result " <> show res <> ". Discharging constraint " <> show name
+      log $ "Subtyping computation of " <> showT path <> " finished with result " <> showT res <> ". Discharging constraint " <> showT name
       dischargeConstraint @MonadDMTC name
     Partial (a,_)  -> do
-      log $ "Subtyping computation of " <> show path <> " gave partial result " <> show res <> ". Updating constraint " <> show name
+      log $ "Subtyping computation of " <> showT path <> " gave partial result " <> showT res <> ". Updating constraint " <> showT name
       updateConstraint name (Solvable (IsLessEqual a))
     Wait           -> do
-      log $ "Subtyping computation of " <> show path <> " returned `Wait`. Keeping constraint as is."
+      log $ "Subtyping computation of " <> showT path <> " returned `Wait`. Keeping constraint as is."
       npath <- normalizeExact path
-      log $ "(With normalizations applied the constraint is now " <> show npath <> " ; it should be the same as the input.)"
+      log $ "(With normalizations applied the constraint is now " <> showT npath <> " ; it should be the same as the input.)"
       -- convertSubtypingToSupremum name path -- in this case we try to change this one into a sup
     Fail e         -> do
 
@@ -556,7 +556,7 @@ completeDiamondUpstream graph (a0,a1) =
 -- and may even only work if `a == center` or `b == center`.
 checkContractionAllowed :: forall t k. (SingI k, Typeable k, IsT MonadDMTC t) => [(DMTypeOf k)] -> (DMTypeOf k, DMTypeOf k) -> DMTypeOf k -> t ContractionAllowed
 checkContractionAllowed contrTypes (TVar a, TVar b) (center) = do
-  debug $ "[CheckContractionAllowd]: Called for (" <> show a <> " ==> " <> show b <> "), center: " <> show center <> ", contrTypes: " <> show contrTypes
+  debug $ "[CheckContractionAllowd]: Called for (" <> showT a <> " ==> " <> showT b <> "), center: " <> showT center <> ", contrTypes: " <> showT contrTypes
   let acceptOnlyVar (TVar a) = Just a
       acceptOnlyVar _        = Nothing
 
@@ -596,7 +596,7 @@ checkContractionAllowed contrTypes (TVar a, TVar b) (center) = do
                     <> (ctrs_relevant_max >>= subFromMax)
                     <> (ctrs_relevant_min >>= subFromMin)
 
-          debug $ "  ^^^^ subtyping pairs are: " <> show subs
+          debug $ "  ^^^^ subtyping pairs are: " <> showT subs
 
           --
           -- NOTE: In the following, we only deal with edges here which are relevant,
@@ -624,7 +624,7 @@ checkContractionAllowed contrTypes (TVar a, TVar b) (center) = do
           let edgesWithGoodness = [(a,b,isGood (a,b)) | (a,b) <- subs]
           case find (\(a,b,good) -> not good) edgesWithGoodness of
             Just (a,b,_) -> do
-              debug $ "  ^^^^ Contraction not allowed because the edge " <> show (a,b) <> " is not good."
+              debug $ "  ^^^^ Contraction not allowed because the edge " <> showT (a,b) <> " is not good."
               return ContractionDisallowed
             Nothing -> do
               debug $ "  ^^^^ Contraction allowed because all edges are good."
@@ -645,7 +645,7 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsLessEqual (DMTypeOf k, DMTyp
   solve_ Dict SolveFinal name (IsLessEqual (a,b))  | b `elem` getTops    = dischargeConstraint name
   solve_ Dict SolveFinal name (IsLessEqual (a,b))  | otherwise = do
     -- if we are in solve final, we try to contract the edge
-        debug $ "Computing LessEqual: " <> show (a,b)
+        debug $ "Computing LessEqual: " <> showT (a,b)
         alloweda <- checkContractionAllowed [a,b] (a,b) a
         allowedb <- checkContractionAllowed [a,b] (a,b) b
         case (alloweda , allowedb) of
@@ -784,7 +784,7 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsSupremum ((DMTypeOf k, DMTyp
     collapseSubtypingCycles (b,y)
 
   solve_ Dict SolveFinal name (IsSupremum ((a,b) :=: y)) = do
-    debug $ "Computing supremum (final solving mode): " <> show ((a,b) :=: y)
+    debug $ "Computing supremum (final solving mode): " <> showT ((a,b) :=: y)
     msg <- inheritanceMessageFromName name
     let msg' = "Diamond contraction (from supremum)" :\\: msg
 
@@ -792,7 +792,7 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsSupremum ((DMTypeOf k, DMTyp
     let contrCandidates = completeDiamondUpstream graph (a,b)
     let f (x,contrVars) = do
 
-              debug $ "Trying to contract from " <> show (x,y) <> " with contrVars: " <> show contrVars
+              debug $ "Trying to contract from " <> showT (x,y) <> " with contrVars: " <> showT contrVars
               allowedy <- checkContractionAllowed (y:contrVars) (x,y) y
               allowedx <- checkContractionAllowed (y:contrVars) (x,y) x
               case (allowedy, allowedx) of
@@ -822,7 +822,7 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsInfimum ((DMTypeOf k, DMType
     collapseSubtypingCycles (x,b)
 
   solve_ Dict SolveFinal name (IsInfimum ((a,b) :=: x)) = do
-    debug $ "Computing infimum (final solving): " <> show ((a,b) :=: x)
+    debug $ "Computing infimum (final solving): " <> showT ((a,b) :=: x)
 
     msg <- inheritanceMessageFromName name
     let msg' = "Diamond contraction (from infimum)" :\\: msg
@@ -832,7 +832,7 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsInfimum ((DMTypeOf k, DMType
     let contrCandidates = completeDiamondDownstream graph (a,b)
     let f (y,contrVars) = do
 
-              debug $ "Trying to contract from " <> show (x,y) <> " with contrVars: " <> show contrVars
+              debug $ "Trying to contract from " <> showT (x,y) <> " with contrVars: " <> showT contrVars
               allowedx <- checkContractionAllowed (x:contrVars) (x,y) x
               allowedy <- checkContractionAllowed (x:contrVars) (x,y) y
               case (allowedx , allowedy) of
@@ -859,15 +859,15 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsInfimum ((DMTypeOf k, DMType
 -- all types in such a chain can be unified.
 collapseSubtypingCycles :: forall k t. (SingI k, Typeable k, IsT MonadDMTC t) => (DMTypeOf k, DMTypeOf k) -> t ()
 collapseSubtypingCycles (start, end) = withLogLocation "Subtyping" $ do
-  debug $ ("~~~~ collapsing cycles of " <> show (start,end))
+  debug $ ("~~~~ collapsing cycles of " <> showT (start,end))
   graph <- getCurrentConstraintSubtypingGraph
 
-  debug $ ("~~~~ graph is " <> show graph)--(H.insert end (start:[start]) H.empty))
+  debug $ ("~~~~ graph is " <> showT graph)--(H.insert end (start:[start]) H.empty))
 
   -- find all paths from the ssucc to the start node, hence cycles that contain the start-end-edge
   let cycles = concat (allPaths graph (end, start))
 
-  debug $ ("~~~~ found cycles " <> show cycles <> " unifying with " <> show end <> "\n")
+  debug $ ("~~~~ found cycles " <> showT cycles <> " unifying with " <> showT end <> "\n")
 
   -- unify all types in all cycles with the end type
   unifyAll "Subtyping cycles collapse" (concat cycles)

@@ -35,8 +35,8 @@ run :: IO ()
 run = putStrLn "Hello?"
 
 
-typecheckFromString_DMTerm_Detailed :: String -> String -> IO ()
-typecheckFromString_DMTerm_Detailed term rawsource = do
+typecheckFromString_DMTerm_Debug :: String -> String -> IO ()
+typecheckFromString_DMTerm_Debug term rawsource = do
  let (res) = parseJTreeFromString term >>= parseJExprFromJTree
  case (res) of
    Left err -> putStrLn $ "Error while parsing DMTerm from string: " <> show err
@@ -45,10 +45,10 @@ typecheckFromString_DMTerm_Detailed term rawsource = do
     --  putStrLn $ ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
     --  putStrLn $ show rs
     --  putStrLn $ ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
-     typecheckFromJExpr_Detailed term rs
+     typecheckFromJExpr_Debug term rs
 
-typecheckFromString_DMTerm_Simple :: String -> String -> IO ()
-typecheckFromString_DMTerm_Simple term rawsource = do
+typecheckFromString_DMTerm_Simple :: ShouldPrintConstraintHistory -> String -> String -> IO ()
+typecheckFromString_DMTerm_Simple bHistory term rawsource = do
  let res = parseJTreeFromString term >>= parseJExprFromJTree
  case res of
    Left err -> putStrLn $ "Error while parsing DMTerm from string: " <> show err
@@ -57,7 +57,7 @@ typecheckFromString_DMTerm_Simple term rawsource = do
     --  putStrLn $ ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
     --  putStrLn $ show rs
     --  putStrLn $ ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
-     typecheckFromJExpr_Simple term rs
+     typecheckFromJExpr_Simple bHistory term rs
 
 data DoShowLog = DoShowLog DMLogSeverity [DMLogLocation] | DontShowLog
 
@@ -98,7 +98,7 @@ typecheckFromJExprWithPrinter :: ((DMMain,Full (DMPersistentMessage TC)) -> Text
 typecheckFromJExprWithPrinter printer logoptions term rawsource = do
   let r = do
 
-        log $ "Checking term   : " <> show term
+        log $ "Checking term   : " <> showT term
 
         term' <- parseDMTermFromJExpr term >>= (liftNewLightTC . preprocessAll)
 
@@ -138,12 +138,18 @@ typecheckFromJExprWithPrinter printer logoptions term rawsource = do
 
 -- (DoShowLog Warning logging_locations)
 
-typecheckFromJExpr_Simple :: JExpr -> RawSource -> IO ()
-typecheckFromJExpr_Simple term rawsource = do
+data ShouldPrintConstraintHistory = PrintConstraintHistory | DontPrintConstraintHistory
+
+typecheckFromJExpr_Simple :: ShouldPrintConstraintHistory -> JExpr -> RawSource -> IO ()
+typecheckFromJExpr_Simple bHistory term rawsource = do
   let printer (ty, full) =
         let cs = _anncontent (_constraints (_meta full))
             cs_simple :: CtxStack IxSymbol (Watched (Solvable GoodConstraint GoodConstraintContent MonadDMTC)) = fmap (\(ConstraintWithMessage a m) -> a) cs
-            pcs = runReader (showLocated cs_simple) rawsource
+
+            pcs = case bHistory of
+              PrintConstraintHistory     -> runReader (showLocated cs) rawsource
+              DontPrintConstraintHistory -> runReader (showLocated cs_simple) rawsource
+
             cstring = case isEmptyDict cs of
                            True -> ""
                            _ -> "Constraints:\n" <> pcs
@@ -156,14 +162,14 @@ typecheckFromJExpr_Simple term rawsource = do
         in do
            "\n---------------------------------------------------------------------------\n"
            <> "Type:\n" <> runReader (showLocated ty) rawsource
-           <> "\n" <> T.pack (showPretty (_userVars (_meta full)))
+           <> "\n" <> (showPretty (_userVars (_meta full)))
            <> "\n---------------------------------------------------------------------------\n"
            <> cstring <> "\n"
            <> fcstring
   typecheckFromJExprWithPrinter printer (DontShowLog) term rawsource
 
-typecheckFromJExpr_Detailed :: JExpr -> RawSource -> IO ()
-typecheckFromJExpr_Detailed term rawsource = do
+typecheckFromJExpr_Debug :: JExpr -> RawSource -> IO ()
+typecheckFromJExpr_Debug term rawsource = do
 
   let logging_locations = [
         -- Location_Check,
@@ -179,7 +185,7 @@ typecheckFromJExpr_Detailed term rawsource = do
         "\n---------------------------------------------------------------------------\n"
         <> "Type:\n" <> runReader (showLocated ty) rawsource
         <> "\n---------------------------------------------------------------------------\n"
-        <> "Monad state:\n" <> T.pack (show full)
+        <> "Monad state:\n" <> (showT full)
 
   typecheckFromJExprWithPrinter printer (DoShowLog Debug logging_locations) term rawsource
 

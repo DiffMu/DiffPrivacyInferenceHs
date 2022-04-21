@@ -36,11 +36,11 @@ instance ISing_DMLogLocation l => MonadLog (LightTC l a) where
 
 
 -- logging
-logWithSeverityOfMut :: forall l a. ISing_DMLogLocation l => DMLogSeverity -> String -> LightTC l a ()
+logWithSeverityOfMut :: forall l a. ISing_DMLogLocation l => DMLogSeverity -> Text -> LightTC l a ()
 logWithSeverityOfMut sev text = do
   -- here we split the messages at line breaks (using `lines`)
   -- in order to get consistent looking output (every line has a header)
-  let messages = DMLogMessage sev (singDMLogLocation (Proxy @l)) <$> (reverse $ lines text)
+  let messages = DMLogMessage sev (singDMLogLocation (Proxy @l)) <$> (reverse $ linesS text)
   tell (DMMessages messages [])
 
 -- lifting

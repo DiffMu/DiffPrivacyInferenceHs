@@ -21,8 +21,8 @@ getPermutation xs ys = mapM (findPos ys) xs
     findPos (b:bs) a | a == b    = pure 0
     findPos (b:bs) a | otherwise = (1 P.+) <$> findPos bs a
     findPos []     a             = internalError $ "While searching for a permutation to map "
-                                                   <> show xs <> " ↦ " <> show ys
-                                                   <> ", could not find the element " <> show a
+                                                   <> showT xs <> " ↦ " <> showT ys
+                                                   <> ", could not find the element " <> showT a
                                                    <> "in the second list."
 
 

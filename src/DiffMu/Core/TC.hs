@@ -18,6 +18,7 @@ import DiffMu.Typecheck.Constraint.Definitions
 import Data.List (partition)
 import qualified Data.HashMap.Strict as H
 import qualified Prelude as P
+import qualified Data.Text as T
 
 import Debug.Trace
 import DiffMu.Core.Symbolic (normalizeSensSpecial)
@@ -336,7 +337,7 @@ duplicateTerm subs τ = do
       case sub_lengths of
         [] -> return Nothing
         (n:ns) -> case and ((== n) <$> ns) of
-          False -> internalError $ "Encountered a 'duplication substitution' whose entries had different lengths:\n" <> show subs
+          False -> internalError $ "Encountered a 'duplication substitution' whose entries had different lengths:\n" <> showT subs
           True -> do
             -- we execute the function f on τ, while taking the subs number {0, ..., n-1}
             τs <- mapM (f τ) [0..n-1]
@@ -670,7 +671,7 @@ instance Show SolvingEvent where
 data Watcher = Watcher Changed
   deriving (Generic)
 
-newtype UserVars = UserVars [(Sensitivity, String, JuliaType, SourceLocExt)]
+newtype UserVars = UserVars [(Sensitivity, Text, JuliaType, SourceLocExt)]
 
 instance Default UserVars where
     def = UserVars []
@@ -771,23 +772,23 @@ dmWithLogLocation l action = do
 -- debug = logWithSeverity Debug
 -- info = logWithSeverity Info
 
-logWithSeverity :: MonadDMTC t => DMLogSeverity -> String -> t ()
+logWithSeverity :: MonadDMTC t => DMLogSeverity -> Text -> t ()
 logWithSeverity sev text = do
   loc <- use (tcstate.logger.loggerCurrentLocation)
   -- here we split the messages at line breaks (using `lines`)
   -- in order to get consistent looking output (every line has a header)
-  let messages = DMLogMessage sev loc <$> (reverse $ lines text)
+  let messages = DMLogMessage sev loc <$> (reverse $ linesS text)
   -- traceM text -- force logging even if the computation des not terminate
   tell (DMMessages messages [])
   -- tcstate.logger.loggerMessages %= (messages <>)
 
-dmlog :: MonadDMTC t => String -> t ()
+dmlog :: MonadDMTC t => Text -> t ()
 dmlog text = do
   loc <- use (tcstate.logger.loggerCurrentLocation)
   sev <- use (tcstate.logger.loggerCurrentSeverity)
   -- here we split the messages at line breaks (using `lines`)
   -- in order to get consistent looking output (every line has a header)
-  let messages = DMLogMessage sev loc <$> (reverse $ lines text)
+  let messages = DMLogMessage sev loc <$> (reverse $ linesS text)
   -- traceM text -- force logging even if the computation des not terminate
   tell (DMMessages messages [])
   -- tcstate.logger.loggerMessages %= ( <>)
@@ -802,6 +803,7 @@ instance Monad m => MonadLog (TCT m) where
 
 
 
+
 instance Show m => Show (MetaCtx m) where
   show (MetaCtx s t n sσ tσ cs failedCs (UserVars uvs) fixedT) =
        "- sens vars: " <> show s <> "\n"
@@ -813,6 +815,21 @@ instance Show m => Show (MetaCtx m) where
     <> "- user-chosen vars: " <> show uvs <> "\n"
     <> "- constraints:\n" <> show cs <> "\n"
     <> "- failed constraints:\n" <> show failedCs <> "\n"
+
+instance ShowLocated m => ShowLocated (MetaCtx m) where
+  showLocated (MetaCtx s t n sσ tσ cs failedCs (UserVars uvs) fixedT) =
+    do lcs <- showLocated cs
+       lfailedCs <- showLocated failedCs
+       return $
+             "- sens vars: " <> T.pack (show s) <> "\n"
+          <> "- type vars: " <> T.pack (show t) <> "\n"
+          <> "- name vars: " <> T.pack (show n) <> "\n"
+          <> "- sens subs:   " <> T.pack (show sσ) <> "\n"
+          <> "- type subs:   " <> T.pack (show tσ) <> "\n"
+          <> "- fixed TVars: " <> T.pack (show fixedT) <> "\n"
+          <> "- user-chosen vars: " <> T.pack (show uvs) <> "\n"
+          <> "- constraints:\n" <> lcs <> "\n"
+          <> "- failed constraints:\n" <> lfailedCs <> "\n"
 
 instance Show Watcher where
   show (Watcher changed) = show changed
@@ -862,7 +879,7 @@ instance Monad m => MonadTerm DMTypeOf (TCT m) where
     σs <- use (meta.typeSubs)
     -- traceM ("/ Type: I have the subs " <> show σs <> ", and I want to add: " <> show σ)
     -- withLogLocation "Subst" $ debug ("/ Type: I have the subs " <> show σs <> ", and I want to add: " <> show σ)
-    withLogLocation "Subst" $ debug ("Adding type subst: " <> show σ)
+    withLogLocation "Subst" $ debug ("Adding type subst: " <> T.pack (show σ))
     tcstate.solvingEvents %= (Event_SubstitutionAdded (show σ) :)
     -- logPrintConstraints
     σs' <- σs ⋆ singletonSub σ
@@ -895,7 +912,7 @@ instance Monad m => MonadTerm SensitivityOf (TCT m) where
   getConstraintsBlockingVariable _ _ = return mempty
 
 
-memorizeUserVar :: (MonadDMTC m) => Sensitivity -> String -> JuliaType -> SourceLocExt -> m ()
+memorizeUserVar :: (MonadDMTC m) => Sensitivity -> Text -> JuliaType -> SourceLocExt -> m ()
 memorizeUserVar var bounds ty loc = do
     UserVars ls <- use (meta.userVars)
     meta.userVars .= UserVars ((var, bounds, ty, loc) : ls)
@@ -937,7 +954,7 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
   markFailedConstraint name = do
     val <- getValue name <$> use (meta.constraints.anncontent.topctx)
     case val of
-      Nothing -> internalError $ "Expected constraint " <> show name <> " to exist."
+      Nothing -> internalError $ "Expected constraint " <> showT name <> " to exist."
       Just val -> do
         meta.constraints.anncontent.topctx %= (deleteValue name)
         meta.failedConstraints %= (setValue name val)
@@ -1000,13 +1017,13 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
   logPrintConstraints = do
     ctrs <- use (meta.constraints.anncontent)
     log $ "## Constraints ##"
-    log $ show ctrs
+    log $ T.pack $ show ctrs
     log $ ""
 
   logPrintSubstitutions = do
     ctrs <- use (meta.sensSubs)
     log $ "## Substitutions ##"
-    log $ show ctrs
+    log $ T.pack $ show ctrs
     log $ ""
 
   getAllConstraints = do
@@ -1021,9 +1038,9 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
           let (duplicateConstrs,otherConstrs) = partition (\(n,c') -> c' == c) cs
           let namesToDischarge = fst <$> duplicateConstrs
           case length namesToDischarge > 0 of
-            True -> debug $ "Discharging duplicate constraints for " <> show name <> ":\n"
+            True -> debug $ "Discharging duplicate constraints for " <> showPretty name <> ":\n"
                       <> "  The following constraints have the same content and are going to be discharged:\n"
-                      <> "  " <> show namesToDischarge
+                      <> "  " <> showPretty namesToDischarge
             False -> return ()
           otherNamesToDischarge <- getNamesToDischarge otherConstrs
           return (namesToDischarge <> otherNamesToDischarge)
@@ -1036,24 +1053,24 @@ instance Monad m => MonadConstraint (MonadDMTC) (TCT m) where
 
   clearSolvingEvents = do
     events <- tcstate.solvingEvents %%= (\ev -> (ev,[]))
-    return (show <$> (reverse events))
+    return (showT <$> (reverse events))
 
   getConstraintMessage name = do
     (AnnNameCtx _ ctrs) <- use (meta.constraints) 
     case getValueCtxStack name ctrs of
       Just (ConstraintWithMessage _ descr) -> return descr
-      Nothing -> internalError $ "Expected a constraint with the name " <> show name <> " to exist (getting message).\n"
+      Nothing -> internalError $ "Expected a constraint with the name " <> showT name <> " to exist (getting message).\n"
                                 <> "Ctrs is:\n" 
-                                <> show ctrs
+                                <> showT ctrs
 
   getConstraint name = do
     (AnnNameCtx _ ctrs) <- use (meta.constraints) 
     case getValueCtxStack name ctrs of
       Just (ConstraintWithMessage (Watched _ a) descr) -> return (a, descr)
-      Nothing -> internalError $ "Expected a constraint with the name " <> show name <> " to exist (getting constraint content).\n"
+      Nothing -> internalError $ "Expected a constraint with the name " <> showT name <> " to exist (getting constraint content).\n"
                                 <> "Ctrs is:\n" 
-                                <> show ctrs
-    
+                                <> showT ctrs
+
 
 
 instance FreeVars TVarOf Int where

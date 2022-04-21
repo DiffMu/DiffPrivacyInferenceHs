@@ -325,14 +325,14 @@ appendDifferentIfLastIsLong main verticalToSwitch lengthToSwitch shortExtra long
                   False -> main <> longExtra
                      
 
-showArgPrettyShort :: (ShowPretty a, ShowPretty b) => (a :@ b) -> String
-showArgPrettyShort (a :@ b) = showPretty a <> " @ " <> parenIfMultiple (showPretty b)
+showArgPrettyShort :: (ShowPretty a, ShowPretty b) => (a :@ b) -> Text
+showArgPrettyShort (a :@ b) = showPretty a <> "@" <> parenIfMultiple (showPretty b)
 
-showFunPrettyShort :: (ShowPretty a, ShowPretty b) => String -> [(a :@ b)] -> a -> String
-showFunPrettyShort marker args ret =  "(" <> intercalate ", " (fmap showArgPrettyShort args) <> ")"
+showFunPrettyShort :: (ShowPretty a, ShowPretty b) => Text -> [(a :@ b)] -> a -> Text
+showFunPrettyShort marker args ret =  "(" <> intercalateS ", " (fmap showArgPrettyShort args) <> ")"
                                       <> " " <> marker <> " " <> (showPretty ret)
 
-showArgPrettyLong :: (ShowPretty a, ShowPretty b) => (a :@ b) -> String
+showArgPrettyLong :: (ShowPretty a, ShowPretty b) => (a :@ b) -> Text
 showArgPrettyLong (a :@ b) =
   let ty = "- " <> indentAfterFirstWith "  " (showPretty a) 
   in appendDifferentIfLastIsLong ty 2 20
@@ -340,29 +340,29 @@ showArgPrettyLong (a :@ b) =
        ("\n"
        <> "    @ " <> showPretty b <> "\n")
 
-showFunPrettyLong :: (ShowPretty a, ShowPretty b) => String -> [(a :@ b)] -> a -> String
+showFunPrettyLong :: (ShowPretty a, ShowPretty b) => Text -> [(a :@ b)] -> a -> Text
 showFunPrettyLong marker args ret =
-  let text = intercalate "\n" (fmap showArgPrettyLong args)
+  let text = intercalateS "\n" (fmap showArgPrettyLong args)
              <> "--------------------------\n"
              <> " " <> marker <> " " <> (showPretty ret)
   in text
 
-showFunPretty :: (ShowPretty a, ShowPretty b) => String -> [(a :@ b)] -> a -> String
+showFunPretty :: (ShowPretty a, ShowPretty b) => Text -> [(a :@ b)] -> a -> Text
 showFunPretty marker args ret =
   let shortResult = showFunPrettyShort marker args ret
-  in case length shortResult < 40 of
+  in case lengthS shortResult < 40 of
       True  -> shortResult
       False -> showFunPrettyLong marker args ret
 
-showPrettyEnumVertical :: (ShowPretty a) => [a] -> String
+showPrettyEnumVertical :: (ShowPretty a) => [a] -> Text
 showPrettyEnumVertical = prettyEnumVertical . fmap showPretty
   -- "{\n" <> intercalate "\n,\n" (fmap (indentWith "|   " . showPretty) as) <> "\n}"
 
 instance ShowPretty (Sensitivity) where
-  showPretty s = show s
+  showPretty s = T.pack $ show s
 
 instance ShowPretty (SymbolOf k) where
-  showPretty = show
+  showPretty = T.pack . show
 
 instance (ShowPretty a, ShowPretty b) => ShowPretty (a :@ b) where
   showPretty (a :@ b) = showPretty a <> " @ " <> showPretty b
@@ -385,7 +385,7 @@ instance ShowPretty (DMTypeOf k) where
   showPretty (TVar t) = showPretty t
   showPretty (a :->: b) = showFunPretty "->" a b
   showPretty (a :->*: b) = showFunPretty "->*" a b
-  showPretty (DMTup ts) = "Tuple{" <> intercalate "," (showPretty <$> ts) <> "}"
+  showPretty (DMTup ts) = "Tuple{" <> T.intercalate "," (showPretty <$> ts) <> "}"
   showPretty L1 = "L1"
   showPretty L2 = "L2"
   showPretty LInf = "LInf"
@@ -398,14 +398,14 @@ instance ShowPretty (DMTypeOf k) where
   showPretty (DMMat nrm clp n m τ) = "Matrix<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty n <> " × " <> showPretty m <> "]{" <> showPretty τ <> "}"
   showPretty (DMModel m) = "DMModel[" <> showPretty m <> "]"
   showPretty (DMGrads nrm clp m τ) = "DMGrads<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty m <> "]{" <> showPretty τ <> "}"
-  showPretty (DMContainer k nrm clp m τ) = "DMContainer<kind: " <> show k <> ", n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty m <> "]{" <> showPretty τ <> "}"
+  showPretty (DMContainer k nrm clp m τ) = "DMContainer<kind: " <> showPretty k <> ", n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty m <> "]{" <> showPretty τ <> "}"
   showPretty (NoFun x) = showPretty x
   showPretty (Fun xs) = showPrettyEnumVertical (fmap fstAnn xs)
   showPretty (x :∧: y) = "(" <> showPretty x <> "∧" <> showPretty y <> ")"
   showPretty (BlackBox n) = "BlackBox<sign: " <> showPretty n <> ">"
 
 instance ShowLocated (DMTypeOf k) where
-  showLocated = pure . T.pack . showPretty
+  showLocated = pure . showPretty
 
 -- instance Eq (DMTypeOf NormKind) where
 --   _ == _ = False
@@ -678,8 +678,8 @@ data DMTypeOp =
   deriving (Show, Eq)
 
 instance ShowPretty DMTypeOp where
-    showPretty (Unary op t s) = "Unary operation " <> show op <> " on " <> showPretty t <> " with result type " <> showPretty s
-    showPretty (Binary op t s) = "Binary operation " <> show op <> " on " <> showPretty t <> " with result type " <> showPretty s
+    showPretty (Unary op t s) = "Unary operation " <> T.pack (show op) <> " on " <> showPretty t <> " with result type " <> showPretty s
+    showPretty (Binary op t s) = "Binary operation " <> T.pack (show op) <> " on " <> showPretty t <> " with result type " <> showPretty s
 
 instance ShowLocated DMTypeOp_Some where
   showLocated (IsUnary a) = pure $ T.pack $ show a
@@ -1031,10 +1031,10 @@ freeVarsOfProcDMTerm t = fst $ recDMTermMSameExtension_Loc f (Located UnknownLoc
 -- pretty printing
 
 instance ShowPretty a => ShowPretty [a] where
-  showPretty as = "[" <> intercalate ", " (fmap showPretty as) <> "]"
+  showPretty as = "[" <> intercalateS ", " (fmap showPretty as) <> "]"
 
 instance (Show a, Show b) => ShowPretty (HashMap a b) where
-    showPretty = show
+    showPretty = T.pack . show
 --  showPretty as = "[" <> intercalate ", " (fmap showPretty (Data.HashMap.Strict.assocs as)) <> "]"
 
 instance ShowPretty a => ShowPretty (Maybe a) where
@@ -1050,14 +1050,12 @@ instance ShowPretty a => ShowPretty (ProcAsgmt a) where
   showPretty (a ::- x) = showPretty a <> " :- " <> showPretty x
 
 instance ShowPretty (DMTypeOp_Some) where
-  showPretty (IsBinary op) = show op
-  showPretty (IsUnary op) = show op
+  showPretty (IsBinary op) = T.pack $ show op
+  showPretty (IsUnary op) = T.pack $ show op
 
 instance ShowPretty (JuliaType) where
-  showPretty = show
+  showPretty = T.pack . show
 
-instance ShowPretty (Int) where
-  showPretty = show
 
 --instance (ShowPretty a, ShowPretty b) => ShowPretty (a,b) where
 --  showPretty (a,b) = "("<> showPretty a <> ", " <> showPretty b <> ")"
@@ -1069,7 +1067,7 @@ instance (ShowPretty a, ShowPretty b, ShowPretty c, ShowPretty d) => ShowPretty 
   showPretty (a,b,c,d) = "("<> showPretty a <> ", " <> showPretty b <> ", " <> showPretty c <> ", " <> showPretty d <> ")"
 
 instance ShowPretty Relevance where
-  showPretty = show
+  showPretty = T.pack . show
 
 instance ShowPretty a => ShowPretty (Located a) where
   showPretty (Located l a) = showPretty a
@@ -1083,7 +1081,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (Disc (r))          = "Disc (" <>  showPretty r <> ")"
   showPretty (DMFalse)          = "DMFalse"
   showPretty (DMTrue)           = "DMTrue"
-  showPretty (Sng g jt)         = show g
+  showPretty (Sng g jt)         = T.pack $ show g
   showPretty (Var v)            = showVar v
 --  showPretty (Rnd jt)           = "Rnd"
   showPretty (Arg v jt r)       = showPretty v
@@ -1093,9 +1091,9 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
                                   <> parenIfMultiple (showPretty t2)
   showPretty (Op op ts)         = showPretty op <> " " <> showPretty ts
   showPretty (Phi a b c)        = "Phi (" <> showPretty a <> ")" <> parenIndent (showPretty b) <> parenIndent (showPretty c)
-  showPretty (Lam     jts ret a) = "Lam (" <> showPretty jts <> " -> " <> show ret <> ")" <> parenIndent (showPretty a)
-  showPretty (LamStar jts ret a) = "LamStar (" <> showPretty jts <> " -> " <> show ret <> ")" <> parenIndent (showPretty a)
-  showPretty (BBLet n jts b)    = "BBLet " <> showPretty n <> " = (" <> show jts <> " -> ?)\n" <> showPretty b
+  showPretty (Lam     jts ret a) = "Lam (" <> showPretty jts <> " -> " <> showPretty ret <> ")" <> parenIndent (showPretty a)
+  showPretty (LamStar jts ret a) = "LamStar (" <> showPretty jts <> " -> " <> showPretty ret <> ")" <> parenIndent (showPretty a)
+  showPretty (BBLet n jts b)    = "BBLet " <> showPretty n <> " = (" <> showPretty jts <> " -> ?)\n" <> showPretty b
   showPretty (BBApply t as cs k)  = "BBApply (" <> showPretty t <> ")[" <> showPretty cs <> "](" <> showPretty as <> ") -> " <> showPretty k
   showPretty (Apply a bs)       = (showPretty a) <> (showPretty bs)
   showPretty (FLet v a b)       = "FLet " <> showVar v <> " = " <> newlineIndentIfLong (showPretty a) <> "\n" <> (showPretty b)
@@ -1127,7 +1125,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (Undisc a)         = "Undisc (" <> (showPretty a) <> ")"
   showPretty (MutConvertM a b)  = "MutConvertM (" <> (showPretty a) <> ", " <> showPretty b <> ")"
   showPretty (ConvertM a b)     = "ConvertM (" <> (showPretty a) <> ", " <> showPretty b <> ")"
-  showPretty (MCreate a b x c ) = "MCreate (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> show x <> ", " <> (showPretty c) <> ")"
+  showPretty (MCreate a b x c ) = "MCreate (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> showPretty x <> ", " <> (showPretty c) <> ")"
   showPretty (Transpose a)      = "Transpose (" <> (showPretty a) <> ")"
   showPretty (Size a)           = "Size (" <> (showPretty a) <> ")"
   showPretty (Length a)         = "Length (" <> (showPretty a) <> ")"
@@ -1135,13 +1133,13 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (VIndex a b)       = "VIndex (" <> (showPretty a) <> ", " <> (showPretty b)  <> ")"
   showPretty (Row a b)          = "Row (" <> (showPretty a) <> ", " <> (showPretty b) <> ")"
   showPretty (ClipN a b c)      = "ClipN (" <> (showPretty a) <> ", " <> (showPretty b) <> ", " <> (showPretty c) <> ")"
-  showPretty (ClipM c a)        = "ClipM (" <> show c <> ", " <> (showPretty a) <> ")"
-  showPretty (MutClipM c a)     = "MutClipM (" <> show c <> ", " <> (showPretty a) <> ")"
+  showPretty (ClipM c a)        = "ClipM (" <> showPretty c <> ", " <> (showPretty a) <> ")"
+  showPretty (MutClipM c a)     = "MutClipM (" <> showPretty c <> ", " <> (showPretty a) <> ")"
   showPretty (SubGrad a b)      = "SubGrad (" <> (showPretty a) <> ", " <> (showPretty b) <>  ")"
   showPretty (MutSubGrad a b)      = "MutSubGrad (" <> (showPretty a) <> ", " <> (showPretty b) <>  ")"
   showPretty (ScaleGrad a b)    = "ScaleGrad (" <> (showPretty a) <> ", " <> (showPretty b) <>  ")"
-  showPretty (TProject x a)     = "Proj" <> show x <> " " <>  (showPretty a)
-  showPretty (Loop a b x d )    = "Loop (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> show x <> ")" <> parenIndent (showPretty d)
+  showPretty (TProject x a)     = "Proj" <> showPretty x <> " " <>  (showPretty a)
+  showPretty (Loop a b x d )    = "Loop (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> showPretty x <> ")" <> parenIndent (showPretty d)
   showPretty (SBind x a b)      = "SBind " <> showPretty x <> " <- " <> newlineIndentIfLong (showPretty a) <> "\n" <> (showPretty b)
 
   showPretty (ZeroGrad a)       = "ZeroGrad " <> (showPretty a)
@@ -1159,13 +1157,13 @@ instance ShowPretty a => ShowPretty (ProceduralExtension a) where
     ProcFLet v a        -> "PFLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty a)
     ProcBBLet v jts     -> "PBBLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty jts)
     ProcPhi a b c        -> "PPhi " <> showPretty a <> "\n" <> braceIndent (showPretty b) <> "\n" <> braceIndent (showPretty c)
-    ProcPreLoop a x d   -> "PLoop (" <> (showPretty a) <> ", " <> show x <> ")" <> parenIndent (showPretty d)
+    ProcPreLoop a x d   -> "PLoop (" <> (showPretty a) <> ", " <> showPretty x <> ")" <> parenIndent (showPretty d)
     ProcReturn          -> "PReturn"
     ProcVarTerm pa  -> showPretty pa
-    ProcLam jts ret a       -> "PLam (" <> showPretty jts <> " -> " <> show ret <> ")" <> parenIndent (showPretty a)
-    ProcLamStar jts ret a   -> "PLamStar (" <> showPretty jts <> " ->* " <> show ret <> ")" <> parenIndent (showPretty a)
+    ProcLam jts ret a       -> "PLam (" <> showPretty jts <> " -> " <> showPretty ret <> ")" <> parenIndent (showPretty a)
+    ProcLamStar jts ret a   -> "PLamStar (" <> showPretty jts <> " ->* " <> showPretty ret <> ")" <> parenIndent (showPretty a)
     ProcBBApply t as k  -> "PBBApply (" <> showPretty t <> ") (" <> showPretty as <> ") -> " <> showPretty k
-    Block as -> braceIndent $ intercalate "\n" $ showPretty <$> as
+    Block as -> braceIndent $ intercalateS "\n" $ showPretty <$> as
 
 instance ShowPretty a => ShowPretty (DemutatedExtension a) where
   showPretty = \case
@@ -1174,8 +1172,8 @@ instance ShowPretty a => ShowPretty (DemutatedExtension a) where
     DemutFLet v a        -> "DFLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty a)
     DemutBBLet v jts     -> "DBBLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty jts)
     DemutPhi a b c       -> "DPhi " <> showPretty a <> "\n" <> braceIndent (showPretty b) <> "\n" <> braceIndent (showPretty c)
-    DemutLoop a b c x d    -> "Loop (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> (showPretty c)  <> ", " <> show x <> ")" <> parenIndent (showPretty d)
-    DemutBlock as        -> braceIndent $ intercalate "\n" $ showPretty <$> reverse as
+    DemutLoop a b c x d    -> "Loop (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> (showPretty c)  <> ", " <> showPretty x <> ")" <> parenIndent (showPretty d)
+    DemutBlock as        -> braceIndent $ intercalateS "\n" $ showPretty <$> reverse as
 
 
 instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (BBKind t) where
@@ -1188,7 +1186,7 @@ instance ShowPretty (EmptyExtension a) where
   showPretty a = undefined
 
 instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowLocated (PreDMTerm t) where
-  showLocated = pure . T.pack . showPretty
+  showLocated = pure . showPretty
 
 
 --------------------------------------------------------------------------
