@@ -30,7 +30,7 @@ import qualified GHC.RTS.Flags as LHS
 import Control.Exception (throw)
 import DiffMu.Typecheck.Preprocess.Demutation.Definitions (getAllMemVarsOfMemState, procVarAsTeVarInMutCtx, MutationArgumentType)
 
-
+default (Text)
 
 ld s l = Located (downgradeToRelated s l)
 
@@ -79,28 +79,28 @@ elaborateValue :: Scope -> LocProcDMTerm -> MTC (ImmutType , LocMoveType)
 elaborateValue scname te = do
   (te1type) <- elaborateMut scname te
   case te1type of
-    Statement _ _ _ -> demutationError $ "Expected term to be a value, but it was a statement:\n" <> showPretty te
-    StatementWithoutDefault _ _ -> demutationError $ "Expected term to be a value, but it was a statement:\n" <> showPretty te
+    Statement _ _ _ -> demutationErrorNoLoc $ "Expected term to be a value, but it was a statement:\n" <> showPretty te
+    StatementWithoutDefault _ _ -> demutationErrorNoLoc $ "Expected term to be a value, but it was a statement:\n" <> showPretty te
     Value it mt -> return (it , mt)
-    MutatingFunctionEnd _ -> demutationError $ "Expected term to be a value, but it was a return."
+    MutatingFunctionEnd _ -> demutationErrorNoLoc $ "Expected term to be a value, but it was a return."
     -- PurePhiTermType cond tt1 tt2 -> case (tt1, tt2) of
     --   ((Value Pure mt1,tt1), (Value Pure mt2,tt2)) -> pure $ (Pure, (PhiMove cond (mt1,tt1) (mt2,tt2)))
-    --   other -> demutationError $ "Expected a term to be a value, but found an if statement where the branches had term types: " <> show other
+    --   other -> demutationErrorNoLoc $ "Expected a term to be a value, but found an if statement where the branches had term types: " <> show other
 
 elaboratePureValue :: Scope -> LocProcDMTerm -> MTC (LocMoveType)
 elaboratePureValue scname te = do
   (te1type) <- elaborateMut scname te
   case te1type of
-    Statement _ _ _   -> demutationError $ "Expected term to be a value, but it was a statement:\n" <> showPretty te
-    StatementWithoutDefault _ _   -> demutationError $ "Expected term to be a value, but it was a statement:\n" <> showPretty te
-    MutatingFunctionEnd _ -> demutationError $ "Expected term to be a value, but it was a return."
+    Statement _ _ _   -> demutationErrorNoLoc $ "Expected term to be a value, but it was a statement:\n" <> showPretty te
+    StatementWithoutDefault _ _   -> demutationErrorNoLoc $ "Expected term to be a value, but it was a statement:\n" <> showPretty te
+    MutatingFunctionEnd _ -> demutationErrorNoLoc $ "Expected term to be a value, but it was a return."
     Value Pure mt -> return (mt)
-    Value _ mt    -> demutationError $ "Expected term to be a pure value, but it has type: " <> showPretty mt
+    Value _ mt    -> demutationErrorNoLoc $ "Expected term to be a pure value, but it has type: " <> showPretty mt
                                     <> "The term is:\n"
                                     <> showPretty te
     -- PurePhiTermType cond tt1 tt2 -> case (tt1, tt2) of
     --   ((Value Pure mt1,tt1), (Value Pure mt2,tt2)) -> pure $ (PhiMove cond (mt1,tt1) (mt2,tt2))
-    --   other -> demutationError $ "Expected a term to be a value, but found an if statement where the branches had term types: " <> show other
+    --   other -> demutationErrorNoLoc $ "Expected a term to be a value, but found an if statement where the branches had term types: " <> show other
 
 
 
@@ -111,30 +111,30 @@ elaboratePureValue scname te = do
 makeTermList :: [TermType] -> MTC (LastValue, Maybe LocDemutDMTerm, [LocDemutDMTerm])
 
 -- empty list
-makeTermList [] = demutationError $ "Found an empty list of statements."
+makeTermList [] = demutationErrorNoLoc $ "Found an empty list of statements."
 
 -- single element left
 makeTermList (Value it mt : [])         = case it of
                                             Pure -> do mt' <- moveTypeAsTerm_Loc mt ; return (PureValue mt, Nothing, [mt'])
-                                            _    -> demutationError $ "The last value of a block has the type " <> showPretty it <> "\n"
+                                            _    -> demutationErrorNoLoc $ "The last value of a block has the type " <> showPretty it <> "\n"
                                                                     <> "Only pure values are allowed.\n"
                                                                     <> "The value is:\n"
                                                                     <> showPretty mt
 makeTermList (Statement l term last : []) = do last' <- (moveTypeAsTerm last) ; return (PureValue (Located l last), Just (Located l last'), [Located l term])
 makeTermList (StatementWithoutDefault l term : []) = return (NoLastValue , Nothing, [Located l term])
 -- makeTermList (PurePhiTermType cond (Value Pure mt1,tt1) (Value Pure mt2,tt2) : []) = return (PureValue [mt1,mt2] , Nothing, [Extra (DemutPhi cond tt1 tt2)])
--- makeTermList (PurePhiTermType cond _ _ : [])     = demutationError $ "Encountered a phi as last statement in a block, but the branches to do not have pure values as returns."
+-- makeTermList (PurePhiTermType cond _ _ : [])     = demutationErrorNoLoc $ "Encountered a phi as last statement in a block, but the branches to do not have pure values as returns."
 makeTermList (MutatingFunctionEnd _ : [])          = return (MutatingFunctionEndValue , Nothing, [])
 
 -- more than one element left
-makeTermList (Value _ mt : ts)          = demutationError $ "Found a value term " <> showPretty mt <> " inside a list of statements."
+makeTermList (Value _ mt : ts)          = demutationErrorNoLoc $ "Found a value term " <> showPretty mt <> " inside a list of statements."
 makeTermList (Statement l term _ : ts)    = do (last, lastt, ts') <- makeTermList ts
                                                return (last, lastt, ts' <> [Located l term])
 makeTermList (StatementWithoutDefault l term : ts)
                                         = do (last, lastt, ts') <- makeTermList ts
                                              return (last, lastt, ts' <> [Located l term])
-makeTermList (MutatingFunctionEnd _ : ts) = demutationError $ "Found a MutatingFunctionEnd inside a list of statements."
--- makeTermList (PurePhiTermType cond v1 v2 : ts) = demutationError "Phis in the middle of a block are currently not implemented."
+makeTermList (MutatingFunctionEnd _ : ts) = demutationErrorNoLoc $ "Found a MutatingFunctionEnd inside a list of statements."
+-- makeTermList (PurePhiTermType cond v1 v2 : ts) = demutationErrorNoLoc "Phis in the middle of a block are currently not implemented."
 
 --
 -- with actually appending
@@ -168,12 +168,12 @@ elaborateTopLevel scname (Located l (Extra (Block ts))) = do
 
   mt <- case last_val of
     PureValue mt -> return mt
-    MutatingFunctionEndValue -> demutationError $ "Encountered a 'return' which is not the last statement of a function."
-    NoLastValue              -> demutationError $ "Encountered a statement without last value in top level."
+    MutatingFunctionEndValue -> demutationErrorNoLoc $ "Encountered a 'return' which is not the last statement of a function."
+    NoLastValue              -> demutationErrorNoLoc $ "Encountered a statement without last value in top level."
 
   -- case mt of
   --   NoMove pdt -> pure ()
-  --   _ -> demutationError $ "Encountered a block which is not top level and not in a function, but has a move as return type. This is currently not allowed."
+  --   _ -> demutationErrorNoLoc $ "Encountered a block which is not top level and not in a function, but has a move as return type. This is currently not allowed."
 
   return (Value Pure (Located l (NoMove (Extra (DemutBlock ts'')))))
 
@@ -191,15 +191,15 @@ elaborateMut scname term@(Located l (Extra (Block ts))) = do
 
   mt <- case last_val of
     PureValue (Located _ mt) -> return mt
-    MutatingFunctionEndValue -> demutationError $ "Encountered a 'return' which is not the last statement of a function."
-    NoLastValue -> demutationError $ "Encountered a statement which is not allowed to be the last one in a block.\n"
+    MutatingFunctionEndValue -> demutationErrorNoLoc $ "Encountered a 'return' which is not the last statement of a function."
+    NoLastValue -> demutationErrorNoLoc $ "Encountered a statement which is not allowed to be the last one in a block.\n"
                                     <> "The statement is:\n"
                                     <> showPretty term
 
 
   case mt of
     NoMove _  -> pure ()
-    _ -> demutationError $ "Encountered a block which is not top level and not in a function, but has a move as return type. This is currently not allowed."
+    _ -> demutationErrorNoLoc $ "Encountered a block which is not top level and not in a function, but has a move as return type. This is currently not allowed."
 
   return (Value Pure (Located l (NoMove (Extra (DemutBlock ts'')))))
     
@@ -217,7 +217,7 @@ elaborateMut scname (Located l (DMTrue)) = do
 elaborateMut scname (Located l (DMFalse)) = do
   return (Value Pure (Located l (NoMove $ DMFalse)))
 
-elaborateMut scname term@(Located l (Var _)) = demutationError $ "Unsupported term: " <> showPretty term
+elaborateMut scname term@(Located l (Var _)) = demutationErrorNoLoc $ "Unsupported term: " <> showPretty term
 
 elaborateMut scname (Located l (Extra (ProcVarTerm x))) = do
   mx <- expectNotMoved x
@@ -320,7 +320,7 @@ elaborateMut scname fullterm@(Located l (Extra (ProcTLetBase ltype vars term))) 
 
   -- write the list of possible memory types into the
   -- variables of the lhs
-  setMemTupleInManyMems scname vars mem
+  setMemTupleInManyMems l scname vars mem
 
   demutTLetStatement l ltype vars moveType'
 
@@ -410,7 +410,7 @@ elaborateMut scname term@(Located l (Apply f args)) = do
               NotMutated -> NotMutatedArg Pure
 
         let mutargs = zip (mutsToOtherMuts <$> muts) args
-        (newArgs , muts) <- elaborateMutList (showPretty f) scname mutargs
+        (newArgs , muts) <- elaborateMutList l (showPretty f) scname mutargs
 
         movetype' <- (moveTypeAsTerm_Loc movetype)
         let funcallterm = (Apply movetype' newArgs)
@@ -423,7 +423,7 @@ elaborateMut scname term@(Located l (Apply f args)) = do
     --
     Pure -> do
         let mutargs = zip (repeat (NotMutatedArg Pure)) args
-        (newArgs , muts) <- elaborateMutList (showPretty f) scname mutargs
+        (newArgs , muts) <- elaborateMutList l (showPretty f) scname mutargs
 
         movetype' <- (moveTypeAsTerm_Loc movetype)
         let funcallterm = (Apply movetype' newArgs)
@@ -437,7 +437,7 @@ elaborateMut scname term@(Located l (Apply f args)) = do
     --   since #202 this is handled in the case for `BBApply`.
     --
     
-    PureBlackBox -> demutationError $ "Trying to call a black box without `unbox_call` wrapper. In the term: " <> showPretty term
+    PureBlackBox -> demutationErrorNoLoc $ "Trying to call a black box without `unbox_call` wrapper. In the term: " <> showPretty term
 
 
 
@@ -460,17 +460,17 @@ elaborateMut scname term@(Located l (Extra (ProcBBApply f args bbkind))) = do
 
         -- since the box is pure, we say so to `elaborateMutList`
         let mutargs = zip (repeat (NotMutatedArg Pure)) args
-        (newArgs , muts) <- elaborateMutList (showPretty f) scname mutargs
+        (newArgs , muts) <- elaborateMutList l (showPretty f) scname mutargs
 
         movetype' <- (moveTypeAsTerm_Loc movetype)
         let glvars' = map UserTeVar glvars
         return $ Value Pure (Located l (NoMove (BBApply movetype' newArgs glvars' bbkind')))
 
-    otherType -> demutationError $ "Trying to call a function of type " <> showPretty otherType <> " with `unbox_call`. In the term " <> showPretty term
+    otherType -> demutationErrorNoLoc $ "Trying to call a function of type " <> showPretty otherType <> " with `unbox_call`. In the term " <> showPretty term
 
 
 
-elaborateMut scname (Located l (Extra (ProcPreLoop (i1,i2,i3) iterVar body))) = do -- demutationError $ "Not implemented: loop." -- do
+elaborateMut scname (Located l (Extra (ProcPreLoop (i1,i2,i3) iterVar body))) = do -- demutationErrorNoLoc $ "Not implemented: loop." -- do
   debug $ "[elaborateMut/Loop] BEGIN ---------------------"
 
 
@@ -563,7 +563,7 @@ elaborateMut scname (Located l (Extra (ProcPreLoop (i1,i2,i3) iterVar body))) = 
                                            Nothing -> undefined -- this should not happen since pv is in `memsBefore`
                       case pmemstate_before == pmemstate_after of
                         True  -> pure ()
-                        False -> demutationError $ "The variable " <> showT pv <> " contains a reference to the following mutated function arguments: " <> showT mutatedArgMemVars <> "\n"
+                        False -> demutationErrorNoLoc $ "The variable " <> showT pv <> " contains a reference to the following mutated function arguments: " <> showT mutatedArgMemVars <> "\n"
                                                    <> "If function arguments are mutated in a loop, then the variable which contains them is not allowed to be reassigned.\n"
                                                    <> "But this happened here, memory of the variable before the body: " <> showT pmemstate_before <> ", after: " <> showT pmemstate_after
                                                    <> "\n"
@@ -684,7 +684,7 @@ elaborateMut scname term@(Located l (Extra (ProcPhi cond tr fs))) = do
   trTerms <- do
     (l_tr, (trLastVal,trLast,trTerms)) <- elaborateAsList scname tr
     case (trLastVal,trLast) of
-      (MutatingFunctionEndValue,_) -> demutationError $ "Ifs cannot contain `return` statements.\n"
+      (MutatingFunctionEndValue,_) -> demutationErrorNoLoc $ "Ifs cannot contain `return` statements.\n"
                                                   <> "In the term:\n"
                                                   <> showPretty term
       (PureValue mt, Just defaulval) -> pure (StatementBranch l_tr trTerms)
@@ -712,7 +712,7 @@ elaborateMut scname term@(Located l (Extra (ProcPhi cond tr fs))) = do
       Just fs -> do
         (l_fs, (fsLastVal,fsLast,fsTerms)) <- elaborateAsList scname fs
         case (fsLastVal,fsLast) of
-          (MutatingFunctionEndValue,_) -> demutationError $ "Ifs cannot contain `return` statements.\n"
+          (MutatingFunctionEndValue,_) -> demutationErrorNoLoc $ "Ifs cannot contain `return` statements.\n"
                                                       <> "In the term:\n"
                                                       <> showPretty term
           (PureValue mt, Just defaulval) -> pure (StatementBranch l_fs fsTerms)
@@ -753,19 +753,19 @@ elaborateMut scname term@(Located l (Extra (ProcPhi cond tr fs))) = do
     --
     (ValueBranch l_tr trTerms trMoves, ValueBranch l_fs fsTerms fsMoves) -> case (proj1,proj2) of
       ([],[]) -> return (Value Pure (Located l (PhiMove cond' (trMoves, (Located l_tr (Extra (DemutBlock trTerms)))) (fsMoves, (Located l_fs (Extra (DemutBlock fsTerms)))))))
-      (proj1,proj2) -> demutationError $ "Found an if with branches of value-type, in such ifs mutation is not allowed."
+      (proj1,proj2) -> demutationErrorNoLoc $ "Found an if with branches of value-type, in such ifs mutation is not allowed."
 
     --
     -- error case: mixed branches
     --
-    branchTypes -> demutationError $ "Found an if where the branch types differ: " <> showT branchTypes
+    branchTypes -> demutationErrorNoLoc $ "Found an if where the branch types differ: " <> showT branchTypes
 
 
 
 -- Special builtins
 elaborateMut scname (Located l (MutPFoldRows t1 t2 t3 t4))   = do
 
-  (argTerms, mutVars) <- elaborateMutList "pfoldrows!" scname [(NotMutatedArg (Mutating [NotMutated, NotMutated, Mutated]) , t1), (MutatedArg , t2), (NotMutatedArg Pure, t3), (NotMutatedArg Pure, t4)]
+  (argTerms, mutVars) <- elaborateMutList l "pfoldrows!" scname [(NotMutatedArg (Mutating [NotMutated, NotMutated, Mutated]) , t1), (MutatedArg , t2), (NotMutatedArg Pure, t3), (NotMutatedArg Pure, t4)]
   case argTerms of
     [newT1, newT2, newT3, newT4] -> demutTLetStatement l PureLet mutVars (Located l (MutPFoldRows newT1 newT2 newT3 newT4))
     _ -> internalError ("Wrong number of terms after elaborateMutList")
@@ -794,50 +794,50 @@ elaborateMut scname (Located l (Row t1 t2))      = elaborateRefMove2 scname l Ro
 -- the mutating builtin cases
 
 elaborateMut scname (Located l (MutSubGrad t1 t2)) = do
-  (argTerms, mutVars) <- elaborateMutList "subgrad" scname [(MutatedArg , t1), (NotMutatedArg Pure , t2)]
+  (argTerms, mutVars) <- elaborateMutList l "subgrad" scname [(MutatedArg , t1), (NotMutatedArg Pure , t2)]
   case argTerms of
     [newT1, newT2] -> demutTLetStatement l PureLet mutVars (Located l (MutSubGrad newT1 newT2))
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 elaborateMut scname (Located l (ScaleGrad scalar grads)) = do
-  (argTerms, mutVars) <- elaborateMutList "scalegrad" scname [(NotMutatedArg Pure , scalar), (MutatedArg , grads)]
+  (argTerms, mutVars) <- elaborateMutList l "scalegrad" scname [(NotMutatedArg Pure , scalar), (MutatedArg , grads)]
   case argTerms of
     [newT1, newT2] -> demutTLetStatement l PureLet mutVars (Located l (ScaleGrad newT1 newT2))
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 elaborateMut scname (Located l (MutClipM c t)) = do
-  (argTerms, mutVars) <- elaborateMutList "clip" scname [(MutatedArg , t)]
+  (argTerms, mutVars) <- elaborateMutList l "clip" scname [(MutatedArg , t)]
   case argTerms of
     [newT] -> demutTLetStatement l PureLet mutVars (Located l (MutClipM c newT))
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 elaborateMut scname (Located l (MutConvertM c t)) = do
-  (argTerms, mutVars) <- elaborateMutList "norm_convert" scname [(MutatedArg , t)]
+  (argTerms, mutVars) <- elaborateMutList l "norm_convert" scname [(MutatedArg , t)]
   case argTerms of
     [newT] -> demutTLetStatement l PureLet mutVars (Located l (MutConvertM c newT))
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 elaborateMut scname (Located l (MutGauss t1 t2 t3 t4)) = do
-  (argTerms, mutVars) <- elaborateMutList "gauss" scname [(NotMutatedArg Pure , t1), (NotMutatedArg Pure , t2), (NotMutatedArg Pure , t3), (MutatedArg , t4)]
+  (argTerms, mutVars) <- elaborateMutList l "gauss" scname [(NotMutatedArg Pure , t1), (NotMutatedArg Pure , t2), (NotMutatedArg Pure , t3), (MutatedArg , t4)]
   case argTerms of
     [newT1, newT2, newT3, newT4] -> demutTLetStatement l PureLet mutVars (Located l (Gauss newT1 newT2 newT3 newT4))
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 elaborateMut scname (Located l (MutLaplace t1 t2 t3)) = do
-  (argTerms, mutVars) <- elaborateMutList "laplace" scname [(NotMutatedArg Pure , t1), (NotMutatedArg Pure , t2), (MutatedArg , t3)]
+  (argTerms, mutVars) <- elaborateMutList l "laplace" scname [(NotMutatedArg Pure , t1), (NotMutatedArg Pure , t2), (MutatedArg , t3)]
   case argTerms of
     [newT1, newT2, newT3] -> demutTLetStatement l PureLet mutVars (Located l (Laplace newT1 newT2 newT3))
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 elaborateMut scname (Located l (MutUndiscM t1)) = do
-  (argTerms, mutVars) <- elaborateMutList "convert" scname [(MutatedArg , t1)]
+  (argTerms, mutVars) <- elaborateMutList l "convert" scname [(MutatedArg , t1)]
   case argTerms of
     [newT1] -> demutTLetStatement l PureLet mutVars (Located l (MutUndiscM newT1))
     _ -> internalError ("Wrong number of terms after elaborateMutList")
 
 
 elaborateMut scname (Located l (InternalMutate t1)) = do
-  (argTerms, mutVars) <- elaborateMutList "internal_mutate" scname [(MutatedArg , t1)]
+  (argTerms, mutVars) <- elaborateMutList l "internal_mutate" scname [(MutatedArg , t1)]
   case argTerms of
     [newT1] -> demutTLetStatement l PureLet mutVars (Located l (InternalMutate newT1))
     _ -> internalError ("Wrong number of terms after elaborateMutList")
@@ -1121,7 +1121,7 @@ elaborateLambda scname args body = do
       --
       case memVarsOfMove `intersect` argmvs of
         [] -> pure ()
-        pvs ->   demutationError $ "Found a function which passes through a reference given as input. This is not allowed.\n"
+        pvs ->   demutationErrorNoLoc $ "Found a function which passes through a reference given as input. This is not allowed.\n"
                                       <> "The function body is:\n" <> showPretty body <> "\n"
                                       <> "The passed through memory references are: " <> showPretty pvs
 
@@ -1131,12 +1131,12 @@ elaborateLambda scname args body = do
     --
     -- case II: not allowed
     --
-    (PureValue as, xs) -> demutationError $ "Found a function which is mutating, but does not have a 'return'. This is not allowed."
+    (PureValue as, xs) -> demutationErrorNoLoc $ "Found a function which is mutating, but does not have a 'return'. This is not allowed."
                                         <> "\nThe function body is:\n" <> showPretty body
     --
     -- case III: not allowed
     --
-    (MutatingFunctionEndValue, []) -> demutationError $ "Found a function which is not mutating, but has a 'return'. This is not allowed."
+    (MutatingFunctionEndValue, []) -> demutationErrorNoLoc $ "Found a function which is not mutating, but has a 'return'. This is not allowed."
                                                     <> "\nThe function body is:\n" <> showPretty body
 
     --
@@ -1149,7 +1149,7 @@ elaborateLambda scname args body = do
               vs  -> Tup [(Located (RelatedLoc s1 l) (Var (v))) | v <- mvs]
       return (Mutating mut_states, Extra (DemutBlock ((Located (downgradeToRelated s1 l) (last_tuple)) : new_body_terms)))
 
-    (NoLastValue, _) -> demutationError $ "Found a function which has no last value, that is not allowed."
+    (NoLastValue, _) -> demutationErrorNoLoc $ "Found a function which has no last value, that is not allowed."
                                           <> "\nThe function body is:\n" <> showPretty body
 
 
@@ -1192,8 +1192,8 @@ elaborateLambda scname args body = do
 -- elaborating a list of terms which are used in individually either mutating, or not mutating places
 --
 
-elaborateMutList :: Text -> Scope -> [(MutationArgumentType , LocProcDMTerm)] -> MTC ([LocDemutDMTerm] , [ProcVar])
-elaborateMutList f scname mutargs = do
+elaborateMutList :: SourceLocExt -> Text -> Scope -> [(MutationArgumentType , LocProcDMTerm)] -> MTC ([LocDemutDMTerm] , [ProcVar])
+elaborateMutList loc f scname mutargs = do
   ---------------------------------------
   -- Regarding MoveTypes (#171)
   --
@@ -1221,7 +1221,10 @@ elaborateMutList f scname mutargs = do
 
             -- get the memvar of this tevar from the memctx
             -- and say that the memory location is mutated
-            markMutated x
+            markMutated x (DMPersistentMessage
+                           ("When checking that the argument" :<>: Quote arg :<>: "passed to function" :<>: Quote f :<>: "in a mutable argument position contains a single memory location.":\\:
+                            loc
+                           ))
 
             return ((Located l (Var (x'))), (Located l (SingleMove x)), Just x)
 
@@ -1236,7 +1239,7 @@ elaborateMutList f scname mutargs = do
         -- we require the argument to be of the right type
         case itype == reqty of
           True -> pure ()
-          False -> demutationError $ "While checking the argument " <> showPretty arg <> " of the function " <> f <> ":"
+          False -> demutationErrorNoLoc $ "While checking the argument " <> showPretty arg <> " of the function " <> f <> ":"
                                     <> "Expected it to have demutation type " <> showPretty reqty
                                     <> "But found type " <> showPretty itype
 
