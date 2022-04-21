@@ -21,6 +21,7 @@ import Data.Foldable
 import Debug.Trace
 
 import qualified Prelude as P
+default (Text)
 
 
 
@@ -357,7 +358,9 @@ mergeMemCtx = (⋆!)
 
 fst3 (a,b,c) = a
 
-demutationError = throwUnlocatedError . DemutationError
+throwLocatedError err loc = throwError (WithContext err (DMPersistentMessage loc))
+demutationError err loc = throwLocatedError (DemutationError err) loc
+demutationErrorNoLoc err = throwUnlocatedError (DemutationError err)
 
 -- buildReturnValue :: [ProcVar] -> DMTerm
 -- buildReturnValue [x] = Var (Just x :- JTAny)
@@ -469,9 +472,9 @@ cleanupVACtxAfterScopeEnd vaCtxBefore = do
 
 --------------------------------------------------------------------------------------
 
-markMutated :: ProcVar -> MTC TeVar
-markMutated pv = do
-  mv <- expectSingleMem =<< expectNotMoved pv
+markMutated :: ProcVar -> DMPersistentMessage MTC -> MTC TeVar
+markMutated pv msg = do
+  mv <- expectSingleMem msg =<< expectNotMoved pv
   tevar <- newTeVarOfMut (showT mv) (Just pv)
   let f ctx = do
         case getValue mv ctx of
@@ -639,11 +642,11 @@ setMemMaybe (Just x) mt = setMem x mt
 setMemMaybe (Nothing) _ = pure ()
 
 
-setMemTupleInManyMems :: Scope -> [ProcVar] -> [MemType] -> MTC ()
-setMemTupleInManyMems scname xs mems = mapM_ (setMemTuple scname xs) mems
+setMemTupleInManyMems :: SourceLocExt -> Scope -> [ProcVar] -> [MemType] -> MTC ()
+setMemTupleInManyMems loc scname xs mems = mapM_ (setMemTuple loc scname xs) mems
 
-setMemTuple :: Scope -> [ProcVar] -> MemType -> MTC ()
-setMemTuple scname xs (SingleMem a) = do
+setMemTuple :: SourceLocExt -> Scope -> [ProcVar] -> MemType -> MTC ()
+setMemTuple loc scname xs (SingleMem a) = do
   -- we get the memory info of the input var
   mvictx <- use memVarInfo
   ifa <- case getValue a mvictx of
@@ -662,18 +665,22 @@ setMemTuple scname xs (SingleMem a) = do
   rhs_mut <- getValue a <$> use mutCtx
 
   case rhs_mut of
-    Nothing -> demutationError $ "Expected the memory location " <> showT a <> " to have a mutation status."
+    Nothing -> internalError $ "Expected the memory location " <> showT a <> " to have a mutation status."
     Just (scvar,TeVarMutTrace pv _ ts) -> mutCtx %= (setValue a (scvar, TeVarMutTrace pv (Split memvars) ts))
 
-setMemTuple scname xs (RefMem a) = do
+setMemTuple loc scname xs (RefMem a) = do
   mapM_ (\(x) -> setMemMaybe x ([RefMem a])) (Just <$> xs)
 
-setMemTuple scname xs (TupleMem as) | length xs == length as = do
+setMemTuple loc scname xs (TupleMem as) | length xs == length as = do
   let xas = zip xs as
   mapM_ (\(x, a) -> setMem x [a]) xas
 
-setMemTuple scname xs (TupleMem as) | otherwise = demutationError $ "Trying to assign a tuple where lengths do not match:\n"
-                                                                    <> showT xs <> " = " <> showT as
+setMemTuple loc scname xs (TupleMem as) | otherwise = demutationError ("Trying to assign a tuple where lengths do not match.")
+                                                                      (loc :\\:
+                                                                       ("The LHS has length " <> showT (length xs) <> ", while the RHS has length " <> showT (length as) <> ".") :\\:
+                                                                       "" :\\:
+                                                                       ("Debug info: the inferred memory state is: " <> showT xs <> " = " <> showT as)
+                                                                      )
 
 expectNotMoved :: ProcVar -> MTC [MemType]
 expectNotMoved tevar = do
@@ -705,13 +712,15 @@ getAllMemVarsOfMemState :: MemState -> [MemVar]
 getAllMemVarsOfMemState (MemExists ms) = ms >>= getAllMemVars
 getAllMemVarsOfMemState (MemMoved) = []
 
-expectSingleMem :: [MemType] -> MTC MemVar
-expectSingleMem mts = do
+expectSingleMem :: DMPersistentMessage MTC -> [MemType] -> MTC MemVar
+expectSingleMem msg mts = do
   case mts of
     [mt] -> case mt of
               (SingleMem a) -> pure a
-              (mem) -> demutationError $ "The memory type " <> showT mem <> " was expected to contain a single memory location."
-    mts -> demutationError $ "The memory type " <> showT mts <> " was expected to only have one alternative."
+              (mem) -> demutationError ("Encountered a value spanning multiple memory locations where a single location value was expected.")
+                                       (msg :\\:
+                                        ("The encountered memory type is " <> showT mem))
+    mts -> demutationErrorNoLoc $ "The memory type " <> showT mts <> " was expected to only have one alternative."
 
 
 -- reverseMemLookup :: MemVar -> MTC ProcVar
@@ -720,12 +729,12 @@ expectSingleMem mts = do
 --   let relevantTemems = [(t,m) | (t,MemExists m) <- alltemems, wantedMem `elem` getAllMemVars m]
 
 --   case relevantTemems of
---     [] -> demutationError $ "When doing a reverse memory lookup for memory variable " <> showT wantedMem <> ", no tevar was found."
+--     [] -> demutationErrorNoLoc $ "When doing a reverse memory lookup for memory variable " <> showT wantedMem <> ", no tevar was found."
 --     [(t,a)] -> case a of
 --                 SingleMem a -> return t
---                 a  -> demutationError $ "When doing a reverse memory lookup for memory variable " <> showT wantedMem <> ", expected it to have an individual name.\n"
+--                 a  -> demutationErrorNoLoc $ "When doing a reverse memory lookup for memory variable " <> showT wantedMem <> ", expected it to have an individual name.\n"
 --                                       <> "but it was part of a compound type: " <> showT a
---     xs -> demutationError $ "When doing a reverse memory lookup for memory variable " <> showT wantedMem <> ", multiple tevars were found: " <> showT xs
+--     xs -> demutationErrorNoLoc $ "When doing a reverse memory lookup for memory variable " <> showT wantedMem <> ", multiple tevars were found: " <> showT xs
 
 
 getMemVarMutationStatus :: MemVar -> MTC (IsSplit, [TeVar])
@@ -741,7 +750,7 @@ coequalizeTeVarMutTrace (TeVarMutTrace pv1 split1 ts1) (TeVarMutTrace pv2 split2
 coequalizeTeVarMutTrace (TeVarMutTrace pv1 split1 ts1) (TeVarMutTrace pv2 split2 ts2)  = do
   t3 <- newTeVarOfMut "phi" Nothing
   let makeProj (Just pv) []     = pure $ Extra (DemutSLetBase PureLet (t3) (notLocated $ Var (UserTeVar pv)))
-      makeProj Nothing   []     = lift $ demutationError $ "While demutating phi encountered a branch where a proc-var-less memory location is mutated. This cannot be done."
+      makeProj Nothing   []     = lift $ demutationErrorNoLoc $ "While demutating phi encountered a branch where a proc-var-less memory location is mutated. This cannot be done."
       makeProj _         (t:ts) = pure $ Extra (DemutSLetBase PureLet (t3) (notLocated $ Var (t)))
 
   proj1 <- makeProj pv1 ts1 
@@ -765,7 +774,7 @@ coequalizeTeVarMutTrace (TeVarMutTrace pv1 split1 ts1) (TeVarMutTrace pv2 split2
 
   pure $ TeVarMutTrace pv3 split3 (t3 : ts1 <> ts2)
 
--- coequalizeTeVarMutTrace (TeVarMutTrace pv1 _ ts1) (TeVarMutTrace pv2 _ ts2)  = lift $ demutationError $ "While demutating phi, encountered two branches where the owners of a tvar differ. This is not allowed."
+-- coequalizeTeVarMutTrace (TeVarMutTrace pv1 _ ts1) (TeVarMutTrace pv2 _ ts2)  = lift $ demutationErrorNoLoc $ "While demutating phi, encountered two branches where the owners of a tvar differ. This is not allowed."
 
 
 instance SemigroupM (WriterT ([LocDemutDMTerm],[LocDemutDMTerm]) MTC) TeVarMutTrace where
@@ -777,7 +786,7 @@ instance CheckNeutral (WriterT ([LocDemutDMTerm],[LocDemutDMTerm]) MTC) TeVarMut
 
 instance SemigroupM (WriterT ([LocDemutDMTerm],[LocDemutDMTerm]) MTC) Scope where
   (⋆) a b | a == b    = pure a
-  (⋆) a b | otherwise = lift $ demutationError $ "While demutating phi, encountered two branches where the scopevars of a memvar differ. This is not allowed."
+  (⋆) a b | otherwise = lift $ demutationErrorNoLoc $ "While demutating phi, encountered two branches where the scopevars of a memvar differ. This is not allowed."
 instance MonoidM (WriterT ([LocDemutDMTerm],[LocDemutDMTerm]) MTC) Scope where
   neutral = lift $ internalError $ "There is no neutral element for scopevars"
 
@@ -832,7 +841,7 @@ procVarAsTeVar pv = do
     -- if we there are mutations, we need
     -- to make sure that all tevars are the same
     (x:xs) -> case all (== x) xs of
-      False -> demutationError $ "The tevars assigned to mutated " <> showT pv <> " do not match in different execution branches.\n"
+      False -> demutationErrorNoLoc $ "The tevars assigned to mutated " <> showT pv <> " do not match in different execution branches.\n"
                                 <> "This is not allowed.\n"
                                 <> "Tevars: " <> showT (x:xs)
 

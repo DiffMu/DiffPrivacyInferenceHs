@@ -451,7 +451,19 @@ instance (ShowLocated a, ShowLocated b) => ShowLocated (a :<>: b) where
 instance (Normalize t a, Normalize t b) => Normalize t (a :<>: b) where
   normalize e (a :<>: b) = (:<>:) <$> normalize e a <*> normalize e b
 
+-------------------------------------------------------------------------
+-- Quote wrapping
 
+data Quote a = Quote a
+  deriving (Show)
+
+instance (ShowLocated a) => ShowLocated (Quote a) where
+  showLocated (Quote a) = do
+    a' <- showLocated a
+    return $ "'" <> a' <> "'"
+
+instance (Normalize t a) => Normalize t (Quote a) where
+  normalize e (Quote a) = Quote <$> normalize e a
 -- -------
 
 -- data (:<.:) a = (:<.:) a String
