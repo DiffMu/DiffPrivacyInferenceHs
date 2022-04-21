@@ -75,7 +75,7 @@ tcb :: Bool -> TC a -> IO (Either (DMException) a)
 tcb True = tcl
 tcb False = tc
 
-sn :: (Show a, Normalize TC a) => TC a -> TC a
+sn :: (ShowPretty a, Normalize TC a) => TC a -> TC a
 sn x = do
   -- x1 <- x
   -- solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
@@ -105,7 +105,7 @@ sn x = do
 
 
 
-sn_EW :: (Show a, Normalize TC a) => TC a -> TC a
+sn_EW :: (ShowPretty a, Normalize TC a) => TC a -> TC a
 sn_EW x = x >>= solveAndNormalize ExactNormalization [SolveExact,SolveAssumeWorst]
   -- do
   -- x' <- x

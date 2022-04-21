@@ -52,7 +52,7 @@ instance Solve MonadDMTC MakeConst (DMMain, Text) where
       NoFun (Numeric k) -> do
                      cv <- newVar 
                      ck <- newSVarWithPriority UserNamePriority username
-                     debug $ "While making const: priority of " <> show ck <> " is: " <> show (varPriority ck)
+                     debug $ "While making const: priority of " <> showT ck <> " is: " <> showT (varPriority ck)
                      unifyFromName name (k) (Num cv (Const (svar ck)))
                      dischargeConstraint name
       _ -> dischargeConstraint name 
@@ -133,7 +133,7 @@ instance Solve MonadDMTC IsAdditiveNoiseResult (DMTypeOf MainKind, DMTypeOf Main
         NoFun (TVar x) -> pure () -- we don't know yet.
         NoFun (DMContainer k nrm clp n τ) -> do -- is mgauss
 
-           logForce $ ">>>>>>>>>>>>>>>>>>>>>>>>\nIn gauss, type is " <> show (DMGrads nrm clp n τ) <> "<<<<<<<<<<<<<<<<<<<<<"
+           logForce $ ">>>>>>>>>>>>>>>>>>>>>>>>\nIn gauss, type is " <> showT (DMGrads nrm clp n τ) <> "<<<<<<<<<<<<<<<<<<<<<"
 
            iclp <- newVar -- clip of input matrix can be anything
            τv <- newVar -- input matrix element type can be anything (as long as it's numeric)
@@ -171,8 +171,8 @@ instance Solve MonadDMTC IsTProject ((Int, DMTypeOf MainKind) :=: DMTypeOf MainK
             unifyFromName name ρ (NoFun ρ')
             dischargeConstraint name
             pure ()
-          Nothing -> internalError $ "tuple index out of range\nwhere index: " <> show i <> ",tuple type: " <> show ρs
-      f (τs) = throwUnlocatedError (TypeMismatchError $ "Expected the type " <> show ρs <> " to be a tuple type.")
+          Nothing -> internalError $ "tuple index out of range\nwhere index: " <> showPretty i <> ",tuple type: " <> showPretty ρs
+      f (τs) = throwUnlocatedError (TypeMismatchError $ "Expected the type " <> showT ρs <> " to be a tuple type.")
 
 
 --------------------------------------------------

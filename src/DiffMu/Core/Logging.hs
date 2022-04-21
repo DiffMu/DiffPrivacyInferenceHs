@@ -70,7 +70,7 @@ data DMLogSeverity = Debug | Info | Warning | Force
 data IsFollowUpMessage = FollowUpMessage | NotFollowUpMessage
   deriving (Eq)
 
-data DMLogMessage = DMLogMessage DMLogSeverity DMLogLocation String
+data DMLogMessage = DMLogMessage DMLogSeverity DMLogLocation Text
 
 data DMLogMessageFU = DMLogMessageFU IsFollowUpMessage DMLogMessage
 
@@ -145,12 +145,12 @@ instance Show DMLogSeverity where
   show Force = yellow "Force"
   show Warning = magenta "Warning"
 
-instance Show DMLogMessage where
-  show (DMLogMessage s l m) = show s <> "[" <> show l <> "]: " <> m
+instance ShowPretty DMLogMessage where
+  showPretty (DMLogMessage s l m) = showT s <> "[" <> showT l <> "]: " <> m
     -- "[" <> blue (show l) <> "]\t" <> s <> blue ": \t" <> m
 
 instance Show DMLogMessageFU where
-  show (DMLogMessageFU x (DMLogMessage s l m)) = prefix' <> m
+  show (DMLogMessageFU x (DMLogMessage s l m)) = prefix' <> T.unpack m
     where
       showSevNoColor :: DMLogSeverity -> String
       showSevNoColor Debug   = "Debug"

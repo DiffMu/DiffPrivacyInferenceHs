@@ -153,7 +153,7 @@ trySubstitute :: (MonadImpossible t, MonadWatch t, Term v a, IsKind k) => Subs v
 trySubstitute (Subs m) (x :: v k) = case H.lookup (SomeK x) m of
   Just (SomeK (a :: a k2))  -> do
     case testEquality (typeRep @k) (typeRep @k2) of
-      Nothing -> impossible $ "Encountered a wrongly kinded substitution: " <> show (typeRep @k) <> " ≠ " <> show (typeRep @k2)
+      Nothing -> impossible $ "Encountered a wrongly kinded substitution: " <> showT (typeRep @k) <> " ≠ " <> showT (typeRep @k2)
       Just Refl -> notifyChanged >> pure a
 
   Nothing -> pure (var x)
@@ -174,7 +174,7 @@ substituteSingle ((x :: v k) := (a :: a k)) b = runIdentity (substitute f b)
 wellkindedSub :: (IsKind k, Typeable j, Term v a, Typeable k => FreeVars v (a k), MonadImpossible t, MonadUnificationError t) => Sub' v a k j -> t (Sub v a k)
 wellkindedSub ((x :: v k) :=~ (a :: a j)) =
     case testEquality (typeRep @k) (typeRep @j) of
-      Nothing -> impossible $ "Encountered a wrongly kinded substitution: " <> show (typeRep @k) <> " ≠ " <> show (typeRep @j)
+      Nothing -> impossible $ "Encountered a wrongly kinded substitution: " <> showT (typeRep @k) <> " ≠ " <> showT (typeRep @j)
       Just Refl -> do
         -- occur check
         let varsInA = freeVars a
@@ -196,7 +196,7 @@ instance (MonadImpossible t, MonadUnificationError t, Term v a, forall k. Typeab
     where f mm (SomeK (x :: v k)) (SomeK a) = do
             mm' <- mm
             case H.lookup (SomeK x) mm' of
-              Just (SomeK a') -> impossible $ "Tried to extend a set of substitutions which already contains " <> show (x :=~ a') <> " with a new substitution of the same variable, " <> show (x :=~ a) <> "."
+              Just (SomeK a') -> impossible $ "Tried to extend a set of substitutions which already contains " <> showT (x :=~ a') <> " with a new substitution of the same variable, " <> showT (x :=~ a) <> "."
               Nothing -> do σ <- wellkindedSub (x :=~ a)
                             let mm1 = H.map (substituteSingle' σ) mm'
                             return (H.insert (SomeK x) (SomeK a) mm1)

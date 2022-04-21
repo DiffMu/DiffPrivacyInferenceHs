@@ -58,7 +58,7 @@ solveIsFunctionArgument name (Fun xs, Fun ys) = do
       return ()
 
     -- if there were functions without annotation, error out
-    xs -> internalError $ "Encountered functions without a required julia type annotation as the argument to a function:\n" <> show xs
+    xs -> internalError $ "Encountered functions without a required julia type annotation as the argument to a function:\n" <> showPretty xs
 
 -- the callee does not expect any specific type, so we can just unify.
 solveIsFunctionArgument name (TVar a, Fun xs) = addSub (a := Fun xs) >> dischargeConstraint name >> pure ()
@@ -116,7 +116,7 @@ solveIsChoice name (provided, required) = do
           case curReq of
              [] -> return (curProv, [])
              (τs : restReq) -> do -- go through all required methods
-                 debug $ "[IFA]: called on " <> show τs
+                 debug $ "[IFA]: called on " <> showT τs
                  case τs of
                       TVar _ -> do -- it was a tvar
                               (resP, resR) <- (matchArgs curProv restReq) -- can't resolve TVar choice, keep it and recurse.
@@ -138,8 +138,8 @@ solveIsChoice name (provided, required) = do
                                -- else we do not change them
                                False -> candidates
 
-                         debug $ "[IFA]: candidates before: " <> show candidates
-                         debug $ "[IFA]: candidates after:  " <> show candidates'
+                         debug $ "[IFA]: candidates before: " <> showT candidates
+                         debug $ "[IFA]: candidates after:  " <> showT candidates'
 
                          case and ((length candidates' == length curProv),(length candidates' > 1)) of
                             -- no choices were discarded, the constraint could not be simplified.
@@ -169,7 +169,7 @@ solveIsChoice name (provided, required) = do
    case newcs of
         [] -> do -- complete resolution! set counters, discard.
                 debug $ "[IFA]: Done, newdict is:"
-                debug $ show newdict
+                debug $ showT newdict
                 mapM (resolveChoiceHash name) (H.toList newdict)
                 dischargeConstraint name
         cs | (length required > length newcs) -> do
@@ -202,7 +202,7 @@ resolveChoiceHash name (sign, (method, matches)) = do
                                      msg <- inheritanceMessageFromName name
                                      throwError (WithContext (NoChoiceFoundError $ "Found application of a privacy function "
                                                                   <> show method <> " where a senstivity value was expected") (DMPersistentMessage msg))
-                                 _ -> impossible $ "reached impossible case in resolving choices: " <> show (match, method)
+                                 _ -> impossible $ "reached impossible case in resolving choices: " <> showT (match, method)
 
    methsigs <- mapM resolveAnn matches -- set sensitivities of all matches and get their dmtype signatures
    let argtypes = transpose (map snd methsigs) -- get per-argument list instead of per-match list
@@ -265,19 +265,19 @@ getMatchCandidates τsτ provided = do
                         let argsNoJFun = [(τa, ann) | (τa :@ ann) <- args, noJuliaFunction τa]
                         -- ... and get the free typevars of the rest.
                         let free = and (null . freeVars @_ @TVarOf <$> argsNoJFun)
-                        debug $ "[IFA]: `getMatchCandidates` on " <> show τsτ
-                        debug $ "[IFA]: (via " <> show argsNoJFun <> ")"
-                        debug $ "[IFA]: => free vars is: " <> show free
+                        debug $ "[IFA]: `getMatchCandidates` on " <> showT τsτ
+                        debug $ "[IFA]: (via " <> showT argsNoJFun <> ")"
+                        debug $ "[IFA]: => free vars is: " <> showT free
                         return (cand, free)
       (args :->*: _) -> do -- same as for the above case.
                         let cand = (H.filterWithKey (\s c -> choiceCouldMatch (fstAnn <$> args) s) provided)
                         let argsNoJFun = [(τa, ann) | (τa :@ ann) <- args, noJuliaFunction τa]
                         let free = and (null . freeVars @_ @TVarOf <$> argsNoJFun)
-                        debug $ "[IFA]: `getMatchCandidates` on " <> show τsτ
-                        debug $ "[IFA]: (via " <> show argsNoJFun <> ")"
-                        debug $ "[IFA]: => free vars is: " <> show free
+                        debug $ "[IFA]: `getMatchCandidates` on " <> showT τsτ
+                        debug $ "[IFA]: (via " <> showT argsNoJFun <> ")"
+                        debug $ "[IFA]: => free vars is: " <> showT free
                         return (cand, free)
-      _ -> throwUnlocatedError (ImpossibleError ("Invalid type for Choice: " <> show τsτ))
+      _ -> throwUnlocatedError (ImpossibleError ("Invalid type for Choice: " <> showPretty τsτ))
 
    if H.null candidates
       then throwUnlocatedError (NoChoiceFoundError $ "No matching choice for " <> show τsτ <> " found in " <> show provided)

@@ -95,7 +95,7 @@ elaboratePureValue scname te = do
     StatementWithoutDefault _ _   -> demutationError $ "Expected term to be a value, but it was a statement:\n" <> showPretty te
     MutatingFunctionEnd _ -> demutationError $ "Expected term to be a value, but it was a return."
     Value Pure mt -> return (mt)
-    Value _ mt    -> demutationError $ "Expected term to be a pure value, but it has type: " <> show mt
+    Value _ mt    -> demutationError $ "Expected term to be a pure value, but it has type: " <> showPretty mt
                                     <> "The term is:\n"
                                     <> showPretty te
     -- PurePhiTermType cond tt1 tt2 -> case (tt1, tt2) of
@@ -116,10 +116,10 @@ makeTermList [] = demutationError $ "Found an empty list of statements."
 -- single element left
 makeTermList (Value it mt : [])         = case it of
                                             Pure -> do mt' <- moveTypeAsTerm_Loc mt ; return (PureValue mt, Nothing, [mt'])
-                                            _    -> demutationError $ "The last value of a block has the type " <> show it <> "\n"
+                                            _    -> demutationError $ "The last value of a block has the type " <> showPretty it <> "\n"
                                                                     <> "Only pure values are allowed.\n"
                                                                     <> "The value is:\n"
-                                                                    <> show mt
+                                                                    <> showPretty mt
 makeTermList (Statement l term last : []) = do last' <- (moveTypeAsTerm last) ; return (PureValue (Located l last), Just (Located l last'), [Located l term])
 makeTermList (StatementWithoutDefault l term : []) = return (NoLastValue , Nothing, [Located l term])
 -- makeTermList (PurePhiTermType cond (Value Pure mt1,tt1) (Value Pure mt2,tt2) : []) = return (PureValue [mt1,mt2] , Nothing, [Extra (DemutPhi cond tt1 tt2)])
@@ -127,7 +127,7 @@ makeTermList (StatementWithoutDefault l term : []) = return (NoLastValue , Nothi
 makeTermList (MutatingFunctionEnd _ : [])          = return (MutatingFunctionEndValue , Nothing, [])
 
 -- more than one element left
-makeTermList (Value _ mt : ts)          = demutationError $ "Found a value term " <> show mt <> " inside a list of statements."
+makeTermList (Value _ mt : ts)          = demutationError $ "Found a value term " <> showPretty mt <> " inside a list of statements."
 makeTermList (Statement l term _ : ts)    = do (last, lastt, ts') <- makeTermList ts
                                                return (last, lastt, ts' <> [Located l term])
 makeTermList (StatementWithoutDefault l term : ts)
@@ -247,7 +247,7 @@ elaborateMut scname (Located l (Extra (ProcSLetBase ltype x term))) = do
   case newTermType of
     Pure -> pure ()
     Mutating _ -> pure ()
-    PureBlackBox     -> throwUnlocatedError (DemutationError $ "Found an assignment " <> show x <> " = " <> showPretty term <> " where RHS is a black box. This is not allowed.")
+    PureBlackBox     -> throwUnlocatedError (DemutationError $ "Found an assignment " <> showPretty x <> " = " <> showPretty term <> " where RHS is a black box. This is not allowed.")
 
   moveType' <- (moveTypeAsTerm moveType)
 
@@ -267,10 +267,10 @@ elaborateMut scname (Located l (Extra (ProcSLetBase ltype x term))) = do
   setImmutType scname x newTermType
 
   -- log what happened
-  debug $ "[elaborateMut/SLetBase]: The variable " <> show x <> " is being assigned." 
+  debug $ "[elaborateMut/SLetBase]: The variable " <> showPretty x <> " is being assigned." 
   logmem <- use memCtx
   debug $ "The memctx is now:\n"
-  debug $ show logmem
+  debug $ showT logmem
 
 
   return (Statement l (Extra (DemutSLetBase ltype x' (Located l_moveType moveType')))
@@ -306,8 +306,8 @@ elaborateMut scname fullterm@(Located l (Extra (ProcTLetBase ltype vars term))) 
   --
   case newTermType of
     Pure -> pure ()
-    Mutating ims -> throwUnlocatedError (DemutationError $ "Found a tuple assignment " <> show vars <> " = " <> showPretty term <> " where RHS is a mutating function. This is not allowed.")
-    PureBlackBox -> throwUnlocatedError (DemutationError $ "Found an assignment " <> show vars <> " = " <> showPretty term <> " where RHS is a black box. This is not allowed.")
+    Mutating ims -> throwUnlocatedError (DemutationError $ "Found a tuple assignment " <> showPretty vars <> " = " <> showPretty term <> " where RHS is a mutating function. This is not allowed.")
+    PureBlackBox -> throwUnlocatedError (DemutationError $ "Found an assignment " <> showPretty vars <> " = " <> showPretty term <> " where RHS is a black box. This is not allowed.")
   --
   -- we set the immuttype of every element on the LHS to Pure
   --
@@ -366,10 +366,10 @@ elaborateMut scname (Located l (Extra (ProcFLet name term))) = do
   setImmutTypeFLetDefined scname name newTermType
 
   -- log what happened
-  debug $ "[elaborateMut/FLetBase]: The function " <> show name <> " is being defined."
+  debug $ "[elaborateMut/FLetBase]: The function " <> showPretty name <> " is being defined."
   logmem <- use memCtx
   debug $ "The memctx is now:\n"
-  debug $ show logmem
+  debug $ showT logmem
 
 
   return (Statement l (Extra (DemutFLet (UserTeVar name) (Located l_moveType term'))) (SingleMove name))
@@ -466,7 +466,7 @@ elaborateMut scname term@(Located l (Extra (ProcBBApply f args bbkind))) = do
         let glvars' = map UserTeVar glvars
         return $ Value Pure (Located l (NoMove (BBApply movetype' newArgs glvars' bbkind')))
 
-    otherType -> demutationError $ "Trying to call a function of type " <> show otherType <> " with `unbox_call`. In the term " <> showPretty term
+    otherType -> demutationError $ "Trying to call a function of type " <> showPretty otherType <> " with `unbox_call`. In the term " <> showPretty term
 
 
 
@@ -517,10 +517,10 @@ elaborateMut scname (Located l (Extra (ProcPreLoop (i1,i2,i3) iterVar body))) = 
   --
   debug $ "----"
   debug $ "memctx before:\n"
-  debug $ show memsBefore
+  debug $ showT memsBefore
   debug $ "----"
   debug $ "memctx after:\n"
-  debug $ show memsAfter
+  debug $ showT memsAfter
   --
   --
   -- get all procvars in `memsAfter` which are different from `memsBefore` (or new).
@@ -537,7 +537,7 @@ elaborateMut scname (Located l (Extra (ProcPreLoop (i1,i2,i3) iterVar body))) = 
   case newMemVars `intersect` oldMemVars of
     [] -> pure ()
     xs -> throwUnlocatedError $ DemutationMovedVariableAccessError $ "Found a loop body which moves variables around.\n"
-                          <> "The following variables are changed and contain memory locations from before: " <> show xs <> "\n"
+                          <> "The following variables are changed and contain memory locations from before: " <> showT xs <> "\n"
                           <> "Since this means that we cannot track what actually happens in the case of an unknown number of iterations,\n"
                           <> "this is not allowed.\n"
                           <> "\n"
@@ -563,9 +563,9 @@ elaborateMut scname (Located l (Extra (ProcPreLoop (i1,i2,i3) iterVar body))) = 
                                            Nothing -> undefined -- this should not happen since pv is in `memsBefore`
                       case pmemstate_before == pmemstate_after of
                         True  -> pure ()
-                        False -> demutationError $ "The variable " <> show pv <> " contains a reference to the following mutated function arguments: " <> show mutatedArgMemVars <> "\n"
+                        False -> demutationError $ "The variable " <> showT pv <> " contains a reference to the following mutated function arguments: " <> showT mutatedArgMemVars <> "\n"
                                                    <> "If function arguments are mutated in a loop, then the variable which contains them is not allowed to be reassigned.\n"
-                                                   <> "But this happened here, memory of the variable before the body: " <> show pmemstate_before <> ", after: " <> show pmemstate_after
+                                                   <> "But this happened here, memory of the variable before the body: " <> showT pmemstate_before <> ", after: " <> showT pmemstate_after
                                                    <> "\n"
                                                    <> "Loop body:\n"
                                                    <> showPretty body
@@ -593,7 +593,7 @@ elaborateMut scname (Located l (Extra (ProcPreLoop (i1,i2,i3) iterVar body))) = 
               let single_mems = [m | SingleMem m <- mts]
               let isChanged m = case (getValue m mutsBefore, getValue m mutsAfter) of {
                     (Just ma, Just ma') -> pure $ not $ ma == ma'
-                    ; (ma, ma')         -> internalError $ "Did not expect the mutctx to have no entry for: " <> show v1
+                    ; (ma, ma')         -> internalError $ "Did not expect the mutctx to have no entry for: " <> showT v1
                     }
               mems_changed <- mapM isChanged single_mems
               return $ any (== True) mems_changed
@@ -625,7 +625,7 @@ elaborateMut scname (Located l (Extra (ProcPreLoop (i1,i2,i3) iterVar body))) = 
 
   debug $ "----"
   debug $ "capture mems:\n"
-  debug $ show captureMems
+  debug $ showT captureMems
 
 
   ------------------------------------------------
@@ -758,7 +758,7 @@ elaborateMut scname term@(Located l (Extra (ProcPhi cond tr fs))) = do
     --
     -- error case: mixed branches
     --
-    branchTypes -> demutationError $ "Found an if where the branch types differ: " <> show branchTypes
+    branchTypes -> demutationError $ "Found an if where the branch types differ: " <> showT branchTypes
 
 
 
@@ -1057,9 +1057,9 @@ elaborateLambda scname args body = do
     mutctx <- use mutCtx
     logForce $ ""
     logForce $ "[elaborateLambda]"
-    logForce $ "memCtx:\n" <> show memctx
+    logForce $ "memCtx:\n" <> showT memctx
     logForce $ ""
-    logForce $ "mutCtx:\n" <> show mutctx
+    logForce $ "mutCtx:\n" <> showT mutctx
     logForce $ ""
     return ()
   --
@@ -1113,8 +1113,8 @@ elaborateLambda scname args body = do
       -- and check that they do not contain memory
       -- locations which are function inputs.
       --
-      debug $ "[elaborateLambda] pure function. move type: " <> show as
-      debug $ "   movedVars: " <> show (movedVarsOfMoveType_Loc as) <> ", mutated_argmvs: " <> show mutated_argmvs
+      debug $ "[elaborateLambda] pure function. move type: " <> showT as
+      debug $ "   movedVars: " <> showT (movedVarsOfMoveType_Loc as) <> ", mutated_argmvs: " <> showT mutated_argmvs
       --
       memTypesOfMove <- mapM expectNotMoved (movedVarsOfMoveType_Loc as)
       let memVarsOfMove = join memTypesOfMove >>= getAllMemVars
@@ -1123,7 +1123,7 @@ elaborateLambda scname args body = do
         [] -> pure ()
         pvs ->   demutationError $ "Found a function which passes through a reference given as input. This is not allowed.\n"
                                       <> "The function body is:\n" <> showPretty body <> "\n"
-                                      <> "The passed through memory references are: " <> show pvs
+                                      <> "The passed through memory references are: " <> showPretty pvs
 
       return $ (Pure, Extra $ DemutBlock new_body_terms)
 
@@ -1192,7 +1192,7 @@ elaborateLambda scname args body = do
 -- elaborating a list of terms which are used in individually either mutating, or not mutating places
 --
 
-elaborateMutList :: String -> Scope -> [(MutationArgumentType , LocProcDMTerm)] -> MTC ([LocDemutDMTerm] , [ProcVar])
+elaborateMutList :: Text -> Scope -> [(MutationArgumentType , LocProcDMTerm)] -> MTC ([LocDemutDMTerm] , [ProcVar])
 elaborateMutList f scname mutargs = do
   ---------------------------------------
   -- Regarding MoveTypes (#171)
@@ -1236,9 +1236,9 @@ elaborateMutList f scname mutargs = do
         -- we require the argument to be of the right type
         case itype == reqty of
           True -> pure ()
-          False -> demutationError $ "While checking the argument " <> show arg <> " of the function " <> f <> ":"
-                                    <> "Expected it to have demutation type " <> show reqty
-                                    <> "But found type " <> show itype
+          False -> demutationError $ "While checking the argument " <> showPretty arg <> " of the function " <> f <> ":"
+                                    <> "Expected it to have demutation type " <> showPretty reqty
+                                    <> "But found type " <> showPretty itype
 
         movetype' <- moveTypeAsTerm_Loc movetype
 
@@ -1286,7 +1286,7 @@ elaborateMutList f scname mutargs = do
                      $ "The function '" <> f <> "' is called with the following vars in mutating positions:\n\n"
                         <> showvarcounts mutvarcounts <> "\n"
                         <> "But it is not allowed to have the same variable occur multiple times "
-                        where showvarcounts ((name,count):rest) = " - variable `" <> show name <> "` occurs " <> show count <> " times." <> "\n"
+                        where showvarcounts ((name,count):rest) = " - variable `" <> showT name <> "` occurs " <> showT count <> " times." <> "\n"
                                                                   <> showvarcounts rest
                               showvarcounts [] = ""
 

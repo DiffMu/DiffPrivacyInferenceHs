@@ -98,7 +98,7 @@ typecheckFromJExprWithPrinter :: ((DMMain,Full (DMPersistentMessage TC)) -> Text
 typecheckFromJExprWithPrinter printer logoptions term rawsource = do
   let r = do
 
-        log $ "Checking term   : " <> show term
+        log $ "Checking term   : " <> showT term
 
         term' <- parseDMTermFromJExpr term >>= (liftNewLightTC . preprocessAll)
 
@@ -156,7 +156,7 @@ typecheckFromJExpr_Simple term rawsource = do
         in do
            "\n---------------------------------------------------------------------------\n"
            <> "Type:\n" <> runReader (showLocated ty) rawsource
-           <> "\n" <> T.pack (showPretty (_userVars (_meta full)))
+           <> "\n" <> (showPretty (_userVars (_meta full)))
            <> "\n---------------------------------------------------------------------------\n"
            <> cstring <> "\n"
            <> fcstring
@@ -179,7 +179,7 @@ typecheckFromJExpr_Detailed term rawsource = do
         "\n---------------------------------------------------------------------------\n"
         <> "Type:\n" <> runReader (showLocated ty) rawsource
         <> "\n---------------------------------------------------------------------------\n"
-        <> "Monad state:\n" <> T.pack (show full)
+        <> "Monad state:\n" <> (showT full)
 
   typecheckFromJExprWithPrinter printer (DoShowLog Debug logging_locations) term rawsource
 

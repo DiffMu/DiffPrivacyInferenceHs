@@ -9,6 +9,7 @@ import DiffMu.Core.Logging
 import DiffMu.Typecheck.Preprocess.Common
 
 import Debug.Trace
+import qualified Data.Text as T
 
 -----------------------------------------------------------------------------------
 -- preprocessing step to make procedural "blocks" of statements into nice nested DMTerms.
@@ -27,7 +28,7 @@ unblockValue (Located l (Extra e)) = case e of
   DemutBlock []       -> unblockingError $ "Found an empty block where a value was expected."
   DemutBlock (x:xs)   -> unblockStatementsM (unblockValue x) xs
   DemutPhi cond tr fs -> Located l <$> (Phi <$> (unblock cond) <*> (unblock tr) <*> (unblock fs)) -- a phi that has no tail
-  _                   -> unblockingError $ "Found a statement without return value. This is not allowed.\n" <> "Statement:\n" <> showPretty e
+  _                   -> unblockingError $ "Found a statement without return value. This is not allowed.\n" <> "Statement:\n" <> T.unpack (showPretty e)
 unblockValue t = recDMTermM_Loc unblockValue (\(Located l x) -> unblock (Located l (Extra x))) t
 
 
@@ -46,5 +47,5 @@ unblockStatements last (Located l (Extra (DemutLoop (n1,n2,n3) cvars cvars' it b
         unblockStatementsM (Located l <$> (TLet cvars' <$> (Located l <$> (Loop <$> ((,,) <$> unblock n1 <*> unblock n2 <*> unblock n3) <*> pure cvars <*> pure it <*> (unblock body))) <*> pure last)) xs
 
 unblockStatements last (x                                   : xs) = unblockingError $ "Expected a statement, but encountered a term:"
-                                                                                   <> showPretty x
+                                                                                   <> T.unpack (showPretty x)
 

@@ -324,11 +324,11 @@ instance MonadDMTC t => Unify (WithContext DMException) t (WithRelev e) where
 -- Unification of DMTypes (of any kind k) is given by:
 instance (Typeable k, MonadDMTC t) => Unify (WithContext DMException) t (DMTypeOf k) where
   unify_ name a b = do
-    withLogLocation "Unification" $ debug ("Unifying " <> show a <> " ==! "<> show b)
+    withLogLocation "Unification" $ debug ("Unifying " <> showPretty a <> " ==! "<> showPretty b)
     res <- runExceptT $ runINCResT $ unifyᵢ_Msg @(StoppingReason (WithContext DMException)) (WrapMessageINCRev @(WithContext DMException) name) a b
     case res of
       Left (Wait')   -> do
-        withLogLocation "Unification" $ debug ("Got wait in unify on " <> show a <> " ==! "<> show b)
+        withLogLocation "Unification" $ debug ("Got wait in unify on " <> showPretty a <> " ==! "<> showPretty b)
         liftTC ((a ==! b) (WrapMessageRevId name))
         return a
       Left (Fail' (WithContext err (DMPersistentMessage msg))) -> throwError (WithContext err (DMPersistentMessage (WrapMessageINC @(WithContext DMException) msg)))

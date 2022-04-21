@@ -325,7 +325,7 @@ instance TCConstraint IsTProject where
   runConstr (IsTProject c) = c
 
 instance (ShowPretty a) => ShowPretty (IsTProject ((Int , a) :=: a)) where
-    showPretty (IsTProject ((i , t) :=: e)) = "Type " <> showPretty t <> " is a tuple whose " <> show i <> "-th entry has type " <> showPretty e
+    showPretty (IsTProject ((i , t) :=: e)) = "Type " <> showPretty t <> " is a tuple whose " <> showPretty i <> "-th entry has type " <> showPretty e
 
 --------------------------------------------------
 -- black boxes

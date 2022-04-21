@@ -29,7 +29,7 @@ instance Show SolvingMode where
   show SolveSpecial = "special"
   
 instance ShowPretty SolvingMode where
-    showPretty = show
+    showPretty = T.pack . show
 
 instance Monad m => Normalize m SolvingMode where
   normalize _ = pure
@@ -86,7 +86,7 @@ instance ShowPretty (Solvable eC eC2 isT) where
   showPretty (Solvable c) = showPretty c
 
 instance ShowLocated (Solvable eC eC2 isT) where
-  showLocated = pure . T.pack . showPretty
+  showLocated = pure . showPretty
   -- showLocated (Solvable (c :: c a)) =  -- (Solvable @isT <$> insideConstr (normalize @(t) nt) c)
 
 data CloseConstraintSetResult = ConstraintSet_WasEmpty | ConstraintSet_WasNotEmpty
@@ -111,7 +111,7 @@ class (Monad t) => MonadConstraint isT t | t -> isT where
   getConstraintMessage :: IxSymbol -> t (DMPersistentMessage t)
   getConstraint :: IxSymbol -> t (Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT, DMPersistentMessage t)
   getAllConstraints :: t [(IxSymbol, Solvable (ConstraintOnSolvable t) (ContentConstraintOnSolvable t) isT)]
-  clearSolvingEvents :: t [String]
+  clearSolvingEvents :: t [Text]
 
 inheritanceMessageFromName name = do
     (c,msg) <- getConstraint name
@@ -153,7 +153,7 @@ solveAllConstraints nt modes = withLogLocation "Constr" $ do
     [] -> pure ()
     xs -> do
       log $ "[Solver]: Before solving all constraints, the following events have accumulated unnoticed:"
-      log $ intercalate "\n" (fmap ("           - " <>) xs)
+      log $ intercalateS "\n" (fmap ("           - " <>) xs)
       log ""
 
 
@@ -211,8 +211,8 @@ solveAllConstraints nt modes = withLogLocation "Constr" $ do
       case (bDischarged, events) of
         (False,[]) -> pure ()
         (b,xs) -> do
-          log $ "[Solver]: solving (" <> show mode <> ") " <> show name <> " : " <> show constr
-          log $ intercalate "\n" (fmap ("             - " <>) xs)
+          log $ "[Solver]: solving (" <> showT mode <> ") " <> showT name <> " : " <> showPretty constr
+          log $ intercalateS "\n" (fmap ("             - " <>) xs)
           log $ "          => " <> if b then green "Discharged" else yellow "Wait/Update"
 
       solveAllConstraints nt modes
@@ -234,7 +234,7 @@ solvingAllNewConstraints nt modes f = withLogLocation "Constr" $ do
   return (closeRes, res)
 
 
-solveAndNormalize :: forall a isT t eC e. (MonadDMError e t, MonadImpossible t, MonadLog t, MonadConstraint isT t, MonadNormalize t, IsT isT t, Normalize t a, Show a) => NormalizationType -> [SolvingMode] -> a -> t a
+solveAndNormalize :: forall a isT t eC e. (MonadDMError e t, MonadImpossible t, MonadLog t, MonadConstraint isT t, MonadNormalize t, IsT isT t, Normalize t a, ShowPretty a) => NormalizationType -> [SolvingMode] -> a -> t a
 solveAndNormalize nt modes value = f 4 value
   where
     f :: Int -> a -> t a
@@ -259,8 +259,8 @@ solveAndNormalize nt modes value = f 4 value
       debug $ "Solved constraints as far as possible."
       debug $ "Now normalizing type."
       a1 <- normalize nt a0
-      debug $ "Old type: " <> show a0
-      debug $ "New type: " <> show a1
+      debug $ "Old type: " <> showPretty a0
+      debug $ "New type: " <> showPretty a1
 
       allCs1 <- getAllConstraints
       let allNames1 = fst <$> allCs1
