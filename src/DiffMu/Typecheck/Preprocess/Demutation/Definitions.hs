@@ -474,7 +474,7 @@ cleanupVACtxAfterScopeEnd vaCtxBefore = do
 
 markMutated :: ProcVar -> DMPersistentMessage MTC -> MTC TeVar
 markMutated pv msg = do
-  mv <- expectSingleMem msg =<< expectNotMoved pv
+  mv <- expectSingleMem msg =<< expectNotMoved msg pv
   tevar <- newTeVarOfMut (showT mv) (Just pv)
   let f ctx = do
         case getValue mv ctx of
@@ -596,25 +596,25 @@ oneOfEach [] = [[]]
 
 
 
-moveGetMem_Loc :: Scope -> Maybe ProcVar -> LocMoveType -> MTC [MemType]
-moveGetMem_Loc scname pv (Located _ mt) = moveGetMem scname pv mt
+moveGetMem_Loc :: Scope -> Maybe ProcVar -> DMPersistentMessage MTC -> LocMoveType -> MTC [MemType]
+moveGetMem_Loc scname pv msg (Located _ mt) = moveGetMem scname pv msg mt
 
-moveGetMem :: Scope -> Maybe ProcVar -> MoveType -> MTC [MemType]
-moveGetMem scname pv (NoMove te) = do
+moveGetMem :: Scope -> Maybe ProcVar -> DMPersistentMessage MTC -> MoveType -> MTC [MemType]
+moveGetMem scname pv msg (NoMove te) = do
   mem <- allocateMem scname pv (NotFunctionArgument)
   return [(SingleMem mem)]
-moveGetMem scname pv (SingleMove a) = do
-  memstate <- expectNotMoved a
+moveGetMem scname pv msg (SingleMove a) = do
+  memstate <- expectNotMoved msg a
   memCtx %= (setValue a MemMoved)
   return (memstate)
-moveGetMem scname pv (PhiMove _ (mt1,_) (mt2,_)) = do
-  memt1 <- moveGetMem_Loc scname Nothing mt1
-  memt2 <- moveGetMem_Loc scname Nothing mt2
+moveGetMem scname pv msg (PhiMove _ (mt1,_) (mt2,_)) = do
+  memt1 <- moveGetMem_Loc scname Nothing msg mt1
+  memt2 <- moveGetMem_Loc scname Nothing msg mt2
   return (memt1 <> memt2)
-moveGetMem scname pv (TupleMove as) = do
-  mems <- mapM (moveGetMem_Loc scname Nothing) as
+moveGetMem scname pv msg (TupleMove as) = do
+  mems <- mapM (moveGetMem_Loc scname Nothing msg) as
   return (TupleMem <$> oneOfEach mems)
-moveGetMem scname pv (RefMove te) = do
+moveGetMem scname pv msg (RefMove te) = do
   -- if we had a reference,
   -- allocate new memory for it
   memvar <- allocateMem scname pv (NotFunctionArgument)
@@ -682,12 +682,12 @@ setMemTuple loc scname xs (TupleMem as) | otherwise = demutationError ("Trying t
                                                                        ("Debug info: the inferred memory state is: " <> showT xs <> " = " <> showT as)
                                                                       )
 
-expectNotMoved :: ProcVar -> MTC [MemType]
-expectNotMoved tevar = do
+expectNotMoved :: DMPersistentMessage MTC -> ProcVar -> MTC [MemType]
+expectNotMoved msg tevar = do
   mc <- use memCtx
   case getValue tevar mc of
-    Nothing          -> throwUnlocatedError $ DemutationDefinitionOrderError $ tevar
-    Just (MemMoved) -> throwUnlocatedError $ DemutationMovedVariableAccessError tevar
+    Nothing          -> throwLocatedError (DemutationDefinitionOrderError $ tevar) msg
+    Just (MemMoved) -> throwLocatedError (DemutationMovedVariableAccessError tevar) msg
     Just (MemExists a) -> pure a
 
 -- expectNotMovedMaybe :: Maybe ProcVar -> MTC (Maybe [MemType]) 
@@ -720,21 +720,11 @@ expectSingleMem msg mts = do
               (mem) -> demutationError ("Encountered a value spanning multiple memory locations where a single location value was expected.")
                                        (msg :\\:
                                         ("The encountered memory type is " <> showT mem))
-    mts -> demutationErrorNoLoc $ "The memory type " <> showT mts <> " was expected to only have one alternative."
+    mts -> demutationError ("Encountered a value spanning multiple possible memory locations where a single location value was expected.")
+                                       (msg :\\:
+                                        ("The encountered memory type is " <> showT mts))
 
 
--- reverseMemLookup :: MemVar -> MTC ProcVar
--- reverseMemLookup wantedMem = do
---   alltemems <- getAllKeyElemPairs <$> use memCtx
---   let relevantTemems = [(t,m) | (t,MemExists m) <- alltemems, wantedMem `elem` getAllMemVars m]
-
---   case relevantTemems of
---     [] -> demutationErrorNoLoc $ "When doing a reverse memory lookup for memory variable " <> showT wantedMem <> ", no tevar was found."
---     [(t,a)] -> case a of
---                 SingleMem a -> return t
---                 a  -> demutationErrorNoLoc $ "When doing a reverse memory lookup for memory variable " <> showT wantedMem <> ", expected it to have an individual name.\n"
---                                       <> "but it was part of a compound type: " <> showT a
---     xs -> demutationErrorNoLoc $ "When doing a reverse memory lookup for memory variable " <> showT wantedMem <> ", multiple tevars were found: " <> showT xs
 
 
 getMemVarMutationStatus :: MemVar -> MTC (IsSplit, [TeVar])
@@ -774,7 +764,6 @@ coequalizeTeVarMutTrace (TeVarMutTrace pv1 split1 ts1) (TeVarMutTrace pv2 split2
 
   pure $ TeVarMutTrace pv3 split3 (t3 : ts1 <> ts2)
 
--- coequalizeTeVarMutTrace (TeVarMutTrace pv1 _ ts1) (TeVarMutTrace pv2 _ ts2)  = lift $ demutationErrorNoLoc $ "While demutating phi, encountered two branches where the owners of a tvar differ. This is not allowed."
 
 
 instance SemigroupM (WriterT ([LocDemutDMTerm],[LocDemutDMTerm]) MTC) TeVarMutTrace where
@@ -822,9 +811,9 @@ coequalizeMutCtx muts1 muts2 = runWriterT (muts1 ⋆ muts2)
 --    1. all memory types do not contain mutated variables
 --    2. all memory types are single varnd all are mutated,
 --       with last tevar being the same
-procVarAsTeVar :: ProcVar -> MTC TeVar
-procVarAsTeVar pv = do
-  mts <- expectNotMoved pv
+procVarAsTeVar :: ProcVar -> DMPersistentMessage MTC -> MTC TeVar
+procVarAsTeVar pv msg = do
+  mts <- expectNotMoved msg pv
   --
   -- all memory types which contain mutated vars
   let getMutatedName x = do
@@ -838,35 +827,37 @@ procVarAsTeVar pv = do
   case mut_mts of
     []     -> pure (UserTeVar pv)
     --
-    -- if we there are mutations, we need
+    -- if there are mutations, we need
     -- to make sure that all tevars are the same
     (x:xs) -> case all (== x) xs of
-      False -> demutationErrorNoLoc $ "The tevars assigned to mutated " <> showT pv <> " do not match in different execution branches.\n"
-                                <> "This is not allowed.\n"
-                                <> "Tevars: " <> showT (x:xs)
+      False -> demutationError ("Illegal variable assignment combination.")
+                 ("The variable " :<>: Quote pv :<>: " is being assigned different memory locations in different execution branches." :\\:
+                 msg :\\:
+                 ("This is not allowed. A possible fix could be to write `" <> showPretty pv <> " = clone(...)` instead.")
+                 )
 
       True  -> pure x
 
-procVarAsTeVarInMutCtx :: MemCtx -> MutCtx -> ProcVar -> MTC TeVar
-procVarAsTeVarInMutCtx tempMemCtx tempMutCtx pv = do
+procVarAsTeVarInMutCtx :: MemCtx -> MutCtx -> DMPersistentMessage MTC -> ProcVar -> MTC TeVar
+procVarAsTeVarInMutCtx tempMemCtx tempMutCtx msg pv = do
   oldMutCtx <- use mutCtx
   oldMemCtx <- use memCtx
   mutCtx .= tempMutCtx
   memCtx .= tempMemCtx
-  val <- procVarAsTeVar pv
+  val <- procVarAsTeVar pv msg
   mutCtx .= oldMutCtx
   memCtx .= oldMemCtx
   return val
 
-moveTypeAsTerm_Loc :: LocMoveType -> MTC LocDemutDMTerm
-moveTypeAsTerm_Loc = mapM moveTypeAsTerm
+moveTypeAsTerm_Loc :: DMPersistentMessage MTC -> LocMoveType -> MTC LocDemutDMTerm
+moveTypeAsTerm_Loc msg = mapM (moveTypeAsTerm msg)
 
-moveTypeAsTerm :: MoveType -> MTC DemutDMTerm
-moveTypeAsTerm = \case
+moveTypeAsTerm :: DMPersistentMessage MTC -> MoveType -> MTC DemutDMTerm
+moveTypeAsTerm msg = \case
   TupleMove mts -> do
-    terms <- mapM moveTypeAsTerm_Loc mts
+    terms <- mapM (moveTypeAsTerm_Loc msg) mts
     pure $ (Tup terms)
-  SingleMove pv -> do tv <- procVarAsTeVar pv ; pure $ Var $ (tv)
+  SingleMove pv -> do tv <- procVarAsTeVar pv msg ; pure $ Var $ (tv)
   PhiMove cond (_,tt1) (_,tt2) -> return (Extra (DemutPhi cond tt1 tt2))
   RefMove pdt   -> pure pdt
   NoMove pdt    -> pure pdt
@@ -883,11 +874,11 @@ movedVarsOfMoveType = \case
   RefMove pdt -> []
   NoMove pdt -> []
 
-termTypeAsTerm :: TermType -> MTC LocDemutDMTerm
-termTypeAsTerm = \case
-  Value it mt -> moveTypeAsTerm_Loc mt
+termTypeAsTerm :: DMPersistentMessage MTC -> TermType -> MTC LocDemutDMTerm
+termTypeAsTerm msg = \case
+  Value it mt -> moveTypeAsTerm_Loc msg mt
   Statement l pdt mt -> do
-    mt' <- moveTypeAsTerm mt
+    mt' <- moveTypeAsTerm msg mt
     pure $ Located l $ Extra $ DemutBlock [Located l pdt, Located l mt']
   StatementWithoutDefault l pdt -> pure $ Located l $ Extra $ DemutBlock [Located l pdt]
   MutatingFunctionEnd l       -> pure $ Located l $ Extra $ DemutBlock []

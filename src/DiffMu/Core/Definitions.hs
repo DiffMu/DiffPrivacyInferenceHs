@@ -1073,7 +1073,7 @@ instance ShowPretty a => ShowPretty (Located a) where
   showPretty (Located l a) = showPretty a
 
 
-showVar = showPretty
+showVar = showT
 
 instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t) where
   showPretty (Extra e)          = showPretty e
@@ -1140,7 +1140,7 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (ScaleGrad a b)    = "ScaleGrad (" <> (showPretty a) <> ", " <> (showPretty b) <>  ")"
   showPretty (TProject x a)     = "Proj" <> showPretty x <> " " <>  (showPretty a)
   showPretty (Loop a b x d )    = "Loop (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> showPretty x <> ")" <> parenIndent (showPretty d)
-  showPretty (SBind x a b)      = "SBind " <> showPretty x <> " <- " <> newlineIndentIfLong (showPretty a) <> "\n" <> (showPretty b)
+  showPretty (SBind x a b)      = "SBind " <> showVar x <> " <- " <> newlineIndentIfLong (showPretty a) <> "\n" <> (showPretty b)
 
   showPretty (ZeroGrad a)       = "ZeroGrad " <> (showPretty a)
   showPretty (SumGrads a b)     = "SumGrads (" <> (showPretty a) <> ", " <> (showPretty b) <> ")"
@@ -1152,10 +1152,10 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
 
 instance ShowPretty a => ShowPretty (ProceduralExtension a) where
   showPretty = \case
-    ProcTLetBase lk v a -> "PTLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty a)
-    ProcSLetBase lk v a -> "PSLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty a)
-    ProcFLet v a        -> "PFLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty a)
-    ProcBBLet v jts     -> "PBBLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty jts)
+    ProcTLetBase lk v a -> "PTLet " <> showVar v <> " = " <> newlineIndentIfLong (showPretty a)
+    ProcSLetBase lk v a -> "PSLet " <> showVar v <> " = " <> newlineIndentIfLong (showPretty a)
+    ProcFLet v a        -> "PFLet " <> showVar v <> " = " <> newlineIndentIfLong (showPretty a)
+    ProcBBLet v jts     -> "PBBLet " <> showVar v <> " = " <> newlineIndentIfLong (showPretty jts)
     ProcPhi a b c        -> "PPhi " <> showPretty a <> "\n" <> braceIndent (showPretty b) <> "\n" <> braceIndent (showPretty c)
     ProcPreLoop a x d   -> "PLoop (" <> (showPretty a) <> ", " <> showPretty x <> ")" <> parenIndent (showPretty d)
     ProcReturn          -> "PReturn"
@@ -1167,10 +1167,10 @@ instance ShowPretty a => ShowPretty (ProceduralExtension a) where
 
 instance ShowPretty a => ShowPretty (DemutatedExtension a) where
   showPretty = \case
-    DemutTLetBase lk v a -> "DTLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty a)
-    DemutSLetBase lk v a -> "DSLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty a)
-    DemutFLet v a        -> "DFLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty a)
-    DemutBBLet v jts     -> "DBBLet " <> showPretty v <> " = " <> newlineIndentIfLong (showPretty jts)
+    DemutTLetBase lk v a -> "DTLet " <> showVar v <> " = " <> newlineIndentIfLong (showPretty a)
+    DemutSLetBase lk v a -> "DSLet " <> showVar v <> " = " <> newlineIndentIfLong (showPretty a)
+    DemutFLet v a        -> "DFLet " <> showVar v <> " = " <> newlineIndentIfLong (showPretty a)
+    DemutBBLet v jts     -> "DBBLet " <> showVar v <> " = " <> newlineIndentIfLong (showPretty jts)
     DemutPhi a b c       -> "DPhi " <> showPretty a <> "\n" <> braceIndent (showPretty b) <> "\n" <> braceIndent (showPretty c)
     DemutLoop a b c x d    -> "Loop (" <> (showPretty a) <> ", " <> (showPretty b)  <> ", " <> (showPretty c)  <> ", " <> showPretty x <> ")" <> parenIndent (showPretty d)
     DemutBlock as        -> braceIndent $ intercalateS "\n" $ showPretty <$> reverse as

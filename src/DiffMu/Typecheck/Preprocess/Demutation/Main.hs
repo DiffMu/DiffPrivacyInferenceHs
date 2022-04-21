@@ -29,6 +29,7 @@ import Control.Monad.Trans.Class
 import qualified GHC.RTS.Flags as LHS
 import Control.Exception (throw)
 import DiffMu.Typecheck.Preprocess.Demutation.Definitions (getAllMemVarsOfMemState, procVarAsTeVarInMutCtx, MutationArgumentType)
+import DiffMu.Abstract (Located(getLocation))
 
 default (Text)
 
@@ -37,11 +38,11 @@ ld s l = Located (downgradeToRelated s l)
 demutTLetStatement :: SourceLocExt -> LetKind -> [ProcVar] -> LocDemutDMTerm -> MTC TermType
 demutTLetStatement l ltype vars term = case vars of
   [var] -> do
-            var' <- (procVarAsTeVar var)
+            var' <- (procVarAsTeVar var (DMPersistentMessage l))
             return (Statement l (Extra (DemutSLetBase ltype var' term))
                    (SingleMove var))
   vars -> do
-            vars' <- mapM procVarAsTeVar vars
+            vars' <- mapM (\v -> procVarAsTeVar v (DMPersistentMessage l)) vars
             return (Statement l (Extra (DemutTLetBase ltype (vars') term))
                    (TupleMove [(Located l (SingleMove v)) | v <- vars]))
 
@@ -64,7 +65,7 @@ demutate term = do
   topscname <- newScopeVar "toplevel"
 
   res <- elaborateTopLevel (Scope [topscname]) term
-  resterm <- termTypeAsTerm res
+  resterm <- termTypeAsTerm (DMPersistentMessage $ getLocation term) res
   logForce $ "-----------------------------------"
   logForce $ "Mutation elaborated term is:\n" <> showPretty resterm
 
@@ -115,12 +116,12 @@ makeTermList [] = demutationErrorNoLoc $ "Found an empty list of statements."
 
 -- single element left
 makeTermList (Value it mt : [])         = case it of
-                                            Pure -> do mt' <- moveTypeAsTerm_Loc mt ; return (PureValue mt, Nothing, [mt'])
+                                            Pure -> do mt' <- moveTypeAsTerm_Loc (DMPersistentMessage (getLocation mt)) mt ; return (PureValue mt, Nothing, [mt'])
                                             _    -> demutationErrorNoLoc $ "The last value of a block has the type " <> showPretty it <> "\n"
                                                                     <> "Only pure values are allowed.\n"
                                                                     <> "The value is:\n"
                                                                     <> showPretty mt
-makeTermList (Statement l term last : []) = do last' <- (moveTypeAsTerm last) ; return (PureValue (Located l last), Just (Located l last'), [Located l term])
+makeTermList (Statement l term last : []) = do last' <- (moveTypeAsTerm (DMPersistentMessage l) last) ; return (PureValue (Located l last), Just (Located l last'), [Located l term])
 makeTermList (StatementWithoutDefault l term : []) = return (NoLastValue , Nothing, [Located l term])
 -- makeTermList (PurePhiTermType cond (Value Pure mt1,tt1) (Value Pure mt2,tt2) : []) = return (PureValue [mt1,mt2] , Nothing, [Extra (DemutPhi cond tt1 tt2)])
 -- makeTermList (PurePhiTermType cond _ _ : [])     = demutationErrorNoLoc $ "Encountered a phi as last statement in a block, but the branches to do not have pure values as returns."
@@ -205,7 +206,7 @@ elaborateMut scname term@(Located l (Extra (Block ts))) = do
     
 elaborateMut scname (Located l (Op op args)) = do
   args' <- mapM (elaboratePureValue scname) args
-  args'' <- mapM moveTypeAsTerm_Loc args'
+  args'' <- mapM (moveTypeAsTerm_Loc (DMPersistentMessage l)) args'
   pure (Value Pure (Located l (NoMove (Op op args''))))
 
 elaborateMut scname (Located l (Sng η τ)) = do
@@ -220,7 +221,7 @@ elaborateMut scname (Located l (DMFalse)) = do
 elaborateMut scname term@(Located l (Var _)) = demutationErrorNoLoc $ "Unsupported term: " <> showPretty term
 
 elaborateMut scname (Located l (Extra (ProcVarTerm x))) = do
-  mx <- expectNotMoved x
+  mx <- expectNotMoved (DMPersistentMessage l) x
   itype <- expectImmutType scname x
 
   return (Value itype (Located l (SingleMove x)))
@@ -236,7 +237,7 @@ elaborateMut scname (Located l (Extra (ProcBBLet procx args))) = do
   -- write it into the memctx
   setMem procx [(SingleMem memx)]
 
-  tevarx <- procVarAsTeVar procx
+  tevarx <- procVarAsTeVar procx (DMPersistentMessage l)
 
   return (Statement l (Extra (DemutBBLet tevarx args)) (SingleMove procx))
 
@@ -249,7 +250,7 @@ elaborateMut scname (Located l (Extra (ProcSLetBase ltype x term))) = do
     Mutating _ -> pure ()
     PureBlackBox     -> throwUnlocatedError (DemutationError $ "Found an assignment " <> showPretty x <> " = " <> showPretty term <> " where RHS is a black box. This is not allowed.")
 
-  moveType' <- (moveTypeAsTerm moveType)
+  moveType' <- (moveTypeAsTerm (DMPersistentMessage l) moveType)
 
   --
   -- move out of variables on the RHS, getting the memory
@@ -258,10 +259,10 @@ elaborateMut scname (Located l (Extra (ProcSLetBase ltype x term))) = do
   -- 1. set memory locations for variables on the LHS
   -- 2. generate terms for the memory allocations
   -- 
-  (mem) <- moveGetMem scname (Just x) moveType
+  (mem) <- moveGetMem scname (Just x) (DMPersistentMessage l) moveType
   setMem x mem
 
-  x' <- procVarAsTeVar x
+  x' <- procVarAsTeVar x (DMPersistentMessage l)
 
   -- write the immut type into the scope
   setImmutType scname x newTermType
@@ -313,10 +314,10 @@ elaborateMut scname fullterm@(Located l (Extra (ProcTLetBase ltype vars term))) 
   --
   mapM (\x -> setImmutType scname x Pure) vars
 
-  moveType' <- (moveTypeAsTerm_Loc moveType)
+  moveType' <- (moveTypeAsTerm_Loc (DMPersistentMessage l) moveType)
 
   -- get memory of the RHS
-  mem <- moveGetMem_Loc scname Nothing moveType
+  mem <- moveGetMem_Loc scname Nothing (DMPersistentMessage l) moveType
 
   -- write the list of possible memory types into the
   -- variables of the lhs
@@ -412,7 +413,7 @@ elaborateMut scname term@(Located l (Apply f args)) = do
         let mutargs = zip (mutsToOtherMuts <$> muts) args
         (newArgs , muts) <- elaborateMutList l (showPretty f) scname mutargs
 
-        movetype' <- (moveTypeAsTerm_Loc movetype)
+        movetype' <- (moveTypeAsTerm_Loc (DMPersistentMessage l) movetype)
         let funcallterm = (Apply movetype' newArgs)
 
         -- the new term
@@ -425,7 +426,7 @@ elaborateMut scname term@(Located l (Apply f args)) = do
         let mutargs = zip (repeat (NotMutatedArg Pure)) args
         (newArgs , muts) <- elaborateMutList l (showPretty f) scname mutargs
 
-        movetype' <- (moveTypeAsTerm_Loc movetype)
+        movetype' <- (moveTypeAsTerm_Loc (DMPersistentMessage l) movetype)
         let funcallterm = (Apply movetype' newArgs)
 
         -- the new term
@@ -462,7 +463,7 @@ elaborateMut scname term@(Located l (Extra (ProcBBApply f args bbkind))) = do
         let mutargs = zip (repeat (NotMutatedArg Pure)) args
         (newArgs , muts) <- elaborateMutList l (showPretty f) scname mutargs
 
-        movetype' <- (moveTypeAsTerm_Loc movetype)
+        movetype' <- (moveTypeAsTerm_Loc (DMPersistentMessage l) movetype)
         let glvars' = map UserTeVar glvars
         return $ Value Pure (Located l (NoMove (BBApply movetype' newArgs glvars' bbkind')))
 
@@ -476,11 +477,11 @@ elaborateMut scname (Located l (Extra (ProcPreLoop (i1,i2,i3) iterVar body))) = 
 
   -- first, elaborate the iters
   (newi1) <- elaboratePureValue scname i1
-  newi1' <- moveTypeAsTerm_Loc newi1
+  newi1' <- moveTypeAsTerm_Loc (DMPersistentMessage l) newi1
   (newi2) <- elaboratePureValue scname i2
-  newi2' <- moveTypeAsTerm_Loc newi2
-  (newi3) <- elaboratePureValue scname i3
-  newi3' <- moveTypeAsTerm_Loc newi3
+  newi2' <- moveTypeAsTerm_Loc (DMPersistentMessage l) newi2
+  (newi3) <- elaboratePureValue scname i3 
+  newi3' <- moveTypeAsTerm_Loc (DMPersistentMessage l) newi3
   --
   -- add the iterator to the scope,
   -- and backup old type
@@ -605,8 +606,8 @@ elaborateMut scname (Located l (Extra (ProcPreLoop (i1,i2,i3) iterVar body))) = 
         Just v1 | otherwise -> return True
 
   captureMems <- filterM isChanged (getAllKeyElemPairs memsBefore)
-  capturesBefore <- mapM (procVarAsTeVarInMutCtx memsBefore mutsBefore) $ fst <$> captureMems
-  capturesAfter  <- mapM (procVarAsTeVarInMutCtx memsAfter mutsAfter)  $ fst <$> captureMems
+  capturesBefore <- mapM (procVarAsTeVarInMutCtx memsBefore mutsBefore (DMPersistentMessage ())) $ fst <$> captureMems
+  capturesAfter  <- mapM (procVarAsTeVarInMutCtx memsAfter mutsAfter (DMPersistentMessage ()))  $ fst <$> captureMems
   --
   -- We have to add the capture assignment and the capture return
   -- to the body. Note that the order of `bodyTerms` is already
@@ -662,7 +663,7 @@ elaborateMut scname term@(Located l (Extra (ProcPhi cond tr fs))) = do
   --
   -- elaborate the condition
   --
-  cond' <- moveTypeAsTerm_Loc =<< elaboratePureValue scname cond
+  cond' <- moveTypeAsTerm_Loc (DMPersistentMessage l) =<< elaboratePureValue scname cond
 
   ---------------------------------
   --
@@ -912,7 +913,7 @@ elaborateRefMove4 scname l ctr = elaborateHelper4 scname l (((.).(.).(.).(.)) Re
 
 elaborateHelper1 :: Scope -> SourceLocExt -> (LocDemutDMTerm -> MoveType) -> LocProcDMTerm -> MTC TermType
 elaborateHelper1 scname l ctr t1 = do
-  (newT1) <- moveTypeAsTerm_Loc =<< elaboratePureValue scname (t1)
+  (newT1) <- moveTypeAsTerm_Loc (DMPersistentMessage l) =<< elaboratePureValue scname (t1)
   return (Value Pure (Located l (ctr newT1)))
 
 
@@ -922,8 +923,8 @@ elaborateHelper2 :: Scope
                     -> LocProcDMTerm -> LocProcDMTerm
                     -> MTC TermType
 elaborateHelper2 scname l ctr t1 t2 = do
-  (newT1) <- moveTypeAsTerm_Loc =<< elaboratePureValue scname ((t1))
-  (newT2) <- moveTypeAsTerm_Loc =<< elaboratePureValue scname ((t2))
+  (newT1) <- moveTypeAsTerm_Loc (DMPersistentMessage l) =<< elaboratePureValue scname ((t1))
+  (newT2) <- moveTypeAsTerm_Loc (DMPersistentMessage l) =<< elaboratePureValue scname ((t2))
   return (Value Pure (Located l (ctr newT1 newT2)))
 
 
@@ -933,9 +934,9 @@ elaborateHelper3 :: Scope
                     -> LocProcDMTerm -> LocProcDMTerm -> LocProcDMTerm
                     -> MTC TermType
 elaborateHelper3 scname l ctr t1 t2 t3 = do
-  (newT1) <- moveTypeAsTerm_Loc =<< elaboratePureValue scname t1
-  (newT2) <- moveTypeAsTerm_Loc =<< elaboratePureValue scname t2
-  (newT3) <- moveTypeAsTerm_Loc =<< elaboratePureValue scname t3
+  (newT1) <- moveTypeAsTerm_Loc (DMPersistentMessage l) =<< elaboratePureValue scname t1
+  (newT2) <- moveTypeAsTerm_Loc (DMPersistentMessage l) =<< elaboratePureValue scname t2
+  (newT3) <- moveTypeAsTerm_Loc (DMPersistentMessage l) =<< elaboratePureValue scname t3
   return (Value Pure (Located l (ctr newT1 newT2 newT3)))
 
 
@@ -945,10 +946,10 @@ elaborateHelper4 :: Scope
                     -> LocProcDMTerm -> LocProcDMTerm -> LocProcDMTerm -> LocProcDMTerm
                     -> MTC TermType
 elaborateHelper4 scname l ctr t1 t2 t3 t4 = do
-  (newT1) <- moveTypeAsTerm_Loc =<< elaboratePureValue scname t1
-  (newT2) <- moveTypeAsTerm_Loc =<< elaboratePureValue scname t2
-  (newT3) <- moveTypeAsTerm_Loc =<< elaboratePureValue scname t3
-  (newT4) <- moveTypeAsTerm_Loc =<< elaboratePureValue scname t4
+  (newT1) <- moveTypeAsTerm_Loc (DMPersistentMessage l) =<< elaboratePureValue scname t1
+  (newT2) <- moveTypeAsTerm_Loc (DMPersistentMessage l) =<< elaboratePureValue scname t2
+  (newT3) <- moveTypeAsTerm_Loc (DMPersistentMessage l) =<< elaboratePureValue scname t3
+  (newT4) <- moveTypeAsTerm_Loc (DMPersistentMessage l) =<< elaboratePureValue scname t4
   return (Value Pure (Located l (ctr newT1 newT2 newT3 newT4)))
 
 
@@ -991,11 +992,11 @@ elaborateBBKind :: Scope -> BBKind ProceduralExtension -> MTC (BBKind DemutatedE
 elaborateBBKind scname = \case
   BBSimple jt -> return $ BBSimple jt
   BBVecLike jt pdt -> do
-    pdt' <- moveTypeAsTerm_Loc =<< elaboratePureValue scname pdt
+    pdt' <- moveTypeAsTerm_Loc (DMPersistentMessage ()) =<< elaboratePureValue scname pdt
     return $ BBVecLike jt pdt'
   BBMatrix jt pdt1 pdt2 -> do
-    pdt1' <- moveTypeAsTerm_Loc =<< elaboratePureValue scname pdt1
-    pdt2' <- moveTypeAsTerm_Loc =<< elaboratePureValue scname pdt2
+    pdt1' <- moveTypeAsTerm_Loc (DMPersistentMessage ()) =<< elaboratePureValue scname pdt1
+    pdt2' <- moveTypeAsTerm_Loc (DMPersistentMessage ()) =<< elaboratePureValue scname pdt2
     return $ BBMatrix jt pdt1' pdt2'
 
 
@@ -1116,7 +1117,7 @@ elaborateLambda scname args body = do
       debug $ "[elaborateLambda] pure function. move type: " <> showT as
       debug $ "   movedVars: " <> showT (movedVarsOfMoveType_Loc as) <> ", mutated_argmvs: " <> showT mutated_argmvs
       --
-      memTypesOfMove <- mapM expectNotMoved (movedVarsOfMoveType_Loc as)
+      memTypesOfMove <- mapM (expectNotMoved (DMPersistentMessage l)) (movedVarsOfMoveType_Loc as)
       let memVarsOfMove = join memTypesOfMove >>= getAllMemVars
       --
       case memVarsOfMove `intersect` argmvs of
@@ -1217,7 +1218,7 @@ elaborateMutList loc f scname mutargs = do
 
             -- the elaborated value of x
             -- (this needs to be done before `markMutated` is called)
-            x' <- (procVarAsTeVar x)
+            x' <- (procVarAsTeVar x (DMPersistentMessage loc))
 
             -- get the memvar of this tevar from the memctx
             -- and say that the memory location is mutated
@@ -1243,7 +1244,7 @@ elaborateMutList loc f scname mutargs = do
                                     <> "Expected it to have demutation type " <> showPretty reqty
                                     <> "But found type " <> showPretty itype
 
-        movetype' <- moveTypeAsTerm_Loc movetype
+        movetype' <- moveTypeAsTerm_Loc (DMPersistentMessage loc) movetype
 
         return (movetype' , movetype , Nothing)
 
