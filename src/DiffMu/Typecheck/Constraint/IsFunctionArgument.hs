@@ -95,7 +95,7 @@ instance ShowPretty (IsChoice (ChoiceHash, [DMTypeOf FunKind])) where
                                                      showC (sign, (m, cs)) = "- julia signature " <> showPretty sign
                                                                              <> ": " <> showF [m] <> "\n"
                                                      ll = map showC (H.toList a)
-                                                 in intercalate "\n" ll
+                                                 in intercalateS "\n" ll
                                   in "Function types " <> newlineIndentIfLong (prettyEnumVertical . fmap showPretty $ b)
                                      <> " are required to exist among the following choices:\n"
                                      <> newlineIndentIfLong showHash
