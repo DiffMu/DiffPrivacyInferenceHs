@@ -168,10 +168,6 @@ instance TCConstraint IsChoice where
   constr = IsChoice
   runConstr (IsChoice c) = c
 
-instance (ShowPretty a, ShowPretty b) => ShowPretty (IsChoice (a,[b])) where
-    showPretty (IsChoice (a,b)) = "Function types " <> newlineIndentIfLong (prettyEnumVertical . fmap showPretty $ b)
-                                  <> " are required to exist among the following choices: " <> newlineIndentIfLong (showPretty a)
-
 newtype IsFunctionArgument a = IsFunctionArgument a deriving (Show, Eq)
 
 instance TCConstraint IsFunctionArgument where

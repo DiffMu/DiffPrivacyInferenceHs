@@ -86,7 +86,19 @@ solveIsFunctionArgument name (_, _) = return ()
 -- with certain arguments inside) must be present in the argument function.
 
 -- map Julia signature to method and the list of function calls that went to this method.
-type ChoiceHash = HashMap [JuliaType] (DMTypeOf FunKind, [DMTypeOf FunKind])
+type ChoiceHash = (HashMap [JuliaType] (DMTypeOf FunKind, [DMTypeOf FunKind]))
+
+
+instance ShowPretty (IsChoice (ChoiceHash, [DMTypeOf FunKind])) where
+    showPretty (IsChoice (a,b)) = let showHash = let
+                                                     showF b = newlineIndentIfLong (prettyEnumVertical . fmap showPretty $ b)
+                                                     showC (sign, (m, cs)) = "- julia signature " <> showPretty sign
+                                                                             <> ": " <> showF [m] <> "\n"
+                                                     ll = map showC (H.toList a)
+                                                 in intercalate "\n" ll
+                                  in "Function types " <> newlineIndentIfLong (prettyEnumVertical . fmap showPretty $ b)
+                                     <> " are required to exist among the following choices:\n"
+                                     <> newlineIndentIfLong showHash
 
 
 -- hash has the existing methods, list has the required methods.
