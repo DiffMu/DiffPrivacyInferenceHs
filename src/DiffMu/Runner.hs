@@ -142,7 +142,8 @@ typecheckFromJExpr_Simple :: JExpr -> RawSource -> IO ()
 typecheckFromJExpr_Simple term rawsource = do
   let printer (ty, full) =
         let cs = _anncontent (_constraints (_meta full))
-            pcs = runReader (showLocated cs) rawsource
+            cs_simple :: CtxStack IxSymbol (Watched (Solvable GoodConstraint GoodConstraintContent MonadDMTC)) = fmap (\(ConstraintWithMessage a m) -> a) cs
+            pcs = runReader (showLocated cs_simple) rawsource
             cstring = case isEmptyDict cs of
                            True -> ""
                            _ -> "Constraints:\n" <> pcs
