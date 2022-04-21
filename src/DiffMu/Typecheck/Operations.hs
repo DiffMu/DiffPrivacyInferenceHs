@@ -26,17 +26,17 @@ import Debug.Trace
 -- be determined once enough about the operand types is known.
 makeTypeOp :: (IsT MonadDMTC t) => DMTypeOp_Some -> Int -> DMPersistentMessage t -> t ((DMType) , [(DMType,SVar)])
 makeTypeOp (IsUnary op) 1 msg =
-  do s1 <- newSVar "η"
-     τ1 <-  TVar <$> newTVar "τa"
-     res <- TVar <$> newTVar "τr"
+  do s1 <- newSVar "s"
+     τ1 <-  TVar <$> newTVar "τ"
+     res <- TVar <$> newTVar "τ"
      addConstraint (Solvable (IsTypeOpResult (Unary op (τ1 :@ s1) res))) msg
      return (res , [(τ1, s1)])
 makeTypeOp (IsBinary op) 2 msg =
-  do s1 <- newSVar "η"
-     s2 <- newSVar "η"
-     τ1 <-  TVar <$> newTVar "τa"
-     τ2 <-  TVar <$> newTVar "τa"
-     res <- TVar <$> newTVar "τr"
+  do s1 <- newSVar "s"
+     s2 <- newSVar "s"
+     τ1 <-  TVar <$> newTVar "τ"
+     τ2 <-  TVar <$> newTVar "τ"
+     res <- TVar <$> newTVar "τ"
      addConstraint (Solvable (IsTypeOpResult (Binary op (τ1:@s1, τ2:@s2) res))) msg
      return (res , [(τ1,s1),(τ2,s2)])
 makeTypeOp op lengthArgs msg = throwUnlocatedError (WrongNumberOfArgsOp op (lengthArgs))
