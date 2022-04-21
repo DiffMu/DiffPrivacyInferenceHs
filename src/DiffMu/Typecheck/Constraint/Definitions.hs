@@ -117,7 +117,7 @@ instance TCConstraint IsEqual where
   runConstr (IsEqual c) = c
 
 instance ShowPretty a => ShowPretty (IsEqual (a,a)) where
-    showPretty (IsEqual (a,b)) = showPretty a <> " and " <> showPretty b <> " must be equal."
+    showPretty (IsEqual (a,b)) = showPretty a <> " and " <> showPretty b <> " must be equal"
         
 -------------------------------------------------------------------
 -- Subtyping (solver in Typecheck/Subtyping.hs)
@@ -131,9 +131,6 @@ instance TCConstraint IsLessEqual where
   constr = IsLessEqual
   runConstr (IsLessEqual c) = c
 
-instance ShowPretty a => ShowPretty (IsLessEqual (a,a)) where
-    showPretty (IsLessEqual (a,b)) = showPretty a <> " must be less or equal to " <> showPretty b
-        
 
 ---- Sups
 newtype IsSupremum a = IsSupremum a deriving (Show, Eq)
@@ -177,7 +174,7 @@ instance TCConstraint IsFunctionArgument where
 instance (ShowPretty a) => ShowPretty (IsFunctionArgument (a,a)) where
     showPretty (IsFunctionArgument (a,b)) = "Function type " <> newlineIndentIfLong (showPretty b)
                                             <> "was used in a function application where function type " <> newlineIndentIfLong (showPretty a)
-                                            <> "was expected."
+                                            <> "was expected"
 
 -------------------------------------------------------------------
 -- Julia Types (solver in Typecheck/Constraint/IsJuliaEqual.hs)
@@ -208,7 +205,7 @@ instance TCConstraint UnifyWithConstSubtype where
   runConstr (UnifyWithConstSubtype c) = c
 
 instance ShowPretty a => ShowPretty (UnifyWithConstSubtype (a,a)) where
-    showPretty (UnifyWithConstSubtype (a,b)) = "Types " <> showPretty a <> " and " <> showPretty b <> " are equal except for static-ness, where the fist is a subtype of the second."
+    showPretty (UnifyWithConstSubtype (a,b)) = "Types " <> showPretty a <> " and " <> showPretty b <> " are equal except for static-ness, where the fist is a subtype of the second"
 
 -----------------------------------------------------------------
 -- Fake julia types
@@ -225,7 +222,7 @@ instance TCConstraint IsJuliaEqual where
   runConstr (IsJuliaEqual c) = c
 
 instance ShowPretty a => ShowPretty (IsJuliaEqual (a,a)) where
-    showPretty (IsJuliaEqual (a,b)) = "Types " <> showPretty a <> " and " <> showPretty b <> " describe the same julia type."
+    showPretty (IsJuliaEqual (a,b)) = "Types " <> showPretty a <> " and " <> showPretty b <> " describe the same julia type"
 
 ----------------------------------------------------------------
 -- Things that should be functions
@@ -237,7 +234,7 @@ instance TCConstraint IsFunction where
   runConstr (IsFunction c) = c
 
 instance (ShowPretty a, ShowPretty b) => ShowPretty (IsFunction (a,b)) where
-    showPretty (IsFunction (a,b)) = "Type " <> showPretty b <> " is a " <> showPretty a <> "-function."
+    showPretty (IsFunction (a,b)) = "Type " <> showPretty b <> " is a " <> showPretty a <> "-function"
     
 -------------------------------------------------------------------
 -- Cheap Constraints (solver in Typecheck/Constraint/CheapConstraints.hs)
@@ -258,7 +255,7 @@ instance TCConstraint IsLess where
 
 
 instance ShowPretty a => ShowPretty (IsLess (a,a)) where
-    showPretty (IsLess (a,b)) = "Sensitivity " <> showPretty a <> " is less than sensitivity " <> showPretty b <> "."
+    showPretty (IsLess (a,b)) = showPretty a <> " < " <> showPretty b
         
 
 -------------------------------------------------------------------
@@ -272,7 +269,7 @@ instance TCConstraint MakeConst where
   runConstr (MakeConst c) = c
 
 instance ShowPretty a => ShowPretty (MakeConst (a,b)) where
-    showPretty (MakeConst (a,_)) = "If type " <> showPretty a <> " is numeric or a tuple, it can become static."
+    showPretty (MakeConst (a,_)) = "If type " <> showPretty a <> " is numeric or a tuple, it can become static"
         
 
 ----------------------------------------------------------
@@ -286,7 +283,7 @@ instance TCConstraint MakeNonConst where
   runConstr (MakeNonConst c) = c
 
 instance ShowPretty a => ShowPretty (MakeNonConst (a,b)) where
-    showPretty (MakeNonConst (a,_)) = "All Numeric types in " <> showPretty a <> " will be set non-static."
+    showPretty (MakeNonConst (a,_)) = "All Numeric types in " <> showPretty a <> " will be set non-static"
         
 
 -------------------------------------------------------------------
@@ -348,7 +345,7 @@ instance TCConstraint IsBlackBoxReturn where
   runConstr (IsBlackBoxReturn c) = c
 
 instance (ShowPretty a, ShowPretty b) => ShowPretty (IsBlackBoxReturn (a,b)) where
-    showPretty (IsBlackBoxReturn (a,b)) = "Type " <> showPretty a <> " is an argument of a black box, its sensitivity " <> showPretty b <> "can be set accordingly."
+    showPretty (IsBlackBoxReturn (a,b)) = "Type " <> showPretty a <> " is an argument of a black box, its sensitivity " <> showPretty b <> "can be set accordingly"
 
 
 
@@ -362,7 +359,7 @@ instance TCConstraint IsVecOrMat where
   runConstr (IsVecOrMat c) = c
 
 instance ShowPretty a => ShowPretty (IsVecOrMat (a)) where
-    showPretty (IsVecOrMat (a)) = "Type " <> showPretty a <> " must be a vector or matrix."
+    showPretty (IsVecOrMat (a)) = "Type " <> showPretty a <> " must be a vector or matrix"
 
 
 --------------------------------------------------
@@ -377,7 +374,7 @@ instance TCConstraint IsVecLike where
 
 
 instance ShowPretty a => ShowPretty (IsVecLike (a)) where
-    showPretty (IsVecLike (a)) = "Type " <> showPretty a <> " must be a vector, gradient or one-row matrix."
+    showPretty (IsVecLike (a)) = "Type " <> showPretty a <> " must be a vector, gradient or one-row matrix"
 
 --------------------------------------------------
 -- container norm conversion

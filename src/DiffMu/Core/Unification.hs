@@ -22,11 +22,11 @@ default (Text)
 -- Unification of dmtypes
 --
 
+instance ShowPretty (IsLessEqual (Sensitivity, Sensitivity)) where
+    showPretty (IsLessEqual (a,b)) = showPretty a <> " ≤ " <> showPretty b
+        
 (==!) :: (MessageLike t msg, MonadConstraint isT t, Solve isT IsEqual (a,a), (HasNormalize isT a), Show (a), ShowPretty (a), Eq a, Typeable a, IsT isT t, ContentConstraintOnSolvable t (a,a), ConstraintOnSolvable t (IsEqual (a,a))) => a -> a -> msg -> t ()
 (==!) a b msg = addConstraint (Solvable (IsEqual (a,b))) msg >> pure ()
-
-(≤!) :: (MessageLike t msg, MonadConstraint isT t, Solve isT IsLessEqual (a,a), (HasNormalize isT a), Show (a), ShowPretty (a), Eq a, Typeable a, IsT isT t, ContentConstraintOnSolvable t (a,a), ConstraintOnSolvable t (IsLessEqual (a,a))) => a -> a -> msg -> t ()
-(≤!) a b msg = addConstraint (Solvable (IsLessEqual (a,b))) msg >> pure ()
 
 
 newtype WrapMessageINC e a = WrapMessageINC a

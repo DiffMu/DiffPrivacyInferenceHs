@@ -38,17 +38,6 @@ instance Solve MonadDMTC MakeConst (DMMain, Text) where
       TVar _ -> pure ()
       NoFun (TVar _) -> pure ()
       NoFun (DMTup ts) -> (mapM (\t -> (addConstraintFromName name) (Solvable (MakeConst (NoFun t, username)))) ts) >> dischargeConstraint name
-      {-
-      NoFun (Numeric (Num _ (TVar k))) -> do
-                     ck <- svar <$> newSVarWithPriority UserNamePriority username
-                     unifyFromName name (TVar k) (Const ck)
-                     dischargeConstraint name
-      NoFun (Numeric (TVar k)) -> do
-                     cv <- newVar 
-                     ck <- svar <$> newSVarWithPriority UserNamePriority username
-                     unifyFromName name (TVar k) (Num cv (Const ck))
-                     dischargeConstraint name
-      -}
       NoFun (Numeric k) -> do
                      cv <- newVar 
                      ck <- newSVarWithPriority UserNamePriority username
@@ -71,7 +60,6 @@ instance Typeable k => Solve MonadDMTC MakeNonConst (DMTypeOf k, SolvingMode) wh
          freev4 = filterSomeK @TVarOf @ConstnessKind freev
 
      let makeVarNonConst v = do
-                    --  k <- newVar
                      τv <- newVar
                      unifyFromName name (TVar v) (Num τv NonConst)
 
@@ -80,15 +68,7 @@ instance Typeable k => Solve MonadDMTC MakeNonConst (DMTypeOf k, SolvingMode) wh
      let makeCVarNonConst v = do unifyFromName name (TVar v) (NonConst)
      mapM makeCVarNonConst freev4
 
-
-     -- compare the length of `m` and `n`, that is, if all free variables
-     -- have the aforementioned kinds
-     let m = length freev
-         n = length freev0 P.+ length freev1 P.+ length freev2 P.+ length freev3 P.+ length freev4
-
-     case (m == n) of
-        True -> dischargeConstraint name
-        False -> dischargeConstraint name -- pure ()
+     dischargeConstraint name
 
   solve_ Dict currentMode name (MakeNonConst (τ, targetMode)) | otherwise = pure ()
 

@@ -653,7 +653,13 @@ instance (SingI k, Typeable k) => Solve MonadDMTC IsLessEqual (DMTypeOf k, DMTyp
           (_, ContractionAllowed) -> unify "diamond contraction" a b >> return ()
           _ -> return ()
 
+(≤!) :: (SingI k, Typeable k, MessageLike t msg, IsT MonadDMTC t) => DMTypeOf k -> DMTypeOf k -> msg -> t ()
+(≤!) a b msg = addConstraint (Solvable (IsLessEqual (a,b))) msg >> pure ()
 
+
+instance (SingI k, Typeable k) => ShowPretty (IsLessEqual (DMTypeOf k, DMTypeOf k)) where
+    showPretty (IsLessEqual (a,b)) = showPretty a <> " ⊑ " <> showPretty b
+        
 
 
 

@@ -326,7 +326,7 @@ appendDifferentIfLastIsLong main verticalToSwitch lengthToSwitch shortExtra long
                      
 
 showArgPrettyShort :: (ShowPretty a, ShowPretty b) => (a :@ b) -> String
-showArgPrettyShort (a :@ b) = showPretty a <> "@" <> parenIfMultiple (showPretty b)
+showArgPrettyShort (a :@ b) = showPretty a <> " @ " <> parenIfMultiple (showPretty b)
 
 showFunPrettyShort :: (ShowPretty a, ShowPretty b) => String -> [(a :@ b)] -> a -> String
 showFunPrettyShort marker args ret =  "(" <> intercalate ", " (fmap showArgPrettyShort args) <> ")"
@@ -375,14 +375,17 @@ instance ShowPretty (DMTypeOf k) where
   showPretty DMReal = "Real"
   showPretty DMData = "Data"
   showPretty (IRNum a) = showPretty a
-  showPretty (Num t c) = showPretty t <> "[" <> showPretty c <> "]"
+  showPretty (Num t c) = let cc = showPretty c
+                         in case cc of
+                                 "--" -> showPretty t
+                                 _    ->showPretty t <> "[" <> cc <> "]"
   showPretty (NonConst) = "--"
   showPretty (Const c) = showPretty c <> " ©"
   showPretty (Numeric t) = showPretty t
   showPretty (TVar t) = showPretty t
   showPretty (a :->: b) = showFunPretty "->" a b
   showPretty (a :->*: b) = showFunPretty "->*" a b
-  showPretty (DMTup ts) = "Tuple" <> showPretty ts <> ""
+  showPretty (DMTup ts) = "Tuple{" <> intercalate "," (showPretty <$> ts) <> "}"
   showPretty L1 = "L1"
   showPretty L2 = "L2"
   showPretty LInf = "LInf"
