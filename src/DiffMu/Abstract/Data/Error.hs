@@ -73,9 +73,10 @@ prettyEnumVertical as = "{\n" <> intercalateS "\n,\n" (fmap (indentWith "|   ") 
 --------------------------------------------------------------------------
 -- Locations
 
+
 data SourceLoc = SourceLoc
   {
-    getLocFile  :: Maybe FilePath
+    getLocFile  :: SourceFile
   , getLocBegin :: Int
   , getLocEnd   :: Int
   }
@@ -112,9 +113,7 @@ instance Monad t => Normalize t SourceLocExt where
 
 instance ShowPretty SourceLoc where
   showPretty (SourceLoc file begin end) =
-    let file' = case file of
-                  Just f -> T.pack f
-                  Nothing -> "none"
+    let file' = showT file
     in case (begin P.+ 1 >= end) of
         True -> file' <> ": line " <> showPretty begin
         False -> file' <> ": between lines " <> showPretty begin <> " and " <> showPretty end
@@ -165,7 +164,7 @@ instance ShowLocated SourceQuote where
         f _ = []
 
         betterLocs = sts >>= f
-        locsByFile :: H.HashMap (Maybe FilePath) [(Int,Text)]
+        locsByFile :: H.HashMap (SourceFile) [(Int,Text)]
         locsByFile = foldr (\(file,content) d -> appendValue file [content] d) H.empty betterLocs
 
         changeSource :: Array Int Text -> [(Int,Text)] -> Array Int Text
@@ -196,7 +195,7 @@ instance ShowLocated SourceQuote where
 -- conditions:
 --  - `begin <= end`
 --
-printSourceLines :: MonadReader RawSource t => Maybe FilePath -> (Int,Int) -> t Text
+printSourceLines :: MonadReader RawSource t => SourceFile -> (Int,Int) -> t Text
 printSourceLines fp (begin,end) = do
   let numbersize = length (show end)
   RawSource source <- ask
@@ -217,7 +216,7 @@ printSourceLines fp (begin,end) = do
 -- conditions:
 --  - `begin <= end`
 --
-printSourceLinesFromSource :: RawSource -> Maybe FilePath -> (Int,Int) -> Text
+printSourceLinesFromSource :: RawSource -> SourceFile -> (Int,Int) -> Text
 printSourceLinesFromSource rsource fp range = runReader (printSourceLines fp range) rsource
 
 --
