@@ -341,9 +341,10 @@ test174 pp = describe "issue 174 (count function)" $ do
   parseEvalUnify_customCheck pp "typechecks" ex_1 (ty) $
     do 
       c <- getConstraintsByType (Proxy @(IsTypeOpResult DMTypeOp))
+      cl <- getConstraintsByType (Proxy @(IsLessEqual (Sensitivity, Sensitivity)))
       cs <- getAllConstraints 
-      case (length c, length cs) of
-        (1,1) -> return (Right ())
+      case (length c, length cl, length cs) of
+        (1,1,2) -> return (Right ())
         _     -> return $ Left (show cs)
 
 

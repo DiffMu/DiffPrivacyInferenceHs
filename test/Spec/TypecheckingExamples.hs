@@ -218,7 +218,7 @@ testSample pp = describe "Sample" $ do
               \  gaussian_mechanism!(2, 0.2, 0.3, gs)  \n\
               \  clone(x * gs) \n\
               \end"
-        ty = "Fun([([NoFun(Matrix<n: LInf, c: τ_39>[s_14 × s_24](NoFun(Num(Data[--])))) @ (0.4⋅s_22⋅(1 / s_14),0.3⋅s_22⋅(1 / s_14)),NoFun(Num(IR Int[s_22 ©])) @ (∑∅,∑∅),NoFun(Num(IR Int[--])) @ (∞,∞)] ->* NoFun(Vector<n: LInf, c: U>[s_24](NoFun(Num(IR Real[--]))))) @ Just [Any,Any,Integer]])"
+        ty = "Fun([([NoFun(Matrix<n: LInf, c: C>[n × m](NoFun(Num(Data)))) @ (0.4⋅(1 / n)⋅m₃,0.3⋅(1 / n)⋅m₃),NoFun(Num(IR Integer[m₃ ©])) @ (0,0),NoFun(Num(IR Integer)) @ (∞,∞)] ->* NoFun(Vector<n: LInf, c: U>[m](NoFun(Num(IR Real))))) @ Just [Any,Any,Integer]])"
         cs = ""
     parseEvalString_l_customCheck pp "" ex (ty, cs) (pure $ Right ())
 
@@ -228,7 +228,7 @@ testConvert pp = describe "Convert" $ do
       \    x = norm_convert(L1,x) \n\
       \    x \n\
       \ end"
-        ty = "Fun([([NoFun(Matrix<n: L2, c: τ_1>[s_2 × s_1](NoFun(Num(Data[--])))) @ sqrt(s_1)] -> NoFun(Matrix<n: L1, c: τ_1>[s_2 × s_1](NoFun(Num(Data[--]))))) @ Just [MetricMatrix(Data,L2)]])"
+        ty = "Fun([([NoFun(Matrix<n: L2, c: C>[s₂ × n](NoFun(Num(Data)))) @ √(n)] -> NoFun(Matrix<n: L1, c: C>[s₂ × n](NoFun(Num(Data))))) @ Just [MetricMatrix(Data,L2)]])"
         cs = ""
     parseEvalString_l_customCheck pp "" ex (ty, cs) (pure $ Right ())
 
@@ -240,7 +240,7 @@ testConvert pp = describe "Convert" $ do
 --               \  end \n\
 --               \  exponential_mechanism(2,0.1,v,bar) \n\
 --               \end"
---         ty = " Fun([([NoFun(Num(τ_15[--])) @ (0.1,∑∅),NoFun(Vector<n: τ_9, c: τ_10>[s_5](NoFun(Num(τ_16[--])))) @ (∞,∞)] ->* NoFun(Num(τ_16[--]))) @ Just [Any,Any]])"
+--         ty = " Fun([([NoFun(Num(τ_15[--])) @ (0.1,0),NoFun(Vector<n: τ_9, c: τ_10>[s_5](NoFun(Num(τ_16[--])))) @ (∞,∞)] ->* NoFun(Num(τ_16[--]))) @ Just [Any,Any]])"
 --         cs = "constr_8 : [final,worst,global,exact,special] IsSupremum (τ_15,τ_16) :=: Real"
 --     parseEvalString_l_customCheck pp "" ex (ty, cs) (pure $ Right ())
 
@@ -248,7 +248,7 @@ testAboveThresh pp = describe "Above threshold" $ do
     let ex = "function test(qs, d) :: Priv() \n\
               \  above_threshold(qs, 1, d, 100) \n\
               \ end"
-        ty = "Fun([([NoFun(Vector<n: τ_0, c: τ_1>[s_1](Fun([([τ_3 @ 1] -> NoFun(Num(IR Real[--]))) @ Nothing]))) @ (∞,∞),τ_3 @ (1,∑∅)] ->* NoFun(Num(IR Int[--]))) @ Just [Any,Any]])"
+        ty = "Fun([([NoFun(Vector<n: N, c: C>[s₁](Fun([([τ₁ @ 1] -> NoFun(Num(IR Real))) @ Nothing]))) @ (∞,∞),τ₁ @ (1,0)] ->* NoFun(Num(IR Integer))) @ Just [Any,Any]])"
         cs = ""
     parseEvalString_customCheck pp "" ex (ty, cs) (pure $ Right ())
 
