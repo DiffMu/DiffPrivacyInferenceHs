@@ -97,6 +97,8 @@ instance Monad t => Normalize t Symbol where
 instance Monad t => Normalize t Text where
   normalize nt a = pure a
 
+instance Monad t => Normalize t ProcVar where
+  normalize nt a = pure a
 
 -------------------------------------------------------------------------
 -- Var Priority

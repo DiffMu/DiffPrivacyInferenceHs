@@ -16,7 +16,7 @@ import qualified Data.Text as T
 -- foldM
 
 newtype MonCom m v = MonCom (HashMap v m)
-  deriving (Generic, Show, Hashable, Eq)
+  deriving (Generic, Show, Hashable, Eq, DictLike v m)
 instance Default (MonCom m v) where
   def = MonCom H.empty
 deriving instance (Typeable a, Typeable v, Typeable b, KEq v, FreeVars v a, FreeVars v b) => FreeVars v (MonCom a b)
@@ -64,29 +64,11 @@ instance (HasMonCom t m v, MonoidM t v) => ModuleM t (ActV v) (MonCom m v) where
 -- usage as dictionary
 
 
-changeValue :: DictLike k v d => k -> (v -> v) -> d -> d
-changeValue k f d = case getValue k d of
-  Just x -> setValue k (f x) d
-  Nothing -> d
-
-popValue :: DictLike k v d => k -> d -> (Maybe v , d)
-popValue k d = (getValue k d , deleteValue k d)
-
-restoreValue :: DictLike k v d => d -> k -> d -> (Maybe v , d)
-restoreValue oldDict key dict =
-  let oldValue = getValue key oldDict
-  in case oldValue of
-    Nothing        -> (getValue key dict , deleteValue key dict)
-    Just oldValue  -> (getValue key dict , setValue key oldValue dict)
-
-
-getValueMaybe a scope = a >>= (\x -> getValue x scope)
-setValueMaybe (Just k) v scope = setValue k v scope
-setValueMaybe Nothing v scope = scope
 
 class ShowDict k v d | d -> k v where
   showWith :: StringLike s => s -> (k -> v -> s) -> d -> s -> s
 
+{-
 instance (DictKey k) => DictLike k v (MonCom v k) where
   setValue v m (MonCom h) = MonCom (H.insert v m h)
   deleteValue v (MonCom h) = MonCom (H.delete v h)
@@ -97,6 +79,7 @@ instance (DictKey k) => DictLike k v (MonCom v k) where
   getAllElems (MonCom h) = H.elems h
   getAllKeyElemPairs (MonCom h) = H.toList h
   fromKeyElemPairs list = MonCom (H.fromList list)
+-}
 
 instance ShowDict k v (MonCom v k) where
   showWith comma merge (MonCom d) emptycase =
