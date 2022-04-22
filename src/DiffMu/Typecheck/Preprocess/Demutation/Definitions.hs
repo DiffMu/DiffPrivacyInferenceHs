@@ -139,7 +139,7 @@ data PhiBranchType =
 data MemType = TupleMem [MemType] | SingleMem MemVar | RefMem MemVar
   deriving (Eq, Show, Ord)
 
-data MemState = MemExists [MemType] | MemMoved
+data MemState = MemExists [MemType] | MemMoved [SourceLocExt]
   deriving (Show)
 
 data MemAssignmentType = AllocNecessary | PreexistingMem
@@ -163,7 +163,7 @@ newtype Scope = Scope [ScopeVar]
 type MutCtx = Ctx MemVar (Scope, TeVarMutTrace)
 
 instance Eq MemState where
-  (==) MemMoved MemMoved = True
+  (==) (MemMoved _) (MemMoved _) = True
   (==) (MemExists as) (MemExists bs) = sort (nub as) == sort (nub bs)
   (==) _ _ = False
 
@@ -352,8 +352,9 @@ instance Monad m => CheckNeutral m MemState where
     checkNeutral a = return (a == (MemExists []))
 
 instance Monad m => SemigroupM m MemState where
-    (⋆) MemMoved _ = pure MemMoved
-    (⋆) _ MemMoved = pure MemMoved
+    (⋆) (MemMoved l1) (MemMoved l2) = pure (MemMoved (nub (l1 <> l2)))
+    (⋆) (MemMoved l1) (MemExists _) = pure (MemMoved l1)
+    (⋆) (MemExists _) (MemMoved l2) = pure (MemMoved l2)
     (⋆) (MemExists l1) (MemExists l2) = pure $ MemExists (nub (l1 ++ l2))
 
 mergeMemCtx = (⋆!)
@@ -482,7 +483,7 @@ cleanupVACtxAfterScopeEnd vaCtxBefore = do
 
 markMutated :: ProcVar -> SourceLocExt -> DMPersistentMessage MTC -> MTC TeVar
 markMutated pv loc msg = do
-  mv <- expectSingleMem msg =<< expectNotMoved msg pv
+  mv <- expectSingleMem msg =<< expectNotMoved loc pv
   tevar <- newTeVarOfMut (showT mv) (Just pv)
   let f ctx = do
         case getValue mv ctx of
@@ -611,26 +612,26 @@ oneOfEach [] = [[]]
 
 
 
-moveGetMem_Loc :: Scope -> SourceLocExt -> Maybe ProcVar -> DMPersistentMessage MTC -> LocMoveType -> MTC [MemType]
-moveGetMem_Loc scname loc pv msg (Located _ mt) = moveGetMem scname loc pv msg mt
+moveGetMem_Loc :: Scope -> SourceLocExt -> Maybe ProcVar-> LocMoveType -> MTC [MemType]
+moveGetMem_Loc scname loc pv (Located _ mt) = moveGetMem scname loc pv mt
 
-moveGetMem :: Scope -> SourceLocExt -> Maybe ProcVar -> DMPersistentMessage MTC -> MoveType -> MTC [MemType]
-moveGetMem scname loc pv msg (NoMove te) = do
+moveGetMem :: Scope -> SourceLocExt -> Maybe ProcVar -> MoveType -> MTC [MemType]
+moveGetMem scname loc pv (NoMove te) = do
   mem <- allocateMem scname pv (MemVarInfo NotFunctionArgument loc)
   return [(SingleMem mem)]
-moveGetMem scname loc pv msg (SingleMove a) = do
-  memstate <- expectNotMoved msg a
+moveGetMem scname loc pv (SingleMove a) = do
+  memstate <- expectNotMoved loc a
   mapM (setLastAssignmentLocMem loc) memstate -- set last assignment loc for information purposes
-  memCtx %= (setValue a MemMoved)
+  memCtx %= (setValue a (MemMoved [loc]))
   return (memstate)
-moveGetMem scname loc pv msg (PhiMove _ (mt1,_) (mt2,_)) = do
-  memt1 <- moveGetMem_Loc scname loc Nothing msg mt1
-  memt2 <- moveGetMem_Loc scname loc Nothing msg mt2
+moveGetMem scname loc pv (PhiMove _ (mt1,_) (mt2,_)) = do
+  memt1 <- moveGetMem_Loc scname loc Nothing mt1
+  memt2 <- moveGetMem_Loc scname loc Nothing mt2
   return (memt1 <> memt2)
-moveGetMem scname loc pv msg (TupleMove as) = do
-  mems <- mapM (moveGetMem_Loc scname loc Nothing msg) as
+moveGetMem scname loc pv (TupleMove as) = do
+  mems <- mapM (moveGetMem_Loc scname loc Nothing) as
   return (TupleMem <$> oneOfEach mems)
-moveGetMem scname loc pv msg (RefMove te) = do
+moveGetMem scname loc pv (RefMove te) = do
   -- if we had a reference,
   -- allocate new memory for it
   memvar <- allocateMem scname pv (MemVarInfo NotFunctionArgument loc)
@@ -695,23 +696,20 @@ setMemTuple loc scname xs (TupleMem as) | otherwise = demutationError ("Trying t
                                                                        ("Debug info: the inferred memory state is: " <> showT xs <> " = " <> showT as)
                                                                       )
 
-expectNotMoved :: DMPersistentMessage MTC -> ProcVar -> MTC [MemType]
-expectNotMoved msg tevar = do
+expectNotMoved :: SourceLocExt -> ProcVar -> MTC [MemType]
+expectNotMoved loc tevar = do
   mc <- use memCtx
   case getValue tevar mc of
-    Nothing          -> throwLocatedError (DemutationDefinitionOrderError $ tevar) msg
-    Just (MemMoved) -> throwLocatedError (DemutationMovedVariableAccessError tevar) msg
+    Nothing          -> throwLocatedError (DemutationDefinitionOrderError $ tevar) (DMPersistentMessage @MTC loc)
+    Just (MemMoved movedlocs) -> do
+      let edits = (loc, "trying to access " <> quote (showPretty tevar)) :
+                  [(l, "content of " <> quote (showPretty tevar) <> " is already moved away here") | l <- movedlocs]
+
+      throwLocatedError (DemutationMovedVariableAccessError tevar) (SourceQuote edits)
+                                      
     Just (MemExists a) -> pure a
 
--- expectNotMovedMaybe :: Maybe ProcVar -> MTC (Maybe [MemType]) 
--- expectNotMovedMaybe (Just a) = Just <$> expectNotMoved a
--- expectNotMovedMaybe Nothing = undefined -- return ()
 
-
--------------------------------------
--- memory redirection
--- setMemRedirection :: MemVar -> MemType -> MTC ()
--- setMemRedirection = undefined
 
 -------------------------------------
 -- accessing memories
@@ -723,7 +721,7 @@ getAllMemVars (RefMem a) = [a]
 
 getAllMemVarsOfMemState :: MemState -> [MemVar]
 getAllMemVarsOfMemState (MemExists ms) = ms >>= getAllMemVars
-getAllMemVarsOfMemState (MemMoved) = []
+getAllMemVarsOfMemState (MemMoved _) = []
 
 expectSingleMem :: DMPersistentMessage MTC -> [MemType] -> MTC MemVar
 expectSingleMem msg mts = do
@@ -840,7 +838,7 @@ getLastAssignedLocs mt = do
 --       with last tevar being the same
 procVarAsTeVar :: ProcVar -> SourceLocExt -> MTC TeVar
 procVarAsTeVar pv loc = do
-  mts <- expectNotMoved (DMPersistentMessage loc) pv
+  mts <- expectNotMoved loc pv
   --
   -- all memory types which contain mutated vars
   let getMutatedName x = do

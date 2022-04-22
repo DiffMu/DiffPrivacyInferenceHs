@@ -221,7 +221,7 @@ elaborateMut scname (Located l (DMFalse)) = do
 elaborateMut scname term@(Located l (Var _)) = demutationErrorNoLoc $ "Unsupported term: " <> showPretty term
 
 elaborateMut scname (Located l (Extra (ProcVarTerm x))) = do
-  mx <- expectNotMoved (DMPersistentMessage l) x
+  mx <- expectNotMoved l x
   itype <- expectImmutType scname x
 
   return (Value itype (Located l (SingleMove x)))
@@ -259,7 +259,7 @@ elaborateMut scname (Located l (Extra (ProcSLetBase ltype x term))) = do
   -- 1. set memory locations for variables on the LHS
   -- 2. generate terms for the memory allocations
   -- 
-  (mem) <- moveGetMem scname l (Just x) (DMPersistentMessage l) moveType
+  (mem) <- moveGetMem scname l (Just x) moveType
   setMem x mem
 
   x' <- procVarAsTeVar x l
@@ -317,7 +317,7 @@ elaborateMut scname fullterm@(Located l (Extra (ProcTLetBase ltype vars term))) 
   moveType' <- (moveTypeAsTerm_Loc l moveType)
 
   -- get memory of the RHS
-  mem <- moveGetMem_Loc scname l Nothing (DMPersistentMessage l) moveType
+  mem <- moveGetMem_Loc scname l Nothing moveType
 
   -- write the list of possible memory types into the
   -- variables of the lhs
@@ -598,7 +598,7 @@ elaborateMut scname (Located l (Extra (ProcPreLoop (i1,i2,i3) iterVar body))) = 
                     }
               mems_changed <- mapM isChanged single_mems
               return $ any (== True) mems_changed
-            MemMoved      -> return False
+            MemMoved _     -> return False
         --
         -- case 2: mem_after /= mem_before,
         --   then obviously something changed,
@@ -1118,7 +1118,7 @@ elaborateLambda scname args body = do
       debug $ "[elaborateLambda] pure function. move type: " <> showT as
       debug $ "   movedVars: " <> showT (movedVarsOfMoveType_Loc as) <> ", mutated_argmvs: " <> showT mutated_argmvs
       --
-      memTypesOfMove <- mapM (expectNotMoved (DMPersistentMessage l)) (movedVarsOfMoveType_Loc as)
+      memTypesOfMove <- mapM (expectNotMoved l) (movedVarsOfMoveType_Loc as)
       let memVarsOfMove = join memTypesOfMove >>= getAllMemVars
       --
       case memVarsOfMove `intersect` argmvs of
