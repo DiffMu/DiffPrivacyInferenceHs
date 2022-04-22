@@ -285,6 +285,7 @@ instance Show (DMTypeOf k) where
   show DMReal = "Real"
   show DMData = "Data"
   show (IRNum a) = "IR " <> show a
+  show (Num t NonConst) = show t
   show (Num t c) = show t <> "[" <> show c <> "]"
   show (NonConst) = "--"
   show (Const c) = show c <> " ©"
@@ -326,7 +327,7 @@ appendDifferentIfLastIsLong main verticalToSwitch lengthToSwitch shortExtra long
                      
 
 showArgPrettyShort :: (ShowPretty a, ShowPretty b) => (a :@ b) -> Text
-showArgPrettyShort (a :@ b) = showPretty a <> "@" <> parenIfMultiple (showPretty b)
+showArgPrettyShort (a :@ b) = showPretty a <> " @ " <> parenIfMultiple (showPretty b)
 
 showFunPrettyShort :: (ShowPretty a, ShowPretty b) => Text -> [(a :@ b)] -> a -> Text
 showFunPrettyShort marker args ret =  "(" <> intercalateS ", " (fmap showArgPrettyShort args) <> ")"
@@ -391,7 +392,7 @@ instance ShowPretty (DMTypeOf k) where
   showPretty LInf = "LInf"
   showPretty U = "U"
   showPretty Vector = "Vector"
-  showPretty Gradient = "Gradient"
+  showPretty Gradient = "DMGrads"
   showPretty (Matrix n) = showPretty n <> "-row Matrix"
   showPretty (Clip n) = showPretty n
   showPretty (DMVec nrm clp n τ) = "Vector<n: "<> showPretty nrm <> ", c: " <> showPretty clp <> ">[" <> showPretty n <> "]{" <> showPretty τ <> "}"
