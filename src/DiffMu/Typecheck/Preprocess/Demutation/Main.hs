@@ -125,7 +125,7 @@ makeTermList (Statement l term last : []) = do last' <- (moveTypeAsTerm l last) 
 makeTermList (StatementWithoutDefault l term : []) = return (NoLastValue , Nothing, [Located l term])
 -- makeTermList (PurePhiTermType cond (Value Pure mt1,tt1) (Value Pure mt2,tt2) : []) = return (PureValue [mt1,mt2] , Nothing, [Extra (DemutPhi cond tt1 tt2)])
 -- makeTermList (PurePhiTermType cond _ _ : [])     = demutationErrorNoLoc $ "Encountered a phi as last statement in a block, but the branches to do not have pure values as returns."
-makeTermList (MutatingFunctionEnd _ : [])          = return (MutatingFunctionEndValue , Nothing, [])
+makeTermList (MutatingFunctionEnd retloc : [])          = return (MutatingFunctionEndValue retloc, Nothing, [])
 
 -- more than one element left
 makeTermList (Value _ mt : ts)          = demutationErrorNoLoc $ "Found a value term " <> showPretty mt <> " inside a list of statements."
@@ -169,7 +169,7 @@ elaborateTopLevel scname (Located l (Extra (Block ts))) = do
 
   mt <- case last_val of
     PureValue mt -> return mt
-    MutatingFunctionEndValue -> demutationErrorNoLoc $ "Encountered a 'return' which is not the last statement of a function."
+    MutatingFunctionEndValue retloc -> demutationError ("Encountered a 'return' which is not the last statement of a function.") retloc
     NoLastValue              -> demutationErrorNoLoc $ "Encountered a statement without last value in top level."
 
   -- case mt of
@@ -191,8 +191,8 @@ elaborateMut scname term@(Located l (Extra (Block ts))) = do
   (last_val, ts'') <- makeTermListAndAppend ts'
 
   mt <- case last_val of
-    PureValue (Located _ mt) -> return mt
-    MutatingFunctionEndValue -> demutationErrorNoLoc $ "Encountered a 'return' which is not the last statement of a function."
+    PureValue (Located _ mt)        -> return mt
+    MutatingFunctionEndValue retloc -> demutationError ("Encountered a 'return' which is not the last statement of a function.") retloc
     NoLastValue -> demutationErrorNoLoc $ "Encountered a statement which is not allowed to be the last one in a block.\n"
                                     <> "The statement is:\n"
                                     <> showPretty term
@@ -685,9 +685,7 @@ elaborateMut scname term@(Located l (Extra (ProcPhi cond tr fs))) = do
   trTerms <- do
     (l_tr, (trLastVal,trLast,trTerms)) <- elaborateAsList scname tr
     case (trLastVal,trLast) of
-      (MutatingFunctionEndValue,_) -> demutationErrorNoLoc $ "Ifs cannot contain `return` statements.\n"
-                                                  <> "In the term:\n"
-                                                  <> showPretty term
+      (MutatingFunctionEndValue retloc,_) -> demutationError ("Ifs cannot contain `return` statements.") retloc
       (PureValue mt, Just defaulval) -> pure (StatementBranch l_tr trTerms)
       (NoLastValue, _)               -> pure (StatementBranch l_tr trTerms)
       (PureValue mt, Nothing)        -> pure (ValueBranch l_tr trTerms mt)
@@ -713,9 +711,7 @@ elaborateMut scname term@(Located l (Extra (ProcPhi cond tr fs))) = do
       Just fs -> do
         (l_fs, (fsLastVal,fsLast,fsTerms)) <- elaborateAsList scname fs
         case (fsLastVal,fsLast) of
-          (MutatingFunctionEndValue,_) -> demutationErrorNoLoc $ "Ifs cannot contain `return` statements.\n"
-                                                      <> "In the term:\n"
-                                                      <> showPretty term
+          (MutatingFunctionEndValue retloc,_) -> demutationError ("Ifs cannot contain `return` statements.") retloc
           (PureValue mt, Just defaulval) -> pure (StatementBranch l_fs fsTerms)
           (NoLastValue, _)               -> pure (StatementBranch l_fs fsTerms)
           (PureValue mt, Nothing)        -> pure (ValueBranch l_fs fsTerms mt)
@@ -735,6 +731,11 @@ elaborateMut scname term@(Located l (Extra (ProcPhi cond tr fs))) = do
   (mutCtxAfter, (proj1, proj2)) <- coequalizeMutCtx mutCtxAfter1 mutCtxAfter2
   mutCtx .= mutCtxAfter
   cleanupVACtxAfterScopeEnd vaCtxBefore
+  debug $ "[Demutating Phi]: Coequalizing of mutctx:"
+  debug $ "                  mctx1:  " <> indentAfterFirstWith "                          " (showT mutCtxAfter1)
+  debug $ "                  mctx2:  " <> indentAfterFirstWith "                          " (showT mutCtxAfter2)
+  debug $ "                  result: " <> indentAfterFirstWith "                          " (showT mutCtxAfter)
+
 
   ---------------------------------
   --
@@ -1132,22 +1133,34 @@ elaborateLambda scname args body = do
     --
     -- case II: not allowed
     --
-    (PureValue as, xs) -> demutationErrorNoLoc $ "Found a function which is mutating, but does not have a 'return'. This is not allowed."
-                                        <> "\nThe function body is:\n" <> showPretty body
+    (PureValue as, xs) -> do
+        let makeEdits (x,locs) = [(l, "argument " <> quote (showPretty x) <> " last mutated here.") | l <- locs]
+
+        let edits = (getLocation body,"missing a 'return' statement") : (xs >>= makeEdits)
+
+        demutationError ("Found a function which is mutating, but does not have a 'return'. This is not allowed.")
+          (
+            SourceQuote edits :\\:
+            ("The mutated arguments are: " <> showPretty (fst <$> xs))
+          )
     --
     -- case III: not allowed
     --
-    (MutatingFunctionEndValue, []) -> demutationErrorNoLoc $ "Found a function which is not mutating, but has a 'return'. This is not allowed."
-                                                    <> "\nThe function body is:\n" <> showPretty body
+    (MutatingFunctionEndValue retloc, []) -> demutationError ("Found a function which is not mutating, but has a 'return'. This is not allowed.")
+                                                (SourceQuote
+                                                [ (getLocation body, "does not mutate any of its arguments")
+                                                , (retloc, "should be removed")
+                                                ]
+                                                )
 
     --
     -- case IV: mutating function
     --
-    (MutatingFunctionEndValue, mvs) -> do
+    (MutatingFunctionEndValue _, mvs) -> do
       let s1 = "Auto generated return tuple (or single value) of mutating function"
-      let last_tuple = case mvs of
+      let last_tuple = case fst <$> mvs of
               [v] -> Var (v)
-              vs  -> Tup [(Located (RelatedLoc s1 l) (Var (v))) | v <- mvs]
+              vs  -> Tup [(Located (RelatedLoc s1 l) (Var v)) | v <- vs]
       return (Mutating mut_states, Extra (DemutBlock ((Located (downgradeToRelated s1 l) (last_tuple)) : new_body_terms)))
 
     (NoLastValue, _) -> demutationErrorNoLoc $ "Found a function which has no last value, that is not allowed."
@@ -1222,10 +1235,10 @@ elaborateMutList loc f scname mutargs = do
 
             -- get the memvar of this tevar from the memctx
             -- and say that the memory location is mutated
-            markMutated x (DMPersistentMessage
-                           ("When checking that the argument" :<>: Quote arg :<>: "passed to function" :<>: Quote f :<>: "in a mutable argument position contains a single memory location.":\\:
-                            loc
-                           ))
+            markMutated x loc (DMPersistentMessage
+                               ("When checking that the argument" :<>: Quote arg :<>: "passed to function" :<>: Quote f :<>: "in a mutable argument position contains a single memory location.":\\:
+                                loc
+                               ))
 
             return ((Located l (Var (x'))), (Located l (SingleMove x)), Just x)
 

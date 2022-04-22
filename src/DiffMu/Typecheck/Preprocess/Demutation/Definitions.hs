@@ -118,7 +118,7 @@ data TermType =
 
 data LastValue =
    PureValue LocMoveType
-   | MutatingFunctionEndValue
+   | MutatingFunctionEndValue SourceLocExt
    | NoLastValue
 
 data PhiBranchType =
@@ -154,7 +154,7 @@ data IsSplit = Split [MemVar] | NotSplit
 --   (<>) Split a = Split
 --   (<>) NotSplit b = b
 
-data TeVarMutTrace = TeVarMutTrace (Maybe ProcVar) IsSplit [TeVar]
+data TeVarMutTrace = TeVarMutTrace (Maybe ProcVar) IsSplit [(TeVar,[SourceLocExt])] -- (every tevar also carries the locations where it was created as result of a mutation)
   deriving (Show,Eq)
 
 newtype Scope = Scope [ScopeVar]
@@ -480,14 +480,14 @@ cleanupVACtxAfterScopeEnd vaCtxBefore = do
 
 --------------------------------------------------------------------------------------
 
-markMutated :: ProcVar -> DMPersistentMessage MTC -> MTC TeVar
-markMutated pv msg = do
+markMutated :: ProcVar -> SourceLocExt -> DMPersistentMessage MTC -> MTC TeVar
+markMutated pv loc msg = do
   mv <- expectSingleMem msg =<< expectNotMoved msg pv
   tevar <- newTeVarOfMut (showT mv) (Just pv)
   let f ctx = do
         case getValue mv ctx of
           Nothing -> impossible $ "Wanted to mark the memvar " <> showT mv <> " as mutated, but it was not in the mutctx."
-          Just (scvar, TeVarMutTrace pv split tevars) -> return $ setValue mv (scvar, TeVarMutTrace pv split (tevar:tevars)) ctx
+          Just (scvar, TeVarMutTrace pv split tevars) -> return $ setValue mv (scvar, TeVarMutTrace pv split ((tevar,[loc]):tevars)) ctx
 
   mutCtx %=~ f
   return tevar
@@ -740,7 +740,7 @@ expectSingleMem msg mts = do
 
 
 
-getMemVarMutationStatus :: MemVar -> MTC (IsSplit, [TeVar])
+getMemVarMutationStatus :: MemVar -> MTC (IsSplit, [(TeVar,[SourceLocExt])])
 getMemVarMutationStatus mv = do
   mctx <- use mutCtx
   case getValue mv mctx of
@@ -752,30 +752,36 @@ coequalizeTeVarMutTrace :: TeVarMutTrace -> TeVarMutTrace -> WriterT ([LocDemutD
 coequalizeTeVarMutTrace (TeVarMutTrace pv1 split1 ts1) (TeVarMutTrace pv2 split2 ts2) | and [ts1 == ts2, pv1 == pv2, split1 == split2] = pure $ TeVarMutTrace pv1 split1 ts1
 coequalizeTeVarMutTrace (TeVarMutTrace pv1 split1 ts1) (TeVarMutTrace pv2 split2 ts2)  = do
   t3 <- newTeVarOfMut "phi" Nothing
-  let makeProj (Just pv) []     = pure $ Extra (DemutSLetBase PureLet (t3) (notLocated $ Var (UserTeVar pv)))
-      makeProj Nothing   []     = lift $ demutationErrorNoLoc $ "While demutating phi encountered a branch where a proc-var-less memory location is mutated. This cannot be done."
-      makeProj _         (t:ts) = pure $ Extra (DemutSLetBase PureLet (t3) (notLocated $ Var (t)))
+  let makeProj (Just pv) []            = pure $ (Extra (DemutSLetBase PureLet (t3) (notLocated $ Var (UserTeVar pv))), [])
+      makeProj Nothing   []            = lift $ demutationErrorNoLoc $ "While demutating phi encountered a branch where a proc-var-less memory location is mutated. This cannot be done."
+      makeProj _         ((t,locs):ts) = pure $ (Extra (DemutSLetBase PureLet (t3) (notLocated $ Var (t))), locs)
 
-  proj1 <- makeProj pv1 ts1 
-  proj2 <- makeProj pv2 ts2
+  (proj1,locs1) <- makeProj pv1 ts1 
+  (proj2,locs2) <- makeProj pv2 ts2
 
   lift $ debug $ "Coequalizing MutTraces:\n"
   lift $ debug $ "  proj1: " <> showT proj1
   lift $ debug $ "  proj2: " <> showT proj2
 
-  tell ([notLocated proj1],[notLocated proj2])
+  -- we check whether the muttraces belong to the same procvars
+  case pv1 == pv2 of
+    --
+    -- if they don't then this memory location cannot be used anymore after the if
+    False -> return $ TeVarMutTrace Nothing NotSplit ([])
+    --
+    -- if they do, we can actually coequalize
+    True -> do
+      tell ([notLocated proj1],[notLocated proj2])
 
-  split3 <- case (split1,split2) of
-              (NotSplit, NotSplit) -> pure NotSplit
-              (NotSplit, Split a) -> pure (Split a)
-              (Split a, NotSplit) -> pure (Split a)
-              (Split a, Split b) -> pure (Split (a <> b))
+      let pv3 = pv1
 
-  let pv3 = case pv1 == pv2 of
-              True -> pv1
-              False -> Nothing
+      split3 <- case (split1,split2) of
+                  (NotSplit, NotSplit) -> pure NotSplit
+                  (NotSplit, Split a) -> pure (Split a)
+                  (Split a, NotSplit) -> pure (Split a)
+                  (Split a, Split b) -> pure (Split (a <> b))
 
-  pure $ TeVarMutTrace pv3 split3 (t3 : ts1 <> ts2)
+      pure $ TeVarMutTrace pv3 split3 ((t3,locs1<>locs2) : ts1 <> ts2)
 
 
 
@@ -845,7 +851,7 @@ procVarAsTeVar pv loc = do
   mut_mts <- join <$> mapM getMutatedName (getAllMemVars =<< mts)
   --
   -- if we have no mutations, we are done
-  case mut_mts of
+  case fst <$> mut_mts of
     []     -> pure (UserTeVar pv)
     --
     -- if there are mutations, we need
