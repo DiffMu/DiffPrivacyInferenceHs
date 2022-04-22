@@ -6,6 +6,7 @@ module DiffMu.Prelude
     module All
   , StringLike (..)
   , RawSource (..)
+  , SourceFile (..)
   , rawSourceFromString
   , NamePriority (..)
   , CompoundPriority (..)
@@ -56,8 +57,14 @@ import Data.HashMap.Strict as H
 import System.IO (FilePath, readFile)
 import GHC.IO (catchAny)
 
+newtype SourceFile = SourceFile (Maybe FilePath)
+  deriving (Eq, Hashable, DictKey)
 
-newtype RawSource = RawSource (HashMap (Maybe FilePath) (Array Int Text))
+instance Show SourceFile where
+  show (SourceFile Nothing) = "none"
+  show (SourceFile (Just fp)) = fp
+
+newtype RawSource = RawSource (HashMap SourceFile (Array Int Text))
   deriving (Show)
 
 rawSourceFromString :: String -> [FilePath] -> IO RawSource
@@ -66,12 +73,12 @@ rawSourceFromString input other_files = do
                              in  listArray (1,length ls) (ls) 
   let tryReadFile f = (Just <$> readFile f) `catchAny` (\e -> return Nothing)
 
-  let onlyJust xs = [(Just a, make_line_array b) | (a, Just b) <- xs]
+  let onlyJust xs = [(SourceFile (Just a), make_line_array b) | (a, Just b) <- xs]
 
   other_file_contents <- mapM tryReadFile other_files
   let good_other_file_contents = onlyJust ((other_files) `zip` (other_file_contents))
   return $ RawSource $ H.fromList $
-    ((Nothing, make_line_array input)
+    ((SourceFile Nothing, make_line_array input)
     :
     (good_other_file_contents)
     )
