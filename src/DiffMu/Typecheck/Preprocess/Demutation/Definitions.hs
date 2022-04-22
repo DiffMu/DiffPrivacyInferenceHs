@@ -21,7 +21,7 @@ import Data.Foldable
 import Debug.Trace
 
 import qualified Prelude as P
-default (Text)
+default (Text,Int)
 
 
 
@@ -188,6 +188,23 @@ instance Semigroup IsMutated where
 instance Monoid IsMutated where
   mempty = neutralId
 
+
+--------------------------------------------------------------------------------------
+-- Memory info
+--------------------------------------------------------------------------------------
+
+data IsFunctionArgument = FunctionArgument | NotFunctionArgument
+  deriving (Eq,Show)
+
+data MemVarInfo = MemVarInfo
+  {
+    _ifaInfo :: IsFunctionArgument
+  , _lastAssignmentLocInfo :: SourceLocExt
+  }
+$(makeLenses ''MemVarInfo)
+
+type MemVarInfoCtx = Ctx MemVar MemVarInfo
+
 --------------------------------------------------------------------------------------
 -- Variable Access Type
 --------------------------------------------------------------------------------------
@@ -262,15 +279,6 @@ computeVarAccessType var (a,xvat) (b,yvat) = do
     False -> f [(yvat), (xvat)]
 
 
---------------------------------------------------------------------------------------
--- Memory info
---------------------------------------------------------------------------------------
-
-data IsFunctionArgument = FunctionArgument | NotFunctionArgument
-  deriving (Eq,Show)
-
-type MemVarInfo = IsFunctionArgument
-type MemVarInfoCtx = Ctx MemVar MemVarInfo
 
 
 --------------------------------------------------------------------------------------
@@ -574,12 +582,19 @@ setImmutTypeOverwritePrevious = markReadOverwritePrevious
 
 
 
---
--- This function marks variables as moved in the scope
--- For #172
---
--- moveGetMemAndAllocs :: ScopeVar -> MoveType -> MTC ([MemType], [(MemVar,DemutDMTerm)])
--- moveGetMemAndAllocs scname mt = runWriterT (moveGetMemAndAllocs_impl scname mt)
+-- change last move Loc for memvars
+setLastAssignmentLocMemVar :: SourceLocExt -> MemVar -> MTC ()
+setLastAssignmentLocMemVar loc mv = do
+  memVarInfo <%= changeValue mv (\(MemVarInfo a _) -> (MemVarInfo a loc))
+  return ()
+
+-- change last move Loc for memtypes
+setLastAssignmentLocMem :: SourceLocExt -> MemType -> MTC ()
+setLastAssignmentLocMem loc = \case
+  TupleMem mts  -> mapM_ (setLastAssignmentLocMem loc) mts
+  SingleMem mv  -> setLastAssignmentLocMemVar loc mv
+  RefMem mv     -> setLastAssignmentLocMemVar loc mv
+
 
 
 --
@@ -596,28 +611,29 @@ oneOfEach [] = [[]]
 
 
 
-moveGetMem_Loc :: Scope -> Maybe ProcVar -> DMPersistentMessage MTC -> LocMoveType -> MTC [MemType]
-moveGetMem_Loc scname pv msg (Located _ mt) = moveGetMem scname pv msg mt
+moveGetMem_Loc :: Scope -> SourceLocExt -> Maybe ProcVar -> DMPersistentMessage MTC -> LocMoveType -> MTC [MemType]
+moveGetMem_Loc scname loc pv msg (Located _ mt) = moveGetMem scname loc pv msg mt
 
-moveGetMem :: Scope -> Maybe ProcVar -> DMPersistentMessage MTC -> MoveType -> MTC [MemType]
-moveGetMem scname pv msg (NoMove te) = do
-  mem <- allocateMem scname pv (NotFunctionArgument)
+moveGetMem :: Scope -> SourceLocExt -> Maybe ProcVar -> DMPersistentMessage MTC -> MoveType -> MTC [MemType]
+moveGetMem scname loc pv msg (NoMove te) = do
+  mem <- allocateMem scname pv (MemVarInfo NotFunctionArgument loc)
   return [(SingleMem mem)]
-moveGetMem scname pv msg (SingleMove a) = do
+moveGetMem scname loc pv msg (SingleMove a) = do
   memstate <- expectNotMoved msg a
+  mapM (setLastAssignmentLocMem loc) memstate -- set last assignment loc for information purposes
   memCtx %= (setValue a MemMoved)
   return (memstate)
-moveGetMem scname pv msg (PhiMove _ (mt1,_) (mt2,_)) = do
-  memt1 <- moveGetMem_Loc scname Nothing msg mt1
-  memt2 <- moveGetMem_Loc scname Nothing msg mt2
+moveGetMem scname loc pv msg (PhiMove _ (mt1,_) (mt2,_)) = do
+  memt1 <- moveGetMem_Loc scname loc Nothing msg mt1
+  memt2 <- moveGetMem_Loc scname loc Nothing msg mt2
   return (memt1 <> memt2)
-moveGetMem scname pv msg (TupleMove as) = do
-  mems <- mapM (moveGetMem_Loc scname Nothing msg) as
+moveGetMem scname loc pv msg (TupleMove as) = do
+  mems <- mapM (moveGetMem_Loc scname loc Nothing msg) as
   return (TupleMem <$> oneOfEach mems)
-moveGetMem scname pv msg (RefMove te) = do
+moveGetMem scname loc pv msg (RefMove te) = do
   -- if we had a reference,
   -- allocate new memory for it
-  memvar <- allocateMem scname pv (NotFunctionArgument)
+  memvar <- allocateMem scname pv (MemVarInfo NotFunctionArgument loc)
   pure $ [RefMem memvar]
 
 
@@ -630,10 +646,7 @@ setMem x mt = do
   -- set the owner of the SingleVars in `mt`
   let smt = [s | SingleMem s <- mt]
   let setOwner s = do
-        sv <- getValue s <$> use mutCtx
-        case sv of
-          Just (scopeVar, TeVarMutTrace oldOwner split trace) -> mutCtx %= (setValue s (scopeVar, TeVarMutTrace (Just x) split trace))
-          Nothing -> pure ()
+        mutCtx <%= changeValue s (\(scopeVar, TeVarMutTrace oldOwner split trace) -> (scopeVar, TeVarMutTrace (Just x) split trace))
 
   mapM_ setOwner smt
 
@@ -649,14 +662,14 @@ setMemTuple :: SourceLocExt -> Scope -> [ProcVar] -> MemType -> MTC ()
 setMemTuple loc scname xs (SingleMem a) = do
   -- we get the memory info of the input var
   mvictx <- use memVarInfo
-  ifa <- case getValue a mvictx of
+  MemVarInfo ifa _ <- case getValue a mvictx of
         Nothing -> internalError $ "Expected the memvariable " <> showT a <> " to have an info entry."
         Just ifa -> return ifa
 
   -- We are deconstructing a tuple value,
   -- need to create memory locations for all parts
   let f (x) = do
-        mx <- allocateMem scname (Just x) ifa
+        mx <- allocateMem scname (Just x) (MemVarInfo ifa loc) -- NOTE: We update the `lastAssignmentLoc` here for RHS!
         setMem x [SingleMem mx]
         return mx
   memvars <- mapM f xs
@@ -797,6 +810,14 @@ coequalizeMutCtx muts1 muts2 = runWriterT (muts1 ⋆ muts2)
 --   RefMem mv -> undefined
 
 
+getLastAssignedLocs :: MemType -> MTC [SourceLocExt]
+getLastAssignedLocs mt = do
+  mvinfo <- use memVarInfo
+  let mvs = getAllMemVars mt
+  let f mv = case getValue mv mvinfo of
+               Nothing -> []
+               Just mvi -> [_lastAssignmentLocInfo mvi]
+  return (f =<< mvs)
 
 --
 -- | Create a tevar for a procvar.
@@ -811,9 +832,9 @@ coequalizeMutCtx muts1 muts2 = runWriterT (muts1 ⋆ muts2)
 --    1. all memory types do not contain mutated variables
 --    2. all memory types are single varnd all are mutated,
 --       with last tevar being the same
-procVarAsTeVar :: ProcVar -> DMPersistentMessage MTC -> MTC TeVar
-procVarAsTeVar pv msg = do
-  mts <- expectNotMoved msg pv
+procVarAsTeVar :: ProcVar -> SourceLocExt -> MTC TeVar
+procVarAsTeVar pv loc = do
+  mts <- expectNotMoved (DMPersistentMessage loc) pv
   --
   -- all memory types which contain mutated vars
   let getMutatedName x = do
@@ -830,15 +851,25 @@ procVarAsTeVar pv msg = do
     -- if there are mutations, we need
     -- to make sure that all tevars are the same
     (x:xs) -> case all (== x) xs of
-      False -> demutationError ("Illegal variable assignment combination.")
+      False -> do
+        let makeMessage (i, mt) = do
+              locs <- getLastAssignedLocs mt
+              return [(l, quote (showPretty pv) <> " assigned in execution branch " <> showPretty i) | l <- locs]
+
+        messages <- (mapM makeMessage (zip [1..] mts))
+        let messages' = (loc,quote (showPretty pv) <> " is used here"):join messages
+
+        demutationError ("Illegal variable assignment combination.")
                  ("The variable " :<>: Quote pv :<>: " is being assigned different memory locations in different execution branches." :\\:
-                 msg :\\:
-                 ("This is not allowed. A possible fix could be to write `" <> showPretty pv <> " = clone(...)` instead.")
+                 SourceQuote messages' :\\:
+                 ("This is not allowed. A possible fix could be to write `" <> showPretty pv <> " = clone(...)` instead.") :\\:
+                 "" :\\:
+                 ("Debug Info: Inferred memory type is:" <> showT mts)
                  )
 
       True  -> pure x
 
-procVarAsTeVarInMutCtx :: MemCtx -> MutCtx -> DMPersistentMessage MTC -> ProcVar -> MTC TeVar
+procVarAsTeVarInMutCtx :: MemCtx -> MutCtx -> SourceLocExt -> ProcVar -> MTC TeVar
 procVarAsTeVarInMutCtx tempMemCtx tempMutCtx msg pv = do
   oldMutCtx <- use mutCtx
   oldMemCtx <- use memCtx
@@ -849,10 +880,10 @@ procVarAsTeVarInMutCtx tempMemCtx tempMutCtx msg pv = do
   memCtx .= oldMemCtx
   return val
 
-moveTypeAsTerm_Loc :: DMPersistentMessage MTC -> LocMoveType -> MTC LocDemutDMTerm
+moveTypeAsTerm_Loc :: SourceLocExt -> LocMoveType -> MTC LocDemutDMTerm
 moveTypeAsTerm_Loc msg = mapM (moveTypeAsTerm msg)
 
-moveTypeAsTerm :: DMPersistentMessage MTC -> MoveType -> MTC DemutDMTerm
+moveTypeAsTerm :: SourceLocExt -> MoveType -> MTC DemutDMTerm
 moveTypeAsTerm msg = \case
   TupleMove mts -> do
     terms <- mapM (moveTypeAsTerm_Loc msg) mts
@@ -874,7 +905,7 @@ movedVarsOfMoveType = \case
   RefMove pdt -> []
   NoMove pdt -> []
 
-termTypeAsTerm :: DMPersistentMessage MTC -> TermType -> MTC LocDemutDMTerm
+termTypeAsTerm :: SourceLocExt -> TermType -> MTC LocDemutDMTerm
 termTypeAsTerm msg = \case
   Value it mt -> moveTypeAsTerm_Loc msg mt
   Statement l pdt mt -> do

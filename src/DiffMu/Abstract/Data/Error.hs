@@ -17,6 +17,7 @@ import qualified Prelude as P
 import Data.Graph (edges)
 import System.IO (FilePath)
 import qualified Data.HashMap.Strict as H
+import qualified Data.Array as A
 
 --------------------------------------------------------------------------
 -- Printing
@@ -147,6 +148,46 @@ instance ShowLocated SourceLocExt where
       s' <- showLocated s
       return $ "This location is currently ineffable. (" <> s' <> ")"
 
+-------------------------------------------------------------------------
+-- Source Quotes
+
+newtype SourceQuote = SourceQuote [(SourceLocExt, Text)]
+  deriving (Show)
+
+
+instance Monad t => Normalize t SourceQuote where
+  normalize e = pure
+
+instance ShowLocated SourceQuote where
+  showLocated (SourceQuote sts) =
+    let f (ExactLoc (SourceLoc file begin end),text) = [(file, (begin,text))]
+        f (RelatedLoc _ l, text) = f (l,text)
+        f _ = []
+
+        betterLocs = sts >>= f
+        locsByFile :: H.HashMap (Maybe FilePath) [(Int,Text)]
+        locsByFile = foldr (\(file,content) d -> appendValue file [content] d) H.empty betterLocs
+
+        changeSource :: Array Int Text -> [(Int,Text)] -> Array Int Text
+        changeSource = A.accum (\line edit -> line <> blue ("  <- " <> edit))
+
+    in do
+      RawSource originalSource <- ask
+      let changedSource = H.mapWithKey (\k v -> case getValue k locsByFile of
+                                                  Nothing -> v
+                                                  Just edit -> changeSource v edit
+                                        )
+                              originalSource 
+
+      let printSingle (fp, edits) =
+            let lines = fst <$> edits
+            in showT fp <> ":\n"
+               <> printSourceLinesFromSource (RawSource changedSource) fp (minimum lines, maximum lines P.+ 1)
+
+      let result = intercalateS "\n" (printSingle <$> (H.toList locsByFile))
+
+      return (result)
+
 
 -------------------------------------------------------------------------
 -- Printing source
@@ -171,6 +212,13 @@ printSourceLines fp (begin,end) = do
                         <> "  | (for file: " <> T.pack (show fp) <> ")\n"
                         <> "  |\n"
 
+
+--
+-- conditions:
+--  - `begin <= end`
+--
+printSourceLinesFromSource :: RawSource -> Maybe FilePath -> (Int,Int) -> Text
+printSourceLinesFromSource rsource fp range = runReader (printSourceLines fp range) rsource
 
 --
 -- conditions:
@@ -457,10 +505,13 @@ instance (Normalize t a, Normalize t b) => Normalize t (a :<>: b) where
 data Quote a = Quote a
   deriving (Show)
 
+quote :: Text -> Text
+quote a = "'" <> a <> "'"
+
 instance (ShowLocated a) => ShowLocated (Quote a) where
   showLocated (Quote a) = do
     a' <- showLocated a
-    return $ "'" <> a' <> "'"
+    return $ quote a'
 
 instance (Normalize t a) => Normalize t (Quote a) where
   normalize e (Quote a) = Quote <$> normalize e a
