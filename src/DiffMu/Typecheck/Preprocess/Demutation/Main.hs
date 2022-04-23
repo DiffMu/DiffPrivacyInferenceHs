@@ -30,6 +30,7 @@ import qualified GHC.RTS.Flags as LHS
 import Control.Exception (throw)
 import DiffMu.Typecheck.Preprocess.Demutation.Definitions (getAllMemVarsOfMemState, procVarAsTeVarInMutCtx, MutationArgumentType)
 import DiffMu.Abstract (Located(getLocation))
+import Text.Parsec (getPosition)
 
 default (Text)
 
@@ -203,7 +204,7 @@ elaborateMut scname term@(Located l (Extra (Block ts))) = do
     _ -> demutationErrorNoLoc $ "Encountered a block which is not top level and not in a function, but has a move as return type. This is currently not allowed."
 
   return (Value Pure (Located l (NoMove (Extra (DemutBlock ts'')))))
-    
+
 elaborateMut scname (Located l (Op op args)) = do
   args' <- mapM (elaboratePureValue scname) args
   args'' <- mapM (moveTypeAsTerm_Loc l) args'
@@ -248,7 +249,7 @@ elaborateMut scname (Located l (Extra (ProcSLetBase ltype x term))) = do
   case newTermType of
     Pure -> pure ()
     Mutating _ -> pure ()
-    PureBlackBox     -> throwUnlocatedError (DemutationError $ "Found an assignment " <> showPretty x <> " = " <> showPretty term <> " where RHS is a black box. This is not allowed.")
+    PureBlackBox     -> throwLocatedError (DemutationError $ "Found an assignment where RHS is a black box. This is not allowed.") l
 
   moveType' <- (moveTypeAsTerm l moveType)
 
@@ -307,8 +308,8 @@ elaborateMut scname fullterm@(Located l (Extra (ProcTLetBase ltype vars term))) 
   --
   case newTermType of
     Pure -> pure ()
-    Mutating ims -> throwUnlocatedError (DemutationError $ "Found a tuple assignment " <> showPretty vars <> " = " <> showPretty term <> " where RHS is a mutating function. This is not allowed.")
-    PureBlackBox -> throwUnlocatedError (DemutationError $ "Found an assignment " <> showPretty vars <> " = " <> showPretty term <> " where RHS is a black box. This is not allowed.")
+    Mutating ims -> throwLocatedError (DemutationError $ "Found a tuple assignment where RHS is a mutating function. This is not allowed.") l
+    PureBlackBox -> throwLocatedError (DemutationError $ "Found a tuple assignment where RHS is a black box. This is not allowed.") l
   --
   -- we set the immuttype of every element on the LHS to Pure
   --
@@ -404,7 +405,10 @@ elaborateMut scname term@(Located l (Apply f args)) = do
         -- make sure that there are as many arguments as the function requires
         case length muts == length args of
           True -> pure ()
-          False -> throwUnlocatedError (DemutationError $ "Trying to call the function '" <> showPretty f <> "' with a wrong number of arguments.")
+          False -> throwLocatedError (DemutationError $ "Trying to call the function '" <> showPretty f <> "' with a wrong number of arguments.")
+                     (l :\\:
+                     "The function " <> quote (showPretty f) <> " has " <> showPretty (length muts) <> " arguments but has been given " <> showPretty (length args) <> "."
+                     )
 
         let mutsToOtherMuts mut = case mut of
               Mutated -> MutatedArg
@@ -537,13 +541,12 @@ elaborateMut scname (Located l (Extra (ProcPreLoop (i1,i2,i3) iterVar body))) = 
   let newMemVars = (snd <$> newMems) >>= getAllMemVarsOfMemState
   case newMemVars `intersect` oldMemVars of
     [] -> pure ()
-    xs -> throwUnlocatedError $ DemutationMovedVariableAccessError $ "Found a loop body which moves variables around.\n"
-                          <> "The following variables are changed and contain memory locations from before: " <> showT xs <> "\n"
-                          <> "Since this means that we cannot track what actually happens in the case of an unknown number of iterations,\n"
-                          <> "this is not allowed.\n"
-                          <> "\n"
-                          <> "Loop body:\n"
-                          <> showPretty body
+    xs -> throwLocatedError (DemutationLoopError $ "Found a loop body which moves variables around.")
+                            (l :\\:
+                             ("The following variables are changed and contain memory locations from before: " <> showT xs <> "\n"
+                             <> "Since this means that we cannot track what actually happens in the case of an unknown number of iterations,\n"
+                             <> "this is not allowed.")
+                            )
   --
   -- Check that if function arguments are mutated, then their containing pvars
   -- need to still point to them after the loop body. For details, see #232.
@@ -884,14 +887,14 @@ elaborateMut scname (Located l (MFold t1 t2 t3))          = elaborateNonMut3 scn
 
 
 -- the unsupported terms
-elaborateMut scname term@(Located l (Choice t1))        = throwUnlocatedError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
-elaborateMut scname term@(Located l (Loop t1 t2 t3 t4)) = throwUnlocatedError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
-elaborateMut scname term@(Located l (TProject t1 t2))   = throwUnlocatedError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
-elaborateMut scname term@(Located l (Arg x a b))        = throwUnlocatedError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
-elaborateMut scname term@(Located l (Ret t1))           = throwUnlocatedError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
+elaborateMut scname term@(Located l (Choice t1))        = throwLocatedError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term)) l
+elaborateMut scname term@(Located l (Loop t1 t2 t3 t4)) = throwLocatedError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term)) l
+elaborateMut scname term@(Located l (TProject t1 t2))   = throwLocatedError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term)) l
+elaborateMut scname term@(Located l (Arg x a b))        = throwLocatedError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term)) l
+elaborateMut scname term@(Located l (Ret t1))           = throwLocatedError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term)) l
 
 
-elaborateMut scname term@_    = throwUnlocatedError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term))
+elaborateMut scname term@_    = throwLocatedError (UnsupportedError ("When mutation-elaborating:\n" <> showPretty term)) (getLocation term)
 
 
 ------------------------------------------------------
@@ -1074,14 +1077,24 @@ elaborateLambda scname args body = do
 
     let toTeVar (NotSplit, (t:ts)) = pure (Just t)
         toTeVar (NotSplit, [])     = pure Nothing
-        toTeVar (Split as, (t:ts)) = throwUnlocatedError $ DemutationSplitMutatingArgumentError $ "While demutating a function definition, encountered the case that an argument memory location was split. This is not allowed"
-        toTeVar (Split as, []) = do
+        toTeVar (Split slocs as, (t:ts)) = throwLocatedError
+          (DemutationSplitMutatingArgumentError $ "While demutating a function definition, encountered the case that an argument memory location was split. This is not allowed.")
+          (let (arg,tlocs) = t in SourceQuote (
+            [(tl,"mutation of an argument (currently under the name of " <> quote (showPretty arg) <> ") occurs here") | tl <- tlocs]
+            <> [(sl,quote (showPretty arg) <> " is split here") | sl <- slocs]
+          ))
+        toTeVar (Split slocs as, []) = do
           -- if a var was split, we check recursively if
           -- its parts have been mutated.
           let f a = do
                       partTerms <- toTeVar =<< getMemVarMutationStatus a
                       case partTerms of
-                        Just _ -> throwUnlocatedError $ DemutationSplitMutatingArgumentError "Part of a split function argument was mutated. This is currently not allowed"
+                        Just parts -> throwLocatedError (DemutationSplitMutatingArgumentError "Part of a split function argument was mutated. This is not allowed.")
+                                    (let (parg,ptlocs) = parts in SourceQuote
+                                     ([(sl,"a function argument is split here") | sl <- slocs]
+                                     <> [(pl,"the part " <> quote (showPretty parg) <> " of that argument is mutated here") | pl <- ptlocs]
+                                     )
+                                    )
                         Nothing  -> pure ()
 
           mapM f as
@@ -1243,7 +1256,10 @@ elaborateMutList loc f scname mutargs = do
             return ((Located l (Var (x'))), (Located l (SingleMove x)), Just x)
 
           -- if argument is not a var, throw error
-          _ -> throwUnlocatedError (DemutationError $ "When calling the mutating function " <> f <> " found the term " <> showPretty arg <> " as argument in a mutable-argument-position. Only variables are allowed here.")
+          _ -> throwLocatedError (DemutationError "Only variables can be used in a mutating-argument position of a function call.")
+                (l :\\:
+                 ("When calling the mutating function " <> quote f <> " found the term " <> quote (showPretty arg) <> " as argument in a mutable-argument-position.")
+                )
 
       checkArg (NotMutatedArg reqty , arg) = do
         -- if the argument is given in an immutable position,
@@ -1253,9 +1269,11 @@ elaborateMutList loc f scname mutargs = do
         -- we require the argument to be of the right type
         case itype == reqty of
           True -> pure ()
-          False -> demutationErrorNoLoc $ "While checking the argument " <> showPretty arg <> " of the function " <> f <> ":"
-                                    <> "Expected it to have demutation type " <> showPretty reqty
-                                    <> "But found type " <> showPretty itype
+          False -> throwLocatedError (DemutationError "Wrong function argument type in non-mutating position")
+                     (loc :\\:
+                      ("While checking the argument " <> showPretty arg <> " of the function " <> f <> ":\n"
+                      <> "Expected it to have demutation type " <> quote (showPretty reqty)
+                      <> "But found type " <> quote (showPretty itype)))
 
         movetype' <- moveTypeAsTerm_Loc (loc) movetype
 
@@ -1296,217 +1314,19 @@ elaborateMutList loc f scname mutargs = do
   -- number of occurences of all variables, but only for variables which are mutated, with occurence > 1
   let wrongVarCounts = filter (\(k,n) -> n > 1) mutvarcounts
 
+  let showvarcounts ((name,count):rest) = " - variable `" <> showT name <> "` occurs " <> showT count <> " times." <> "\n"
+                                            <> showvarcounts rest
+      showvarcounts [] = ""
+
   -- make sure that such variables do not occur
   case wrongVarCounts of
     [] -> return ()
-    xs -> throwUnlocatedError $ DemutationNonAliasedMutatingArgumentError
-                     $ "The function '" <> f <> "' is called with the following vars in mutating positions:\n\n"
+    xs -> throwLocatedError (DemutationNonAliasedMutatingArgumentError "Occurence of same variable in multiple mutating argument positions.")
+                       (loc :\\:
+                        ("The function '" <> f <> "' is called with the following vars in mutating positions:\n\n"
                         <> showvarcounts mutvarcounts <> "\n"
-                        <> "But it is not allowed to have the same variable occur multiple times "
-                        where showvarcounts ((name,count):rest) = " - variable `" <> showT name <> "` occurs " <> showT count <> " times." <> "\n"
-                                                                  <> showvarcounts rest
-                              showvarcounts [] = ""
+                        <> "But it is not allowed to have the same variable occur multiple times "))
 
   return (newArgs, mutVars)
 
-
-{-
-------------------------------------------------------------
--- preprocessing a for loop body
-
-runPreprocessLoopBody :: Scope -> Maybe TeVar -> ProcDMTerm -> MTC (ProcDMTerm, [TeVar])
-runPreprocessLoopBody scope iter t = do
-  (a,x) <- runStateT (preprocessLoopBody scope iter t) def
-  return (a, nub x)
-
--- | Walks through the loop term and changes SLet's to `modify!`
---   calls if such a variable is already in scope.
---   Also makes sure that the iteration variable `iter` is not assigned,
---   and that no `FLet`s are found.
---   Returns the variables which were changed to `modify!`.
-preprocessLoopBody :: Scope -> Maybe TeVar -> ProcDMTerm -> StateT [TeVar] MTC ProcDMTerm
-
-preprocessLoopBody scope iter (SLetBase ltype (v :- jt) term body) = do
-  -- it is not allowed to change the iteration variable
-  case (iter, v) of
-    (Just iter, Just v) | iter == v
-                          -> throwOriginalError (DemutationError $ "Inside for-loops the iteration variable (in this case '" <> show iter <> "') is not allowed to be mutated.")
-    _ -> pure ()
-
-  -- if an slet expression binds a variable which is already in scope,
-  -- then this means we are actually mutating this variable.
-  -- thus we update the term to be a mutlet and use the builtin modify!
-  -- function for setting the variable
-  -- if the variable has not been in scope, it is a local variable,
-  -- and we do not change the term
-
-  (term') <- preprocessLoopBody scope iter term
-  -- let newVars = nub (termVars <> bodyVars)
-
-  case v of
-    Just v -> case getValue v scope of
-      Just _ -> state (\a -> ((), a <> [v])) 
-      Nothing -> pure ()
-    Nothing -> pure ()
-
-  (body') <- preprocessLoopBody scope iter body
-  return (SLetBase ltype (v :- jt) term' body')
-
-
-preprocessLoopBody scope iter (TLet (vs) term body) = do
-  -- it is not allowed to change the iteration variable
-  case (iter) of
-    (Just iter) | (Just iter) `elem` (fstA <$> vs)
-                          -> throwOriginalError (DemutationError $ "Inside for-loops the iteration variable (in this case '" <> show iter <> "') is not allowed to be mutated.")
-    _ -> pure ()
-
-  -- if an slet expression binds a variable which is already in scope,
-  -- then this means we are actually mutating this variable.
-  -- thus we update the term to be a mutlet and use the builtin modify!
-  -- function for setting the variable
-  -- if the variable has not been in scope, it is a local variable,
-  -- and we do not change the term
-
-  (term') <- preprocessLoopBody scope iter term
-
-  -- we collect those values of vs for which there is something in the scope
-  let vs_in_scope = [v | (Just v :- _) <- vs, (Just _) <- [getValue v scope]]
-
-
-  state (\a -> ((), a <> vs_in_scope))
-
-  body' <- preprocessLoopBody scope iter body
-  return (TLet vs term' body')
-
-preprocessLoopBody scope iter (FLet f _ _) = throwOriginalError (DemutationError $ "Function definition is not allowed in for loops. (Encountered definition of " <> show f <> ".)")
-preprocessLoopBody scope iter (Ret t) = throwOriginalError (DemutationError $ "Return is not allowed in for loops. (Encountered " <> show (Ret t) <> ".)")
-
--- mutlets make us recurse
-preprocessLoopBody scope iter (Extra (MutLet mtype t1 t2)) = do
-  (t1') <- preprocessLoopBody scope iter t1
-  (t2') <- preprocessLoopBody scope iter t2
-  return (Extra (MutLet mtype t1' t2'))
-
-preprocessLoopBody scope iter (Extra (DefaultRet a)) = do
-  captureVars <- get
-  lift $ debug $ "[preprocessLoopBody]: default ret in loop, building loopret with captures: " <> show captureVars
-  return $ Extra $ LoopRet captureVars
-
-preprocessLoopBody scope iter (Extra (MutRet)) = do
-  captureVars <- get
-  lift $ debug $ "[preprocessLoopBody]: mutret in loop, building loopret with captures: " <> show captureVars
-  return $ Extra $ LoopRet captureVars
-
--- for the rest we simply recurse
-preprocessLoopBody scope iter t = do
-  x <- recDMTermMSameExtension (preprocessLoopBody scope iter) t
-  return x
-
-
-
-
-
-
---------------------------------------------------------
--- removing unnecessary tlets
-
---
--- | Walk through the tlet sequence in `term` until
---  the last 'in', and check if this returns `αs`
---  as a tuple. If it does, replace it by `replacement`
---  and return the new term.
---  Else, return nothing.
-replaceTLetIn :: [Maybe TeVar] -> DMTerm -> DMTerm -> Maybe DMTerm
-
--- If we have found our final `in` term, check that the tuple
--- is correct
-replaceTLetIn αs replacement (TLet βs t1 (Tup t2s)) =
-
-  let isvar :: (Maybe TeVar, DMTerm) -> Bool
-      isvar (v, Var (w :- _)) | v == w = True
-      isvar _ = False
-
-  in case and (isvar <$> zip αs t2s) of
-    -- if it does fit our pattern, replace by a single TLet
-    -- and recursively call ourselves again
-    True -> Just (TLet βs t1 replacement)
-
-    -- if this does not fit our pattern, recurse into term and body
-    False -> Nothing
-
--- If we have found our final `in` term (which is also allowed to be an slet),
--- check that the tuple is correct
-replaceTLetIn αs replacement (SLet β t1 (Tup t2s)) =
-
-  let isvar :: (Maybe TeVar, DMTerm) -> Bool
-      isvar (v, Var (w :- _)) | v == w = True
-      isvar _ = False
-
-  in case and (isvar <$> zip αs t2s) of
-    -- if it does fit our pattern, replace by a single TLet
-    -- and recursively call ourselves again
-    True -> Just (SLet β t1 replacement)
-
-    -- if this does not fit our pattern, recurse into term and body
-    False -> Nothing
-
--- if we have a next tlet, continue with it
-replaceTLetIn αs replacement (TLet βs t1 (TLet γs t2 t3)) = TLet βs t1 <$> rest
-  where
-    rest = replaceTLetIn αs replacement (TLet γs t2 t3)
-
--- if we have an intermiediate slet, also continue
-replaceTLetIn αs replacement (SLet βs t1 (TLet γs t2 t3)) = SLet βs t1 <$> rest
-  where
-    rest = replaceTLetIn αs replacement (TLet γs t2 t3)
-
--- if we have an intermiediate flet, also continue
-replaceTLetIn αs replacement (FLet βs t1 (TLet γs t2 t3)) = FLet βs t1 <$> rest
-  where
-    rest = replaceTLetIn αs replacement (TLet γs t2 t3)
-
--- if the term is different, we cannot do anything
-replaceTLetIn αs replacement _ = Nothing
-
-
-
-
-optimizeTLet :: DMTerm -> DMTerm
--- the interesting case
-optimizeTLet (TLet (αs) (term) t3) =
-  -- if we have two tlets inside each other, where
-  -- one of them returns the exactly the variables
-  -- captured by the other, i.e:
-  --
-  -- > tlet αs... = tlet βs = t1
-  -- >              in (αs...)
-  -- > in t3
-  --
-  -- then we can change it to
-  --
-  -- > tlet βs = t1
-  -- > in t3
-  --
-  --
-  -- But, there is one complication, namely:
-  -- It could be that the tlet with `in (αs...)`
-  -- is not directly inside of our term, but
-  -- further nested inside a tlet sequence.
-  -- Thus we do search for the `in` using `replaceTLetIn`.
-  case replaceTLetIn (fstA <$> αs) t3 term of
-
-    -- if we were successfull, we simply use the returned
-    -- term (after recursing on it)
-    Just replaced -> optimizeTLet replaced
-
-    -- if not successfull, we recurse
-    Nothing -> TLet (αs) (optimizeTLet term) (optimizeTLet t3)
-
--- the recursion case
-optimizeTLet t      = recDMTermSameExtension (optimizeTLet) t
-
-
-
-
--}
 

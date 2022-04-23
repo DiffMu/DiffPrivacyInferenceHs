@@ -163,7 +163,7 @@ data MemAssignmentType = AllocNecessary | PreexistingMem
 type MemCtx = Ctx ProcVar MemState
 
 
-data IsSplit = Split [MemVar] | NotSplit
+data IsSplit = Split [SourceLocExt] [MemVar] | NotSplit
   deriving (Show,Eq)
 
 -- instance Semigroup IsSplit where
@@ -695,7 +695,7 @@ setMemTuple loc scname xs (SingleMem a) = do
 
   case rhs_mut of
     Nothing -> internalError $ "Expected the memory location " <> showT a <> " to have a mutation status."
-    Just (scvar,TeVarMutTrace pv _ ts) -> mutCtx %= (setValue a (scvar, TeVarMutTrace pv (Split memvars) ts))
+    Just (scvar,TeVarMutTrace pv _ ts) -> mutCtx %= (setValue a (scvar, TeVarMutTrace pv (Split [loc] memvars) ts))
 
 setMemTuple loc scname xs (RefMem a) = do
   mapM_ (\(x) -> setMemMaybe x ([RefMem a])) (Just <$> xs)
@@ -790,9 +790,9 @@ coequalizeTeVarMutTrace (TeVarMutTrace pv1 split1 ts1) (TeVarMutTrace pv2 split2
 
       split3 <- case (split1,split2) of
                   (NotSplit, NotSplit) -> pure NotSplit
-                  (NotSplit, Split a) -> pure (Split a)
-                  (Split a, NotSplit) -> pure (Split a)
-                  (Split a, Split b) -> pure (Split (a <> b))
+                  (NotSplit, Split l a) -> pure (Split l a)
+                  (Split l a, NotSplit) -> pure (Split l a)
+                  (Split l1 a, Split l2 b) -> pure (Split (l1 <> l2) (a <> b))
 
       pure $ TeVarMutTrace pv3 split3 ((t3,locs1<>locs2) : ts1 <> ts2)
 

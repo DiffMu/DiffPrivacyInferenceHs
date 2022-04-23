@@ -309,6 +309,7 @@ data DMException where
   TermColorError          :: AnnotationKind -> Text -> DMException
   ParseError              :: String -> Maybe String -> Int -> Int-> DMException -- error message, filename, line number, line number of next expression
   DemutationMovedVariableAccessError :: Show a => a -> DMException
+  DemutationLoopError     :: Text -> DMException
   DemutationNonAliasedMutatingArgumentError :: Text -> DMException
   DemutationSplitMutatingArgumentError :: Text -> DMException
 
@@ -339,6 +340,7 @@ instance Show DMException where
   show (DemutationDefinitionOrderError a) = "The variable '" <> show a <> "' has not been defined before being used.\n"
                                             <> "Note that every variable has to be assigned some value prior to its usage.\n"
                                             <> "Here, 'prior to usage' means literally earlier in the code."
+  show (DemutationLoopError e) = "An error regarding loop demutation occured:\n" <> T.unpack e
   show (DemutationVariableAccessTypeError e) = "An error regarding variable access types occured:\n" <> T.unpack e
   show (DemutationMovedVariableAccessError a) = "Tried to access the variable " <> show a <> ". But this variable is not valid anymore, because it was assigned to something else."
   show (DemutationNonAliasedMutatingArgumentError a) = "An error regarding non-aliasing of mutating arguments occured:\n" <> T.unpack a
@@ -367,6 +369,7 @@ instance Eq DMException where
   TermColorError      a b          == TermColorError c d              = True
   DemutationError a                == DemutationError         b       = True
   DemutationDefinitionOrderError a == DemutationDefinitionOrderError b = True
+  DemutationLoopError a == DemutationLoopError b = True
   DemutationVariableAccessTypeError a == DemutationVariableAccessTypeError b = True
   DemutationMovedVariableAccessError a       == DemutationMovedVariableAccessError b = True
   DemutationNonAliasedMutatingArgumentError a       == DemutationNonAliasedMutatingArgumentError b = True
