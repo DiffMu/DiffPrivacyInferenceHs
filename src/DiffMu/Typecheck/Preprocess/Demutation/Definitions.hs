@@ -90,7 +90,11 @@ data ImmutType = Pure | Mutating [IsMutated] | PureBlackBox
   deriving (Show,Eq)
 
 instance ShowPretty ImmutType where
-  showPretty = showT
+  showPretty Pure = "Pure"
+  showPretty (Mutating args) = "Mutating (" <> intercalateS ", " (f <$> args) <> ") -> ()"
+    where f Mutated = "mut"
+          f NotMutated = "pure"
+  showPretty PureBlackBox = "Blackbox"
 
 -- consumeDefaultValue :: ImmutType -> ImmutType
 -- consumeDefaultValue (Pure DefaultValue) = Pure UserValue
@@ -232,6 +236,11 @@ data VarAccessState =
   | VAGlobalReadAccess (SourceLocExt,SourceLocExt)
   deriving (Show,Eq)
 
+getDefinitionLocation :: VarAccessState -> SourceLocExt
+getDefinitionLocation (VABasicAccess _ l) = l
+getDefinitionLocation (VAMultiWriteAccess _ (l,_)) = l
+getDefinitionLocation (VAGlobalReadAccess (l,_)) = l
+
 data IsFLetDefined = NotFLetDefined | FLetDefined
   deriving (Show,Eq)
 
@@ -288,7 +297,7 @@ computeVarAccessType var (a,VABasicAccess f l)       (b,WriteAction g w,loc) | b
                                                                                                   "A variable name cannot be used for function-style and assignment-style statements at the same time.")
                                                                                                  (let def = l in SourceQuote
                                                                                                  [(def, quote (showPretty var) <> " defined here with " <> asStyle f <> " statement")
-                                                                                                 ,(loc, "trying to use a " <> asStyle g <> " statement for " <> quote (showPretty var))
+                                                                                                 ,(loc, "attempting to use a " <> asStyle g <> " statement for " <> quote (showPretty var))
                                                                                                  ]
                                                                                                  )
 computeVarAccessType var (a,VABasicAccess f l)       (b,WriteAction g w,loc) | otherwise         =
@@ -307,7 +316,7 @@ computeVarAccessType var (a,VAMultiWriteAccess f l)  (b,ReadAction,loc)      | o
                                                                                                   ("A variable which is reassigned or mutated after its definition cannot be read from a different scope."))
                                                                                                  (let (def,writes) = l in SourceQuote
                                                                                                   ([(def, quote (showPretty var) <> " defined here")
-                                                                                                   ,(loc, "Trying to read " <> quote (showPretty var) <> " here")
+                                                                                                   ,(loc, "attempting to read " <> quote (showPretty var) <> " here")
                                                                                                    ]
                                                                                                    <> [(l, quote (showPretty var) <> " " <> past w <> " here") | (l,w) <- writes ]
                                                                                                   )
@@ -320,7 +329,7 @@ computeVarAccessType var (a,VAMultiWriteAccess f l)  (b,WriteAction g w,loc) | (
                                                                                                   "A variable name cannot be used for function-style and assignment-style statements at the same time.")
                                                                                                  (let (def,writes) = l in SourceQuote
                                                                                                  [(def, quote (showPretty var) <> " defined here with " <> asStyle f <> " statement")
-                                                                                                 ,(loc, "trying to use a " <> asStyle g <> " statement for " <> quote (showPretty var))
+                                                                                                 ,(loc, "attempting to use a " <> asStyle g <> " statement for " <> quote (showPretty var))
                                                                                                  ]
                                                                                                  )
 computeVarAccessType var (a,VAMultiWriteAccess f l)  (b,WriteAction g w,loc) | otherwise        =
@@ -460,7 +469,7 @@ markReassignedBase fletdef w scname loc tevar itype = do
   return ()
 
     -- The actual updating function
-    where 
+    where
       markReassignedInScope :: Scope -> ProcVar -> ImmutType -> VarAccessCtx -> MTC VarAccessCtx 
       markReassignedInScope scname tevar itype ctx =
         case getValue tevar ctx of
@@ -472,9 +481,13 @@ markReassignedBase fletdef w scname loc tevar itype = do
                 debug $ "[markReassignedBase]: VA type for '" <> showT tevar <> "' changes from " <> showT oldvatype <> " to " <> showT newvatype
                 return (setValue tevar (scname:oldscname, newvatype, olditype) ctx)
               False ->
-                throwUnlocatedError (DemutationError $ "Found a redefinition of the variable '" <> showT tevar
-                            <> "', where the old type (" <> showT olditype <> ") and the new type (" <> showT itype
-                            <> ") differ. This is not allowed.")
+                throwLocatedError
+                  (DemutationError "Reassignments which change the mutation type of a variable are not allowed.")
+                  (SourceQuote
+                   [(getDefinitionLocation oldvatype, "definition of " <> quote (showPretty tevar) <> " with mutation type " <> quote (showPretty olditype))
+                   ,(loc, "attempted reassignment of " <> quote (showPretty tevar) <> " with mutation type " <> quote (showPretty itype))
+                   ]
+                  )
 
 markReassignedFLet :: Scope -> SourceLocExt -> ProcVar -> ImmutType -> MTC ()
 markReassignedFLet scname loc var itype = do
@@ -498,11 +511,11 @@ markRead scname loc tevar = do
    debug $ "[markRead]: called for tevar" <> showT tevar <> " in " <> showT scname 
   --  mvars <- getAllMemVars <$> expectNotMoved var -- we make sure that we are still allowed to use this variable
    let f v = vaCtx %=~ (markReadInScope scname v) 
-        where 
+        where
           markReadInScope :: Scope -> ProcVar -> VarAccessCtx -> MTC VarAccessCtx 
           markReadInScope scname tevar ctx =
             case getValue tevar ctx of
-              Nothing -> throwUnlocatedError (DemutationDefinitionOrderError tevar)
+              Nothing -> throwLocatedError (DemutationDefinitionOrderError tevar) loc
               Just (oldscname, oldvatype, olditype) -> do
                 newvatype <- computeVarAccessType tevar (oldscname, oldvatype) (scname, ReadAction, loc)
                 return (setValue tevar (scname:oldscname,newvatype, olditype) ctx)
@@ -553,64 +566,7 @@ markMutated pv loc msg = do
   return tevar
 
 
---------------------------------------------------------------------------------------
 
-
-{-
-wrapReorder :: (Eq a, Show a) => [a] -> [a] -> PreDMTerm t -> PreDMTerm t
-wrapReorder have want term | have == want = term
-wrapReorder have want term | otherwise    =
-  let σ = getPermutationWithDrop have want
-  in Reorder σ (term)
-
-immutTypeEq :: ImmutType -> ImmutType -> Bool
-immutTypeEq (Pure _) (Pure _) = True
-immutTypeEq (Mutating a) (Mutating b) = a == b
-immutTypeEq (VirtualMutated a) (VirtualMutated b) = a == b
-immutTypeEq (PureBlackBox) (PureBlackBox) = True
-immutTypeEq _ _ = False
--}
-
--- set the type of the variable in scope,
--- but do not allow to change that value afterwards.
--- This has to happen after the memory location is set
-{-
-safeSetValueBase :: IsFLetDefined -> ScopeVar -> Maybe ProcVar -> ImmutType -> MTC ()
-safeSetValueBase fletdef scname (Nothing) itype = pure ()
-safeSetValueBase fletdef scname (Just var) itype = do
-
-  markReassignedBase fletdef scname var itype
--}
-{-
-  scope <- use vaCtx
-
-  case getValue var scope of
-    Nothing -> do
-      debug $ "[safeSetValue]: Var " <> showT var <> " not in scope " <> showT scname <> ". Marking read."
-      markRead scname var
-      -- return (setValue var newType scope)
-    (Just oldType) -> do
-      debug $ "[safeSetValue]: Var " <> showT var <> " is already in scope " <> showT scname <> ". Marking as mutated."
-      markReassignedBase fletdef scname var -- We say that we are changing this variable. This can throw an error.
-      if immutTypeEq oldType newType
-                      then pure scope
-                      else throwUnlocatedError (DemutationError $ "Found a redefinition of the variable '" <> showT var <> "', where the old type (" <> showT oldType <> ") and the new type (" <> showT newType <> ") differ. This is not allowed.")
--}
-
-{-
-safeSetValue = safeSetValueBase NotFLetDefined
-safeSetValueAllowFLet = safeSetValueBase FLetDefined
--}
-{-
-safeSetValueAllowFLet :: Maybe ProcVar -> ImmutType -> Scope -> MTC Scope
-safeSetValueAllowFLet (Nothing) newType scope = pure scope
-safeSetValueAllowFLet (Just var) newType scope =
-  case getValue var scope of
-    Nothing -> pure $ setValue var newType scope
-    (Just oldType) -> if immutTypeEq oldType newType
-                      then pure scope
-                      else throwUnlocatedError (DemutationError $ "Found a redefinition of the variable '" <> showT var <> "', where the old type (" <> showT oldType <> ") and the new type (" <> showT newType <> ") differ. This is not allowed.")
--}
 
 --------------------------------------------------------------------------------
 -- immuttype access
