@@ -24,6 +24,17 @@ import qualified Prelude as P
 default (Text,Int)
 
 
+--------------------------------------------------------------------------------------
+-- Prelude
+--------------------------------------------------------------------------------------
+
+fst3 (a,b,c) = a
+
+throwLocatedError err loc = throwError (WithContext err (DMPersistentMessage loc))
+demutationError err loc = throwLocatedError (DemutationError err) loc
+demutationErrorNoLoc err = throwUnlocatedError (DemutationError err)
+
+
 
 --------------------------------------------------------------------------------------
 -- Demutation Type
@@ -211,66 +222,106 @@ type MemVarInfoCtx = Ctx MemVar MemVarInfo
 
 -- NOTE: The order of constructors is relevant!
 --       (in `computeVarAccessType`)
-data VarAccessType = ReadSingle | ReadMulti | WriteSingleBase IsFLetDefined
+data VarAccessType = ReadSingle SourceLocExt | ReadMulti (SourceLocExt, SourceLocExt) | WriteSingleBase IsFLetDefined ([SourceLocExt], [SourceLocExt])
   deriving (Show,Eq,Ord)
+
+-- These are generated while parsing the code
+data VarAccessAction = ReadAction | WriteAction IsFLetDefined 
+  deriving (Show,Eq)
+
+data VarAccessState =
+  VABasicAccess SourceLocExt 
+  | VAMultiWriteAccess IsFLetDefined (SourceLocExt,[SourceLocExt])
+  | VAGlobalReadAccess (SourceLocExt,SourceLocExt)
+  deriving (Show,Eq)
 
 -- NOTE: The order of constructors is relevant!
 --       (in `computeVarAccessType`)
 data IsFLetDefined = NotFLetDefined | FLetDefined
   deriving (Show,Eq,Ord)
 
-pattern WriteSingle = WriteSingleBase NotFLetDefined
-pattern WriteSingleFunction = WriteSingleBase FLetDefined
+pattern WriteSingle a = WriteSingleBase NotFLetDefined a
+pattern WriteSingleFunction a = WriteSingleBase FLetDefined a
 
 -- type ImVarAccessCtx = Ctx ProcVar ()
-type VarAccessCtx = Ctx ProcVar ([Scope], VarAccessType, ImmutType)
+type VarAccessCtx = Ctx ProcVar ([Scope], VarAccessState, ImmutType)
 
 
 isIndependent :: Scope -> [Scope] -> Bool
 isIndependent (Scope new) = all (\(Scope old) -> and [not (old `isSuffixOf` new), not (new `isSuffixOf` old)])
 
+computeVarAccessType2 :: ProcVar -> ([Scope],VarAccessState) -> (Scope,VarAccessAction,SourceLocExt) -> MTC VarAccessState
+--
+-- if we have an independent location, the new vastate is always "basic"
+computeVarAccessType2 var (a,vas) (b,ReadAction,loc)    | b `isIndependent` a = throwLocatedError (DemutationDefinitionOrderError var) loc
+computeVarAccessType2 var (a,vas) (b,WriteAction _,loc) | b `isIndependent` a = return (VABasicAccess loc)
+--
+-- if the location is not independent, we compute the new vastate
+computeVarAccessType2 var (a,VABasicAccess l)         (b,ReadAction,loc)    | b `elem` a        = return (VABasicAccess l)
+computeVarAccessType2 var (a,VABasicAccess l)         (b,ReadAction,loc)    | otherwise         = return (VAGlobalReadAccess (l,loc))
+computeVarAccessType2 var (a,VABasicAccess l)         (b,WriteAction f,loc) | b `elem` a        = return (VAMultiWriteAccess f (l,[loc]))
+computeVarAccessType2 var (a,VABasicAccess l)         (b,WriteAction f,loc) | otherwise         = throwUnlocatedError (DemutationVariableAccessTypeError "")
+computeVarAccessType2 var (a,VAMultiWriteAccess f l)  (b,ReadAction,loc)    | b `elem` a        = return (VAMultiWriteAccess f l)
+computeVarAccessType2 var (a,VAMultiWriteAccess f l)  (b,ReadAction,loc)    | f == FLetDefined  = return (VAMultiWriteAccess f l)
+computeVarAccessType2 var (a,VAMultiWriteAccess f l)  (b,ReadAction,loc)    | otherwise         = throwUnlocatedError (DemutationVariableAccessTypeError "")
+computeVarAccessType2 var (a,VAMultiWriteAccess f l)  (b,WriteAction g,loc) | (b `elem` a)
+                                                                            && f == g           = return (VAMultiWriteAccess f l)
+computeVarAccessType2 var (a,VAMultiWriteAccess f l)  (b,WriteAction g,loc) | (b `elem` a)
+                                                                            && f /= g           = throwUnlocatedError (DemutationVariableAccessTypeError "")
+computeVarAccessType2 var (a,VAMultiWriteAccess f l)  (b,WriteAction g,loc) | otherwise         = throwUnlocatedError (DemutationVariableAccessTypeError "")
+computeVarAccessType2 var (a,VAGlobalReadAccess l)    (b,ReadAction,loc)                        = return (VAGlobalReadAccess l)
+computeVarAccessType2 var (a,VAGlobalReadAccess l)    (b,WriteAction g,loc)                     = throwUnlocatedError (DemutationVariableAccessTypeError "")
+
 
 computeVarAccessType :: ProcVar -> ([Scope],VarAccessType) -> (Scope,VarAccessType) -> MTC VarAccessType
 computeVarAccessType var (a,xvat) (b,yvat) = do
   let iOrE as b = or [b `isIndependent` as, b `elem` as]
+  let i as b = isIndependent b as
+  let e as b = elem b as
   logForce $ "Computing var access type: "
   logForce $ "as: " <> showT a
   logForce $ "b:  " <> showT b
   logForce $ "indep: " <> showT (b `isIndependent` a) <> ", elem: " <> showT (b `elem` a)
   let f cur =
          case cur of
-           [(ReadSingle), (ReadSingle)] | a `iOrE` b   -> pure ((ReadSingle))
-           [(ReadSingle), (ReadSingle)] | otherwise    -> pure (ReadMulti)
-           [(ReadSingle), (ReadMulti)]                 -> pure ((ReadMulti))
-           [(ReadSingle), (WriteSingle)] | a `iOrE` b  -> pure ((WriteSingle))
-           [(ReadSingle), (WriteSingle)] | otherwise   -> throwUnlocatedError $ DemutationVariableAccessTypeError $ "The variable '" <> showT var <> "' "
+           --
+           -- if b is not in a, then we have a new definition of a variable.
+           -- thus we set the vat to readsingle
+           _ | a `i` b -> pure (yvat)
+
+           -- [(ReadSingle l1), (ReadSingle l2)] | a `i` b     -> pure ((ReadSingle l2))
+           [(ReadSingle l1), (ReadSingle l2)] | a `e` b     -> pure ((ReadSingle l1))
+           [(ReadSingle l1), (ReadSingle l2)] | otherwise   -> pure (ReadMulti (l1,l2))
+           [(ReadSingle _), (ReadMulti locs)]               -> pure ((ReadMulti locs))
+           [(ReadSingle loc), (WriteSingle (rlocs,wlocs))] | a `iOrE` b  -> pure ((WriteSingle ([],[])))
+           [(ReadSingle _), (WriteSingle _)] | otherwise   -> throwUnlocatedError $ DemutationVariableAccessTypeError $ "The variable '" <> showT var <> "' "
                                                                                   <> "' is being mutated and read in two different scopes.\n"
                                                                                   <> "This is not allowed."
-           -- [(ReadSingle), (WriteSingleFunction)] | a == b -> pure ((WriteSingleFunction))
-           -- [(ReadSingle), (WriteSingleFunction)] | a /= b -> throwUnlocatedError $ DemutationVariableAccessTypeError $ "The variable '" <> showT var <> "' "
+           -- [(ReadSingle _), (WriteSingleFunction _)] | a == b -> pure ((WriteSingleFunction _))
+           -- [(ReadSingle _), (WriteSingleFunction _)] | a /= b -> throwUnlocatedError $ DemutationVariableAccessTypeError $ "The variable '" <> showT var <> "' "
            --                                                                                <> "' is being mutated and read in two different scopes.\n"
            --                                                                                <> "This is not allowed."
-           [(ReadSingle), (WriteSingleFunction)]   -> pure ((WriteSingleFunction))
-           [(ReadMulti),(ReadMulti)]                   -> pure ((ReadMulti))
-           [(ReadMulti),(WriteSingle)]               -> throwUnlocatedError $ DemutationVariableAccessTypeError $ "The variable '" <> showT var <> "' "
+           [(ReadSingle _), (WriteSingleFunction _)]   -> pure ((WriteSingleFunction ([],[])))
+           [(ReadMulti _),(ReadMulti _)]                   -> pure ((ReadMulti (UnknownLoc , UnknownLoc)))
+           [(ReadMulti _),(WriteSingle _)]               -> throwUnlocatedError $ DemutationVariableAccessTypeError $ "The variable '" <> showT var <> "' "
                                                                                    <> "' is being mutated and read in two different scopes.\n"
                                                                                    <> "This is not allowed."
-           [(ReadMulti),(WriteSingleFunction)]       -> throwUnlocatedError $ DemutationVariableAccessTypeError $ "The variable '" <> showT var <> "' cannot be redefined as a function after already being read somewhere. "
-            --  pure ((WriteSingleFunction)) -- because of flet reordering it is allowed to mutate functions
-           [(WriteSingle), (WriteSingle)] | a `iOrE` b  -> pure ((WriteSingle))
-           -- [(WriteSingle) l, (WriteSingle) k] | a == b -> throwUnlocatedError $ DemutationError $ "The function argument '" <> showT var <> "' has been mutated.\n"
+           [(ReadMulti _),(WriteSingleFunction _)]       -> throwUnlocatedError $ DemutationVariableAccessTypeError $ "The variable '" <> showT var <> "' cannot be redefined as a function after already being read somewhere. "
+            --  pure ((WriteSingleFunction _)) -- because of flet reordering it is allowed to mutate functions
+           [(WriteSingle _), (WriteSingle _)] | a `iOrE` b  -> pure ((WriteSingle ([],[])))
+           -- [(WriteSingle _) l, (WriteSingle _) k] | a == b -> throwUnlocatedError $ DemutationError $ "The function argument '" <> showT var <> "' has been mutated.\n"
            --                                                                             <> "But then a statement follows which assigns a variable with the same name."
            --                                                                             <> "This is not allowed, please use a different name here."
-           [(WriteSingle), (WriteSingle)]          -> throwUnlocatedError $ DemutationVariableAccessTypeError $ "The variable '" <> showT var <> "' "
+           [(WriteSingle _), (WriteSingle _)]          -> throwUnlocatedError $ DemutationVariableAccessTypeError $ "The variable '" <> showT var <> "' "
                                                                                    <> "' is being mutated in two different scopes.\n"
                                                                                    <> "This is not allowed."
-           [(WriteSingle), (WriteSingleFunction)]  -> throwUnlocatedError $ DemutationVariableAccessTypeError $ "The variable '" <> showT var <> "' is defined as function and as value."
+           [(WriteSingle _), (WriteSingleFunction _)]  -> throwUnlocatedError $ DemutationVariableAccessTypeError $ "The variable '" <> showT var <> "' is defined as function and as value."
                                                                                    <> "This is not allowed."
-           [(WriteSingleFunction), (WriteSingleFunction)] | a `iOrE` b -> pure ((WriteSingleFunction))
-           -- [(WriteSingleFunction), (WriteSingleFunction)] | a == b         -> throwUnlocatedError $ DemutationError $ "The function argument '" <> showT var <> "' has been mutated.\n"
+           [(WriteSingleFunction _), (WriteSingleFunction _)] | a `iOrE` b -> pure ((WriteSingleFunction ([],[])))
+           -- [(WriteSingleFunction _), (WriteSingleFunction _)] | a == b         -> throwUnlocatedError $ DemutationError $ "The function argument '" <> showT var <> "' has been mutated.\n"
            --                                                                             <> "But then a statement follows which assigns a variable with the same name."
            --                                                                             <> "This is not allowed, please use a different name here."
-           [(WriteSingleFunction), (WriteSingleFunction)] | otherwise -> throwUnlocatedError $ DemutationVariableAccessTypeError $ "The variable '" <> showT var <> "' "
+           [(WriteSingleFunction _), (WriteSingleFunction _)] | otherwise -> throwUnlocatedError $ DemutationVariableAccessTypeError $ "The variable '" <> showT var <> "' "
                                                                                    <> "' is being mutated in two different scopes.\n"
                                                                                    <> "This is not allowed."
            vavalues -> impossible $ "In demutation, while computing var access type. This branch should be inaccessible.\nlist is:\n" <> showT vavalues
@@ -365,12 +416,6 @@ mergeMemCtx = (⋆!)
 -----------------------------------------------------------------------------------------------------
 
 
-fst3 (a,b,c) = a
-
-throwLocatedError err loc = throwError (WithContext err (DMPersistentMessage loc))
-demutationError err loc = throwLocatedError (DemutationError err) loc
-demutationErrorNoLoc err = throwUnlocatedError (DemutationError err)
-
 -- buildReturnValue :: [ProcVar] -> DMTerm
 -- buildReturnValue [x] = Var (Just x :- JTAny)
 -- buildReturnValue xs = Tup [Var (Just x :- JTAny) | x <- xs]
@@ -382,8 +427,8 @@ demutationErrorNoLoc err = throwUnlocatedError (DemutationError err)
 --------------------------------------------------------------------------------------
 -- Accessing the VA-Ctx in the MTC monad
 
-markReassignedBase :: IsFLetDefined -> Scope -> ProcVar -> ImmutType -> MTC ()
-markReassignedBase fletdef scname tevar itype = do
+markReassignedBase :: IsFLetDefined -> Scope -> SourceLocExt -> ProcVar -> ImmutType -> MTC ()
+markReassignedBase fletdef scname loc tevar itype = do
   debug $ "[markReassignedBase]: called for " <> showT tevar <> " in " <> showT scname 
 
   -- make sure that we are still allowed to access this var
@@ -405,11 +450,11 @@ markReassignedBase fletdef scname tevar itype = do
       markReassignedInScope :: Scope -> ProcVar -> ImmutType -> VarAccessCtx -> MTC VarAccessCtx 
       markReassignedInScope scname tevar itype ctx =
         case getValue tevar ctx of
-          Nothing -> return $ setValue tevar ([scname], ReadSingle, itype) ctx
+          Nothing -> return $ setValue tevar ([scname], VABasicAccess loc, itype) ctx
           Just (oldscname, oldvatype, olditype) -> do
             case olditype == itype of
               True -> do
-                newvatype <- computeVarAccessType tevar (oldscname, oldvatype) (scname, WriteSingleBase fletdef)
+                newvatype <- computeVarAccessType2 tevar (oldscname, oldvatype) (scname, WriteAction fletdef, loc)
                 debug $ "[markReassignedBase]: VA type for '" <> showT tevar <> "' changes from " <> showT oldvatype <> " to " <> showT newvatype
                 return (setValue tevar (scname:oldscname, newvatype, olditype) ctx)
               False ->
@@ -417,10 +462,10 @@ markReassignedBase fletdef scname tevar itype = do
                             <> "', where the old type (" <> showT olditype <> ") and the new type (" <> showT itype
                             <> ") differ. This is not allowed.")
 
-markReassignedFLet :: Scope -> ProcVar -> ImmutType -> MTC ()
-markReassignedFLet scname var itype = do
+markReassignedFLet :: Scope -> SourceLocExt -> ProcVar -> ImmutType -> MTC ()
+markReassignedFLet scname loc var itype = do
   log $ "Marking flet mutated for " <> showT var
-  markReassignedBase FLetDefined scname var itype
+  markReassignedBase FLetDefined scname loc var itype
 
 --
 -- Apply a mutation of `loc` locality to the `var`.
@@ -428,14 +473,14 @@ markReassignedFLet scname var itype = do
 -- is already local or not-local.
 -- The resulting locality is returned.
 --
-markReassigned :: Scope -> ProcVar -> ImmutType -> MTC ()
-markReassigned scname var itype = do
+markReassigned :: Scope -> SourceLocExt -> ProcVar -> ImmutType -> MTC ()
+markReassigned scname loc var itype = do
   log $ "Marking simple mutated for " <> showT var
-  markReassignedBase NotFLetDefined scname var itype
+  markReassignedBase NotFLetDefined scname loc var itype
 
 
-markRead :: Scope -> ProcVar -> MTC ImmutType
-markRead scname tevar = do
+markRead :: Scope -> SourceLocExt -> ProcVar -> MTC ImmutType
+markRead scname loc tevar = do
    debug $ "[markRead]: called for tevar" <> showT tevar <> " in " <> showT scname 
   --  mvars <- getAllMemVars <$> expectNotMoved var -- we make sure that we are still allowed to use this variable
    let f v = vaCtx %=~ (markReadInScope scname v) 
@@ -445,7 +490,7 @@ markRead scname tevar = do
             case getValue tevar ctx of
               Nothing -> throwUnlocatedError (DemutationDefinitionOrderError tevar)
               Just (oldscname, oldvatype, olditype) -> do
-                newvatype <- computeVarAccessType tevar (oldscname, oldvatype) (scname, ReadSingle)
+                newvatype <- computeVarAccessType2 tevar (oldscname, oldvatype) (scname, ReadAction, loc)
                 return (setValue tevar (scname:oldscname,newvatype, olditype) ctx)
 
    f tevar
@@ -455,12 +500,12 @@ markRead scname tevar = do
      Nothing -> internalError $ "Expected the procvar " <> showT tevar <> " to have an assignment because it was set just a moment ago."
      Just (_,_,itype) -> return itype
 
-markReadMaybe :: Scope -> Maybe ProcVar -> MTC (Maybe ImmutType)
-markReadMaybe scname (Just x) = Just <$> markRead scname x
-markReadMaybe scname Nothing = pure Nothing
+markReadMaybe :: Scope -> SourceLocExt -> Maybe ProcVar -> MTC (Maybe ImmutType)
+markReadMaybe scname loc (Just x) = Just <$> markRead scname loc x
+markReadMaybe scname loc Nothing = pure Nothing
 
-markReadOverwritePrevious :: Scope -> ProcVar -> ImmutType -> MTC ()
-markReadOverwritePrevious scname var itype = vaCtx %%= (\scope -> ((), setValue var ([scname], ReadSingle, itype) scope))
+markReadOverwritePrevious :: Scope -> SourceLocExt -> ProcVar -> ImmutType -> MTC ()
+markReadOverwritePrevious scname loc var itype = vaCtx %%= (\scope -> ((), setValue var ([scname], VABasicAccess loc, itype) scope))
 
 
 cleanupVACtxAfterScopeEnd :: VarAccessCtx -> MTC ()
@@ -557,23 +602,23 @@ safeSetValueAllowFLet (Just var) newType scope =
 -- immuttype access
 --------------------------------------------------------------------------------
 
-expectImmutType :: Scope -> ProcVar -> MTC ImmutType
+expectImmutType :: Scope -> SourceLocExt -> ProcVar -> MTC ImmutType
 expectImmutType = markRead
 
-setImmutType :: Scope -> ProcVar -> ImmutType -> MTC ()
+setImmutType :: Scope -> SourceLocExt -> ProcVar -> ImmutType -> MTC ()
 setImmutType = markReassigned
 
-backupAndSetImmutType :: Scope -> ProcVar -> ImmutType -> MTC (Maybe ImmutType)
-backupAndSetImmutType scname procvar itype = do
+backupAndSetImmutType :: Scope -> SourceLocExt -> ProcVar -> ImmutType -> MTC (Maybe ImmutType)
+backupAndSetImmutType scname loc procvar itype = do
   oldVal <- getValue procvar <$> use vaCtx
   case oldVal of
-    Nothing          -> setImmutType scname procvar itype >> return Nothing
-    Just (_,_,itype) -> setImmutType scname procvar itype >> return (Just itype)
+    Nothing          -> setImmutType scname loc procvar itype >> return Nothing
+    Just (_,_,itype) -> setImmutType scname loc procvar itype >> return (Just itype)
 
-setImmutTypeFLetDefined :: Scope -> ProcVar -> ImmutType -> MTC ()
+setImmutTypeFLetDefined :: Scope -> SourceLocExt -> ProcVar -> ImmutType -> MTC ()
 setImmutTypeFLetDefined = markReassignedFLet
 
-setImmutTypeOverwritePrevious :: Scope -> ProcVar -> ImmutType -> MTC ()
+setImmutTypeOverwritePrevious :: Scope -> SourceLocExt -> ProcVar -> ImmutType -> MTC ()
 setImmutTypeOverwritePrevious = markReadOverwritePrevious
 
 
@@ -807,11 +852,6 @@ coequalizeMutCtx muts1 muts2 = runWriterT (muts1 ⋆ muts2)
 --------------------------------------------------------------------------
 -- Creating TeVars from MemVars
 --
--- memTypeAsTerm :: MemType -> DemutDMTerm
--- memTypeAsTerm mt = case mt of
---   TupleMem mts -> undefined
---   SingleMem mv -> undefined
---   RefMem mv -> undefined
 
 
 getLastAssignedLocs :: MemType -> MTC [SourceLocExt]

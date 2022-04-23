@@ -222,14 +222,14 @@ elaborateMut scname term@(Located l (Var _)) = demutationErrorNoLoc $ "Unsupport
 
 elaborateMut scname (Located l (Extra (ProcVarTerm x))) = do
   mx <- expectNotMoved l x
-  itype <- expectImmutType scname x
+  itype <- expectImmutType scname l x
 
   return (Value itype (Located l (SingleMove x)))
 
 elaborateMut scname (Located l (Extra (ProcBBLet procx args))) = do
 
   -- write the black box into the scope with its type
-  scope'  <- setImmutType scname procx PureBlackBox
+  scope'  <- setImmutType scname l procx PureBlackBox
 
   -- allocate a memory location
   memx <- allocateMem scname (Just procx) (MemVarInfo NotFunctionArgument l)
@@ -265,7 +265,7 @@ elaborateMut scname (Located l (Extra (ProcSLetBase ltype x term))) = do
   x' <- procVarAsTeVar x l
 
   -- write the immut type into the scope
-  setImmutType scname x newTermType
+  setImmutType scname l x newTermType
 
   -- log what happened
   debug $ "[elaborateMut/SLetBase]: The variable " <> showPretty x <> " is being assigned." 
@@ -312,7 +312,7 @@ elaborateMut scname fullterm@(Located l (Extra (ProcTLetBase ltype vars term))) 
   --
   -- we set the immuttype of every element on the LHS to Pure
   --
-  mapM (\x -> setImmutType scname x Pure) vars
+  mapM (\x -> setImmutType scname l x Pure) vars
 
   moveType' <- (moveTypeAsTerm_Loc l moveType)
 
@@ -364,7 +364,7 @@ elaborateMut scname (Located l (Extra (ProcFLet name term))) = do
   setMem name [(SingleMem mem)]
 
   -- write the immut type into the scope
-  setImmutTypeFLetDefined scname name newTermType
+  setImmutTypeFLetDefined scname l name newTermType
 
   -- log what happened
   debug $ "[elaborateMut/FLetBase]: The function " <> showPretty name <> " is being defined."
@@ -485,7 +485,7 @@ elaborateMut scname (Located l (Extra (ProcPreLoop (i1,i2,i3) iterVar body))) = 
   --
   -- add the iterator to the scope,
   -- and backup old type
-  oldIterImmutType <- backupAndSetImmutType scname iterVar Pure
+  oldIterImmutType <- backupAndSetImmutType scname l iterVar Pure
   --
   -- backup iter memory location, and create a new one
   oldIterMem <- getValue iterVar <$> use memCtx
@@ -1033,7 +1033,7 @@ elaborateLambda scname args body = do
   -- ## for the current scope.
   oldMemCtx <- use memCtx
   oldVaCtx <- use vaCtx
-  mapM (\x -> setImmutTypeOverwritePrevious scname x Pure) [a | (a ::- _) <- args]
+  mapM (\x -> setImmutTypeOverwritePrevious scname (getLocation body) x Pure) [a | (a ::- _) <- args]
   -- ##
   -- END NO.
   --
@@ -1227,7 +1227,7 @@ elaborateMutList loc f scname mutargs = do
         case arg of
           Extra (ProcVarTerm (x)) -> do 
             -- say that this variable is being reassigned (VAT)
-            setImmutType scname x Pure
+            setImmutType scname l x Pure
 
             -- the elaborated value of x
             -- (this needs to be done before `markMutated` is called)

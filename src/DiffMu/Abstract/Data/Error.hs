@@ -80,10 +80,10 @@ data SourceLoc = SourceLoc
   , getLocBegin :: Int
   , getLocEnd   :: Int
   }
-  deriving (Eq)
+  deriving (Eq, Ord)
 
 data SourceLocExt = ExactLoc SourceLoc | RelatedLoc Text SourceLocExt | UnknownLoc | NotImplementedLoc Text
-  deriving (Eq)
+  deriving (Eq, Ord)
 
 data Located a = Located
   {

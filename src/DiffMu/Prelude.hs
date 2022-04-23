@@ -58,7 +58,7 @@ import System.IO (FilePath, readFile)
 import GHC.IO (catchAny)
 
 newtype SourceFile = SourceFile (Maybe FilePath)
-  deriving (Eq, Hashable, DictKey)
+  deriving (Eq, Hashable, DictKey, Ord)
 
 instance Show SourceFile where
   show (SourceFile Nothing) = "none"
