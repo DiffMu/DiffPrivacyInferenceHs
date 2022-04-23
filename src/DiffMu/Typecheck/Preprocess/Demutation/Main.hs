@@ -229,7 +229,7 @@ elaborateMut scname (Located l (Extra (ProcVarTerm x))) = do
 elaborateMut scname (Located l (Extra (ProcBBLet procx args))) = do
 
   -- write the black box into the scope with its type
-  scope'  <- setImmutType scname l procx PureBlackBox
+  scope'  <- setImmutType ReassignmentWrite scname l procx PureBlackBox
 
   -- allocate a memory location
   memx <- allocateMem scname (Just procx) (MemVarInfo NotFunctionArgument l)
@@ -265,7 +265,7 @@ elaborateMut scname (Located l (Extra (ProcSLetBase ltype x term))) = do
   x' <- procVarAsTeVar x l
 
   -- write the immut type into the scope
-  setImmutType scname l x newTermType
+  setImmutType ReassignmentWrite scname l x newTermType
 
   -- log what happened
   debug $ "[elaborateMut/SLetBase]: The variable " <> showPretty x <> " is being assigned." 
@@ -312,7 +312,7 @@ elaborateMut scname fullterm@(Located l (Extra (ProcTLetBase ltype vars term))) 
   --
   -- we set the immuttype of every element on the LHS to Pure
   --
-  mapM (\x -> setImmutType scname l x Pure) vars
+  mapM (\x -> setImmutType ReassignmentWrite scname l x Pure) vars
 
   moveType' <- (moveTypeAsTerm_Loc l moveType)
 
@@ -1225,9 +1225,9 @@ elaborateMutList loc f scname mutargs = do
         -- if the argument is given in a mutable position,
         -- it _must_ be a var
         case arg of
-          Extra (ProcVarTerm (x)) -> do 
-            -- say that this variable is being reassigned (VAT)
-            setImmutType scname l x Pure
+          Extra (ProcVarTerm (x)) -> do
+            -- say that this variable is being mutated (VAT)
+            setImmutType MutationWrite scname l x Pure
 
             -- the elaborated value of x
             -- (this needs to be done before `markMutated` is called)
