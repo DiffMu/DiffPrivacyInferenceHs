@@ -195,6 +195,7 @@ findPathM relevance (GraphM g) (start,goal) msg | otherwise     =
 type SupState a = ((a,a) :=: a, IsShortestPossiblePath)
 
 findSupremumM :: forall s m isT e a msg. (MessageLike m msg, Show (e m), Show a, Eq a, MonadDMError e m, MonadConstraint isT m, IsT isT m, Unify e m (a), Normalize m a, MonadNormalize m, MonadState s m, MonadImpossible m, MonadLog m, CheckNeutral m a) => (e m -> ErrorRelevance) -> GraphM m a -> SupState a -> msg -> m (INCRes (e m) ((a,a) :=: a))
+findSupremumM relevance (GraphM graph) ((a,b) :=: x,isShortestSup) msg | a == b = unify () a x >> return (Finished ((a,b) :=: a))
 findSupremumM relevance (GraphM graph) ((a,b) :=: x,isShortestSup) msg =
   let
     -------------
