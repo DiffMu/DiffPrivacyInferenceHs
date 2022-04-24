@@ -123,10 +123,10 @@ testAMS03 pp = do
       tyc = Fun([([intnc :@ zeroId, intnc :@ zeroId] :->: (NoFun $ intc' (Fin 1))) :@ Just [JTAny, JTAny]])
 
 
-  parseEvalFail pp "01a errors (moving a pre-existing variable into a capture is not allowed)" exa (DemutationMovedVariableAccessError "")
-  parseEvalFail pp "01b errors (switching is not allowed)" exb (DemutationMovedVariableAccessError "")
+  parseEvalFail pp "01a errors (moving a pre-existing variable into a capture is not allowed)" exa (DemutationLoopError "")
+  parseEvalFail pp "01b errors (switching is not allowed)" exb (DemutationLoopError "")
   parseEvalUnify pp "01c succeeds (double switching is allowed)" exc (pure tyc)
-  parseEvalFail pp "01d errors (moving in if-branches is not allowed)" exd (DemutationMovedVariableAccessError "")
+  parseEvalFail pp "01d errors (moving in if-branches is not allowed)" exd (DemutationLoopError "")
 
 
 testAMS04 pp = do
