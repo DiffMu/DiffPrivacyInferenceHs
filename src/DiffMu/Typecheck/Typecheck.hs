@@ -1265,7 +1265,7 @@ checkSen' scope term@(Located l (MakeRow m)) = do
 
 
 -- Everything else is currently not supported.
-checkSen' scope t = throwUnlocatedError (TermColorError SensitivityK (showPretty $ getLocated t))
+checkSen' scope t = throwLocatedError (TermColorError SensitivityK (showPretty $ getLocated t)) (getLocation t)
 
 --------------------------------------------------------------------------------
 -- Privacy terms
@@ -1939,6 +1939,6 @@ checkPri' scope (Located l (PFoldRows f acc m₁ m₂)) = do
     return τbody_out
 
 
-checkPri' scope t = throwUnlocatedError (TermColorError PrivacyK (showPretty $ getLocated t))
+checkPri' scope t = throwLocatedError (TermColorError PrivacyK (showPretty $ getLocated t)) (getLocation t)
 
 

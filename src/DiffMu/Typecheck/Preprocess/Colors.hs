@@ -92,7 +92,7 @@ handleSensTerm_Loc term = do
     tterm <- transformLets_Loc (Just SensitivityK) term
     cterm <- getColor
     case cterm of
-        PrivacyK -> throwUnlocatedError (TermColorError SensitivityK (showPretty (getLocated term)))
+        PrivacyK -> throwLocatedError (TermColorError SensitivityK (showPretty (getLocated term))) (getLocation term)
         SensitivityK -> return tterm
 
 -- handle a term that is required to be a privacy term
@@ -102,7 +102,7 @@ handlePrivTerm_Loc term = do
     cterm <- getColor
     case cterm of
         PrivacyK -> return tterm
-        SensitivityK -> throwUnlocatedError (TermColorError PrivacyK (showPretty (getLocated tterm)))
+        SensitivityK -> throwLocatedError (TermColorError PrivacyK (showPretty (getLocated tterm))) (getLocation term)
 
 -- handle a term that can be whatever
 -- handleAnyTerm :: DMTerm -> ColorTC DMTerm
