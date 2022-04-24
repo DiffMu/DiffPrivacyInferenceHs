@@ -22,6 +22,7 @@ import Debug.Trace
 
 import qualified Prelude as P
 import qualified Data.Char as Char
+import DiffMu.Abstract (throwUnlocatedError)
 default (Text,Int)
 
 
@@ -31,10 +32,7 @@ default (Text,Int)
 
 fst3 (a,b,c) = a
 
-throwLocatedError err loc = throwError (WithContext err (DMPersistentMessage loc))
 demutationError err loc = throwLocatedError (DemutationError err) loc
-demutationErrorNoLoc err = throwUnlocatedError (DemutationError err)
-
 
 
 --------------------------------------------------------------------------------------
@@ -766,7 +764,7 @@ coequalizeTeVarMutTrace (TeVarMutTrace pv1 split1 ts1) (TeVarMutTrace pv2 split2
 coequalizeTeVarMutTrace (TeVarMutTrace pv1 split1 ts1) (TeVarMutTrace pv2 split2 ts2)  = do
   t3 <- newTeVarOfMut "phi" Nothing
   let makeProj (Just pv) []            = pure $ (Extra (DemutSLetBase PureLet (t3) (notLocated $ Var (UserTeVar pv))), [])
-      makeProj Nothing   []            = lift $ demutationErrorNoLoc $ "While demutating phi encountered a branch where a proc-var-less memory location is mutated. This cannot be done."
+      makeProj Nothing   []            = lift $ throwUnlocatedError $ DemutationError $ "While demutating phi encountered a branch where a proc-var-less memory location is mutated. This cannot be done."
       makeProj _         ((t,locs):ts) = pure $ (Extra (DemutSLetBase PureLet (t3) (notLocated $ Var (t))), locs)
 
   (proj1,locs1) <- makeProj pv1 ts1 
@@ -807,7 +805,7 @@ instance CheckNeutral (WriterT ([LocDemutDMTerm],[LocDemutDMTerm]) MTC) TeVarMut
 
 instance SemigroupM (WriterT ([LocDemutDMTerm],[LocDemutDMTerm]) MTC) Scope where
   (⋆) a b | a == b    = pure a
-  (⋆) a b | otherwise = lift $ demutationErrorNoLoc $ "While demutating phi, encountered two branches where the scopevars of a memvar differ. This is not allowed."
+  (⋆) a b | otherwise = lift $ throwUnlocatedError $ DemutationError $ "While demutating phi, encountered two branches where the scopevars of a memvar differ. This is not allowed."
 instance MonoidM (WriterT ([LocDemutDMTerm],[LocDemutDMTerm]) MTC) Scope where
   neutral = lift $ internalError $ "There is no neutral element for scopevars"
 

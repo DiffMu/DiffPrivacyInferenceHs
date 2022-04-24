@@ -379,6 +379,7 @@ instance Eq DMException where
 
 -- throwLocatedError e xs = throwError (WithContext e [(s,)])
 
+
 isCriticalError e = case e of
   ImpossibleError s -> True
   InternalError s -> True

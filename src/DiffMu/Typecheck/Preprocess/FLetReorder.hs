@@ -14,7 +14,6 @@ import qualified Data.HashMap.Strict as H
 import qualified Data.Text as T
 
 import Debug.Trace
-import DiffMu.Typecheck.Preprocess.Demutation (throwLocatedError)
 
 default (Text)
 
