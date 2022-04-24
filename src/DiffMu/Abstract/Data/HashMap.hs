@@ -3,9 +3,9 @@ module DiffMu.Abstract.Data.HashMap where
 
 import DiffMu.Prelude
 
-import Data.HashMap.Strict as H
+import qualified Data.HashMap.Strict as H
 
-instance Normalize t v => Normalize t (HashMap k v) where
+instance Normalize t v => Normalize t (H.HashMap k v) where
   normalize nt map = mapM (normalize nt) map
 
 
@@ -28,7 +28,7 @@ class DictKey k => DictLike k v d | d -> k v where
   getAllKeyElemPairs :: d -> [(k,v)]
   fromKeyElemPairs :: [(k,v)] -> d
 
-instance (DictKey k) => DictLike k v (HashMap k v) where
+instance (DictKey k) => DictLike k v (H.HashMap k v) where
   setValue v m (h) = (H.insert v m h)
   deleteValue v (h) = (H.delete v h)
   getValue k (h) = h H.!? k
@@ -39,6 +39,7 @@ instance (DictKey k) => DictLike k v (HashMap k v) where
   getAllKeyElemPairs (h) = H.toList h
   fromKeyElemPairs list = (H.fromList list)
 
+fromKeyElemPairs' list = foldr (\(file,content) d -> appendValue file [content] d) H.empty list
 
 changeValue :: DictLike k v d => k -> (v -> v) -> d -> d
 changeValue k f d = case getValue k d of
@@ -63,3 +64,7 @@ restoreValue oldDict key dict =
 getValueMaybe a scope = a >>= (\x -> getValue x scope)
 setValueMaybe (Just k) v scope = setValue k v scope
 setValueMaybe Nothing v scope = scope
+
+
+
+

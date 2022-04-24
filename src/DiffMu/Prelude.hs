@@ -230,6 +230,8 @@ instance FromSymbol SymbolOf where
 
 class (Eq v, Hashable v) => DictKey v
 
+instance DictKey v => DictKey [v]
+
 -- symbols
 
 -- WARNING: Not total

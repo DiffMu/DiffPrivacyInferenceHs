@@ -610,6 +610,7 @@ data JuliaType =
   deriving (Generic, Eq, Ord)
 
 instance Hashable JuliaType where
+instance DictKey JuliaType
 
 -- this is used for callbacks to actual julia, so the string representation matches julia exactly.
 instance Show JuliaType where

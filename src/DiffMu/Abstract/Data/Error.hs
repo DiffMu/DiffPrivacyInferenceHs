@@ -165,7 +165,7 @@ instance ShowLocated SourceQuote where
 
         betterLocs = sts >>= f
         locsByFile :: H.HashMap (SourceFile) [(Int,Text)]
-        locsByFile = foldr (\(file,content) d -> appendValue file [content] d) H.empty betterLocs
+        locsByFile = fromKeyElemPairs' betterLocs
 
         changeSource :: Array Int Text -> [(Int,Text)] -> Array Int Text
         changeSource = A.accum (\line edit -> line <> blue ("  <- " <> edit))
