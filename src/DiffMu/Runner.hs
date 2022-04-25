@@ -145,8 +145,8 @@ data ShouldPrintConstraintHistory = PrintConstraintHistory | DontPrintConstraint
 typecheckFromJExpr_Simple :: ShouldPrintConstraintHistory -> JExpr -> RawSource -> IO ()
 typecheckFromJExpr_Simple bHistory term rawsource = do
   let printer (ty, full) =
-        let cs = _anncontent (_constraints (_meta full))
-            cs_simple :: CtxStack IxSymbol (Watched (Solvable GoodConstraint GoodConstraintContent MonadDMTC)) = fmap (\(ConstraintWithMessage a m) -> a) cs
+        let cs = _topctx (_anncontent (_constraints (_meta full)))
+            cs_simple :: Ctx IxSymbol (Watched (Solvable GoodConstraint GoodConstraintContent MonadDMTC)) = fmap (\(ConstraintWithMessage a m) -> a) cs
 
             pcs = case bHistory of
               PrintConstraintHistory     -> runReader (showLocated cs) rawsource
