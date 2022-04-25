@@ -94,8 +94,8 @@ pSingle e = case e of
                      case l of
                           [] -> parseError "Found an empty block."
                           _ -> Extra <$> (Block <$> pure l)
-                 JELam args ret body -> pJLam args ret body
-                 JELamStar args ret body -> pJLamStar args ret  body
+                 JELam args ret body -> pJLam args ret body ProcLam
+                 JELamStar args ret body -> pJLam args ret body ProcLamStar
                  JEIfElse cond tr fs -> Extra <$> (ProcPhi <$> (pSingle_Loc cond) <*> (pSingle_Loc tr) <*> (mapM pSingle_Loc fs))
                  JELoop ivar iter body -> pJLoop ivar iter body
                  JEAssignment aee amt -> pJLet aee amt
@@ -164,16 +164,10 @@ pArgRel arg = case arg of
                        a -> parseError ("Invalid function argument " <> show a <> ". Expected a symbol, optionally with type annotation, or a hole (_).")
 
 
-pJLam args ret body = do
-                   dargs <- mapM pArg args
+pJLam args ret body ctor = do
+                   dargs <- mapM pArgRel args
                    dbody <- pSingle_Loc body
-                   return (Extra (ProcLam dargs ret dbody))
-
-pJLamStar args ret body = do
-                       dargs <- mapM pArgRel args
-                       dbody <- pSingle_Loc body
-                       return (Extra (ProcLamStar dargs ret dbody))
-
+                   return (Extra (ctor dargs ret dbody))
 
 
 pJLoop ivar iter body = case iter of

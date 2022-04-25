@@ -173,7 +173,7 @@ checkSen' scope (Located l (Lam xτs retτ body)) = do
 
     -- put a special term to mark x as a function argument. those get special treatment
     -- because we're interested in their privacy. put the relevance given in the function signature, too.
-    let f s sc (x :- τ) = setValue x (checkSens s (Located (RelatedLoc "argument of this function" l) (Arg x τ IsRelevant))) sc
+    let f s sc (x :- (τ, rel)) = setValue x (checkSens s (Located (RelatedLoc "argument of this function" l) (Arg x τ rel))) sc
     let addArgs s = foldl (f s) s xτs
     let scope' = addArgs scope
 
@@ -184,21 +184,26 @@ checkSen' scope (Located l (Lam xτs retτ body)) = do
     addJuliaSubtypeConstraint btype retτ (l :\\: "The inferred return type of the function " :<>: btype :\\: "is subtype of the annotated return type " :<>: retτ)
 
     -- extract julia signature
-    let sign = (sndA <$> xτs)
+    let sign = (fst <$> sndA <$> xτs)
 
     -- get inferred types and sensitivities for the arguments
-    xrτs <- getArgList @_ @SensitivityK xτs
+    xrτs <- getArgList @_ @SensitivityK [(x :- τ) | (x :- (τ, _)) <- xτs]
     let xrτs' = [x :@ s | (x :@ SensitivityAnnotation s) <- xrτs]
     logForce $ "Checking Lam, outer scope: " <> showT (getAllKeys scope) <> " | inner: " <> showT (getAllKeys scope')
 
     -- add constraints for making non-const if not resolvable
-    let addC :: (DMMain :@ b, Asgmt a) -> TCT Identity ()
-        addC ((τ :@ _), x :- _) = do
-            addConstraint (Solvable (MakeNonConst (τ, SolveAssumeWorst)))
-              (l :\\: "Lam argument " :<>: x :<>: " can become NonConst.")
-            pure ()
+    let addC :: (DMMain :@ b, Asgmt (a, Relevance)) -> TCT Identity ()
+        addC ((τ :@ _), x :- (_, i)) = case i of
+                     IsRelevant -> do
+                         addConstraint (Solvable (MakeNonConst (τ, SolveAssumeWorst)))
+                           (l :\\: "Lam argument " :<>: x :<>: "can become NonConst.")
+                         pure ()
+                     NotRelevant -> do
+                                      addConstraint (Solvable (MakeConst (τ, (showPretty x))))
+                                        (l :\\: "Static Lam argument " :<>: x :<>: " can become Const.")
+                                      return ()
     mapM addC (zip xrτs xτs)
-
+    
     -- make an arrow type.
     let τ = (xrτs' :->: btype)
     return (Fun [τ :@ (Just sign)])
@@ -227,8 +232,7 @@ checkSen' scope (Located l (LamStar xτs retτ body)) = do
     -- numeric or tuples. that way we can express the result sensitivity/privacy
     -- in terms of the nonrelevant input variables
     let addC :: (DMMain :@ b, Asgmt (a, Relevance)) -> TCT Identity ()
-        addC ((τ :@ _), x :- (_, i)) = do
-               _ <- case i of
+        addC ((τ :@ _), x :- (_, i)) = case i of
                      IsRelevant -> do
                          addConstraint (Solvable (MakeNonConst (τ, SolveAssumeWorst)))
                            (l :\\: "LamStar argument " :<>: x :<>: "can become NonConst.")
@@ -237,7 +241,6 @@ checkSen' scope (Located l (LamStar xτs retτ body)) = do
                                       addConstraint (Solvable (MakeConst (τ, (showPretty x))))
                                         (l :\\: "Static LamStar argument " :<>: x :<>: " can become Const.")
                                       return ()
-               return ()
     mapM addC (zip xrτs xτs)
 
     -- truncate function context to infinity sensitivity

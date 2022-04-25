@@ -170,7 +170,7 @@ transformLets reqc (Located l_term (term)) = do
 --        return (Reorder σ tt)
 
    Lam args ret body -> do
-       pushFunctionArgs args
+       pushFunctionArgsRel args
        tbody <- handleSensTerm_Loc body
        return (Located l_term (Lam args ret tbody))
 

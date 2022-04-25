@@ -109,7 +109,7 @@ findFLets target t ls = return $ FindFLetsResult [] t
 
 
 getJuliaSig ::  ISing_DMLogLocation l => DMTerm -> LightTC l s JuliaSig
-getJuliaSig (Lam as _ _) = pure $ map sndA as
+getJuliaSig (Lam as _ _) = pure $ map (fst . sndA) as
 getJuliaSig (LamStar as _ _) = pure $ map (fst . sndA) as
 getJuliaSig _ = impossible "Expected a lam/lamstar inside an flet."
 

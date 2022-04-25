@@ -730,7 +730,7 @@ data PreDMTerm (t :: * -> *) =
   | Arg TeVar JuliaType Relevance
   | Op DMTypeOp_Some [(LocPreDMTerm t)]
   | Phi (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t)
-  | Lam     [Asgmt JuliaType] JuliaType (LocPreDMTerm t)
+  | Lam     [Asgmt (JuliaType, Relevance)] JuliaType (LocPreDMTerm t)
   | LamStar [(Asgmt (JuliaType, Relevance))] JuliaType (LocPreDMTerm t)
   | BBLet TeVar [JuliaType] (LocPreDMTerm t) -- name, arguments, tail
   | BBApply (LocPreDMTerm t) [(LocPreDMTerm t)] [TeVar] (BBKind t) -- term containing the application, list of captured variables, return type.
@@ -845,7 +845,7 @@ data ProceduralExtension a =
   | ProcPreLoop (a,a,a) (ProcVar) a
   | ProcReturn
   | ProcVarTerm (ProcVar)
-  | ProcLam     [ProcAsgmt JuliaType] JuliaType a
+  | ProcLam     [ProcAsgmt (JuliaType, Relevance)] JuliaType a
   | ProcLamStar [(ProcAsgmt (JuliaType, Relevance))] JuliaType a
   | Block [a]
   deriving (Show, Eq, Functor, Foldable, Traversable)

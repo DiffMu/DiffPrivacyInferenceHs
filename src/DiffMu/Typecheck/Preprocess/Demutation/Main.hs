@@ -327,7 +327,7 @@ elaborateMut scname (Located l (Extra (ProcLamStar args ret body))) = do
 
 elaborateMut scname (Located l (Extra (ProcLam args ret body))) = do
   bodyscname <- appendNewScopeVar "lam" scname
-  (newBody, newBodyType) <- elaborateLambda bodyscname [(v ::- x) | (v ::- x) <- args] body
+  (newBody, newBodyType) <- elaborateLambda bodyscname [(v ::- x) | (v ::- (x, _)) <- args] body
   return (Value newBodyType (Located l (NoMove (Lam [(UserTeVar v) :- x | (v ::- x) <- args] ret newBody))))
 
 
