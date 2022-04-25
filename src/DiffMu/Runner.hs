@@ -83,10 +83,12 @@ executeTC l r rawsource = do
                     (errs, Left err) -> (err:errs, Nothing)
                     (errs, Right res) -> (errs, Just res)
 
-
-  putStrLn "======================== Errors ====================="
-  TIO.putStrLn (getErrorMessage rawsource errs)
-  putStrLn "======================== End Errors ====================="
+  case errs of
+       [] -> pure ()
+       _ -> do
+              putStrLn "======================== Errors ====================="
+              TIO.putStrLn (getErrorMessage rawsource errs)
+              putStrLn "======================== End Errors ====================="
 
   return (errs,res)
 
