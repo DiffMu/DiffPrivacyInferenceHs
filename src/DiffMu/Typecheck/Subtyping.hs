@@ -25,13 +25,7 @@ default (Text)
 ---------------------------------------------------------------------
 -- "Non strict subtyping"
 
-
-
--- A helper function used below in defining the subtyping graph.
-getArrowLength :: DMFun -> Maybe Int
-getArrowLength (a :->: _) = Just (length a)
-getArrowLength _         = Nothing
-
+-- helper functions used below in defining the subtyping graph.
 getFun :: DMMain -> INCRes () [DMTypeOf FunKind :@ Maybe [JuliaType]]
 getFun (Fun xs) = Finished xs
 getFun (TVar _) = Wait
@@ -73,34 +67,16 @@ subtypingGraph name =
 
                    -- we do not have subtyping for arrows
                    MultiEdge getFun $ \a -> do
-                     -- a0 <- newVar
-                     -- a1 <- newVar
-                     -- a0 ⊑! a1
                      return (Fun a, Fun a)
                  ]
             ; _
               -> []
             }
-
+    -- Fun Kind
     (_,Just Refl, _, _, _, _, _, _, _) ->
       \case { IsReflexive IsStructural -> []
             ; _ -> []}
-              -- -> [ MultiEdge getArrowLength $
-              --      \n -> do
-              --        let f () = do a <- newVar
-              --                      b <- newVar
-              --                      b ⊑! a
-              --                      s <- newVar
-              --                      return (a :@ s, b :@ s)
-
-              --        args <- mapM f (take n $ repeat ())
-              --        let (args₀, args₁) = unzip args
-              --        r₀ <- newVar
-              --        r₁ <- newVar
-              --        r₀ ⊑! r₁
-              --        return (args₀ :->: r₀,  args₁ :->: r₁)
-              --    ]}
-
+    -- NoFunKind
     (_,_, Just Refl, _, _, _, _, _, _) ->
       \case { IsReflexive IsStructural
             -> [
@@ -161,27 +137,6 @@ subtypingGraph name =
                       clp₀ ⊑! clp₁
                       return ((DMGrads nrm₀ clp₀ m a₀), (DMGrads nrm₁ clp₁ m a₁))
                  , SingleEdge $ return (DMBool, DMBool)
-                      {-
-                      {-
-                 , SingleEdge $ -- this is the conv rule made implicit, for converting (Num DMData NonConst) to DMReal
-                   do nrm <- newVar
-                      clp <- newVar
-                      n <- newVar
-                      m <- newVar
-                      return ((DMMat nrm (Clip clp) n m (Numeric (Num DMData NonConst))), (DMMat clp U n m (Numeric (Num DMReal NonConst))))
-                    -}
-                 , SingleEdge $ -- this is the conv rule made implicit, for converting (Num DMData NonConst) to DMReal
-                   do nrm <- newVar
-                      clp <- newVar
-                      m <- newVar
-                      return ((DMGrads nrm (Clip clp) m (Numeric (Num DMData NonConst))), (DMGrads clp U m (Numeric (Num DMReal NonConst))))
-                 , SingleEdge $ -- this is the fr-sens rule made implicit, for converting from L1 norm to any other
-                   do nrm <- newVar
-                      clp <- newVar
-                      t <- newVar
-                      m <- newVar
-                      return ((DMGrads L1 clp m (Numeric t)), (DMGrads nrm clp m (Numeric t)))
-                      -}
                  ]
             ; IsReflexive NotStructural -> []
             ; _ -> []
@@ -202,27 +157,8 @@ subtypingGraph name =
                       return (Num a₀ c₀, Num a₁ c₁)
                  ]
             ; IsReflexive IsLeftStructural -> []
-              -- -> [
-              --      SingleEdge $
-              --      do a₀ <- newVar
-              --         a₁ <- newVar
-              --         a₀ ⊑! a₁
-              --         return (NonConst a₀, NonConst a₁)
-              --    ]
             ; IsReflexive IsRightStructural -> []
-              --  -> [SingleEdge $
-              --      do a₀ <- newVar
-              --         a₁ <- newVar
-              --         a₀ ⊑! a₁
-              --         s₀ <- newVar
-              --         return (Const s₀ a₀, Const s₀ a₁)
-              --  ]
             ; NotReflexive -> []
-              -- -> [ SingleEdge $
-              --      do a₀ <- newVar
-              --         s₀ <- newVar
-              --         return (Const s₀ a₀, NonConst a₀)
-              --    ]
             ; _ -> []
             }
 
@@ -242,11 +178,8 @@ subtypingGraph name =
     -- IRNum Kind
     (_,_, _, _, _, Just Refl, _, _, _) ->
       \case { IsReflexive IsRightStructural
-              -> [ SingleEdge $ return (DMInt, DMInt)
-
-                 -- , SingleEdge $
-                 --    do a <- newVar
-                 --       return (a , DMAny)
+              -> [
+                   SingleEdge $ return (DMInt, DMInt)
                  ]
             ; IsReflexive IsLeftStructural
               -> [
@@ -267,12 +200,6 @@ subtypingGraph name =
                      a ⊑! b
                      return (Clip a, Clip b)
                  ]
-            -- ; IsReflexive IsRightStructural
-            --   -> [
-              -- SingleEdge $
-              --       do a <- newVar
-              --          return (a , DMAny)
-              --    ]
             ; _ -> []
             }
 
@@ -283,13 +210,10 @@ subtypingGraph name =
                  , SingleEdge $ return (L2, L2)
                  , SingleEdge $ return (LInf, LInf)
                  ]
-            -- ; IsReflexive IsRightStructural
-              -- -> [ SingleEdge $
-              --       do a <- newVar
-              --          return (a , DMAny)
-              --    ]
             ; _ -> []
             }
+            
+    -- constness kind
     (_, _, _, _, _, _, _, _, Just Refl) ->
       \case { IsReflexive IsStructural
               -> [ ]
@@ -298,18 +222,11 @@ subtypingGraph name =
                    SingleEdge $
                    do 
                       return (NonConst, NonConst)
-                  -- , SingleEdge $
-                  --  do a <- newVar
-                  --     s <- newVar
-                  --     return (Const s, a)
                  ]
             ; IsReflexive IsRightStructural
                -> [SingleEdge $
                    do s₀ <- newVar
                       return (Const s₀, Const s₀)
-                  -- , SingleEdge $
-                  --   do a <- newVar
-                  --      return (a, NonConst)
                ]
             ; NotReflexive
               -> [ SingleEdge $

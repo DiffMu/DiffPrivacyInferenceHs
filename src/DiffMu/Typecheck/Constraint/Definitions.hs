@@ -5,17 +5,9 @@ import DiffMu.Prelude
 import DiffMu.Abstract.Data.Error
 import DiffMu.Abstract.Class.IsT
 import DiffMu.Abstract.Class.Constraint
---import DiffMu.Core.Definitions
---import DiffMu.Core.Context
---import DiffMu.Core.TC
---import DiffMu.Core.Unification
---import DiffMu.Typecheck.Subtyping
 
 import Debug.Trace
 import Data.HashMap.Strict (HashMap)
-
---import Prelude as P
-
 
 --------------------------------------------------------------------------
 -- Constraints
@@ -104,9 +96,7 @@ instance TCConstraint IsTypeOpResult where
 
 instance ShowPretty a => ShowPretty (IsTypeOpResult (a)) where
     showPretty (IsTypeOpResult (a)) = showPretty a
-        
---
---
+
 
 -- Equal (solver in Core/Unification.hs):
 newtype IsEqual a = IsEqual a

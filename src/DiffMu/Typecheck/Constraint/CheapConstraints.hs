@@ -30,6 +30,10 @@ import qualified Prelude as P
 default (Text)
 
 -------------------------------------------------------------------
+-- This file contains the solving code for constraints where said
+-- code is not very complex.
+
+-------------------------------------------------------------------
 -- set the a type to a variable const, in case it's numeric or a tuple.
 --
 

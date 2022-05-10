@@ -53,13 +53,7 @@ type SVar   = SVarOf MainSensKind
 ---------------------------------------------------------
 -- Definition of DMTypes
 --
--- Our DMTypes do not only contain the real types of the duet
--- type system, but also norm and clip expressions. To still
--- be able to differentiate between the different kinds of `DMTypes`,
--- We annotate their type with a term of `DMKind`.
 
---------------------
--- 1. DMKinds
 
 data AnnotationKind = SensitivityK | PrivacyK
   deriving (Show, Eq)
@@ -68,15 +62,14 @@ instance ShowPretty AnnotationKind where
     showPretty SensitivityK = "SensitivityKind"
     showPretty PrivacyK = "PrivacyKind"
 
--- type family Annotation (a :: AnnotationKind) = (result :: *) | result -> a where
--- data family Annotation (a :: AnnotationKind) :: *
--- data instance Annotation SensitivityK = SymTerm MainSensKind
--- data instance Annotation PrivacyK = (SymTerm MainSensKind, SymTerm MainSensKind)
-
 data Annotation (a :: AnnotationKind) where
   SensitivityAnnotation :: SymTerm MainSensKind -> Annotation SensitivityK
   PrivacyAnnotation :: (SymTerm MainSensKind, SymTerm MainSensKind) -> Annotation PrivacyK
 
+instance Show (Annotation a) where
+  show (PrivacyAnnotation p) = show p
+  show (SensitivityAnnotation s) = show s
+  
 instance ShowPretty (Annotation a) where
     showPretty (SensitivityAnnotation a) = " @ " <> showPretty a
     showPretty (PrivacyAnnotation a) = " @ " <> showPretty a
@@ -102,7 +95,14 @@ instance Typeable a => MonoidM Identity (Annotation a) where
                 _ -> undefined
 
 instance Typeable a => CMonoidM Identity (Annotation a) where
--- type family Annotation SensitivityK = Sensitivity
+
+--------------------
+-- DMKinds
+----------
+--  Our DMTypes do not only contain the real types of the duet
+-- type system, but also norm and clip expressions. To still
+-- be able to differentiate between the different kinds of `DMTypes`,
+-- We annotate their type with a term of `DMKind`.
 
 -- A `DMKind` is one of the following constructors:
 data DMKind =
@@ -142,9 +142,10 @@ instance Show DMKind where
 
 --------------------
 -- 2. DMTypes
-
+-------------
 -- Now we can define our actual DMTypes.
 -- We call the general case of a type of some kind k, `DMTypeOf k`.
+
 -- The specific case of a type of "main" kind, we simply call `DMType`, i.e.:
 type DMMain = DMTypeOf MainKind
 type DMType = DMTypeOf NoFunKind
@@ -267,15 +268,6 @@ instance (Hashable a, Hashable b) => Hashable (a :@ b) where
   hashWithSalt s (a:@ b) = s `hashWithSalt` a `hashWithSalt` b
 
 type DMExtra e = (Typeable e, SingI e)
---                   Eq (Annotation e), Show (Annotation e),
---                   CMonoidM Identity (Annotation e),
---                   -- Substitute SVarOf SensitivityOf (Annotation e), FreeVars TVarOf (Annotation e),
---                   -- Unify MonadDMTC (Annotation e) --, (HasNormalize MonadDMTC (Annotation e))
---                  )
-
-instance Show (Annotation a) where
-  show (PrivacyAnnotation p) = show p
-  show (SensitivityAnnotation s) = show s
 
 -- Types are pretty printed as follows.
 instance Show (DMTypeOf k) where
@@ -311,8 +303,6 @@ instance Show (DMTypeOf k) where
   show (Fun xs) = "Fun(" <> show xs <> ")"
   show (x :∧: y) = "(" <> show x <> "∧" <> show y <> ")"
   show (BlackBox n) = "BlackBox [" <> show n <> "]"
-
-
 
 appendDifferentIfLastIsLong :: StringLike s => s -> Int -> Int -> s -> s -> s
 appendDifferentIfLastIsLong main verticalToSwitch lengthToSwitch shortExtra longExtra =
@@ -357,7 +347,6 @@ showFunPretty marker args ret =
 
 showPrettyEnumVertical :: (ShowPretty a) => [a] -> Text
 showPrettyEnumVertical = prettyEnumVertical . fmap showPretty
-  -- "{\n" <> intercalate "\n,\n" (fmap (indentWith "|   " . showPretty) as) <> "\n}"
 
 instance ShowPretty (Sensitivity) where
   showPretty s = T.pack $ show s
@@ -367,7 +356,6 @@ instance ShowPretty (SymbolOf k) where
 
 instance (ShowPretty a, ShowPretty b) => ShowPretty (a :@ b) where
   showPretty (a :@ b) = showPretty a <> " @ " <> showPretty b
-
 
 instance ShowPretty (DMTypeOf k) where
   showPretty DMAny = "Any"
@@ -408,11 +396,6 @@ instance ShowPretty (DMTypeOf k) where
 instance ShowLocated (DMTypeOf k) where
   showLocated = pure . showPretty
 
--- instance Eq (DMTypeOf NormKind) where
---   _ == _ = False
-
--- instance Eq (DMTypeOf ClipKind) where
-
 instance Eq (DMTypeOf k) where
   -- special
   TVar a == TVar b = a == b
@@ -425,7 +408,6 @@ instance Eq (DMTypeOf k) where
   L1 == L1 = True
   L2 == L2 = True
   LInf == LInf = True
-
 
   -- VecKind
   Vector == Vector = True
@@ -448,7 +430,6 @@ instance Eq (DMTypeOf k) where
   -- we include numeric types into main types using this constructor
   Numeric t1 == Numeric t2 = t1 == t2
 
-
   -- the arrow type
   (xs :->: x) == (ys :->: y) = and [xs == ys, x == y]
 
@@ -460,9 +441,6 @@ instance Eq (DMTypeOf k) where
 
   -- matrices
   DMContainer k a b c d == DMContainer k2 a2 b2 c2 d2 = and [k == k2, a == a2, b == b2, c == c2, d == d2]
---  DMVec a b c d == DMVec a2 b2 c2 d2 = and [a == a2, b == b2, c == c2, d == d2]
---  DMVec a b c d == DMVec a2 b2 c2 d2 = and [a == a2, b == b2, c == c2, d == d2]
---  DMMat a b c d e == DMMat a2 b2 c2 d2 e2 = and [a == a2, b == b2, c == c2, d == d2, e == e2]
 
   -- annotations
   NoFun t == NoFun s = t == s
@@ -475,9 +453,6 @@ instance Eq (DMTypeOf k) where
   _ == _ = False
 
 
-
-
---instance Ord (DMTypeOf ClipKind) where
 instance Ord (DMTypeOf NormKind) where
   a <= b = (show a) <= (show b)
 
@@ -689,7 +664,7 @@ instance ShowLocated DMTypeOp_Some where
 
 
 --------------------------------------------------------------------------
--- DMTerm
+-- DMTerms
 --
 
 type NormTerm = DMTypeOf NormKind
@@ -703,9 +678,6 @@ fstA (x :- τ) = x
 sndA :: Asgmt a -> a
 sndA (x :- τ) = τ
 
--- data Lam_ = Lam_ [Asgmt JuliaType] DMTerm
---   deriving (Generic, Show)
-
 data LetKind = PureLet | BindLet | SampleLet
   deriving (Eq, Show)
 
@@ -713,7 +685,6 @@ data BBKind (t :: * -> *) = BBSimple JuliaType | BBVecLike JuliaType (LocPreDMTe
 
 deriving instance (forall a. Show a => Show (t a)) => Show (BBKind t)
 deriving instance (forall a. Eq a => Eq (t a)) => Eq (BBKind t)
-
 
 type LocPreDMTerm t = Located (PreDMTerm t)
 
@@ -726,7 +697,6 @@ data PreDMTerm (t :: * -> *) =
   | Var TeVar
   | Disc (LocPreDMTerm t)
   | Undisc (LocPreDMTerm t)
---  | Rnd JuliaType
   | Arg TeVar JuliaType Relevance
   | Op DMTypeOp_Some [(LocPreDMTerm t)]
   | Phi (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t)
@@ -773,7 +743,6 @@ data PreDMTerm (t :: * -> *) =
   | ClipM NormTerm (LocPreDMTerm t)
   | ClipN (LocPreDMTerm t) (LocPreDMTerm t) (LocPreDMTerm t)
   | MutClipM NormTerm (LocPreDMTerm t)
-  -- Loop (DMTerm : "Number of iterations") ([TeVar] : "Captured variables") (TeVar : "name of iteration var", TeVar : "name of capture variable") (DMTerm : "body")
   | Loop ((LocPreDMTerm t), (LocPreDMTerm t), (LocPreDMTerm t)) [TeVar] (TeVar, TeVar) (LocPreDMTerm t)
 -- Special NN builtins
   | MutSubGrad (LocPreDMTerm t) (LocPreDMTerm t)
@@ -801,7 +770,6 @@ pattern SmpLet a b c = TLetBase SampleLet a b c
  Apply, FLet, Choice, SLet, SBind, Tup, TLet, TBind, Gauss, Laplace, Exponential, MutGauss, MutLaplace, AboveThresh, Count, MMap, MapRows, MapCols, MapCols2, MapRows2, PReduceCols, PFoldRows, MutPFoldRows, MFold, MutConvertM, ConvertM, MCreate, Transpose, UndiscM, MutUndiscM, Undisc,
  Size, Length, Index, VIndex, Row, ClipN, ClipM, MutClipM, Loop, SubGrad, MutSubGrad, ScaleGrad, TProject, ZeroGrad, SumGrads, SmpLet,
  Sample, InternalExpectConst, InternalMutate #-}
-
 
 deriving instance (forall a. Show a => Show (t a)) => Show (PreDMTerm t)
 deriving instance (forall a. Eq a => Eq (t a)) => Eq (PreDMTerm t)
@@ -881,9 +849,6 @@ recDMTermSameExtension_Loc f x = runIdentity (recDMTermMSameExtension_Loc (Ident
 recDMTermMSameExtension_Loc :: forall t m. (Monad m, Traversable t) => (LocPreDMTerm t -> m (LocPreDMTerm t)) -> LocPreDMTerm t -> m (LocPreDMTerm t)
 recDMTermMSameExtension_Loc f t = recDMTermM_Loc f g t
   where
-    -- g' :: t (LocPreDMTerm t) -> m (LocPreDMTerm t)
-    -- g' = undefined
-
     g :: Located (t (LocPreDMTerm t)) -> m (LocPreDMTerm t)
     g (Located l x) =
       let x' :: t (m (LocPreDMTerm t))
@@ -892,48 +857,16 @@ recDMTermMSameExtension_Loc f t = recDMTermM_Loc f g t
           x'' = sequence x'
       in Located l <$> fmap Extra x''
 
--- recursing into a dmterm
-  {-
-recDMTermSameExtension :: forall t. (Traversable t) => (PreDMTerm t -> (PreDMTerm t)) -> PreDMTerm t -> (PreDMTerm t)
-recDMTermSameExtension f x = runIdentity (recDMTermMSameExtension (Identity . f) x)
-
-recDMTermMSameExtension :: forall t m. (Monad m, Traversable t) => (PreDMTerm t -> m (PreDMTerm t)) -> PreDMTerm t -> m (PreDMTerm t)
-recDMTermMSameExtension f t = recDMTermM f g' t
-  where
-    g' :: t (LocPreDMTerm t) -> m (LocPreDMTerm t)
-    g' = undefined
-
-    g :: t (PreDMTerm t) -> m (PreDMTerm t)
-    g x =
-      let x' :: t (m (PreDMTerm t))
-          x' = fmap (recDMTermMSameExtension f) x
-          x'' :: m (t (PreDMTerm t))
-          x'' = sequence x'
-      in undefined -- fmap Extra x''
--}
-
 recKindM :: forall t m s. (Monad m) => (LocPreDMTerm t -> m (LocPreDMTerm s)) -> BBKind t -> m (BBKind s)
 recKindM f = \case
   BBSimple jt -> return $ BBSimple jt
   BBVecLike jt pdt -> BBVecLike jt <$> f pdt
   BBMatrix jt pdt pdt' -> BBMatrix jt <$> f pdt <*> f pdt'
 
-  {-
-recDMTermM :: forall t m s. (Monad m, Traversable t) => (PreDMTerm t -> m (PreDMTerm s)) -> (t (LocPreDMTerm t) -> m (LocPreDMTerm s)) -> PreDMTerm t -> m (PreDMTerm s)
-recDMTermM f h x = (recDMTermM_Loc_Impl (mapM f) h) x
-  -- where
-  --   h' y = let y1 = sequence y
-  --          in _
--}
-
--- recDMTermM_Loc :: forall t m s. (Monad m) => (LocPreDMTerm t -> m (LocPreDMTerm s)) -> (t (LocPreDMTerm t) -> m (PreDMTerm s)) -> LocPreDMTerm t -> m (LocPreDMTerm s)
--- recDMTermM_Loc f h x = mapM (recDMTermM_Loc_Impl f h) x
-
 recDMTermM_Loc :: forall t m s. (Monad m) => (LocPreDMTerm t -> m (LocPreDMTerm s)) -> (Located (t (LocPreDMTerm t)) -> m (LocPreDMTerm s)) -> LocPreDMTerm t -> m (LocPreDMTerm s)
 recDMTermM_Loc f h (Located l (Extra e))         = h (Located l e)
 recDMTermM_Loc f h (rest)            = mapM (recDMTermM_Loc_Impl f h) rest -- h e
   where
--- recDMTermM_Loc_Impl f h (Ret (r))          = Ret <$> (f r)
     recDMTermM_Loc_Impl f h (Disc (r))         = Disc <$> (f r)
     recDMTermM_Loc_Impl f h (Extra e)          = undefined -- impossible "This DMTerm recursion case should already be handled."
     recDMTermM_Loc_Impl f h (Ret r)            = Ret <$> (f r)
@@ -1002,20 +935,6 @@ recDMTermM_Loc f h (rest)            = mapM (recDMTermM_Loc_Impl f h) rest -- h 
 --------------------------------------------------------------------------
 -- Free variables for terms
 
-
-freeVarsOfDMTerm_Loc :: LocDMTerm -> [TeVar]
-freeVarsOfDMTerm_Loc = freeVarsOfDMTerm . getLocated
-
-freeVarsOfDMTerm :: DMTerm -> [TeVar]
-freeVarsOfDMTerm (Var v) = [v]
-freeVarsOfDMTerm (Lam jts jt body) = freeVarsOfDMTerm_Loc body \\ [v | (v :- _) <- jts]
-freeVarsOfDMTerm (LamStar jts jt body) = freeVarsOfDMTerm_Loc body \\ [v | (v :- _) <- jts]
-freeVarsOfDMTerm t = fst $ recDMTermMSameExtension_Loc f (Located UnknownLoc t)
-  where
-    f :: LocDMTerm -> ([TeVar] , LocDMTerm)
-    f = (\a -> (freeVarsOfDMTerm_Loc a, a))
-
-
 freeVarsOfProcDMTerm_Loc :: LocProcDMTerm -> [ProcVar]
 freeVarsOfProcDMTerm_Loc = freeVarsOfProcDMTerm . getLocated
 
@@ -1030,23 +949,20 @@ freeVarsOfProcDMTerm t = fst $ recDMTermMSameExtension_Loc f (Located UnknownLoc
     f = (\a -> (freeVarsOfProcDMTerm_Loc a, a))
 
 --------------------------------------------------------------------------
--- pretty printing
+-- pretty printing for terms
 
 instance ShowPretty a => ShowPretty [a] where
   showPretty as = "[" <> intercalateS ", " (fmap showPretty as) <> "]"
 
 instance (Show a, Show b) => ShowPretty (HashMap a b) where
     showPretty = T.pack . show
---  showPretty as = "[" <> intercalate ", " (fmap showPretty (Data.HashMap.Strict.assocs as)) <> "]"
 
 instance ShowPretty a => ShowPretty (Maybe a) where
       showPretty (Just v) = "Just " <> (showPretty v)
       showPretty Nothing = "Nothing"
 
-
 instance ShowPretty a => ShowPretty (Asgmt a) where
   showPretty (a :- x) = showPretty a <> " :- " <> showPretty x
-
 
 instance ShowPretty a => ShowPretty (ProcAsgmt a) where
   showPretty (a ::- x) = showPretty a <> " :- " <> showPretty x
@@ -1057,10 +973,6 @@ instance ShowPretty (DMTypeOp_Some) where
 
 instance ShowPretty (JuliaType) where
   showPretty = T.pack . show
-
-
---instance (ShowPretty a, ShowPretty b) => ShowPretty (a,b) where
---  showPretty (a,b) = "("<> showPretty a <> ", " <> showPretty b <> ")"
 
 instance (ShowPretty a, ShowPretty b, ShowPretty c) => ShowPretty (a,b,c) where
   showPretty (a,b,c) = "("<> showPretty a <> ", " <> showPretty b <> ", " <> showPretty c <> ")"
@@ -1085,7 +997,6 @@ instance (forall a. ShowPretty a => ShowPretty (t a)) => ShowPretty (PreDMTerm t
   showPretty (DMTrue)           = "DMTrue"
   showPretty (Sng g jt)         = T.pack $ show g
   showPretty (Var v)            = showVar v
---  showPretty (Rnd jt)           = "Rnd"
   showPretty (Arg v jt r)       = showPretty v
   showPretty (Op op [t1])       = showPretty op <> " " <> parenIfMultiple (showPretty t1)
   showPretty (Op op [t1,t2])    = parenIfMultiple (showPretty t1)
