@@ -45,20 +45,6 @@ catchNoncriticalError a x = do
                 msg
     return (resultType, msg')
 
-
-  -- catchError x $ \err@(WithContext e msg) -> case isCriticalError e of
-  --   True -> throwError err
-  --   False -> do
-  --     resultType <- newVar
-  --     -- let msg = DMPersistentMessage $ (WithContext e (("While checking the term", getLocation a):locs))
-  --     --                                 :-----:
-  --     --                                 "Since the checking was not successful, created the following type for this term:" :\\:
-  --     --                                 resultType
-  --     -- tell (DMMessages [] [msg])
-  --     persistentError $ msg :-----: "While checking the term"
-  --     return resultType
-
-
 ------------------------------------------------------------------------
 -- The typechecking function
 checkPriv :: DMScope -> LocDMTerm -> TC DMMain
@@ -114,10 +100,12 @@ checkSen' :: DMScope -> LocDMTerm -> TC DMMain
 checkSen' scope (Located l (DMTrue)) = return (NoFun DMBool)
 checkSen' scope (Located l (DMFalse)) = return (NoFun DMBool)
 
+
 -- TODO: Here we assume that η really has type τ, and do not check it. Should maybe do that.
 checkSen' scope (Located l (Sng η τ)) = case η < 0 of
     True -> NoFun <$> Numeric <$> (Num <$> (createDMTypeBaseNum τ) <*> pure NonConst) -- we don't allow negative const
     False -> NoFun <$> Numeric <$> (Num <$> (createDMTypeBaseNum τ) <*> pure (Const (constCoeff (Fin η)))) -- we don't allow negative const
+
     
 -- typechecking an op
 checkSen' scope (Located l (Op op args)) = do
@@ -155,19 +143,14 @@ checkSen' scope (Located l (Arg x jτ i)) = do
   return τs
 
 
-
-
 checkSen' scope (Located l (Var x)) =  -- get the term that corresponds to this variable from the scope dict
    let mτ = getValue x scope
    in case mτ of
      Nothing -> debug ("[Var-Sens] Scope is:\n" <> showT (getAllKeys scope)) >> throwUnlocatedError (VariableNotInScope x)
      Just jτ -> do
                      debug ("[Var-Sens] Scope is:\n" <> showT (getAllKeys scope))
-                     τ <- jτ -- extract the type of x
-                     -- if the user has given an annotation
-                     -- inferred type must be a subtype of the user annotation
-                     -- addJuliaSubtypeConstraint τ dτ (l :\\: "Variable " :<>: x :<>: " user type annotation.")
-                     return τ
+                     jτ
+
 
 checkSen' scope (Located l (Lam xτs retτ body)) = do
 
@@ -249,10 +232,6 @@ checkSen' scope (Located l (LamStar xτs retτ body)) = do
     -- build the type signature and proper ->* type
     let xrτs' = [x :@ p | (x :@ PrivacyAnnotation p) <- xrτs]
 
-    -- functions can only return deepcopies of DMModel and DMGrads
-    -- restype <- newVar
-    -- addConstraintNoMessage (Solvable (IsClone (btype, restype)))
-
     let τ = (xrτs' :->*: btype)
     return (Fun [τ :@ (Just sign)])
 
@@ -260,7 +239,6 @@ checkSen' scope (Located l (LamStar xτs retτ body)) = do
 checkSen' scope (Located l (SLet x term body)) = do
 
    -- put the computation to check the term into the scope
-   --  let scope' = setValue x (checkSens term scope) scope
    let scope' = setValue x (checkSens scope term) scope
 
    -- check body with that new scope
@@ -280,8 +258,6 @@ checkSen' scope (Located l (BBLet name jτs tail)) = do
    result <- checkSens scope' tail
    removeVar @SensitivityK name
    return result
-
-
 
 
 checkSen' scope (Located l (BBApply app args cs k)) =
@@ -308,10 +284,8 @@ checkSen' scope (Located l (BBApply app args cs k)) =
     -- that sets the sensitivity to 1 in case they turn out to be (*,Data).
     checkBBKind :: BBKind EmptyExtension -> TC (DMMain, Bool)
     checkBBKind a = let
-
         err jt form = throwUnlocatedError $ TypeMismatchError $ "The type " <> showPretty jt <> " is not allowed as return type of this black boxe call.\n"
                                                                 <> form <> "See documentation of `unbox` for more information."
-                                                            
         -- check the user-given return type dimension and make sure it's const
         checkSize pdt = do
            pdt_actual_ty <- checkSens scope pdt <* mscale zeroId
@@ -326,9 +300,7 @@ checkSen' scope (Located l (BBApply app args cs k)) =
                                  tt <- createDMType jt
                                  return (NoFun tt, False)
                              False -> err jt "It must be either one of [Integer, Real, Bool, Data] or you need to specify the size.\n"
-
          BBVecLike jt pdt -> do
-    
            pdt_val <- checkSize pdt -- typecheck the length term
 
            tt <- createDMType jt -- get return dmtype
@@ -347,9 +319,7 @@ checkSen' scope (Located l (BBApply app args cs k)) =
                     unify (l :\\: "Setting black box return model dimension") d pdt_val
                     return (NoFun tt, False)
                 _ -> err jt "It must be one of [Vector, DMModel, DMGrads, MetricVector, MetricGradient].\n"
-                
          BBMatrix jt pdt1 pdt2 -> do
-
            (pdt1_val,pdt2_val) <- msumTup (checkSize pdt1, checkSize  pdt2) -- typecheck the size terms
            
            tt <- createDMType jt -- get return dmtype
@@ -360,10 +330,8 @@ checkSen' scope (Located l (BBApply app args cs k)) =
                    return (NoFun tt, False)
                _ -> err jt "It must be a Matrix.\n"
 
-
     margs = checkArg <$> args
     mf = checkSens scope app
-
   in do
     -- we merge the different TC's into a single result TC
     let caps = checkCap <$> cs
@@ -433,6 +401,7 @@ checkSen' scope (Located l (MMap f m)) = do
 
     return (NoFun (DMContainer k nrm U mv τ_out))
 
+
 checkSen' scope (Located l (MapRows f m)) = do
     s <- newVar
     ηm <- svar <$> newSVarWithPriority UserNamePriority "m"
@@ -455,6 +424,7 @@ checkSen' scope (Located l (MapRows f m)) = do
       (l :\\: "The function applied in MapRows must have the right type.")
 
     return (NoFun (DMMat nrm₂ clp₂ ηm ηn₂ τ_out))
+
 
 checkSen' scope (Located l (MapCols f m)) = do
     ς <- newVar
@@ -483,6 +453,7 @@ checkSen' scope (Located l (MapCols f m)) = do
     -- After transposing, since we have L1, we can output every norm,
     -- thus nrm₂ is freely choosable
     return (NoFun (DMMat nrm₂ U ηm₂ r τ_out))
+
 
 checkSen' scope (Located l (MapCols2 f m₁ m₂)) = do
     ς₁ <- newVar
@@ -516,6 +487,7 @@ checkSen' scope (Located l (MapCols2 f m₁ m₂)) = do
     -- thus nrm₂ is freely choosable
     return (NoFun (DMMat nrm₃ U ηm₃ r τ_out))
 
+
 checkSen' scope (Located l (MapRows2 f m₁ m₂)) = do
     ς₁ <- newVar
     ς₂ <- newVar
@@ -547,6 +519,7 @@ checkSen' scope (Located l (MapRows2 f m₁ m₂)) = do
     -- After transposing, since we have L1, we can output every norm,
     -- thus nrm₂ is freely choosable
     return (NoFun (DMMat nrm₃ clp₃ ηm ηn₃ τ_out))
+
 
 checkSen' scope (Located l (MFold f acc₀ m)) = do
     s₁ <- newVar
@@ -580,7 +553,6 @@ checkSen' scope (Located l (MFold f acc₀ m)) = do
     return τbody_out
 
 
-
 checkSen' scope (Located l (FLet fname term body)) = do
 
   -- make a Choice term to put in the scope
@@ -599,7 +571,6 @@ checkSen' scope (Located l (Choice d)) = do
   choices <- msumS delCs
   let combined = foldl (:∧:) (Fun []) choices
   return combined
-
 
 
 checkSen' scope (Located l (Phi cond ifbr elsebr)) = do
@@ -627,7 +598,6 @@ checkSen' scope (Located l (Phi cond ifbr elsebr)) = do
   return τ
 
 
-
 checkSen' scope (Located l (Tup ts)) = do
 
   -- check tuple entries and sum contexts
@@ -642,7 +612,6 @@ checkSen' scope (Located l (Tup ts)) = do
   log $ "checking sens Tup: " <> showPretty (Tup ts) <> ", type is " <> showPretty (NoFun (DMTup τnf)) <> " when terms were " <> showPretty τsum
   -- return the tuple.
   return (NoFun (DMTup τnf))
-
 
 
 checkSen' original_scope (Located l (TLet xs term body)) = do
@@ -695,6 +664,7 @@ checkSen' original_scope (Located l (TLet xs term body)) = do
   log $ "checking sensitivities TLet: " <> showPretty (xs) <> " = " <> showPretty term <> " in " <> showPretty body <> "\n ==> types are " <> showPretty τbody <> " for term " <> showPretty τterm
   -- and we return the type of the body
   return τbody
+
 
 checkSen' scope (Located l (Loop (start, step, end) cs' (xi, xc) body)) = do
   let cstart = checkSens scope start
@@ -750,24 +720,6 @@ checkSen' scope (Located l (Loop (start, step, end) cs' (xi, xc) body)) = do
   τcsnf <- newVar
   unify (l :\\: "Loop captures cannot be functions") (NoFun τcsnf) τloop_in -- functions cannot be captured.
 
-
-{-
-      -- TODO loops with Const captures/output don't work yet.
-      -- the inferred capture type should be the same as the non-const version of the inferred body type
-      -- so we can loop properly by plugging the loop result into the loop in again
-      -- the inferred type for xc must be non-const, as we cannot assume that it will be the same in each
-      -- iteration.
-      addConstraintNoMessage (Solvable (IsNonConst (τb, τbcs)))
-
-      -- also the given capture that we start iteration with should fit into the expected capture
-      addConstraintNoMessage (Solvable (IsNonConst (τcs, τbcs)))
--}
-
-      -- the types of body, input captures and captures as used in the body must all be equal
-      -- (except Const-ness, actually. we'll figure that out at some point)
-  -- unify τb τbcs
-  -- unify τcs τbcs
-
   addConstraint (Solvable (IsNonConst (τbody_out, τbody_in)))
     (l :\\: "Loop captures input must be non-const version of loop output.")
   addConstraint (Solvable (UnifyWithConstSubtype (τloop_in, τbody_out)))
@@ -818,6 +770,7 @@ checkSen' scope (Located l (MCreate n m (x1, x2) body)) =
       nrm <- TVar <$> newTVarWithPriority UserNamePriority "N" -- variable for norm
       return (NoFun (DMMat nrm U nv mv τbody))
 
+
 checkSen' scope (Located l (Size m)) = do
   mt <- checkSens scope m
 
@@ -835,6 +788,7 @@ checkSen' scope (Located l (Size m)) = do
   mscale zeroId
 
   return (NoFun (DMTup [Numeric (Num (IRNum DMInt) (Const nv)), Numeric (Num (IRNum DMInt) (Const mv))]))
+
 
 checkSen' scope (Located l (Length m)) = do
   mt <- checkSens scope m
@@ -872,7 +826,6 @@ checkSen' scope (Located l (ClipM c m)) = do
 
   -- change clip parameter to input
   return (NoFun (DMContainer k LInf (Clip c) n (NoFun (Numeric (Num DMData NonConst)))))
-
 
 
 checkSen' scope (Located l (MutConvertM nrm m)) = checkSens scope (Located l (ConvertM nrm m))
@@ -930,8 +883,6 @@ checkSen' scope (Located l (Count f m)) = let
     
     return (NoFun (Numeric (Num (IRNum DMInt) NonConst)))
 
-  
-  
 
 --------------------
 -- NOTE this is different from what is in the paper (convert rule), as we scale the result context by 2 not by 1
@@ -982,6 +933,8 @@ checkSen' (Transpose m) scope = do
       -- change clip parameter to input
       return (NoFun (DMMat L1 U m n (Numeric τ)))
 -}
+
+
 checkSen' scope  (Located l (Index m i j)) = do
 
       -- check indices and set their sensitivity to infinity
@@ -1007,7 +960,6 @@ checkSen' scope  (Located l (Index m i j)) = do
       unify (l :\\: "Index parameter must be matrix") τm (NoFun (DMMat nrm clp n m τ))
 
       -- we don't restrict matrix dimension or index size, but leave that to the runtime errors...
-
       return τ
 
 
@@ -1024,7 +976,6 @@ checkSen' scope (Located l (VIndex v i))  = do
 
       (τv, _) <- msumTup (dv, dx)
 
-
       -- variables for element type, norm and clip parameters and dimension
       τ <- newVar
       nrm <- TVar <$> newTVarWithPriority UserNamePriority "N"
@@ -1035,8 +986,8 @@ checkSen' scope (Located l (VIndex v i))  = do
       unify (l :\\: "single-index parameter must be vector") τv (NoFun (DMVec nrm clp n τ))
 
       -- we don't restrict vector dimension or index size, but leave that to the runtime errors...
-
       return τ
+
 
 checkSen' scope (Located l (Row m i)) = do
           -- check index and set their sensitivity to infinity
@@ -1064,6 +1015,7 @@ checkSen' scope (Located l (Row m i)) = do
 
       return (NoFun (DMVec nrm clp m τ)) -- returns Vector type to accomodate julia behaviour
 
+
 checkSen' scope (Located l (MutSubGrad ps gs)) = checkSen' scope (Located l (SubGrad ps gs))
 checkSen' scope (Located l (SubGrad ps gs)) = do
       -- check model and gradient
@@ -1082,6 +1034,7 @@ checkSen' scope (Located l (SubGrad ps gs)) = do
       unify (l :\\: "The thing that is subtracted from the model must be a gradient") gs (NoFun (DMGrads nrm clp m (NoFun (Numeric τgs))))
 
       return (NoFun (DMModel m))
+
 
 checkSen' scope term@(Located l (ScaleGrad scalar grad)) = do
 
@@ -1128,17 +1081,13 @@ checkSen' scope term@(Located l (ScaleGrad scalar grad)) = do
   unify (l :\\: "Set element type of scaled gradient") (Numeric τresnum) τres
   return (NoFun (DMGrads nrm U m (NoFun τres)))
 
--- checkSen' scope (Reorder σ t) = do
---   τ <- checkSens scope t
---   ρ <- newVar
---   addConstraintNoMessage (Solvable (IsReorderedTuple ((σ , τ) :=: ρ)))
---   return ρ
 
 checkSen' scope (Located l (TProject i t)) = do
   τ <- checkSens scope t
   ρ <- newVar
   addConstraintNoMessage (Solvable (IsTProject ((i , τ) :=: ρ)))
   return ρ
+
 
 checkSen' scope (Located l (ZeroGrad m)) = do
    -- check model
@@ -1213,22 +1162,13 @@ checkSen' scope term@(Located l (InternalMutate a)) = do
   res <- checkSens scope a <* mscale (constCoeff $ Fin 2)
   return res
 
---
--- The user can explicitly copy return values.
---
-checkSen' scope term@(Located l (Clone t)) = checkSen' scope t -- do
-  -- res <- checkSens scope t
-
-  -- ta <- newVar
-  -- res' <- unify res (NoFun (ta))
-
-  -- return (NoFun (ta))
 
 checkSen' scope term@(Located l (Disc t)) = do
   tt <- checkSen' scope t <* mtruncateS inftyS
   v <- newVar
   unify (l :\\: "Input for `disc` must be numeric") (NoFun (Numeric v)) tt
   return (NoFun (Numeric (Num DMData NonConst)))
+
 
 checkSen' scope term@(Located l (MakeVec m)) = do
   mtype <- checkSens scope m
@@ -1280,11 +1220,6 @@ checkPri' scope (Located l (Ret t)) = do
    log $ "checking privacy " <> showPretty (Ret t) <> ", type is " <> showPretty τ
    return τ
 
-{-
-checkPri' scope (Rnd t) = do
-  τ <- (createDMTypeBaseNum t)
-  return (NoFun (Numeric (NonConst τ)))
--}
 
 checkPri' scope term@(Located l (Apply f args)) =
   let
@@ -1334,6 +1269,7 @@ checkPri' scope (Located l (SLet x term body)) = do
   log $ "checking (transparent) privacy SLet: " <> showPretty x <> " = " <> showPretty term <> " in " <> showPretty body
 
   return result
+
 
 checkPri' scope (Located l (SBind x term body)) = do
   -- this is the bind rule.
@@ -1401,6 +1337,8 @@ checkPri' original_scope curterm@(Located l (TLet xs term body)) = do
   log $ "checking (transparent) privacy SLet: " <> showPretty xs <> " = " <> showPretty term <> " in " <> showPretty body
 
   return result
+
+
 checkPri' original_scope curterm@(Located l (TBind xs term body)) = do
   a <- newTeVar "tbind_var"
   -- we check the term
@@ -1414,47 +1352,6 @@ checkPri' original_scope curterm@(Located l (TBind xs term body)) = do
                    (Located (RelatedLoc s1 l) (TLet xs (Located (RelatedLoc s1 l) (Var a))
                          body))))
 
-
------------------------------------
--- PRIVACY TUPLE HACK
---
-{-
--- there are no privacy tuples. instead we transform the term:
--- (t1, t2)
--- becomes
---
--- slet x1 = t1
--- slet x2 = t2
--- in return (x1, x2)
---
--- this way if t1 and t2 are privacy terms, they can be checked in privcacy mode
--- but the tuple is still a sensitivity term.
-checkPri' (Tup ts) scope = do
-   names <- mapM newTeVar [(T.pack ("x" <> (show i))) | i <- [1..(length ts)]] -- make unique new names for the elements.
-   let body = Ret (Tup [Var (n :- JTAny) | n <- names])
-   let t1 = foldl (\b -> \(x, t) -> SLet (x :- JTAny) t b) body (zip names ts)
-      --traceM $ "privacy Tup checking term " <> show t1
-   checkPriv t1 scope
-
--- there are no privacy tlets either. so here's what we do:
--- tlet (x1, x2) = t
--- in ...
--- becomes
---
--- tup = t
--- slet x1 = return { tlet (x1,_) = tup
---                    in x1 }
--- slet x2 = return { tlet (_,x2) = tup
---                   in x2 }
--- in ...
---
--- this way we can do the projections in sensitivity mode while the body can still be a privacy term.
-checkPri' (TLet xs term body) scope = do
-   tupvar <- newTeVar "tup" -- make a new unique name for the tup
-   let t1 = foldl (\t -> \(x :- τj) -> SLet (x :- τj) (Ret (TLet xs (Var (tupvar :- JTAny)) (Var (x :- τj)))) t) body xs
-       t2 = SLet (tupvar :- (JTAny)) term t1
-   checkPriv t2 scope
--}
 
 checkPri' scope (Located l (MutGauss rp εp δp f)) = checkPri' scope (Located l (Gauss rp εp δp f))
 checkPri' scope term@(Located l (Gauss rp εp δp f)) =
@@ -1610,8 +1507,8 @@ checkPri' scope (Located l (AboveThresh qs e d t)) = do
 
       return (NoFun (Numeric (Num (IRNum DMInt) NonConst)))
 
-checkPri' scope term@(Located l (Exponential rp εp xs f)) = do
 
+checkPri' scope term@(Located l (Exponential rp εp xs f)) = do
   let
    setParamConst :: TC DMMain -> Sensitivity -> TC ()
    setParamConst dt v = do -- parameters must be const numbers.
@@ -1632,29 +1529,23 @@ checkPri' scope term@(Located l (Exponential rp εp xs f)) = do
    setBody df ε r t_x = do
 
       -- extract f's type from the TC monad
-      --
       t_f_actual <- df
 
       -- unify with expected
       --  the sensitivity of the function can be \infty,
       --  so we simply use a var and allow any sensitivity.
-      --
       s_input <- newVar
       let t_f_required = Fun ([([t_x :@ s_input] :->: (NoFun (Numeric (Num (IRNum DMReal) NonConst)))) :@ Just [JTAny]])
       unify (l :\\: "Exponential mechanism expects a function from element type to the reals.") t_f_actual t_f_required
 
       -- interesting input variables must have sensitivity <= r
-      --
       restrictInteresting r
         (l :\\:
          "Exponential: All variables which are *NOT* annotated as 'Static' and are used in the body" :\\->: f :\\:
          "Have to have sensitivity <= " :<>: r
         )
-        
 
       -- interesting output variables are set to (ε, 0), the rest is truncated to ∞
-      --
-      ctxBeforeTrunc <- use types
       debug $ "[Exponential] Before truncation, context is:\n" <> showT ctxBeforeTrunc
       mtruncateP inftyP
       ctxAfterTrunc <- use types
@@ -1663,7 +1554,6 @@ checkPri' scope term@(Located l (Exponential rp εp xs f)) = do
       mapM (\(x, (τ :@ _)) -> setVarP x (WithRelev IsRelevant (τ :@ PrivacyAnnotation (ε, zeroId)))) (zip ivars itypes)
 
       return ()
-
 
    in do
       -- check all the parameters and f, extract the TC monad from the Delayed monad.
@@ -1688,8 +1578,8 @@ checkPri' scope term@(Located l (Exponential rp εp xs f)) = do
 
       return (v_t_x)
 
+
 checkPri' scope (Located l (Loop (start,step,end) cs' (xi, xc) body)) =
-   --let setInteresting :: ([Symbol],[DMMain :@ PrivacyAnnotation]) -> Sensitivity -> TC ()
    let setInteresting (xs, τps) n = do
           let τs = map fstAnn τps
           let ps = map sndAnn τps
@@ -1774,35 +1664,12 @@ checkPri' scope (Located l (Loop (start,step,end) cs' (xi, xc) body)) =
       τcsnf <- newVar
       unify (l :\\: "Loop captures cannot be functions.") (NoFun τcsnf) τloop_in -- functions cannot be captured.
 
-{-
-      -- TODO loops with Const captures/output don't work yet.
-      -- the inferred capture type should be the same as the non-const version of the inferred body type
-      -- so we can loop properly by plugging the loop result into the loop in again
-      -- the inferred type for xc must be non-const, as we cannot assume that it will be the same in each
-      -- iteration.
-      addConstraintNoMessage (Solvable (IsNonConst (τb, τbcs)))
-
-      -- also the given capture that we start iteration with should fit into the expected capture
-      addConstraintNoMessage (Solvable (IsNonConst (τcs, τbcs)))
--}
-
-      -- the types of body, input captures and captures as used in the body must all be equal
-      -- (except Const-ness, actually. we'll figure that out at some point)
-
       addConstraint (Solvable (IsNonConst (τbody_out, τbody_in)))
          (l :\\: "Loop captures input must be non-const version of loop output.")
       addConstraint (Solvable (UnifyWithConstSubtype (τloop_in, τbody_out)))
          (l :\\: "Initial loop captures must match loop output.")
 
       return τbody_in
-
-
-
--- checkPri' scope (Reorder σ t) = do
---   τ <- checkPriv scope t
---   ρ <- newVar
---   addConstraintNoMessage (Solvable (IsReorderedTuple ((σ , τ) :=: ρ)))
---   return ρ
 
 
 checkPri' scope term@(Located l (SmpLet xs (Located l2 (Sample n m1_in m2_in)) tail)) =
@@ -1894,6 +1761,7 @@ checkPri' scope (Located l (PReduceCols f m)) = do
 
     return (NoFun (DMVec LInf U r τ_out))
 
+
 checkPri' scope (Located l (MutPFoldRows f acc m₁ m₂)) = checkPri' scope (Located l (PFoldRows f acc m₁ m₂))
 checkPri' scope (Located l (PFoldRows f acc m₁ m₂)) = do
     ε <- newVar
@@ -1943,5 +1811,4 @@ checkPri' scope (Located l (PFoldRows f acc m₁ m₂)) = do
 
 
 checkPri' scope t = throwLocatedError (TermColorError PrivacyK (showPretty $ getLocated t)) (getLocation t)
-
 
