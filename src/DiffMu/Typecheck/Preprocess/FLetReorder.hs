@@ -107,9 +107,16 @@ findFLets target (Located l (BBLet var args rest)) ls = do FindFLetsResult other
                                                            return $ FindFLetsResult (others) (Located l $ BBLet var args rest')
 findFLets target t ls = return $ FindFLetsResult [] t
 
+getRealJuliaType :: JuliaType -> JuliaType
+getRealJuliaType JTData = JTReal
+getRealJuliaType (JTMetricMatrix t _) = JTMatrix (getRealJuliaType t)
+getRealJuliaType (JTMetricVector t _) = JTVector (getRealJuliaType t)
+getRealJuliaType (JTMetricGradient t _) = JTGrads
+getRealJuliaType JTPFunction = JTFunction
+getRealJuliaType t = t
 
 getJuliaSig ::  ISing_DMLogLocation l => DMTerm -> LightTC l s JuliaSig
-getJuliaSig (Lam as _ _) = pure $ map (fst . sndA) as
-getJuliaSig (LamStar as _ _) = pure $ map (fst . sndA) as
+getJuliaSig (Lam as _ _) = pure $ map (getRealJuliaType . fst . sndA) as
+getJuliaSig (LamStar as _ _) = pure $ map (getRealJuliaType . fst . sndA) as
 getJuliaSig _ = impossible "Expected a lam/lamstar inside an flet."
 
