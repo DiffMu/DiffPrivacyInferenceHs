@@ -741,7 +741,10 @@ expectSingleMem msg mts = do
   case mts of
     [mt] -> case mt of
               (SingleMem a) -> pure a
-              (mem) -> demutationError ("Encountered a value spanning multiple memory locations where a single location value was expected.")
+              mem@(TupleMem as) -> demutationError ("Encountered a value spanning multiple memory locations where a single location value was expected.")
+                                       (msg :\\:
+                                        ("The encountered memory type is " <> showT mem))
+              mem@(RefMem as) -> demutationError ("Encountered a value which is a non-mutable reference to an element in a vector/matrix where a single memory location was expected.")
                                        (msg :\\:
                                         ("The encountered memory type is " <> showT mem))
     mts -> demutationError ("Encountered a value spanning multiple possible memory locations where a single location value was expected.")
