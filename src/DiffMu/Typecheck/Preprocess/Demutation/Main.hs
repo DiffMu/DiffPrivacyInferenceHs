@@ -450,7 +450,6 @@ elaborateMut scname term@(Located l (Extra (ProcBBApply f args bbkind))) = do
   --
   case itype of
     PureBlackBox -> do
-        
         -- the global variables which are implicitly applied
         -- and need to be added to the `BBApply`
         glvars <- globalNames <$> (use topLevelInfo)
@@ -1132,7 +1131,16 @@ elaborateLambda scname args body = do
                         (l :\\:
                          "The passed through memory references are: " <> showPretty pvs
                         )
-
+      --
+      -- make sure that no self-aliasing occurs
+      let dups = findDuplicatesWith (\a -> a) memVarsOfMove
+      case dups of
+        [] -> pure ()
+        dups -> demutationError "Found a function whose result value contains multiple references to the same memory location. This is not allowed."
+                   (l :\\:
+                    ("There are multiple references to all of the following locations: " <> showPretty (nub dups))
+                   )
+      --
       return $ (Pure, Extra $ DemutBlock new_body_terms)
 
 

@@ -17,6 +17,7 @@ testIssues pp = do
   test127 pp
   test174 pp
   test188 pp
+  test272 pp
 
 
 test21 pp = describe "issue 21 (FLet collection)" $ do
@@ -357,4 +358,16 @@ test188 pp = describe "issue 188 (holes)" $ do
              \end                           "
 
   parseEvalUnify pp "holes can be used in assignments and function arguments " ex_1 newVar
+
+test272 pp = describe "issue 272 (self aliasing)" $ do
+  let ex_1 = " function make_3tuple(a)          \n\
+              \   b = clone(a)                   \n\
+              \   (b,b,b)                        \n\
+              \ end                              \n\
+              \ function bad(x)                  \n\
+              \   (a,b,c) = make_3tuple(x)       \n\
+              \   internal_mutate!(a)            \n\
+              \ end                              "
+
+  parseEvalFail pp "example variant 1 (needs to fail)" ex_1 (DemutationError "")
 

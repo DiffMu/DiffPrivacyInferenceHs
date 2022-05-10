@@ -19,14 +19,6 @@ default (Text)
 
 type FLetTC = LightTC Location_PrePro_FLetReorder ()
 
-findDuplicatesWith :: forall a b. Eq a => (b -> a) -> [b] -> [b]
-findDuplicatesWith f = findDuplicates' []
-  where
-    findDuplicates' :: [a] -> [b] -> [b]
-    findDuplicates' good [] = []
-    findDuplicates' good (a:as) = case f a `elem` good of
-      False -> findDuplicates' (f a:good) as
-      True  -> a : findDuplicates' (good) as
 
 collectAllFLets :: LocDMTerm -> FLetTC LocDMTerm
 collectAllFLets (Located l (FLet var def rest)) = do
