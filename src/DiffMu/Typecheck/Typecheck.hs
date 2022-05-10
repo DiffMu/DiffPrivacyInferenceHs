@@ -1105,8 +1105,12 @@ checkSen' scope (Located l (ZeroGrad m)) = do
    return (NoFun (DMGrads nrm clp n (NoFun (Numeric (Num (IRNum DMReal) NonConst)))))
 
 
-checkSen' scope term@(Located l (SumGrads g1 g2)) = do
+-- The user can explicitly copy return values.
+checkSen' scope term@(Located l (Clone t)) = checkSen' scope t 
 
+
+checkSen' scope term@(Located l (SumGrads g1 g2)) = do
+        
   -- Create sensitivity / type variables for the addition
   (τres , types_sens) <- makeTypeOp (IsBinary DMOpAdd) 2
                            (DMPersistentMessage $ "Constraint on the builtin call:" :\\: term)
@@ -1546,6 +1550,7 @@ checkPri' scope term@(Located l (Exponential rp εp xs f)) = do
         )
 
       -- interesting output variables are set to (ε, 0), the rest is truncated to ∞
+      ctxBeforeTrunc <- use types
       debug $ "[Exponential] Before truncation, context is:\n" <> showT ctxBeforeTrunc
       mtruncateP inftyP
       ctxAfterTrunc <- use types

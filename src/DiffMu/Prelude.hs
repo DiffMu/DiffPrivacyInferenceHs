@@ -35,6 +35,7 @@ module DiffMu.Prelude
   , blue, green, yellow, red, magenta
   , (&&), (||)
   , showT
+  , findDuplicatesWith
   )
   where
 
@@ -375,6 +376,18 @@ yellow x = "\27[33m" <> x <> "\27[0m"
 red x = "\27[31m" <> x <> "\27[0m"
 magenta x = "\27[35m" <> x <> "\27[0m"
 
+
+-------------------------------------------
+-- algorithms
+
+findDuplicatesWith :: forall a b. Eq a => (b -> a) -> [b] -> [b]
+findDuplicatesWith f = findDuplicates' []
+  where
+    findDuplicates' :: [a] -> [b] -> [b]
+    findDuplicates' good [] = []
+    findDuplicates' good (a:as) = case f a `elem` good of
+      False -> findDuplicates' (f a:good) as
+      True  -> a : findDuplicates' (good) as
 
 
 
