@@ -1,4 +1,11 @@
 
+
+{- |
+Description: Solver for the `IsChoice` and `IsFunctionArgument` constraints.
+
+These encode the julia multiple dispatch functionality, and to solve them
+we have to call back into the julia runtime for its subtype resolving.
+-}
 module DiffMu.Typecheck.Constraint.IsFunctionArgument where
 
 import DiffMu.Prelude

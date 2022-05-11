@@ -33,6 +33,7 @@ module DiffMu.Prelude
   , MemVar (..)
   , ShowPretty (..)
   , ShowLocated (..)
+  , (:=:) (..)
   , throwOriginalError
   , blue, green, yellow, red, magenta
   , (&&), (||)

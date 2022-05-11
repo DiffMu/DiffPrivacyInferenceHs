@@ -1,4 +1,8 @@
 
+{- |
+Description: Code for handling arithmetic operations, i.e. determining their sensitivity w.r.t.
+             whether the involved types are const or non-const numbers or matrices.
+-}
 module DiffMu.Typecheck.Operations where
 
 import DiffMu.Prelude
@@ -15,9 +19,6 @@ import DiffMu.Typecheck.Constraint.CheapConstraints
 
 import Debug.Trace
 
-----------------------------------------------------------------------------------------
--- code for handling arithmetic operations, i.e. determining their sensitivity w.r.t.
--- wheter the involved types are const or non-const numbers or matrices.
 
 
 -- Given a kind of a type op (`DMTypeOp_Some`), and a number of given arguments,

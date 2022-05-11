@@ -1,5 +1,8 @@
 
 
+{- |
+Description: Multiple different variants of type equivalences related to their representation as julia types.
+-}
 module DiffMu.Typecheck.Constraint.IsJuliaEqual where
 
 import DiffMu.Prelude

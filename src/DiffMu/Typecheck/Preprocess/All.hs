@@ -1,4 +1,15 @@
 
+{- |
+Description: A pipeline of all preprocessing steps.
+
+The pipeline is as follows:
+ 1. `checkTopLevel`
+ 2. `demutate`
+ 3. `unblock`
+ 4. `collectAllFLets`
+ 5. `processLS`
+ 6. `processColors`
+-}
 module DiffMu.Typecheck.Preprocess.All where
 
 import DiffMu.Prelude

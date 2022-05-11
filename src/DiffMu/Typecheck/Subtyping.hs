@@ -1,4 +1,14 @@
 
+{- |
+Description: Definition of the subtyping system.
+
+This involves code for solving questions of subtyping, as well as infimum/supremum.
+For generic graph search the computation is done using `DiffMu.Abstract.Computation.MonadicGraph`.
+But there are also further mechanisms for resolving such constraints:
+ - Diamond contraction
+ - Cycle contraction
+ - Top/Bottom evaluation
+-}
 module DiffMu.Typecheck.Subtyping where
 
 import DiffMu.Prelude

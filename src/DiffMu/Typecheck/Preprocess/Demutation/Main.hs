@@ -2,6 +2,19 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 
+{- |
+Description: The demutation preprocessing step.
+
+This step takes a `ProcDMTerm` which is a procedural-style term as was parsed by the parser,
+and turns it into a `DemutDMTerm` in which all mutating function calls are replaced by let-statements,
+which explicitly reassign those variables which have been mutated.
+
+The resulting `DemutDMTerm` has a semi-ssa form, where all mutations are assigned to a new variable name.
+(The form is only "semi"-ssa because variable reassignments by the user are allowed, and passed through as is.)
+Black box calls are given custom application terms (`BBApply`).
+
+Furthermore, it is checked that our strict scoping rules are followed (`VariableAccessType`).
+-}
 module DiffMu.Typecheck.Preprocess.Demutation.Main where
 
 import DiffMu.Prelude

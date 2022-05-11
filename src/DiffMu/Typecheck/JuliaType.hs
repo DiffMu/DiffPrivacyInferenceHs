@@ -1,5 +1,8 @@
 {-# LANGUAGE OverloadedLists #-}
 
+{- |
+Description: Conversion between `DMType`s and `JuliaType`s.
+-}
 module DiffMu.Typecheck.JuliaType where
 
 import DiffMu.Prelude

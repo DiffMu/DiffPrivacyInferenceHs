@@ -1,4 +1,7 @@
 
+{- |
+Description: The typechecking algorithm, defined inductively on `DMTerm`s.
+-}
 module DiffMu.Typecheck.Typecheck where
 
 import DiffMu.Prelude

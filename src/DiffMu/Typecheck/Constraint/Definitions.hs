@@ -1,4 +1,7 @@
 
+{- |
+Description: Definition of all constraints.
+-}
 module DiffMu.Typecheck.Constraint.Definitions where
 
 import DiffMu.Prelude

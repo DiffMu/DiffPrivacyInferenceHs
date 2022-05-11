@@ -1,4 +1,11 @@
 
+{- |
+Description: Executing the preprocessing and typechecking pipeline.
+
+This is the top level code which describes how a user input (a string passed to us from the julia runtime),
+is fed into the preprocessing - typechecking - constraint solving pipeline. And furthermore how the resulting
+output (logging, error messages) are presented to the user.
+-}
 module DiffMu.Runner where
 
 import DiffMu.Prelude
@@ -15,9 +22,6 @@ import DiffMu.Typecheck.Subtyping
 import DiffMu.Typecheck.Typecheck
 import DiffMu.Typecheck.Preprocess.Common
 import DiffMu.Typecheck.Preprocess.All
--- import DiffMu.Typecheck.Preprocess.Demutation
--- import DiffMu.Typecheck.Preprocess.FLetReorder
---import DiffMu.Parser.DMTerm.FromString
 import DiffMu.Parser.FromString
 import DiffMu.Parser.JExprToDMTerm
 
@@ -42,9 +46,6 @@ typecheckFromString_DMTerm_Debug term rawsource = do
    Left err -> putStrLn $ "Error while parsing DMTerm from string: " <> show err
    Right (term,files) -> do
      rs <- (rawSourceFromString rawsource files)
-    --  putStrLn $ ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
-    --  putStrLn $ show rs
-    --  putStrLn $ ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
      typecheckFromJExpr_Debug term rs
 
 typecheckFromString_DMTerm_Simple :: ShouldPrintConstraintHistory -> String -> String -> IO ()
@@ -54,9 +55,6 @@ typecheckFromString_DMTerm_Simple bHistory term rawsource = do
    Left err -> putStrLn $ "Error while parsing DMTerm from string: " <> show err
    Right (term,files) -> do
      rs <- (rawSourceFromString rawsource files)
-    --  putStrLn $ ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
-    --  putStrLn $ show rs
-    --  putStrLn $ ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
      typecheckFromJExpr_Simple bHistory term rs
 
 data DoShowLog = DoShowLog DMLogSeverity [DMLogLocation] | DontShowLog
@@ -92,10 +90,6 @@ executeTC l r rawsource = do
 
   return (errs,res)
 
-  -- case errs of
-  --   [] -> return x
-  --   (x:xs) -> return (Left x)
-
 typecheckFromJExprWithPrinter :: ((DMMain,Full (DMPersistentMessage TC)) -> Text) -> DoShowLog -> JExpr -> RawSource -> IO ()
 typecheckFromJExprWithPrinter printer logoptions term rawsource = do
   let r = do
@@ -104,29 +98,8 @@ typecheckFromJExprWithPrinter printer logoptions term rawsource = do
 
         term' <- parseDMTermFromJExpr term >>= (liftNewLightTC . preprocessAll)
 
-        -- let tres = checkSens (term') def
         tres' <- checkSens def (term')
-        -- let tres'' = tres
-        -- let (tres'',_) = runState (runTCT tres) def
-        -- tres' <- case tres'' of
-        --            Nothing -> internalError "The result of typechecking was a non-applied later value.\nFrom this, no type information can be extracted."
-        --            Just a -> a
 
-
-        -- log $ "Type before constraint resolving: " <> show tres'
-        -- logForce $ "================================================"
-        -- logForce $ "before solving constraints (1)"
-        -- logPrintConstraints
-        -- solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
-        -- tres'' <- normalize tres'
-        -- logForce $ "================================================"
-        -- logForce $ "before solving constraints (2)"
-        -- logPrintConstraints
-        -- solveAllConstraints [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal]
-        -- tres''' <- normalize tres''
-        -- logForce $ "================================================"
-        -- logForce $ "before solving constraints (3)"
-        -- logPrintConstraints
         tres''' <- solveAndNormalize ExactNormalization [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal] tres'
         tres'''' <- solveAndNormalize SimplifyingNormalization [SolveSpecial,SolveExact,SolveGlobal,SolveAssumeWorst,SolveFinal] tres'''
         return tres''''
@@ -137,8 +110,6 @@ typecheckFromJExprWithPrinter printer logoptions term rawsource = do
     (_, Nothing) -> putStrLn $ "No type could be inferred"
     (_, Just x) -> TIO.putStrLn $ printer x
 
-
--- (DoShowLog Warning logging_locations)
 
 data ShouldPrintConstraintHistory = PrintConstraintHistory | DontPrintConstraintHistory
 
