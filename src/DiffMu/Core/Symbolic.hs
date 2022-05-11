@@ -135,7 +135,6 @@ normalizationSubstitution nt x = case f x of
 
     f :: SymVar k -> Maybe (SymTerm MainSensKind)
     f (HonestVar _)  = Nothing
-    -- f (Id t)         = Nothing
     f (Ln a)         = constCoeff <$> (dmLog <$> extractVal a)
     f (Exp (a,b))    = case extractVal a of
       Just (Fin 1) -> pure (a)

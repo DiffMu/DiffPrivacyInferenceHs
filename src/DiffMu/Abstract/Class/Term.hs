@@ -130,6 +130,29 @@ instance (FreeVars v a) => FreeVars v (Maybe a) where
 class (Typeable v, Typeable a, forall k. Eq (v k)) => Substitute (v :: j -> *) (a :: j -> *) x where
   substitute :: (Monad t) => (forall k. (IsKind k) => v k -> t (a k)) -> (x -> t x)
 
+
+instance (Substitute v x a, Substitute v x b, Substitute v x c, Substitute v x d, Substitute v x e) => Substitute v x (a, b, c, d, e) where
+  substitute σs (a, b, c, d, e) = (,,,,) <$> substitute σs a <*> substitute σs b <*> substitute σs c <*> substitute σs d <*> substitute σs e
+
+instance (Substitute v x a, Substitute v x b, Substitute v x c, Substitute v x d) => Substitute v x (a, b, c, d) where
+  substitute σs (a, b, c, d) = (,,,) <$> substitute σs a <*> substitute σs b <*> substitute σs c <*> substitute σs d
+
+instance (Substitute v x a, Substitute v x b, Substitute v x c) => Substitute v x (a, b, c) where
+  substitute σs (a, b, c) = (,,) <$> substitute σs a <*> substitute σs b <*> substitute σs c
+
+instance (Substitute v a x, Substitute v a y) => Substitute v a (x,y) where
+  substitute σs (x,y) = (,) <$> substitute σs x <*> substitute σs y
+
+instance (Substitute v x a, Substitute v x b) => Substitute v x (a :=: b) where
+  substitute σs (a :=: b) = (:=:) <$> substitute σs a <*> substitute σs b
+
+instance Substitute v x a => Substitute v x [a] where
+  substitute σs xs = mapM (substitute σs) xs
+
+instance Substitute v x a => Substitute v x (Maybe a) where
+  substitute σs (Just a) = Just <$> substitute σs a
+  substitute σs (Nothing) = pure Nothing
+
 ------------------------------------------------------------------------------------------
 -- Term
 --   (multi-kinded type where substitution acts on itself)
@@ -228,4 +251,3 @@ class (Monad t, Term (VarFam a) a) => MonadTerm (a :: j -> *) t where
   newVar :: (IsKind k) => t (a k)
   addSub :: (IsKind k) => Sub (VarFam a) a k -> t ()
   getSubs :: t (Subs (VarFam a) a)
-  getConstraintsBlockingVariable :: (IsKind k) => Proxy a -> VarFam a k -> t ([IxSymbol])

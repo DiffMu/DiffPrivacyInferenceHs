@@ -65,6 +65,9 @@ instance ShowPretty AnnotationKind where
     showPretty SensitivityK = "SensitivityKind"
     showPretty PrivacyK = "PrivacyKind"
 
+instance Monad t => Normalize t AnnotationKind where
+  normalize nt a = pure a
+
 data Annotation (a :: AnnotationKind) where
   SensitivityAnnotation :: SymTerm MainSensKind -> Annotation SensitivityK
   PrivacyAnnotation :: (SymTerm MainSensKind, SymTerm MainSensKind) -> Annotation PrivacyK
@@ -474,6 +477,9 @@ data (:@) a b = (:@) a b
 instance (Show a, Show b) => Show (a :@ b) where
   show (a :@ b) = show a <> " @ " <> show b
 
+instance (Substitute v x a, Substitute v x b) => Substitute v x (a :@ b) where
+  substitute σs (a :@ b) = (:@) <$> substitute σs a <*> substitute σs b
+
 -- Since we want to use (monadic-)algebraic operations on terms of type `(a :@ b)`,
 -- we declare these instances here. That is, if `a` and `b` have such instances,
 -- then (a :@ b) has them as well:
@@ -562,6 +568,13 @@ type PrivacyOf a = (SensitivityOf a,SensitivityOf a)
 type Privacy = PrivacyOf MainSensKind
 
 
+-- the special infinity values
+--
+inftyS :: Sensitivity
+inftyS = constCoeff Infty
+--
+inftyP :: Privacy
+inftyP = (constCoeff Infty, constCoeff Infty)
 ---------------------------------------------------------
 -- Julia types
 -- 
@@ -589,6 +602,9 @@ data JuliaType =
 
 instance Hashable JuliaType where
 instance DictKey JuliaType
+
+instance Monad t => Normalize t JuliaType where
+  normalize nt = pure
 
 -- this is used for callbacks to actual julia, so the string representation matches julia exactly.
 instance Show JuliaType where

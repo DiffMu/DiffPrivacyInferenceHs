@@ -38,6 +38,7 @@ module DiffMu.Prelude
   , (&&), (||)
   , showT
   , findDuplicatesWith
+  , (%=~)
   )
   where
 
@@ -78,6 +79,11 @@ instance Monad t => Normalize t Text where
 
 instance Monad t => Normalize t ProcVar where
   normalize nt a = pure a
+
+
+instance Monad t => Normalize t (TeVar) where
+  normalize nt v = pure v
+
 
 -------------------------------------------------------------------------
 -- name / var priority
@@ -403,3 +409,22 @@ rawSourceFromString input other_files = do
     :
     (good_other_file_contents)
     )
+
+
+-------------------------------------------------------------------------
+-- lens operators
+
+-- Helper function for using a monadic function to update the state of a "by a lens accessible"
+-- value in a state monad. Such an operator does not seem to be defined in the "lenses" library.
+-- This might be because using it is not always well behaved, the following note applies.
+--
+-- NOTE: Warning, this function destroys information if the function `f` which does the update
+-- has monadic effects in m which affect the part of the state which is accessed by the lens.
+(%=~) :: MonadState s m => (forall f. Functor f => LensLike f s s a a) -> (a -> m a) -> m ()
+(%=~) lens f = do
+  curVal <- use lens
+  newVal <- f curVal
+  lens .= newVal
+  return ()
+
+infixr 4 %=~
