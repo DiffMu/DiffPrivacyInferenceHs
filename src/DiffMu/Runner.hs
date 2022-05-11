@@ -180,7 +180,7 @@ checkSpecialWarnings ty = checkClipping
         let checkArg :: DMTypeOf MainKind -> [Text]
             checkArg arg@(NoFun (DMContainer dto' dto2 clip_parameter sk dto4)) | clip_parameter /= U =
                [ "The typechecked function has an input argument of type " <> quote (showPretty arg) <> ".\n" <>
-                 "(note the clipping parameter " <> showPretty clip_parameter <> ".)\n" <>
+                 "(Note the clipping parameter " <> showPretty clip_parameter <> ".)\n" <>
                  "This says that the input is required to be clipped wrt the norm " <> showPretty clip_parameter <> ",\n" <>
                  "where \"clipped\" means that each row must have an " <> showPretty clip_parameter <> "-norm that is less or equal than 1." <> "\n" <>
                  "\n" <>
