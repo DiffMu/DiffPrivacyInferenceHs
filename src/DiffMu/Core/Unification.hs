@@ -5,7 +5,6 @@ module DiffMu.Core.Unification where
 
 import DiffMu.Prelude
 import DiffMu.Abstract
-import DiffMu.Abstract.Data.ErrorReporting
 import DiffMu.Core.Definitions
 import DiffMu.Typecheck.Constraint.Definitions
 import DiffMu.Core.TC

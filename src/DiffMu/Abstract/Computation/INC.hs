@@ -1,4 +1,14 @@
 
+{- |
+Description: Incremental nondeterministic computations.
+
+An INC is a set of computations on a given datatype, which
+sometimes give only incremental updates, do not progress at all, or return failures.
+The computations can have monadic effects. The goal is to find an execution path which succeeds.
+The provided function `evalINC` evalutates such a set of state-updating
+functions on a given input state as far as possible, reverting the monadic
+state if failure was detected.
+-}
 module DiffMu.Abstract.Computation.INC where
 
 import DiffMu.Prelude

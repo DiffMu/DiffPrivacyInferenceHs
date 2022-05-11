@@ -1,6 +1,9 @@
 
 {-# LANGUAGE UndecidableInstances #-}
 
+{- |
+Description: Wrapping monoidal combinations (`MonCom`) to use as data types for various contexts.
+-}
 module DiffMu.Abstract.Data.MonComCtx where
 
 import DiffMu.Prelude

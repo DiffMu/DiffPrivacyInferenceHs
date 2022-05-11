@@ -1,12 +1,15 @@
 
+{- |
+Description: Kinded and unkinded name contexts.
+
+These are contexts without any "type information" (except the kinding in the kinded case),
+i.e., only a list of names. Used for type, and the various term variables.
+-}
 module DiffMu.Abstract.Data.NameCtx where
 
 import DiffMu.Prelude
 import DiffMu.Abstract.Class.Term
 
--- import DiffMu.Abstract.Class.Term
--- import DiffMu.Abstract.MonadTC
--- import DiffMu.Abstract.MonadicPolynomial
 
 import qualified Data.Text as T
 import qualified Data.HashMap.Strict as H

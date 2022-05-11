@@ -3,7 +3,6 @@ module DiffMu.Typecheck.Subtyping where
 
 import DiffMu.Prelude
 import DiffMu.Abstract
-import DiffMu.Abstract.Data.ErrorReporting
 import DiffMu.Core.Definitions
 import DiffMu.Core.Context
 import DiffMu.Core.Logging

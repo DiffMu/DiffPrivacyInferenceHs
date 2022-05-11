@@ -18,7 +18,6 @@ import DiffMu.Abstract.Class.IsT
 import DiffMu.Abstract.Class.Log
 import DiffMu.Abstract.Class.Term
 import DiffMu.Abstract.Data.Error
-import DiffMu.Abstract.Data.ErrorReporting
 import DiffMu.Core.Logging
 import Debug.Trace
 import qualified Data.Text as T

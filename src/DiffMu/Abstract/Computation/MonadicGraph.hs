@@ -1,4 +1,13 @@
 
+{- |
+Description: Finding paths and supremuma/infima in a monadic graph.
+
+A monadic graph is a graph where walking along an edge can have monadic effects.
+This is useful for modelling subtyping graphs where the edges are subtyping rules
+with generic holes - walking the graph means filling in these holes.
+
+Computations are done using the `DiffMu.Abstract.Computation.INC` functionality.
+-}
 module DiffMu.Abstract.Computation.MonadicGraph where
 
 import DiffMu.Prelude
@@ -64,23 +73,10 @@ oppositeGraph (GraphM graph) = GraphM (opp graph)
         opp f (NotReflexive) = oppositeEdge <$> f NotReflexive
         opp f (IsReflexive (sl,sr)) = oppositeEdge <$> f (IsReflexive (sr,sl))
 
--- findPathM :: forall s m e a. (Show e, Show a, MonadError e m, MonadState s m, MonoidM m a, CheckNeutral m a) => (e -> ErrorRelevance) -> GraphM m a -> (a,a) -> m (INCRes (e m) (a,a))
 findPathM :: forall s m isT e a msg. (MessageLike m msg, Show (e m), Show a, Eq a, MonadConstraint isT m, IsT isT m, Normalize m a, MonadNormalize m, MonadDMError e m, MonadState s m, MonadImpossible m, MonadLog m, Unify e m a, CheckNeutral m a) => (e m -> ErrorRelevance) -> GraphM m a -> (a,a) -> msg -> m (INCRes (e m) (PathState a))
 findPathM relevance (GraphM g) (start,goal) msg | start == goal = return $ Finished ((start,goal),IsShortestPossiblePath)
 findPathM relevance (GraphM g) (start,goal) msg | otherwise     =
-  let -- both (Finished a) (Finished b) | a == b = Finished a
-      -- both (Fail e) _                         = Fail e
-      -- both _ (Fail e)                         = Fail e
-      -- both _ _                                = Wait
-
-      -- atLeastOne (Finished a) Wait = Finished a
-      -- atLeastOne Wait (Finished b) = Finished b
-      -- atLeastOne (Finished a) (Finished b) | a == b = Finished a
-      -- atLeastOne (Fail e) _                         = Fail e
-      -- atLeastOne _ (Fail e)                         = Fail e
-      -- atLeastOne _ _                                = Wait
-
-      tryFastMatch x (Finished a) (Finished b) | a == b = Finished a
+  let tryFastMatch x (Finished a) (Finished b) | a == b = Finished a
       tryFastMatch (IsMatchForcing,_) (Finished a) Wait = Finished a
       tryFastMatch (_,IsMatchForcing) Wait (Finished b) = Finished b
       tryFastMatch x (Fail e) _                         = Fail e
@@ -95,17 +91,6 @@ findPathM relevance (GraphM g) (start,goal) msg | otherwise     =
              Wait -> return Wait
              Partial _ -> return Wait
 
-      -- we check the neutrality of a and b
-      -- And wait either - only if both are not neutral
-      --          or     - if at least one is not neutral
-      -- checkPair op getIdx a b x = do
-      --   ia <- getIdx a
-      --   ib <- getIdx b
-      --   case (op ia ib) of
-      --     Finished c -> x c
-      --     Fail _ -> return (Fail MultiEdgeIndexFailed)
-      --     Wait -> return Wait
-      --     Partial _ -> return Wait
 
       checkPair op getIdx a b x = withLogLocation "MndGraph" $ do
         ia <- getIdx a
@@ -126,7 +111,6 @@ findPathM relevance (GraphM g) (start,goal) msg | otherwise     =
 
 
       checkByStructurality s getIdx a b x = checkPair (tryFastMatch s) getIdx a b x
-      -- checkByStructurality NotStructural getIdx a b x = checkPair both       getIdx a b x
 
 
       f_refl :: Eq b => Structurality -> EdgeFamily m a b -> PathState a -> m (INCRes (e m) (PathState a))
@@ -214,13 +198,6 @@ findSupremumM relevance (GraphM graph) ((a,b) :=: x,isShortestSup) msg =
       both _ (Fail e)                         = Fail e
       both _ _                                = Wait
 
-      -- atLeastOne (Finished a) Wait = Finished a
-      -- atLeastOne Wait (Finished b) = Finished b
-      -- atLeastOne (Finished a) (Finished b) | a == b = Finished a
-      -- atLeastOne (Fail e) _                         = Fail e
-      -- atLeastOne _ (Fail e)                         = Fail e
-      -- atLeastOne _ _                                = Wait
-
       checkPair op getIdx a b x = withLogLocation "MndGraph" $ do
         ia <- getIdx a
         ib <- getIdx b
@@ -238,9 +215,6 @@ findSupremumM relevance (GraphM graph) ((a,b) :=: x,isShortestSup) msg =
             debug $ "Checkpair[supremum] on " <> showT (a,b) <> " returned a Partial. => We wait"
             return Wait
 
-
-      -- checkByStructurality IsStructural  getIdx a b x = checkPair atLeastOne getIdx a b x
-      -- checkByStructurality NotStructural getIdx a b x = checkPair both       getIdx a b x
 
       catchRelevant :: forall a b. (a -> m (INCRes (e m) a)) -> (a -> m (INCRes (e m) a))
       catchRelevant f a =

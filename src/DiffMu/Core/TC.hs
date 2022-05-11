@@ -7,7 +7,6 @@ module DiffMu.Core.TC where
 
 import DiffMu.Prelude
 import DiffMu.Abstract
-import DiffMu.Abstract.Data.ErrorReporting
 import DiffMu.Core.Definitions
 import DiffMu.Core.Symbolic
 import DiffMu.Core.Logging
