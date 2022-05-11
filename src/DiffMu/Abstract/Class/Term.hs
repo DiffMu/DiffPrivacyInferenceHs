@@ -1,33 +1,55 @@
 {-# LANGUAGE UndecidableInstances #-}
 
+{- |
+Description: Terms and substitutions.
+
+Deals with multi-kinded terms and accumulation of their substitutions.
+-}
 module DiffMu.Abstract.Class.Term where
 
 import DiffMu.Prelude
-
 import Data.HashMap.Strict as H
-
 import Debug.Trace
 
-data Sub x a k = (:=) (x k) (a k)
-data Sub' x a k j = (:=~) (x k) (a j)
+------------------------------------------------------------------------------------------
+-- Sum type for multi-kinded types
+------------------------------------------------------------------------------------------
 
-fstSub (x := _) = x
-
-instance (KShow x, KShow a) => Show (Sub x a k) where
-  show (x := a) = show x <> " := " <> show a
-
-instance (KShow x, KShow a) => Show (Sub' x a k j) where
-  show (x :=~ a) = show x <> " := " <> show a
-
-newtype ListK a k = ListK [a k]
-  deriving Show
-
+data SomeK (v :: j -> *) where
+  SomeK :: (Typeable v, Typeable k, SingI k) => v k -> SomeK v
 
 compareVar :: KEq a => SomeK a -> SomeK a -> Bool
 compareVar (SomeK (x :: a k)) (SomeK (y :: a k2)) =
     case testEquality (typeRep @k) (typeRep @k2) of
       Just Refl -> x == y
       Nothing -> False
+
+instance (KHashable v) => Hashable (SomeK v) where
+  hashWithSalt salt (SomeK x) = hashWithSalt salt x
+
+instance (KShow v) => Show (SomeK (v :: j -> *)) where
+  show (SomeK (x :: v k)) = show x
+
+instance KEq v => Eq (SomeK v) where
+  SomeK (a) == SomeK (b) = case testEquality (typeOf a) (typeOf b) of
+    Nothing -> False
+    Just Refl -> a == b
+
+filterSomeK :: forall v k2. (Typeable k2) => [(SomeK v)] -> [v k2]
+filterSomeK vs = [v | Just v <- (f <$> vs)]
+  where
+    f :: SomeK v -> Maybe (v k2)
+    f (SomeK (v :: v k)) = 
+      case testEquality (typeRep @k) (typeRep @k2) of
+        Nothing -> Nothing
+        Just Refl -> Just v
+
+filterSomeKPair :: forall v k2 x. (Typeable k2) => [(SomeK v,x)] -> [(v k2, x)]
+filterSomeKPair = undefined
+
+------------------------------------------------------------------------------------------
+-- Tracking of whether a substitution changed something (MonadWatch)
+------------------------------------------------------------------------------------------
 
 data Changed = IsChanged | NotChanged
   deriving (Generic, Show, Eq)
@@ -50,9 +72,26 @@ class Monad t => MonadWatch t where
   notifyChanged :: t ()
   getChanged :: t Changed
 
+------------------------------------------------------------------------------------------
+-- Raw multikinded substitutions (data type)
+------------------------------------------------------------------------------------------
+data Sub x a k = (:=) (x k) (a k)
+data Sub' x a k j = (:=~) (x k) (a j)
 
-class (Typeable v, Typeable a, forall k. Eq (v k)) => Substitute (v :: j -> *) (a :: j -> *) x where
-  substitute :: (Monad t) => (forall k. (IsKind k) => v k -> t (a k)) -> (x -> t x)
+fstSub (x := _) = x
+
+instance (KShow x, KShow a) => Show (Sub x a k) where
+  show (x := a) = show x <> " := " <> show a
+
+instance (KShow x, KShow a) => Show (Sub' x a k j) where
+  show (x :=~ a) = show x <> " := " <> show a
+
+newtype ListK a k = ListK [a k]
+  deriving Show
+
+------------------------------------------------------------------------------------------
+-- multi-kinded type with free vars (class)
+------------------------------------------------------------------------------------------
 
 
 class (Typeable v, Typeable a, forall k. Eq (v k)) => FreeVars (v :: j -> *) (a :: *) where
@@ -83,49 +122,33 @@ instance (FreeVars v a) => FreeVars v (Maybe a) where
   freeVars (Nothing) = mempty
 
 
+------------------------------------------------------------------------------------------
+-- Substitute
+--   multi-kinded type with substitutions
+------------------------------------------------------------------------------------------
 
+class (Typeable v, Typeable a, forall k. Eq (v k)) => Substitute (v :: j -> *) (a :: j -> *) x where
+  substitute :: (Monad t) => (forall k. (IsKind k) => v k -> t (a k)) -> (x -> t x)
 
-
+------------------------------------------------------------------------------------------
+-- Term
+--   (multi-kinded type where substitution acts on itself)
+------------------------------------------------------------------------------------------
 
 class (KHashable v, KShow v, KShow a, KEq v, HasVarPriority v, forall k. (Substitute v a (a k))) => Term v a where
   var :: IsKind k => v k -> a k
   -- varPriority :: IsKind k => Proxy a -> v k -> NamePriority
   isVar :: IsKind k => a k -> Maybe (v k)
 
-data SomeK (v :: j -> *) where
-  SomeK :: (Typeable v, Typeable k, SingI k) => v k -> SomeK v
-
-
-instance (KHashable v) => Hashable (SomeK v) where
-  hashWithSalt salt (SomeK x) = hashWithSalt salt x
-
-instance (KShow v) => Show (SomeK (v :: j -> *)) where
-  show (SomeK (x :: v k)) = show x
-
-
-
-
-
-instance KEq v => Eq (SomeK v) where
-  SomeK (a) == SomeK (b) = case testEquality (typeOf a) (typeOf b) of
-    Nothing -> False
-    Just Refl -> a == b
-
-filterSomeK :: forall v k2. (Typeable k2) => [(SomeK v)] -> [v k2]
-filterSomeK vs = [v | Just v <- (f <$> vs)]
-  where
-    f :: SomeK v -> Maybe (v k2)
-    f (SomeK (v :: v k)) = 
-      case testEquality (typeRep @k) (typeRep @k2) of
-        Nothing -> Nothing
-        Just Refl -> Just v
-
-filterSomeKPair :: forall v k2 x. (Typeable k2) => [(SomeK v,x)] -> [(v k2, x)]
-filterSomeKPair = undefined
+------------------------------------------------------------------------------------------
+-- multi-kinded substitutions
+------------------------------------------------------------------------------------------
 
 data Subs v a where
   Subs :: Term v a => (HashMap (SomeK v) (SomeK a)) -> Subs v a
 
+instance Show (Subs v a) where
+  show (Subs s) = intercalate ", " ((\(SomeK x, SomeK a) -> show (x :=~ a)) <$> toList s)
 
 instance Term v a => Default (Subs v a) where
   def = Subs empty
@@ -137,17 +160,10 @@ singletonSub ((x :: x k) := (a :: a k)) = case isVar @x a of
            -> Subs (singleton (SomeK @_ @k av) (SomeK (var x)))
   _ -> Subs (singleton (SomeK @_ @k x) (SomeK a))
 
-
-
-instance Show (Subs v a) where
-  show (Subs s) = intercalate ", " ((\(SomeK x, SomeK a) -> show (x :=~ a)) <$> toList s)
-
-
 removeFromSubstitution :: (Monad t, Term v a) => [SomeK v] -> (forall k. IsKind k => v k -> t (a k)) -> (forall k. IsKind k => v k -> t (a k))
 removeFromSubstitution vars σ x = case (SomeK x) `elem` vars of
   True -> pure (var x)
   False -> σ x
-
 
 trySubstitute :: (MonadImpossible t, MonadWatch t, Term v a, IsKind k) => Subs v a -> v k -> t (a k)
 trySubstitute (Subs m) (x :: v k) = case H.lookup (SomeK x) m of
@@ -158,7 +174,6 @@ trySubstitute (Subs m) (x :: v k) = case H.lookup (SomeK x) m of
 
   Nothing -> pure (var x)
 
-
 substituteSingle :: (Typeable k, Term v a) => Sub v a k -> a j -> a j
 substituteSingle ((x :: v k) := (a :: a k)) b = runIdentity (substitute f b)
   where f :: (forall k. (IsKind k) => v k -> Identity (a k))
@@ -167,9 +182,6 @@ substituteSingle ((x :: v k) := (a :: a k)) b = runIdentity (substitute f b)
           Just Refl -> g v
             where g v | v == x    = pure a
                   g v | otherwise = pure (var v)
-
-
-
 
 wellkindedSub :: (IsKind k, Typeable j, Term v a, Typeable k => FreeVars v (a k), MonadImpossible t, MonadUnificationError t) => Sub' v a k j -> t (Sub v a k)
 wellkindedSub ((x :: v k) :=~ (a :: a j)) =
@@ -183,7 +195,6 @@ wellkindedSub ((x :: v k) :=~ (a :: a j)) =
           True -> unificationError (var x) a
 
         return (x := a)
-
 
 substituteSingle' :: (Typeable k, Term v a) => Sub v a k -> SomeK a -> SomeK a
 substituteSingle' ((x :: v k) := (a :: a k)) (SomeK (a0 :: a j)) = SomeK (substituteSingle (x := a) a0)
@@ -201,7 +212,6 @@ instance (MonadImpossible t, MonadUnificationError t, Term v a, forall k. Typeab
                             let mm1 = H.map (substituteSingle' σ) mm'
                             return (H.insert (SomeK x) (SomeK a) mm1)
 
-
 instance (MonadImpossible t, MonadUnificationError t, Term v a, forall k. FreeVars v (a k)) => MonoidM t (Subs v a) where
   neutral = pure (Subs H.empty)
 
@@ -209,6 +219,9 @@ instance (MonadImpossible t, MonadWatch t, Term v a, Substitute v a x) => Module
   (↷) σs a = substitute (trySubstitute σs) a
 
 
+------------------------------------------------------------------------------------------
+-- Monad keeping track of substitutions
+------------------------------------------------------------------------------------------
 
 class (Monad t, Term (VarFam a) a) => MonadTerm (a :: j -> *) t where
   type VarFam (a :: j -> *) :: j -> *
@@ -216,9 +229,3 @@ class (Monad t, Term (VarFam a) a) => MonadTerm (a :: j -> *) t where
   addSub :: (IsKind k) => Sub (VarFam a) a k -> t ()
   getSubs :: t (Subs (VarFam a) a)
   getConstraintsBlockingVariable :: (IsKind k) => Proxy a -> VarFam a k -> t ([IxSymbol])
-
-class (Monad t, Term (VarFam a) a, MonadTerm a t) => MonadTermDuplication a t where
-  duplicateAllConstraints :: [SomeK (Sub (VarFam a) (ListK a))] -> t ()
-
-
-

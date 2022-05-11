@@ -1,8 +1,10 @@
 {-# LANGUAGE UndecidableInstances #-}
 
+{-
+Description: Provides various basic types and classes.
+-}
 module DiffMu.Prelude
   (
-    -- module Prelude
     module All
   , StringLike (..)
   , RawSource (..)
@@ -42,8 +44,6 @@ module DiffMu.Prelude
 import DiffMu.Imports as All hiding (msum, throwError)
 import qualified DiffMu.Imports as QUAL (throwError)
 
--- import DiffMu.Prelude.Algebra as All
--- import DiffMu.Prelude.Polynomial as All
 
 import DiffMu.Prelude.MonadicAlgebra as All
 import DiffMu.Prelude.Data as All
@@ -58,43 +58,14 @@ import Data.HashMap.Strict as H
 import System.IO (FilePath, readFile)
 import GHC.IO (catchAny)
 
-newtype SourceFile = SourceFile (Maybe FilePath)
-  deriving (Eq, Hashable, DictKey, Ord)
 
-instance Show SourceFile where
-  show (SourceFile Nothing) = "none"
-  show (SourceFile (Just fp)) = fp
+-------------------------------------------------------------------------
+-- kinds for introspection
 
-newtype RawSource = RawSource (HashMap SourceFile (Array Int Text))
-  deriving (Show)
+type IsKind k = (SingI k, Typeable k)
 
-rawSourceFromString :: String -> [FilePath] -> IO RawSource
-rawSourceFromString input other_files = do
-  let make_line_array file = let ls = (T.pack <$> linesS file)
-                             in  listArray (1,length ls) (ls) 
-  let tryReadFile f = (Just <$> readFile f) `catchAny` (\e -> return Nothing)
-
-  let onlyJust xs = [(SourceFile (Just a), make_line_array b) | (a, Just b) <- xs]
-
-  other_file_contents <- mapM tryReadFile other_files
-  let good_other_file_contents = onlyJust ((other_files) `zip` (other_file_contents))
-  return $ RawSource $ H.fromList $
-    ((SourceFile Nothing, make_line_array input)
-    :
-    (good_other_file_contents)
-    )
-
--- NOTE : Order is important
-data NamePriority = GeneratedNamePriority | UserNamePriority
-  deriving (Eq, Ord, Generic, Show)
-
-instance Hashable NamePriority
-
-newtype Symbol = Symbol Text
-  deriving (Eq,Ord,Hashable,Semigroup,Monoid)
-
-newtype IxSymbol = IxSymbol (Symbol,Int,NamePriority)
-  deriving (Eq,Ord,Hashable)
+-------------------------------------------------------------------------
+-- normalization
 
 instance Monad t => Normalize t IxSymbol where
   normalize nt a = pure a
@@ -109,7 +80,14 @@ instance Monad t => Normalize t ProcVar where
   normalize nt a = pure a
 
 -------------------------------------------------------------------------
--- Var Priority
+-- name / var priority
+
+
+-- NOTE : Order is important
+data NamePriority = GeneratedNamePriority | UserNamePriority
+  deriving (Eq, Ord, Generic, Show)
+
+instance Hashable NamePriority
 
 data CompoundPriority = CompoundPriority NamePriority Int
   deriving (Show, Eq)
@@ -118,9 +96,6 @@ instance Ord CompoundPriority where
   CompoundPriority n1 i1 <= CompoundPriority n2 i2 | n1 == n2 = i1 >= i2
   CompoundPriority n1 i1 <= CompoundPriority n2 i2 | n1 > n2  = False
   CompoundPriority n1 i1 <= CompoundPriority n2 i2 | otherwise = True
-
-
-type IsKind k = (SingI k, Typeable k)
 
 class HasVarPriority v where
   varPriority :: IsKind k => v k -> CompoundPriority
@@ -206,34 +181,33 @@ instance ShowPretty Int where
 instance ShowPretty Text where
   showPretty s = s
 
+instance (ShowPretty a, ShowPretty b) => ShowPretty (a,b) where
+  showPretty (a,b) = "("<> showPretty a <> ", " <> showPretty b <> ")"
+
 class FromSymbol (v :: j -> *) where
   fromSymbol :: Symbol -> Int -> NamePriority -> v k
 
--- data SymbolOf (k :: j) where
-  -- SymbolOf :: Symbol -> SymbolOf k
 
 newtype SymbolOf (k :: j) = SymbolOf IxSymbol
   deriving (Eq, Hashable)
 
--- data SymbolOf (k :: j) where
---   SymbolOf :: Symbol -> SymbolOf k
---   -- deriving Eq via Symbol -- (Eq,Ord,Hashable)
 
 instance FromSymbol SymbolOf where
   fromSymbol v n p = SymbolOf (IxSymbol (v, n, p))
-
--- instance Eq (SymbolOf (k :: j)) where
---   (SymbolOf x) == (SymbolOf y) = x == y
-
--- instance Hashable (SymbolOf (k :: j)) where
---   hashWithSalt salt (SymbolOf a) = hashWithSalt salt a
--- -- instance Eq (SymbolOf (k :: j)) where
 
 class (Eq v, Hashable v) => DictKey v
 
 instance DictKey v => DictKey [v]
 
--- symbols
+-------------------------------------------------------------------------
+-- Symbols & IxSymbols
+
+newtype Symbol = Symbol Text
+  deriving (Eq,Ord,Hashable,Semigroup,Monoid)
+
+newtype IxSymbol = IxSymbol (Symbol,Int,NamePriority)
+  deriving (Eq,Ord,Hashable)
+
 
 -- WARNING: Not total
 showSubscriptDigit :: Int -> Char
@@ -268,10 +242,10 @@ instance Show Symbol where
 instance ShowPretty Symbol where
   showPretty = T.pack . show
 
-
 instance DictKey Symbol
 
 
+-------------------------------------------------------------------------
 -- proc variables
 
 data ProcVar = UserProcVar (Symbol) | GenProcVar (IxSymbol)
@@ -288,6 +262,7 @@ instance ShowPretty ProcVar where
 
 instance DictKey ProcVar
 
+-------------------------------------------------------------------------
 -- term variables
 
 data TeVar = UserTeVar ProcVar | GenTeVar IxSymbol (Maybe TeVar)
@@ -307,6 +282,7 @@ instance DictKey TeVar
 
 
 
+-------------------------------------------------------------------------
 -- scope variables
 
 data ScopeVar = ScopeVar IxSymbol
@@ -317,6 +293,7 @@ instance Show ScopeVar where
   show (ScopeVar x) = show x
 instance DictKey ScopeVar
 
+-------------------------------------------------------------------------
 -- memory variables
 
 data MemVar = MemVarForProcVar ProcVar IxSymbol | StandaloneMemVar IxSymbol
@@ -333,10 +310,8 @@ instance ShowPretty MemVar where
 instance DictKey MemVar
 
 
--- class (forall k. Hashable (v k)) => KHashable v
--- class (forall k. Show (v k)) => KShow v
--- class (forall k. Eq (v k)) => KEq v
-
+-------------------------------------------------------------------------
+-- hashing constraints
 
 type KHashable :: (j -> *) -> Constraint
 type KHashable v = (forall k. Hashable (v k))
@@ -347,15 +322,9 @@ type KShow v = (forall k. Show (v k))
 type KEq :: (j -> *) -> Constraint
 type KEq v = (forall k. Eq (v k))
 
-composeFun :: [a -> a] -> a -> a
-composeFun [] a = a
-composeFun (f:fs) a = f (composeFun fs a)
 
-composeFunM :: Monad t => [a -> t a] -> a -> t a
-composeFunM [] a = return a
-composeFunM (f:fs) a = do
-  rs <- composeFunM fs a
-  f rs
+-------------------------------------------------------------------------
+-- basic monad classes
 
 class Monad t => MonadImpossible t where
   impossible :: Text -> t a
@@ -366,9 +335,12 @@ class Monad t => MonadInternalError t where
 class Monad t => MonadUnificationError t where
   unificationError :: Show a => a -> a -> t b
 
-
 throwOriginalError :: (MonadError e m) => e -> m a
 throwOriginalError = QUAL.throwError
+
+
+-------------------------------------------------------------------------
+-- colors in terminal output
 
 blue x = "\27[34m" <> x <> "\27[0m"
 green x = "\27[32m" <> x <> "\27[0m"
@@ -390,40 +362,44 @@ findDuplicatesWith f = findDuplicates' []
       True  -> a : findDuplicates' (good) as
 
 
+-------------------------------------------------------------------------
+-- generic utility functions
 
--- import           Prelude                                 hiding
---                                                           (Fractional (..),
---                                                           Integral (..), (*),
---                                                           (+), (-), (^), (^^))
+composeFun :: [a -> a] -> a -> a
+composeFun [] a = a
+composeFun (f:fs) a = f (composeFun fs a)
 
--- import Algebra.Prelude as All hiding (Symbol)
+composeFunM :: Monad t => [a -> t a] -> a -> t a
+composeFunM [] a = return a
+composeFunM (f:fs) a = do
+  rs <- composeFunM fs a
+  f rs
 
-{-
-import Control.Monad.State.Lazy as All
-import Control.Monad.Except as All
+-------------------------------------------------------------------------
+-- source file reading
 
-import Data.Semigroup as All hiding (diff, Min, Max, Any, WrapMonoid)
-import Data.Monoid as All hiding (Last, First, getLast, getFirst, WrapMonoid)
+newtype SourceFile = SourceFile (Maybe FilePath)
+  deriving (Eq, Hashable, DictKey, Ord)
 
-import Data.Default as All
+instance Show SourceFile where
+  show (SourceFile Nothing) = "none"
+  show (SourceFile (Just fp)) = fp
 
-import GHC.Generics as All (Generic)
+newtype RawSource = RawSource (HashMap SourceFile (Array Int Text))
+  deriving (Show)
 
-import DiffMu.Prelude.Algebra as All
-import DiffMu.Prelude.Polynomial as All
+rawSourceFromString :: String -> [FilePath] -> IO RawSource
+rawSourceFromString input other_files = do
+  let make_line_array file = let ls = (T.pack <$> linesS file)
+                             in  listArray (1,length ls) (ls) 
+  let tryReadFile f = (Just <$> readFile f) `catchAny` (\e -> return Nothing)
 
-import Data.List as All
+  let onlyJust xs = [(SourceFile (Just a), make_line_array b) | (a, Just b) <- xs]
 
-import qualified Prelude
-
-import Prelude as All (Show, IO, putStrLn, undefined, otherwise, fst, snd)
-
-
-
--- import DiffMu.Imports.Sensitivity as All
-
--- import DiffMu.Imports as All -- hiding ((+), (-), (*), (<=))
-
--}
-
-
+  other_file_contents <- mapM tryReadFile other_files
+  let good_other_file_contents = onlyJust ((other_files) `zip` (other_file_contents))
+  return $ RawSource $ H.fromList $
+    ((SourceFile Nothing, make_line_array input)
+    :
+    (good_other_file_contents)
+    )
