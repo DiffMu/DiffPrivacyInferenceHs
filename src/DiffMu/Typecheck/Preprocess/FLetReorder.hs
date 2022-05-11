@@ -1,4 +1,11 @@
 
+{- |
+Description: Preprocessing step dealing with flets.
+
+In this step we make sure that all implementations of a function (as used for multiple dispatch)
+are directly below each other in the code, in order to mitigate surprises. We also check that
+there are not multiple implementations with signatures which evaluate to effectively the same julia types.
+-}
 module DiffMu.Typecheck.Preprocess.FLetReorder where
 
 import DiffMu.Prelude

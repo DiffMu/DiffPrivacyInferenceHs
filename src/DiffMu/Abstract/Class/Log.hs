@@ -1,10 +1,12 @@
 
 
+{- |
+Description: Class for monads in which logging / throwing of errors can be done.
+-}
 module DiffMu.Abstract.Class.Log where
 
 import DiffMu.Prelude
 import DiffMu.Abstract.Data.Error
--- import DiffMu.Core.Logging -- (DMPersistentMessage(DMPersistentMessage))
 import qualified Control.Monad.Except as QUAL
 
 throwError :: (MonadLog m, MonadError e m) => e -> m a

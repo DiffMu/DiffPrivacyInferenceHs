@@ -1,4 +1,7 @@
 
+{- |
+Description: Convenient collection of most external imports which we use.
+-}
 module DiffMu.Imports
   (
     module All,

@@ -1,6 +1,17 @@
 
 {-# LANGUAGE TemplateHaskell #-}
 
+{- |
+Description: Basic definitions for the demutation preprocessing step.
+
+This includes:
+ - Mutation types
+ - Variable access types
+ - Move types
+ - Term types
+ - Memory states
+ - Monadic state which tracks these during demutation
+-}
 module DiffMu.Typecheck.Preprocess.Demutation.Definitions where
 
 import DiffMu.Prelude -- hiding (TeVar)
@@ -69,20 +80,6 @@ onlyLocallyMutatedVariables :: [(ProcVar,IsLocalMutation)] -> Bool
 onlyLocallyMutatedVariables xs = [v | (v, NotLocalMutation) <- xs] == []
 
 
-{-
-data PureType =
-  UserValue
-  -- | DefaultValue
-  | SingleArg ProcVar 
-  | SingleArgPart ProcVar 
-  -- | SingleRef
-  | PureTuple [PureType] 
-  deriving (Show)
-
-data ImmutType = Pure PureType | Mutating [IsMutated] | VirtualMutated [ProcVar] | PureBlackBox
-  deriving (Show)
-
--}
 
 data ImmutType = Pure | Mutating [IsMutated] | PureBlackBox
   deriving (Show,Eq)
@@ -94,12 +91,6 @@ instance ShowPretty ImmutType where
           f NotMutated = "pure"
   showPretty PureBlackBox = "Blackbox"
 
--- consumeDefaultValue :: ImmutType -> ImmutType
--- consumeDefaultValue (Pure DefaultValue) = Pure UserValue
--- consumeDefaultValue a = a
-
--- the scope
--- type Scope = Ctx ProcVar ImmutType
 
 
 ---------------------------------------------------
@@ -119,15 +110,11 @@ instance ShowPretty MoveType where
 
 type LocMoveType = Located MoveType
 
--- singleMoveMaybe :: Maybe ProcVar -> MoveType
--- singleMoveMaybe (Just a) = SingleMove a
--- singleMoveMaybe Nothing  = NoMove
 
 data TermType =
   Value ImmutType LocMoveType
   | Statement SourceLocExt DemutDMTerm MoveType
   | StatementWithoutDefault SourceLocExt DemutDMTerm
-  -- | PurePhiTermType LocDemutDMTerm ([MoveType],LocDemutDMTerm) (TermType,LocDemutDMTerm)
   | MutatingFunctionEnd SourceLocExt
 
 data LastValue =
@@ -164,10 +151,6 @@ type MemCtx = Ctx ProcVar MemState
 data IsSplit = Split [SourceLocExt] [MemVar] | NotSplit
   deriving (Show,Eq)
 
--- instance Semigroup IsSplit where
---   (<>) Split a = Split
---   (<>) NotSplit b = b
-
 data TeVarMutTrace = TeVarMutTrace (Maybe ProcVar) IsSplit [(TeVar,[SourceLocExt])] -- (every tevar also carries the locations where it was created as result of a mutation)
   deriving (Show,Eq)
 
@@ -182,7 +165,6 @@ instance Eq MemState where
   (==) _ _ = False
 
 
--- type MemRedirectionCtx = Ctx MemVar [MemVar]
 
 --------------------------------------------------------
 -- monoid instance for isMutated
@@ -361,7 +343,6 @@ data MFull = MFull
   {
     _vaCtx :: VarAccessCtx
   , _memCtx :: MemCtx
-  -- , _memRedirectionCtx :: MemRedirectionCtx
   , _mutCtx :: MutCtx
   , _termVarsOfMut :: NameCtx
   , _scopeNames :: NameCtx
@@ -412,10 +393,6 @@ cleanupMem scname = mutCtx %= (\ctx -> f ctx)
   where
     f = fromKeyElemPairs . filter (\(_,(scname2,_)) -> scname2 /= scname) . getAllKeyElemPairs
 
--- resetMutCtx :: MTC ()
--- resetMutCtx = mutCtx %= (\ctx -> f ctx)
---   where
---     f = fromKeyElemPairs . fmap ((\(k,(sc,v)) -> (k,(sc,[])))) . getAllKeyElemPairs
 
 instance Monad m => MonoidM m MemState where
     neutral = pure $ MemExists []
@@ -437,13 +414,6 @@ mergeMemCtx = (⋆!)
 -----------------------------------------------------------------------------------------------------
 
 
--- buildReturnValue :: [ProcVar] -> DMTerm
--- buildReturnValue [x] = Var (Just x :- JTAny)
--- buildReturnValue xs = Tup [Var (Just x :- JTAny) | x <- xs]
-
--- buildCopyReturnValue :: [ProcVar] -> DMTerm
--- buildCopyReturnValue [x] = DeepcopyValue $ Var (Just x :- JTAny)
--- buildCopyReturnValue xs = Tup [DeepcopyValue $ Var (Just x :- JTAny) | x <- xs]
 
 --------------------------------------------------------------------------------------
 -- Accessing the VA-Ctx in the MTC monad
@@ -452,17 +422,10 @@ markReassignedBase :: IsFLetDefined -> WriteKind -> Scope -> SourceLocExt -> Pro
 markReassignedBase fletdef w scname loc tevar itype = do
   debug $ "[markReassignedBase]: called for " <> showT tevar <> " in " <> showT scname 
 
-  -- make sure that we are still allowed to access this var
-  -- memvar <- expectSingleMem =<< expectNotMoved tevar
-
   vaCtx %=~ (markReassignedInScope scname tevar itype)
 
   newvatype <- getValue tevar <$> use vaCtx
 
-  -- extracting the new locality
-  -- newloc <- case newvatype of
-  --               Just (WriteSingleBase _ _ newloc) -> return newloc
-  --               _ -> impossible "Expected the resulting locality after `markReassignedBase` to be a `WriteSingleBase`."
 
   return ()
 
@@ -507,7 +470,6 @@ markReassigned w scname loc var itype = do
 markRead :: Scope -> SourceLocExt -> ProcVar -> MTC ImmutType
 markRead scname loc tevar = do
    debug $ "[markRead]: called for tevar" <> showT tevar <> " in " <> showT scname 
-  --  mvars <- getAllMemVars <$> expectNotMoved var -- we make sure that we are still allowed to use this variable
    let f v = vaCtx %=~ (markReadInScope scname v) 
         where
           markReadInScope :: Scope -> ProcVar -> VarAccessCtx -> MTC VarAccessCtx 

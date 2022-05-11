@@ -1,6 +1,17 @@
 
 {-# LANGUAGE TemplateHaskell #-}
 
+{- |
+Description: The color inference preprocessing step.
+
+Preprocessing step to make Lets into Bind (and add Ret if necessary)
+infers the color (whether its a priv or a sens term) recursively and, upon
+encountering SLet/TLet, makes them into Bind if they are supposed to be.
+they are supposed to be if the term that is assigned is a privacy term.
+it is then required for the tail term to be a privacy term too, which is why
+the main function takes the required color as input. it inserts Ret if the term
+cannot be interpreted as a privacy term otherwise.
+-}
 module DiffMu.Typecheck.Preprocess.Colors where
 
 import DiffMu.Prelude
@@ -16,15 +27,6 @@ import Data.Foldable
 import qualified Data.HashSet as H
  
 import Debug.Trace
-
------------------------------------------------------------------------------------
--- preprocessing step to make Lets into Bind (and add Ret if necessary)
--- infers the color (whether its a priv or a sens term) recursively and, upon
--- encountering SLet/TLet, makes them into Bind if they are supposed to be.
--- they are supposed to be if the term that is assigned is a privacy term.
--- it is then required for the tial term to be a privacy term too, which is why
--- the main function takes the required color as input. it inserts Ret if the term
--- cannot be interpreted as a privacy term otherwise.
 
 ------------------------------------------------
 -- the state for our computation:

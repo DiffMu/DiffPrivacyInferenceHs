@@ -1,4 +1,7 @@
 
+{- |
+Description: A custom class for hashmap-like containers.
+-}
 module DiffMu.Abstract.Data.HashMap where
 
 import DiffMu.Prelude

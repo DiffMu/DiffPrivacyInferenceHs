@@ -1,6 +1,12 @@
 
 {-# LANGUAGE TemplateHaskell #-}
 
+{- |
+Description: preprocessing step to make function argument names unique
+
+After this step there is no overlap between locally defined variables and
+those which are function arguments.
+-}
 module DiffMu.Typecheck.Preprocess.LexicalScoping where
 
 import DiffMu.Prelude
@@ -16,8 +22,6 @@ import Data.Foldable
 
 import Debug.Trace
 
------------------------------------------------------------------------------------
--- preprocessing step to make function argument names unique
 
 data LSFull = LSFull
   {

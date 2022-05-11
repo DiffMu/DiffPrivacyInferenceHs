@@ -1,6 +1,9 @@
 
 {-# LANGUAGE TemplateHaskell #-}
 
+{- |
+Description: Definition of `LightTC`, a monad with state, logging and errors to be used by the preprocessing steps.
+-}
 module DiffMu.Typecheck.Preprocess.Common where
 
 import DiffMu.Prelude

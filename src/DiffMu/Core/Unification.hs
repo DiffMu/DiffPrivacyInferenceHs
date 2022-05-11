@@ -1,11 +1,13 @@
 
 {-# LANGUAGE UndecidableInstances #-}
 
+{- |
+Description: Unification of `DMType`s.
+-}
 module DiffMu.Core.Unification where
 
 import DiffMu.Prelude
 import DiffMu.Abstract
-import DiffMu.Abstract.Data.ErrorReporting
 import DiffMu.Core.Definitions
 import DiffMu.Typecheck.Constraint.Definitions
 import DiffMu.Core.TC
@@ -19,7 +21,6 @@ import Control.Monad.Trans.Except (throwE)
 default (Text)
 
 -------------------------------------------------------------------
--- Unification of dmtypes
 --
 
 instance ShowPretty (IsLessEqual (Sensitivity, Sensitivity)) where
@@ -29,23 +30,21 @@ instance ShowPretty (IsLessEqual (Sensitivity, Sensitivity)) where
 (==!) a b msg = addConstraint (Solvable (IsEqual (a,b))) msg >> pure ()
 
 
+class HasUnificationError t e a where
+  unificationError' :: (MessageLike t msg, Show a) => Proxy t -> a -> a -> msg -> e t
+
+-------------------------------------------------------------------------------
+-- Message wrappers
+-------------------------------------------------------------------------------
+
+
 newtype WrapMessageINC e a = WrapMessageINC a
 
 instance Show a => Show (WrapMessageINC e a) where show (WrapMessageINC a) = show a
 instance ShowPretty a => ShowPretty (WrapMessageINC e a) where showPretty (WrapMessageINC a) = showPretty a
 instance ShowLocated a => ShowLocated (WrapMessageINC e a) where showLocated (WrapMessageINC a) = showLocated a
 
-removeINCResT :: (MonadInternalError t) => INCResT e t a -> t (Maybe a)
-removeINCResT n = do
-    n' <- runExceptT (runINCResT n)
-    case n' of
-      Left sr -> case sr of
-        Wait' -> pure Nothing
-        Fail' e' -> internalError ("While normalizing inside INCRes got a fail")
-        -- Fail' e' -> internalError ("While normalizing inside INCRes got a fail :" <> show e')
-      Right a -> return (Just a)
 
--- instance (Show (e (INCResT e m)), MonadInternalError m, MonadLog m, Normalize (INCResT e m) a) => Normalize m (WrapMessageINC e a) where
 instance (MonadInternalError m, MonadLog m, Normalize (INCResT e m) a) => Normalize m (WrapMessageINC e a) where
   normalize e (WrapMessageINC x) = do
     let n :: INCResT e m a
@@ -55,10 +54,7 @@ instance (MonadInternalError m, MonadLog m, Normalize (INCResT e m) a) => Normal
       Left sr -> case sr of
         Wait' -> return (WrapMessageINC x)
         Fail' e' -> internalError ("While normalizing inside INCRes got a fail")
-        -- Fail' e' -> internalError ("While normalizing inside INCRes got a fail :" <> show e')
       Right a -> return (WrapMessageINC a)
-
-    -- return (WrapMessageINC n')
 
 
 newtype WrapMessageINCRev e a = WrapMessageINCRev a
@@ -73,19 +69,32 @@ instance (Show (e (INCResT e m)), MonadInternalError m, MonadLog m, Normalize m 
     in INCResT (ExceptT (fmap (Right . WrapMessageINCRev) y))
 
 
--------------------------------------------
--- INC functionality needed for
--- unification.
+
+-------------------------------------------------------------------------------
+-- INC functionality needed for unification
+-------------------------------------------------------------------------------
+--
+-- | The reason for the implementation using incremental computation is
+--   that unification does not always succeed:
+--   When terms such as `(v :∧: w)` are unified,  usually we cannot do anything,
+--   but have to wait for `v` or `w` to be known in more detail.
 --
 
-class HasUnificationError t e a where
-  unificationError' :: (MessageLike t msg, Show a) => Proxy t -> a -> a -> msg -> e t
+removeINCResT :: (MonadInternalError t) => INCResT e t a -> t (Maybe a)
+removeINCResT n = do
+    n' <- runExceptT (runINCResT n)
+    case n' of
+      Left sr -> case sr of
+        Wait' -> pure Nothing
+        Fail' e' -> internalError ("While normalizing inside INCRes got a fail")
+      Right a -> return (Just a)
 
+liftINC :: Functor m => m a -> INCResT e m a
+liftINC a = INCResT (ExceptT (fmap Right a))
 
 data StoppingReason e t = Wait' | Fail' (e t)
 
 newtype INCResT e m a = INCResT {runINCResT :: ExceptT (StoppingReason e (INCResT e m)) m a}
-  -- Finished' (m a) | Wait' | Fail' e
   deriving (Functor, Applicative, Monad, MonadError (StoppingReason e (INCResT e m)))
 
 instance IsNaturalError e => IsNaturalError (StoppingReason e) where
@@ -93,26 +102,11 @@ instance IsNaturalError e => IsNaturalError (StoppingReason e) where
   functionalLift α (Fail' e) = Fail' (functionalLift α e)
 
 instance (MonadInternalError t, MonadDMError e t) => MonadDMError (StoppingReason e) (INCResT e t) where
-  -- isCritical :: e t -> t Bool
   isCritical (Wait') = return False
   isCritical (Fail' e) = liftINC $ isCritical (functionalLift removeINCResT e)
-
-  -- persistentError :: LocatedDMException t -> t ()
   persistentError e = liftINC $ persistentError (functionalLift removeINCResT e)
-
-  -- catchAndPersist :: (Normalize t x, ShowPretty x, Show x) => t a -> (DMPersistentMessage t -> t (a, x)) -> t a
-  catchAndPersist action handler = undefined -- do
-    -- let myaction = do
-    --       res <- removeINCResT action
-    --       case res of
-    --         Just a -> return a
-    --         Nothing -> _
-    -- liftINC $ catchAndPersist myaction _
-
-  -- enterNonPersisting :: t ()
+  catchAndPersist action handler = undefined
   enterNonPersisting = liftINC enterNonPersisting
-
-  -- exitNonPersisting :: t ()
   exitNonPersisting = liftINC exitNonPersisting
 
 instance (MonadInternalError m, MonadLog m) => MonadLog (INCResT e m) where
@@ -122,45 +116,24 @@ instance (MonadInternalError m, MonadLog m) => MonadLog (INCResT e m) where
   warn            = liftINC . warn
   logForce        = liftINC . logForce
   withLogLocation = \a b -> b
-  -- persistentError = \(DMPersistentMessage msg) -> liftINC (persistentError $ DMPersistentMessage $ WrapMessageINC @e (msg))
-
--- instance MonadInternalError m => MonadInternalError (INCResT e m) where
---   internalError str = undefined
-
 
 
 instance MonadDMTC t => HasUnificationError t (WithContext DMException) a where
   unificationError' _ a b name = WithContext (UnificationError a b) (DMPersistentMessage name)
 
-
 instance MonadDMTC t => HasUnificationError (INCResT (WithContext DMException) t) (StoppingReason (WithContext DMException)) a where
   unificationError' _ a b name = Fail' $ WithContext (UnificationError a b) (DMPersistentMessage name)
 
--- instance HasUnificationError (t) (LocatedDMException t) a where
---   unificationError' _ a b name = WithContext (UnificationError a b) (DMPersistentMessage name)
-
--- instance HasUnificationError t (e) a => HasUnificationError t (StoppingReason e) a where
---   unificationError' p a b name = Fail' (unificationError' p a b name)
-
--- instance MonadLog m => MonadLog (ExceptT e m) where
---   log a = ExceptT (log a >> pure (Right ()))
---   debug a = ExceptT (debug a >> pure (Right ()))
---   info a = ExceptT (info a >> pure (Right ()))
---   warn a = ExceptT (warn a >> pure (Right ()))
---   logForce a = ExceptT (logForce a >> pure (Right ()))
---   withLogLocation s a = a -- TODO: Make this proper?
---   persistentError = undefined
 
 
 
----------------------------------
+-------------------------------------------------------------------------------
 -- The actual unification
---
--- | The reason for the implementation using incremental computation is
---   that unification does not always succeed:
---   When terms such as `(v :∧: w)` are unified,  usually we cannot do anything,
---   but have to wait for `v` or `w` to be known in more detail.
---
+-------------------------------------------------------------------------------
+
+
+--------------------
+-- generic
 
 normalizeᵢ :: Normalize t a => a -> INCResT e t a
 normalizeᵢ a = liftINC (normalizeExact a)
@@ -174,21 +147,10 @@ unifyᵢMsg name a b = (chainM2 (unifyᵢ_Msg name) (normalizeᵢ a) (normalize�
 unifyᵢ :: (Unifyᵢ (StoppingReason e) (INCResT e t) a, Normalize (t) a) => a -> a -> (INCResT e t a)
 unifyᵢ = unifyᵢMsg ()
 
-liftINC :: Functor m => m a -> INCResT e m a
-liftINC a = INCResT (ExceptT (fmap Right a))
 
--- we define the 'incremental' version of unification
+--------------------
+-- instances
 
-
-
---
--- We had this one:
---
--- instance (Monad t, HasUnificationError t e JuliaType, MonadError e t, MonadLog t) => Unifyᵢ t JuliaType where
---   unifyᵢ_Msg name a b | a == b = pure a
---   unifyᵢ_Msg name t s = throwError (unificationError' (Proxy @t) t s name)
-
--- instance (Show (e (INCResT e t)), MonadDMTC t) => Unifyᵢ (INCResT e t) Sensitivity where
 instance (MonadDMTC t) => Unifyᵢ (StoppingReason e) (INCResT e t) Sensitivity where
   unifyᵢ_Msg name a b = liftINC $ unify (WrapMessageINC @e name) a b
 
@@ -220,8 +182,6 @@ instance (MonadDMTC t, Typeable k) => Unifyᵢ (StoppingReason (WithContext DMEx
   unifyᵢ_Msg name (Numeric t) (Numeric s)       = Numeric <$> unifyᵢMsg name t s
   unifyᵢ_Msg name (NonConst) (NonConst)         = pure NonConst
   unifyᵢ_Msg name (Const η₁) (Const η₂)         = Const <$> liftINC (unify (WrapMessageINC @(WithContext DMException) name) η₁ η₂)
-  -- unifyᵢ_Msg name (Const η₁) (Const η₂)         = Const <$> liftINC (unify (WrapMessageINC @(LocatedDMException (INCResT (WithContext DMException) t)) name) η₁ η₂)
-  -- unifyᵢ_Msg name (Const η₁) (Const η₂)         = Const <$> liftINC (unify name η₁ η₂)
   unifyᵢ_Msg name (Num a0 c0) (Num a1 c1)       = Num <$> unifyᵢMsg name a0 a1 <*> unifyᵢMsg name c0 c1
   unifyᵢ_Msg name (as :->: a) (bs :->: b)       = (:->:) <$> unifyᵢMsg name as bs <*> unifyᵢMsg name a b
   unifyᵢ_Msg name (as :->*: a) (bs :->*: b)     = (:->*:) <$> unifyᵢMsg name as bs <*> unifyᵢMsg name a b
@@ -314,9 +274,6 @@ instance MonadDMTC t => Unify (WithContext DMException) t (Annotation e) where
   unify_ name (SensitivityAnnotation s) (SensitivityAnnotation t) = SensitivityAnnotation <$> unify_ name s t
   unify_ name (PrivacyAnnotation s) (PrivacyAnnotation t) = PrivacyAnnotation <$> unify_ name s t
 
--- TODO: Check, is i <> j what we want to do here?
--- instance Unify MonadDMTC e => Unify MonadDMTC (WithRelev e) where
---   unify_ (WithRelev i e) (WithRelev j f)  = WithRelev (i <> j) <$> unify_ e f
 
 instance MonadDMTC t => Unify (WithContext DMException) t (WithRelev e) where
   unify_ name (WithRelev i e) (WithRelev j f)  = WithRelev (i <> j) <$> unify_ name e f
@@ -342,7 +299,6 @@ instance (Unify e isT a, Unify e isT b) => Unify e isT (a :@ b) where
 -- Similarly, lists of terms are unified elements wise,
 -- but they only match if they are of the same lenght:
 instance (HasUnificationError t e [a], MonadDMError e t, Show a, Unify e t a, MonadLog t) => Unify e t [a] where
--- instance (Show a, Unify e t a, MonadLog t) => Unify e t [a] where
   unify_ name xs ys | length xs == length ys = mapM (uncurry (unify_ name)) (zip xs ys)
   unify_ name xs ys = throwError (unificationError' (Proxy @t) xs ys name)
 
@@ -390,12 +346,9 @@ instance (IsT MonadDMTC t) => SemigroupM (t) (DMTypeOf MainKind) where
 instance (IsT MonadDMTC t) => MonoidM (t) (DMTypeOf MainKind) where
   neutral = newVar
 
-
 -- An optimized check for whether a given DMType is a neutral does not create new typevariables,
 -- but simply checks if the given DMType is one.
 instance (SingI k, Typeable k, IsT MonadDMTC t) => (CheckNeutral (t) (DMTypeOf k)) where
   checkNeutral (TVar x) = return True
   checkNeutral (_) = return False
-
--- Old semigroup structure by unification
 

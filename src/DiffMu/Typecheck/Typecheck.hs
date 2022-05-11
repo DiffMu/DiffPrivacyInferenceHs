@@ -1,4 +1,7 @@
 
+{- |
+Description: The typechecking algorithm, defined inductively on `DMTerm`s.
+-}
 module DiffMu.Typecheck.Typecheck where
 
 import DiffMu.Prelude
@@ -10,7 +13,6 @@ import DiffMu.Core.TC
 import DiffMu.Core.Unification
 import DiffMu.Typecheck.Operations
 import DiffMu.Core.Scope
-import DiffMu.Abstract.Data.ErrorReporting
 import DiffMu.Abstract.Data.Permutation
 import DiffMu.Typecheck.JuliaType
 import DiffMu.Typecheck.Constraint.Definitions
@@ -27,7 +29,6 @@ import Debug.Trace
 import Data.IORef
 import System.IO.Unsafe
 import DiffMu.Abstract.Data.Error
-import DiffMu.Abstract.Data.ErrorReporting
 
 default (Text)
 

@@ -1,4 +1,7 @@
 
+{- |
+Description: The first two parsing steps: `String` -> `JTree`, `JTree` -> `JExpr`.
+-}
 module DiffMu.Parser.FromString where
 
 import DiffMu.Prelude

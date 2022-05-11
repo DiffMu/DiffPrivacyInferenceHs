@@ -1,5 +1,8 @@
 {-# LANGUAGE TemplateHaskell #-}
 
+{- |
+Description: Preprocessing step to turn a (procedural) pure `DemutDMTerm` into a properly functional `DMTerm`.
+-}
 module DiffMu.Typecheck.Preprocess.Unblock where
 
 import DiffMu.Prelude

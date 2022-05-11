@@ -1,11 +1,12 @@
 
 {-# LANGUAGE UndecidableInstances #-}
 
+{- |
+Description: Different error types and printing of (located) messages.
+-}
 module DiffMu.Abstract.Data.Error where
 
 import DiffMu.Prelude
--- import DiffMu.Abstract.Class.Log
-import DiffMu.Abstract.Data.ErrorReporting
 import DiffMu.Abstract.Data.HashMap
 
 import {-# SOURCE #-} DiffMu.Core.Definitions
@@ -38,9 +39,6 @@ parenIfMultiple xs = if length (wordsS xs) <= 1
           then xs
           else "(" <> xs <> ")"
 
--- parenIfMultiple xs = case ' ' `elem` xs of
---   False -> xs
---   True -> "(" <> xs <> ")"
 
 parenIndent :: StringLike s => s -> s
 parenIndent s = "\n(\n" <> unlinesS (fmap ("  " <>) (linesS s)) <> ")"
@@ -48,9 +46,6 @@ parenIndent s = "\n(\n" <> unlinesS (fmap ("  " <>) (linesS s)) <> ")"
 braceIndent :: StringLike s => s -> s
 braceIndent s = "\n{\n" <> unlinesS (fmap ("  " <>) (linesS s)) <> "}"
 
-
--- justIndent :: String -> String
--- justIndent s = unlines (fmap ("  " <>) (lines s))
 
 indent :: StringLike s => s -> s
 indent s = unlinesS (fmap ("  " <>) (linesS s))
@@ -227,7 +222,6 @@ printSourceLine :: Array Int Text -> Int -> Int -> Text
 printSourceLine source required_numbersize linenumber =
   let printed_linenumber = show linenumber
       padded_linenumber = take (required_numbersize - length printed_linenumber) (repeat ' ') <> printed_linenumber
-  -- RawSource source <- ask
       required_line = source ! linenumber
   in " " <> T.pack padded_linenumber <> " |     " <> required_line
 
@@ -238,9 +232,6 @@ type MessageLike t a = (Normalize t a, Show a, ShowLocated a)
 data DMPersistentMessage t where
   DMPersistentMessage :: MessageLike t a => a -> DMPersistentMessage t
 
-
--- instance ShowPretty (DMPersistentMessage t) where
---   showPretty (DMPersistentMessage msg) = showPretty msg
 
 instance Show (DMPersistentMessage t) where
   show (DMPersistentMessage msg) = show msg
@@ -261,7 +252,6 @@ instance Monad t => CheckNeutral t (DMPersistentMessage t) where
   checkNeutral b = pure False
 
 data WithContext e t = WithContext e (DMPersistentMessage t)
-  -- deriving (Functor,Foldable,Traversable)
 
 
 instance ShowLocated e => ShowLocated (WithContext e t) where
@@ -274,9 +264,6 @@ instance ShowLocated e => ShowLocated (WithContext e t) where
 instance Show e => Show (WithContext e t) where
   show (WithContext e ctx) = show e
 
--- instance ShowPretty e => Show (WithContext e t) where
---   show (WithContext e ctx) = showPretty e <> "\n"
---                             <> indent (showPretty ctx)
 
 withContext e x = WithContext e (DMPersistentMessage x)
 
@@ -315,7 +302,6 @@ data DMException where
 
 instance Show DMException where
   show (UnsupportedError t) = "The term '" <> T.unpack t <> "' is currently not supported."
-  -- show (UnsupportedTermError t) = "The term '" <> show t <> "' is currently not supported."
   show (UnificationError a b) = "Could not unify '" <> show a <> "' with '" <> show b <> "'."
   show (WrongNumberOfArgs a b) = "While unifying: the terms '" <> show a <> "' and '" <> show b <> "' have different numbers of arguments"
   show (WrongNumberOfArgsOp op n) = "The operation " <> show op <> " was given a wrong number (" <> show n <> ") of args."
@@ -353,7 +339,6 @@ instance ShowLocated (DMException) where
   showLocated = return . showPretty
 
 instance Eq DMException where
-  -- UnsupportedTermError    a        == UnsupportedTermError    b       = True
   UnificationError        a a2     == UnificationError        b b2    = True
   WrongNumberOfArgs       a a2     == WrongNumberOfArgs       b b2    = True
   WrongNumberOfArgsOp     a a2     == WrongNumberOfArgsOp     b b2    = True
@@ -389,13 +374,7 @@ isCriticalError e = case e of
 data WrapMessageNatural s t e a = WrapMessageNatural (forall x. t x -> s (Maybe x)) a
 
 instance Show a => Show (WrapMessageNatural s t e a) where show (WrapMessageNatural f a) = show a
--- instance ShowPretty a => ShowPretty (WrapMessageNatural s t e a) where showPretty (WrapMessageNatural f a) = showPretty a
 instance (Monad s, ShowLocated a) => ShowLocated (WrapMessageNatural s t e a) where showLocated (WrapMessageNatural f a) = showLocated a
--- where showLocated (WrapMessageNatural f a) = do
---                                                                                                           x <- f $ showLocated a
---                                                                                                           case x of
---                                                                                                             Just a -> return a
---                                                                                                             Nothing -> return "[Error when generating Error]"
 
 instance (Monad s, Normalize t a) => Normalize s (WrapMessageNatural s t e a) where
   normalize level (WrapMessageNatural f x) = WrapMessageNatural f <$> do
@@ -403,15 +382,11 @@ instance (Monad s, Normalize t a) => Normalize s (WrapMessageNatural s t e a) wh
     case x' of
       Just x'' -> return x''
       Nothing -> pure x
-    -- case f (normalize level x) of
-                                                                           -- Just x -> x
-                                                                           -- Nothing -> pure x
 
 instance IsNaturalError (WithContext e) where
   functionalLift α (WithContext x (DMPersistentMessage msg)) = WithContext x (DMPersistentMessage (WrapMessageNatural @_ @_ @e α msg))
 
 class IsNaturalError e where
-  -- functionalLiftMaybe :: (Monad t, Monad s) => (forall a. t a -> s (Maybe a)) -> e t -> e s
   functionalLift :: (Monad t, Monad s) => (forall a. t a -> s (Maybe a)) -> e t -> e s
 
 
@@ -518,12 +493,5 @@ instance (ShowLocated a) => ShowLocated (Quote a) where
 
 instance (Normalize t a) => Normalize t (Quote a) where
   normalize e (Quote a) = Quote <$> normalize e a
--- -------
 
--- data (:<.:) a = (:<.:) a String
-
--- instance (ShowPretty a) => ShowPretty (:<.:) a where
---   showPretty (a :<.: b) = showPretty a <> " " <> showPretty b
-
--- instance (Normalize t a) => Normalize t ((:<.:) a) where
 

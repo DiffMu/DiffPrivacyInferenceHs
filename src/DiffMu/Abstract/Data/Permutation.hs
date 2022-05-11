@@ -1,4 +1,7 @@
 
+{- |
+Description: Helper functions for permuations.
+-}
 module DiffMu.Abstract.Data.Permutation where
 
 import DiffMu.Prelude

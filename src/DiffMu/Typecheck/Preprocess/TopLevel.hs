@@ -1,6 +1,13 @@
 
 {-# LANGUAGE TemplateHaskell #-}
 
+{- |
+Description: Preprocessing step to deal with black boxes.
+
+This step finds out the names of all global definitions and black boxes,
+as well as making sure that black boxes are only defined on the top level,
+and do not overlap in names with other global definitions.
+-}
 module DiffMu.Typecheck.Preprocess.TopLevel where
 
 import DiffMu.Prelude
