@@ -47,7 +47,6 @@ import qualified DiffMu.Imports as QUAL (throwError)
 
 
 import DiffMu.Prelude.MonadicAlgebra as All
-import DiffMu.Prelude.Data as All
 import Data.List.Unicode as All
 import Data.String as S
 import Data.Array as All hiding (index, indices)
@@ -327,6 +326,18 @@ type KShow v = (forall k. Show (v k))
 
 type KEq :: (j -> *) -> Constraint
 type KEq v = (forall k. Eq (v k))
+
+-------------------------------------------------------------------------
+-- custom tuples
+
+data (:=:) a b = (:=:) a b
+  deriving (Eq)
+
+instance (Show a, Show b) => Show (a :=: b) where
+  show (a :=: b) = show a <> " :=: " <> show b
+
+instance (Normalize t a, Normalize t b) => Normalize t (a :=: b) where
+  normalize nt (a :=: b) =  (:=:) <$> normalize nt a <*> normalize nt b
 
 
 -------------------------------------------------------------------------

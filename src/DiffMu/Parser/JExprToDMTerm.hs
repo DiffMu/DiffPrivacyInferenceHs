@@ -1,6 +1,9 @@
 
 {-# LANGUAGE TemplateHaskell #-}
 
+{- |
+Description: The third parsing step: `JExpr` -> `LocProcDMTerm`.
+-}
 module DiffMu.Parser.JExprToDMTerm where
     
 import DiffMu.Prelude
