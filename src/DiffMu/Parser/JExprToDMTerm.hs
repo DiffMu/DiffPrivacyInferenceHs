@@ -319,7 +319,7 @@ builtins = H.fromList
   , ("fold", pTernary MFold)
   , ("map_cols_binary", pTernary MapCols2)
   , ("map_rows_binary", pTernary MapRows2)
-  , ("clip", pTernary ClipN)
+  , ("clipn", pTernary ClipN)
 
   , ("gaussian_mechanism!", pQuaternary MutGauss)
   , ("gaussian_mechanism", pQuaternary Gauss)
