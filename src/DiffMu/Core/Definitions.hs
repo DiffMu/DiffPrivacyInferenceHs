@@ -2,6 +2,9 @@
 {-# LANGUAGE TemplateHaskell, UndecidableInstances #-}
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 
+{- |
+Description: Definitions of basic type-checking-relevant data types such as terms and types.
+-}
 module DiffMu.Core.Definitions where
 
 import DiffMu.Prelude
