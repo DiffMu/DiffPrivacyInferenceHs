@@ -137,6 +137,7 @@ typecheckFromJExpr_Simple bHistory term rawsource = do
            <> "Type:\n" <> runReader (showLocated ty) rawsource
            <> "\n" <> (showPretty (_userVars (_meta full)))
            <> "\n---------------------------------------------------------------------------\n"
+           <> showSpecialWarnings ty <> "\n"
            <> cstring <> "\n"
            <> fcstring
   typecheckFromJExprWithPrinter printer (DontShowLog) term rawsource
@@ -158,8 +159,42 @@ typecheckFromJExpr_Debug term rawsource = do
         "\n---------------------------------------------------------------------------\n"
         <> "Type:\n" <> runReader (showLocated ty) rawsource
         <> "\n---------------------------------------------------------------------------\n"
+        <> showSpecialWarnings ty <> "\n"
         <> "Monad state:\n" <> (showT full)
 
   typecheckFromJExprWithPrinter printer (DoShowLog Debug logging_locations) term rawsource
+
+
+--------------------------------------------------------------------------------------------------
+-- special warnings
+showSpecialWarnings :: DMMain -> Text
+showSpecialWarnings ty =
+  let warns = checkSpecialWarnings ty
+  in intercalateS "\n" (fmap (\tx -> yellow "WARNING" <> ":\n" <> indent tx) warns)
+
+checkSpecialWarnings :: DMMain -> [Text]
+checkSpecialWarnings ty = checkClipping
+  where
+    checkClipping = case ty of
+      Fun xs ->
+        let checkArg :: DMTypeOf MainKind -> [Text]
+            checkArg arg@(NoFun (DMContainer dto' dto2 clip_parameter sk dto4)) | clip_parameter /= U =
+               [ "The typechecked function has an input argument of type " <> quote (showPretty arg) <> ".\n" <>
+                 "(Note the clipping parameter " <> showPretty clip_parameter <> ".)\n" <>
+                 "This says that the input is required to be clipped wrt the norm " <> showPretty clip_parameter <> ",\n" <>
+                 "where \"clipped\" means that each row must have an " <> showPretty clip_parameter <> "-norm that is less or equal than 1." <> "\n" <>
+                 "\n" <>
+                 "If your data is not clipped, you have to call `clip` in your code. Then the inferred type will be " <> quote (showPretty (NoFun (DMContainer dto' dto2 U sk dto4))) <> "."
+               ]
+            checkArg _ = []
+
+            checkSingleFun :: DMTypeOf FunKind -> [Text]
+            checkSingleFun = \case
+              DMAny -> []
+              TVar so -> []
+              (:->:) xs dto  -> checkArg =<< (fstAnn <$> xs)
+              (:->*:) xs dto -> checkArg =<< (fstAnn <$> xs)
+        in checkSingleFun =<< (fstAnn <$> xs)
+      _ -> []
 
 
